@@ -156,7 +156,7 @@ export function PendingWorkEmbedded({
     const userDept = currentUser?.department;
     if (!userDept) return false;
 
-    const isCreativeUser = userDept.toLowerCase() === 'creative' || userDept.toLowerCase() === 'smm' || userDept.toLowerCase() === 'social media marketing';
+    const isCreativeUser = userDept.toLowerCase() === 'creative' || userDept.toLowerCase() === 'smm' || userDept.toLowerCase() === 'social media marketing' || userDept.toLowerCase() === 'graphics';
     const isDMUser = userDept.toLowerCase() === 'digital marketing' || userDept.toLowerCase() === 'dm';
 
     if (taskDept.toLowerCase() === 'creative' && !isCreativeUser) return false;
@@ -1305,7 +1305,7 @@ export function PendingWorkEmbedded({
                     };
                     const targetDept = getTaskDepartment();
                     
-                    const isCreativeDept = targetDept.toLowerCase() === 'creative' || targetDept.toLowerCase() === 'smm' || targetDept.toLowerCase() === 'social media marketing';
+                    const isCreativeDept = targetDept.toLowerCase() === 'creative' || targetDept.toLowerCase() === 'smm' || targetDept.toLowerCase() === 'social media marketing' || targetDept.toLowerCase() === 'graphics';
                     const isDMDept = targetDept.toLowerCase() === 'digital-marketing' || targetDept.toLowerCase() === 'digital marketing' || targetDept.toLowerCase() === 'dm';
                     const isDevDept = targetDept.toLowerCase() === 'development' || targetDept.toLowerCase() === 'dev';
 
@@ -1318,7 +1318,7 @@ export function PendingWorkEmbedded({
                         if (!empDept) return false;
                         
                         if (isCreativeDept) {
-                          return empDept === 'creative' || empDept === 'smm' || empDept === 'social media marketing';
+                          return empDept === 'creative' || empDept === 'smm' || empDept === 'social media marketing' || empDept === 'graphics';
                         }
                         if (isDMDept) {
                           return empDept === 'digital-marketing' || empDept === 'digital marketing' || empDept === 'dm';
