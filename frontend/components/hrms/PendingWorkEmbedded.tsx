@@ -1297,7 +1297,11 @@ export function PendingWorkEmbedded({
                       if (tType === 'development') return "Development";
                       if (tType === 'digital-marketing') return "Digital Marketing";
                       if (tType === 'creative' || tType === 'content-calendar') return "Creative";
-                      return currentUser?.department || "";
+                      const userDept = currentUser?.department;
+                      if (userDept && userDept.toLowerCase() !== 'admin' && userDept.toLowerCase() !== 'hr') {
+                        return userDept;
+                      }
+                      return "Creative";
                     };
                     const targetDept = getTaskDepartment();
                     
