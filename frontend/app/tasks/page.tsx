@@ -219,7 +219,16 @@ export default function TaskManagementPage() {
   const uniqueDesignations = Array.from(new Set(employees.map((e: any) => e.designation).filter(Boolean)));
   const uniqueDepartments = Array.from(new Set(employees.map((e: any) => e.department).filter(Boolean)));
 
-  const sortedDepartmentsList = [...departments].sort((a, b) => {
+  const sortedDepartmentsList = [...departments];
+  const hasAdminOption = sortedDepartmentsList.some(dept => {
+    const name = (typeof dept === 'string' ? dept : dept.name || "").toLowerCase();
+    return name === "admin" || name === "administration";
+  });
+  if (!hasAdminOption) {
+    sortedDepartmentsList.push("Admin");
+  }
+
+  sortedDepartmentsList.sort((a, b) => {
     const nameA = (typeof a === 'string' ? a : a.name || "").toLowerCase();
     const nameB = (typeof b === 'string' ? b : b.name || "").toLowerCase();
     if (nameA.includes("admin") && !nameB.includes("admin")) return -1;
