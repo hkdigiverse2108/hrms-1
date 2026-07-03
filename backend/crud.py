@@ -6779,7 +6779,8 @@ async def create_invoice(db, invoice: schemas.InvoiceCreate):
 
 async def get_invoices(db, current_user, skip: int = 0, limit: int = 100):
     query = {}
-    if current_user.get("role") != "Admin":
+    user_role = str(current_user.get("role", "")).strip().lower()
+    if user_role not in ["admin", "hr"]:
         user_id_str = str(current_user.get("sub"))
         query = {
             "$or": [
@@ -6799,7 +6800,8 @@ async def get_invoice(db, invoice_id: str, current_user):
     if not row:
         return None
         
-    if current_user.get("role") != "Admin":
+    user_role = str(current_user.get("role", "")).strip().lower()
+    if user_role not in ["admin", "hr"]:
         user_id_str = str(current_user.get("sub"))
         created_by = row.get("createdById")
         shared_with = row.get("sharedWith", [])
@@ -6808,6 +6810,8 @@ async def get_invoice(db, invoice_id: str, current_user):
         # Has access if explicitly in shared_with OR (creator AND access is not yet managed)
         if user_id_str not in shared_with and not (created_by == user_id_str and not access_managed):
             return None
+            
+    return fix_id(row)
             
 def compare_line_items(old_items, new_items):
     desc = []
