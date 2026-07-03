@@ -154,9 +154,13 @@ export function PendingWorkEmbedded({
 
     const taskDept = defaultTaskType === 'digital-marketing' ? 'Digital Marketing' : 'Creative';
     const userDept = currentUser?.department;
-    if (!userDept || userDept.toLowerCase() !== taskDept.toLowerCase()) {
-      return false;
-    }
+    if (!userDept) return false;
+
+    const isCreativeUser = userDept.toLowerCase() === 'creative' || userDept.toLowerCase() === 'smm' || userDept.toLowerCase() === 'social media marketing';
+    const isDMUser = userDept.toLowerCase() === 'digital marketing' || userDept.toLowerCase() === 'dm';
+
+    if (taskDept.toLowerCase() === 'creative' && !isCreativeUser) return false;
+    if (taskDept.toLowerCase() === 'digital marketing' && !isDMUser) return false;
 
     const isTeamLeaderOfDept = currentUser?.role === 'Team Leader' || currentUser?.designation?.toLowerCase() === 'team leader';
     if (isTeamLeaderOfDept) return true;
@@ -1296,11 +1300,30 @@ export function PendingWorkEmbedded({
                       return currentUser?.department || "";
                     };
                     const targetDept = getTaskDepartment();
+                    
+                    const isCreativeDept = targetDept.toLowerCase() === 'creative' || targetDept.toLowerCase() === 'smm' || targetDept.toLowerCase() === 'social media marketing';
+                    const isDMDept = targetDept.toLowerCase() === 'digital-marketing' || targetDept.toLowerCase() === 'digital marketing' || targetDept.toLowerCase() === 'dm';
+                    const isDevDept = targetDept.toLowerCase() === 'development' || targetDept.toLowerCase() === 'dev';
+
                     return employees
                       .filter((emp: any) => {
                         if (emp.id === currentUser?.id) return false;
                         if (!targetDept) return true;
-                        return emp.department?.toLowerCase() === targetDept.toLowerCase();
+                        
+                        const empDept = emp.department?.toLowerCase();
+                        if (!empDept) return false;
+                        
+                        if (isCreativeDept) {
+                          return empDept === 'creative' || empDept === 'smm' || empDept === 'social media marketing';
+                        }
+                        if (isDMDept) {
+                          return empDept === 'digital-marketing' || empDept === 'digital marketing' || empDept === 'dm';
+                        }
+                        if (isDevDept) {
+                          return empDept === 'development' || empDept === 'dev';
+                        }
+                        
+                        return empDept === targetDept.toLowerCase();
                       })
                       .map((emp: any) => {
                         const name = `${emp.firstName} ${emp.lastName || ''}`.trim();
