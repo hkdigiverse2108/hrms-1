@@ -1746,8 +1746,7 @@ export default function TasksPage() {
                   {employees
                     .filter((emp: any) => {
                       if (emp.id === user?.id) return false;
-                      if (!user?.department) return true;
-                      return emp.department?.toLowerCase() === user?.department?.toLowerCase();
+                      return emp.department?.toLowerCase() === 'development';
                     })
                     .map((emp: any) => {
                       const name = `${emp.firstName} ${emp.lastName || ''}`.trim();
