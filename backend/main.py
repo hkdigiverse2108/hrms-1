@@ -190,6 +190,43 @@ async def feedback_reminder_task():
             
         await asyncio.sleep(300) # Sleep for 5 minutes
 
+async def activity_logs_cleanup_task():
+    """Runs a periodic cleanup to remove activity logs older than 45 days and chats older than 90 days."""
+    from database import db
+    import datetime
+    
+    print("[Logs Cleanup] Task started.", flush=True)
+    await asyncio.sleep(30)  # Wait for startup
+    
+    while True:
+        try:
+            print("[Logs Cleanup] Starting periodic cleanup of database...", flush=True)
+            # 1. Activity Logs (45 days)
+            cutoff_logs = datetime.datetime.now() - datetime.timedelta(days=45)
+            cutoff_logs_str = cutoff_logs.strftime("%Y-%m-%d %H:%M:%S")
+            result_logs = await db.task_logs.delete_many({
+                "timestamp": {"$lt": cutoff_logs_str}
+            })
+            print(f"[Logs Cleanup] Deleted {result_logs.deleted_count} logs older than '{cutoff_logs_str}'.", flush=True)
+            
+            # 2. Chat Messages (90 days) - preserving saved messages
+            cutoff_chats = datetime.datetime.now() - datetime.timedelta(days=90)
+            cutoff_chats_str = cutoff_chats.isoformat()
+            result_chats = await db.messages.delete_many({
+                "timestamp": {"$lt": cutoff_chats_str},
+                "$or": [
+                    {"savedBy": {"$exists": False}},
+                    {"savedBy": None},
+                    {"savedBy": {"$size": 0}}
+                ]
+            })
+            print(f"[Logs Cleanup] Deleted {result_chats.deleted_count} chat messages older than '{cutoff_chats_str}'.", flush=True)
+        except Exception as e:
+            print(f"[Logs Cleanup] Error during cleanup: {e}", flush=True)
+            
+        # Run cleanup every 24 hours
+        await asyncio.sleep(86400)
+
 async def monthly_report_scheduler_task():
     from database import db
     import crud
@@ -470,6 +507,7 @@ async def lifespan(app):
     reminder_task = asyncio.create_task(content_calendar_reminder_task())
     feedback_task = asyncio.create_task(feedback_reminder_task())
     monthly_report_task = asyncio.create_task(monthly_report_scheduler_task())
+    logs_cleanup_task = asyncio.create_task(activity_logs_cleanup_task())
     yield
     # --- Shutdown ---
     try:
@@ -485,6 +523,8 @@ async def lifespan(app):
             feedback_task.cancel()
         if not monthly_report_task.done():
             monthly_report_task.cancel()
+        if not logs_cleanup_task.done():
+            logs_cleanup_task.cancel()
     except Exception:
         pass
     # Reload trigger: 1

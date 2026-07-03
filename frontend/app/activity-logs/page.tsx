@@ -438,9 +438,11 @@ export default function ActivityLogsPage() {
       {total > itemsPerPage && (
         <TablePagination
           currentPage={currentPage}
-          totalCount={total}
-          pageSize={itemsPerPage}
+          totalItems={total}
+          itemsPerPage={itemsPerPage}
           onPageChange={setCurrentPage}
+          onItemsPerPageChange={setItemsPerPage}
+          itemName="logs"
         />
       )}
     </div>
