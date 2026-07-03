@@ -12,6 +12,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { API_URL } from '@/lib/config';
 import { toast } from 'sonner';
 
+const isStageSubsequentOrEqual = (stageName: string, remarkStageName: string, postReel?: string) => {
+  const reelStages = ['Script', 'Shoot', 'Editing', 'Approval', 'Posting'];
+  const postStages = ['Post/Graphics', 'Approval', 'Posting'];
+  
+  const stages = postReel === 'Post' ? postStages : reelStages;
+  const remarkIdx = stages.findIndex(s => s.toLowerCase() === remarkStageName.toLowerCase());
+  const stageIdx = stages.findIndex(s => s.toLowerCase() === stageName.toLowerCase());
+  
+  if (remarkIdx === -1 || stageIdx === -1) return false;
+  return stageIdx >= remarkIdx;
+};
+
 export function PendingWorkEmbedded({ 
   type = "pending-work",
   defaultTaskType = "all",
@@ -440,7 +452,10 @@ export function PendingWorkEmbedded({
           return true;
         }
 
-        const hasApplicableRemark = t.remark && t.remark.trim() !== '' && (!t.remarkStage || t.stage === t.remarkStage);
+        const hasApplicableRemark = t.remark && t.remark.trim() !== '' && (
+          !t.remarkStage || 
+          isStageSubsequentOrEqual(t.stage, t.remarkStage, t.postReel)
+        );
         const isClientIssue = hasApplicableRemark && t.remark.startsWith('[CLIENT ISSUE] ');
 
         if (type === 'pending-work') {
@@ -920,7 +935,7 @@ export function PendingWorkEmbedded({
                     </td>
                     <td className="px-6 py-4 text-slate-600 max-w-[200px]">
                       {(() => {
-                        const isApplicable = !item.remarkStage || item.remarkStage === item.stage;
+                        const isApplicable = !item.remarkStage || isStageSubsequentOrEqual(item.stage, item.remarkStage, item.postReel);
                         const displayRemark = isApplicable ? item.remark : null;
 
                         return editingRemarkId === `${item.id}-${item.stage}` ? (
