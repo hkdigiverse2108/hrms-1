@@ -192,7 +192,7 @@ export default function TasksPage() {
     const isGlobalAdminOrHR = user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin' || user?.role === 'HR';
     if (isGlobalAdminOrHR) return true;
 
-    const userDept = user?.department;
+    const userDept = user?.department?.trim();
     if (!userDept || userDept.toLowerCase() !== 'development') {
       return false;
     }
@@ -1792,7 +1792,7 @@ export default function TasksPage() {
                   {employees
                     .filter((emp: any) => {
                       if (emp.id === user?.id) return false;
-                      return emp.department?.toLowerCase() === 'development';
+                      return emp.department?.trim().toLowerCase() === 'development';
                     })
                     .map((emp: any) => {
                       const name = `${emp.firstName} ${emp.lastName || ''}`.trim();

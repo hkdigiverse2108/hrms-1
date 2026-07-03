@@ -153,7 +153,7 @@ export function PendingWorkEmbedded({
     if (isGlobalAdminOrHR) return true;
 
     const taskDept = defaultTaskType === 'digital-marketing' ? 'Digital Marketing' : 'Creative';
-    const userDept = currentUser?.department;
+    const userDept = currentUser?.department?.trim();
     if (!userDept) return false;
 
     const isCreativeUser = userDept.toLowerCase() === 'creative' || userDept.toLowerCase() === 'smm' || userDept.toLowerCase() === 'social media marketing' || userDept.toLowerCase() === 'graphics';
@@ -1314,7 +1314,7 @@ export function PendingWorkEmbedded({
                         if (emp.id === currentUser?.id) return false;
                         if (!targetDept) return true;
                         
-                        const empDept = emp.department?.toLowerCase();
+                        const empDept = emp.department?.trim().toLowerCase();
                         if (!empDept) return false;
                         
                         if (isCreativeDept) {
@@ -1327,7 +1327,7 @@ export function PendingWorkEmbedded({
                           return empDept === 'development' || empDept === 'dev';
                         }
                         
-                        return empDept === targetDept.toLowerCase();
+                        return empDept === targetDept.trim().toLowerCase();
                       })
                       .map((emp: any) => {
                         const name = `${emp.firstName} ${emp.lastName || ''}`.trim();
