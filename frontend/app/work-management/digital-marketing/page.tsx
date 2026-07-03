@@ -2055,7 +2055,7 @@ export default function MarketingReportsPage() {
                   {employees
                     .filter((emp: any) => {
                       if (emp.id === user?.id) return false;
-                      return emp.department?.toLowerCase() === 'digital marketing';
+                      return emp.department?.trim().toLowerCase() === 'digital marketing';
                     })
                     .map((emp: any) => {
                       const name = `${emp.firstName} ${emp.lastName || ''}`.trim();

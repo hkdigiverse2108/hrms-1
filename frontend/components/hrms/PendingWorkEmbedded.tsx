@@ -1314,7 +1314,7 @@ export function PendingWorkEmbedded({
                         if (emp.id === currentUser?.id) return false;
                         if (!targetDept) return true;
                         
-                        const empDept = emp.department?.toLowerCase();
+                        const empDept = emp.department?.trim().toLowerCase();
                         if (!empDept) return false;
                         
                         if (isCreativeDept) {
@@ -1327,7 +1327,7 @@ export function PendingWorkEmbedded({
                           return empDept === 'development' || empDept === 'dev';
                         }
                         
-                        return empDept === targetDept.toLowerCase();
+                        return empDept === targetDept.trim().toLowerCase();
                       })
                       .map((emp: any) => {
                         const name = `${emp.firstName} ${emp.lastName || ''}`.trim();
