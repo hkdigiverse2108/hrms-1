@@ -139,7 +139,15 @@ export default function LeaveRequestsPage() {
       const res = await fetch(`${API_URL}/leaves`);
       if (res.ok) {
         const data = await res.json();
-        setRequests(data);
+        const parseDDMMYYYY = (dateStr: string) => {
+          if (!dateStr) return 0;
+          const [d, m, y] = dateStr.split("-").map(Number);
+          return new Date(y, m - 1, d).getTime();
+        };
+        const sortedData = data.sort((a: any, b: any) => {
+          return parseDDMMYYYY(b.start_date) - parseDDMMYYYY(a.start_date);
+        });
+        setRequests(sortedData);
         
         // Handle targetId from URL immediately
         if (targetId) {
