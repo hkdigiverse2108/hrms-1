@@ -229,6 +229,16 @@ export default function AllInvoicesPage() {
     if (!targetStatus && invoice.logs && invoice.logs.length > 0) {
       for (let i = invoice.logs.length - 1; i >= 0; i--) {
         const log = invoice.logs[i];
+        
+        // Parse from Cancelled log remarks (e.g., "Status changed from 'Paid' to 'Cancelled'")
+        if (log.action === "Status Changed to Cancelled" && log.remarks) {
+          const match = log.remarks.match(/Status changed from '([^']+)' to 'Cancelled'/);
+          if (match && match[1]) {
+            targetStatus = match[1];
+            break;
+          }
+        }
+        
         if (log.action && log.action.startsWith("Status Changed to ")) {
           const matchStatus = log.action.replace("Status Changed to ", "").trim();
           if (matchStatus && matchStatus !== "Cancelled") {
