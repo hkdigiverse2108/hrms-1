@@ -51,14 +51,19 @@ def kill_port_owner(port):
     """Clean up any process using the port before starting (cross-platform)."""
     try:
         if os.name == 'nt':
-            cmd = f"netstat -ano | findstr :{port} | findstr LISTENING"
+            cmd = f"netstat -ano"
             output = subprocess.check_output(cmd, shell=True).decode()
+            pids = set()
             for line in output.strip().split('\n'):
-                parts = line.split()
-                if len(parts) > 4:
-                    pid = parts[-1]
-                    print(f"Cleaning up port {port} (PID: {pid})...")
-                    subprocess.run(f"taskkill /F /PID {pid}", shell=True, capture_output=True)
+                if f":{port}" in line:
+                    parts = line.split()
+                    if len(parts) > 4:
+                        pid = parts[-1]
+                        if pid.isdigit() and int(pid) > 0:
+                            pids.add(pid)
+            for pid in pids:
+                print(f"Cleaning up port {port} (PID: {pid})...")
+                subprocess.run(f"taskkill /F /PID {pid}", shell=True, capture_output=True)
         else:
             # Linux/macOS
             cmd = f"lsof -t -i:{port}"

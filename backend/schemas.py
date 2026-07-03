@@ -1938,6 +1938,12 @@ class InvoiceIncentive(BaseModel):
     employeeName: str
     amount: float
 
+class InvoiceLog(BaseModel):
+    action: str
+    remarks: Optional[str] = None
+    timestamp: str
+    userName: str
+
 class InvoiceBase(BaseModel):
     clientName: str
     clientAddress: Optional[str] = None
@@ -1973,6 +1979,8 @@ class InvoiceBase(BaseModel):
     accessManaged: Optional[bool] = False
     totalIncentiveAmount: Optional[float] = 0.0
     incentives: Optional[List[InvoiceIncentive]] = []
+    previousStatus: Optional[str] = None
+    logs: Optional[List[InvoiceLog]] = []
 
 class InvoiceCreate(InvoiceBase):
     pass
@@ -2010,6 +2018,8 @@ class InvoiceUpdate(BaseModel):
     accessManaged: Optional[bool] = False
     totalIncentiveAmount: Optional[float] = None
     incentives: Optional[List[InvoiceIncentive]] = None
+    previousStatus: Optional[str] = None
+    logs: Optional[List[InvoiceLog]] = None
 
 class Invoice(InvoiceBase):
     id: str

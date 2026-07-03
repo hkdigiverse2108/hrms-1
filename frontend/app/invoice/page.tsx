@@ -21,7 +21,8 @@ import {
   Users,
   ChevronsUpDown,
   Gift,
-  Coins
+  Coins,
+  History
 } from "lucide-react";
 import {
   Popover,
@@ -47,6 +48,7 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { TablePagination } from "@/components/common/TablePagination";
 import { IncentivesModal } from "./IncentivesModal";
+import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -87,6 +89,8 @@ export default function AllInvoicesPage() {
   // Follow Up Modal State
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
   const [showIncentivesModal, setShowIncentivesModal] = useState(false);
+  const [logsModalOpen, setLogsOpen] = useState(false);
+  const [selectedInvoiceForLogs, setSelectedInvoiceForLogs] = useState<any>(null);
   
   const [endDate, setEndDate] = useState("");
   const [followUp, setFollowUp] = useState("");
@@ -167,20 +171,18 @@ export default function AllInvoicesPage() {
   };
 
   const handleDelete = async (invoice: any) => {
-    const isProforma = invoice.invoiceType === "Proforma Invoice";
-    
     const isConfirmed = await confirm({
       title: "Delete Invoice",
       message: `Are you sure you want to delete invoice ${invoice.invoiceNumber}? This action cannot be undone.`,
       destructive: true,
       confirmText: "Delete",
-      secondaryActionText: isProforma ? "Cancel Invoice" : undefined,
-      onSecondaryAction: isProforma ? async () => {
+      secondaryActionText: "Cancel Invoice",
+      onSecondaryAction: async () => {
         try {
           const res = await fetch(`${API_URL}/invoices/${invoice.id}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status: "Cancelled" })
+            body: JSON.stringify({ status: "Cancelled", previousStatus: invoice.status })
           });
           if (res.ok) {
             const updated = await res.json();
@@ -193,7 +195,7 @@ export default function AllInvoicesPage() {
           console.error(err);
           toast.error("Network error cancelling the invoice");
         }
-      } : undefined
+      }
     });
 
     if (!isConfirmed) return;
@@ -212,6 +214,88 @@ export default function AllInvoicesPage() {
     } catch (err) {
       console.error(err);
       toast.error("Network error deleting the invoice");
+    }
+  };
+
+  const handleUncancelInvoice = async (invoice: any) => {
+    let targetStatus = invoice.previousStatus;
+    
+    // Fallback 1: If it has paymentDate, it was previously Paid
+    if (!targetStatus && invoice.paymentDate) {
+      targetStatus = "Paid";
+    }
+    
+    // Fallback 2: search logs for the previous status before it was cancelled
+    if (!targetStatus && invoice.logs && invoice.logs.length > 0) {
+      for (let i = invoice.logs.length - 1; i >= 0; i--) {
+        const log = invoice.logs[i];
+        if (log.action && log.action.startsWith("Status Changed to ")) {
+          const matchStatus = log.action.replace("Status Changed to ", "").trim();
+          if (matchStatus && matchStatus !== "Cancelled") {
+            targetStatus = matchStatus;
+            break;
+          }
+        }
+      }
+    }
+    
+    if (!targetStatus) {
+      targetStatus = "Pending";
+    }
+
+    const isConfirmed = await confirm({
+      title: "Uncancel Invoice",
+      message: `Are you sure you want to uncancel invoice ${invoice.invoiceNumber}? It will be restored to status: ${targetStatus}.`,
+      confirmText: "Restore",
+    });
+    if (!isConfirmed) return;
+
+    try {
+      const res = await fetch(`${API_URL}/invoices/${invoice.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          status: targetStatus,
+          previousStatus: null
+        })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setInvoices(prev => prev.map(inv => inv.id === invoice.id ? updated : inv));
+        toast.success(`Invoice ${invoice.invoiceNumber} has been restored to ${targetStatus}.`);
+      } else {
+        toast.error("Failed to restore the invoice");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Network error restoring the invoice");
+    }
+  };
+
+  const handleCancelInvoice = async (invoice: any) => {
+    const isConfirmed = await confirm({
+      title: "Cancel Invoice",
+      message: `Are you sure you want to cancel invoice ${invoice.invoiceNumber}?`,
+      confirmText: "Cancel Invoice",
+    });
+    if (!isConfirmed) return;
+
+    try {
+      const res = await fetch(`${API_URL}/invoices/${invoice.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "Cancelled", previousStatus: invoice.status })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setInvoices(prev => prev.map(inv => inv.id === invoice.id ? updated : inv));
+        toast.success(`Invoice ${invoice.invoiceNumber} has been cancelled.`);
+      } else {
+        toast.error("Failed to cancel the invoice");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Network error cancelling the invoice");
     }
   };
 
@@ -692,99 +776,152 @@ export default function AllInvoicesPage() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-8 w-8 text-muted-foreground hover:text-blue-600 hover:bg-blue-50"
-                          onClick={() => router.push(`/invoice/edit/${invoice.id}`)}
-                          title="Edit Invoice"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        {isAdmin && (
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-muted-foreground hover:text-purple-600 hover:bg-purple-50"
-                            onClick={() => handleManageAccess(invoice)}
-                            title="Manage Access"
-                          >
-                            <Users className="w-4 h-4" />
-                          </Button>
-                        )}
-                        {invoice.status !== "Paid" && !(invoice.status === "Payment Approval" && !isAdmin) && (
-                          <Button 
-                            variant="ghost" 
-                            className="h-8 w-8 text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50"
-                            onClick={() => handleMarkAsPaid(invoice)}
-                            title={isAdmin && invoice.status === "Payment Approval" ? "Approve Payment" : (!isAdmin ? "Request Payment Approval" : "Mark as Paid")}
-                          >
-                            <CheckCircle2 className="w-4 h-4" />
-                          </Button>
-                        )}
-                        {invoice.status === "Paid" && (
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-muted-foreground hover:text-red-600 hover:bg-red-50"
-                            onClick={() => handleMarkAsUnpaid(invoice.id)}
-                            title="Mark as Unpaid"
-                          >
-                            <RotateCcw className="w-4 h-4" />
-                          </Button>
-                        )}
-                        {invoice.invoiceType === "Proforma Invoice" && (
+                        {invoice.status === "Cancelled" ? (
                           <>
                             <Button 
                               variant="ghost" 
                               size="icon" 
-                              className="h-8 w-8 text-muted-foreground hover:text-brand-teal hover:bg-brand-teal/10"
-                              onClick={() => {
-                                setActiveInvoiceId(invoice.id);
-                                setEndDate(invoice.endDate || "");
-                                setFollowUp(invoice.followUp || "");
-                                setShowFollowUpModal(true);
-                              }}
-                              title="Set End Date & Follow Up"
+                              className="h-8 w-8 text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50"
+                              onClick={() => handleUncancelInvoice(invoice)}
+                              title="Uncancel Invoice"
                             >
-                              <CalendarIcon className="w-4 h-4" />
+                              <RotateCcw className="w-4 h-4" />
                             </Button>
-
+                            {isAdmin && (
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8 text-muted-foreground hover:text-red-600 hover:bg-red-50"
+                                onClick={() => handleDelete(invoice)}
+                                title="Delete Invoice"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            )}
+                          </>
+                        ) : (
+                          <>
                             <Button 
                               variant="ghost" 
                               size="icon" 
-                              className="h-8 w-8 text-muted-foreground hover:text-brand-teal hover:bg-brand-teal/10"
-                              onClick={() => handleConvertToTaxInvoice(invoice.id)}
-                              title="Convert to Tax Invoice"
+                              className="h-8 w-8 text-muted-foreground hover:text-blue-600 hover:bg-blue-50"
+                              onClick={() => router.push(`/invoice/edit/${invoice.id}`)}
+                              title="Edit Invoice"
                             >
-                              <FileText className="w-4 h-4" />
+                              <Pencil className="w-4 h-4" />
                             </Button>
+                            {isAdmin && (
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8 text-muted-foreground hover:text-purple-600 hover:bg-purple-50"
+                                onClick={() => handleManageAccess(invoice)}
+                                title="Manage Access"
+                              >
+                                <Users className="w-4 h-4" />
+                              </Button>
+                            )}
+                            {invoice.status !== "Paid" && !(invoice.status === "Payment Approval" && !isAdmin) && (
+                              <Button 
+                                variant="ghost" 
+                                className="h-8 w-8 text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50"
+                                onClick={() => handleMarkAsPaid(invoice)}
+                                title={isAdmin && invoice.status === "Payment Approval" ? "Approve Payment" : (!isAdmin ? "Request Payment Approval" : "Mark as Paid")}
+                              >
+                                <CheckCircle2 className="w-4 h-4" />
+                              </Button>
+                            )}
+                            {invoice.status === "Paid" && isAdmin && (
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8 text-muted-foreground hover:text-red-600 hover:bg-red-50"
+                                onClick={() => handleMarkAsUnpaid(invoice.id)}
+                                title="Mark as Unpaid"
+                              >
+                                <RotateCcw className="w-4 h-4" />
+                              </Button>
+                            )}
+                            {invoice.invoiceType === "Proforma Invoice" && (
+                              <>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-muted-foreground hover:text-brand-teal hover:bg-brand-teal/10"
+                                  onClick={() => {
+                                    setActiveInvoiceId(invoice.id);
+                                    setEndDate(invoice.endDate || "");
+                                    setFollowUp(invoice.followUp || "");
+                                    setShowFollowUpModal(true);
+                                  }}
+                                  title="Set End Date & Follow Up"
+                                >
+                                  <CalendarIcon className="w-4 h-4" />
+                                </Button>
+
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-muted-foreground hover:text-brand-teal hover:bg-brand-teal/10"
+                                  onClick={() => handleConvertToTaxInvoice(invoice.id)}
+                                  title="Convert to Tax Invoice"
+                                >
+                                  <FileText className="w-4 h-4" />
+                                </Button>
+                              </>
+                            )}
+                            {invoice.invoiceType !== "Proforma Invoice" && isAdmin && (
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8 text-muted-foreground hover:text-brand-teal hover:bg-brand-teal/10"
+                                onClick={() => {
+                                  setActiveInvoiceId(invoice.id);
+                                  setAccessInvoice(invoice);
+                                  setShowIncentivesModal(true);
+                                }}
+                                title="Manage Incentives"
+                              >
+                                <IndianRupee className="w-4 h-4" />
+                              </Button>
+                            )}
                           </>
-                        )}
-                        {invoice.invoiceType !== "Proforma Invoice" && (
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-muted-foreground hover:text-brand-teal hover:bg-brand-teal/10"
-                            onClick={() => {
-                              setActiveInvoiceId(invoice.id);
-                              setAccessInvoice(invoice);
-                              setShowIncentivesModal(true);
-                            }}
-                            title="Manage Incentives"
-                          >
-                            <IndianRupee className="w-4 h-4" />
-                          </Button>
                         )}
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className="h-8 w-8 text-muted-foreground hover:text-red-600 hover:bg-red-50"
-                          onClick={() => handleDelete(invoice)}
-                          title="Delete Invoice"
+                          className="h-8 w-8 text-muted-foreground hover:text-brand-teal hover:bg-brand-teal/10"
+                          onClick={() => {
+                            setSelectedInvoiceForLogs(invoice);
+                            setLogsOpen(true);
+                          }}
+                          title="View Invoice History"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <History className="w-4 h-4" />
                         </Button>
+                        {invoice.status !== "Cancelled" && (
+                          isAdmin ? (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-muted-foreground hover:text-red-600 hover:bg-red-50"
+                              onClick={() => handleDelete(invoice)}
+                              title="Delete Invoice"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          ) : (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-muted-foreground hover:text-red-600 hover:bg-red-50"
+                              onClick={() => handleCancelInvoice(invoice)}
+                              title="Cancel Invoice"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -951,6 +1088,32 @@ export default function AllInvoicesPage() {
         onSaved={(updatedInvoice) => {
           setInvoices(prev => prev.map(inv => inv.id === updatedInvoice.id ? updatedInvoice : inv));
         }}
+      />
+
+      {/* Invoice Logs / History Modal */}
+      <ActivityLogDialog
+        open={logsModalOpen}
+        onOpenChange={setLogsOpen}
+        title="Invoice Action History"
+        subtitle={selectedInvoiceForLogs?.invoiceNumber}
+        logs={(() => {
+          const apiLogs = selectedInvoiceForLogs?.logs || [];
+          if (apiLogs.length === 0 && selectedInvoiceForLogs) {
+            return [{
+              userName: selectedInvoiceForLogs.createdBy || "Creator",
+              timestamp: selectedInvoiceForLogs.timestamp || selectedInvoiceForLogs.created_at || new Date().toISOString(),
+              action: "Invoice Created",
+              details: `Invoice created with initial status: ${selectedInvoiceForLogs.status || "Pending"}`
+            }];
+          }
+          return apiLogs.map((log: any) => ({
+            userName: log.userName,
+            timestamp: log.timestamp,
+            action: log.action,
+            details: log.remarks || ""
+          }));
+        })()}
+        isLoading={false}
       />
     </div>
   );

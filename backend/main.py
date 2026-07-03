@@ -2297,8 +2297,8 @@ async def read_invoice(invoice_id: str, db=Depends(get_db), current_user=Depends
     return db_invoice
 
 @app.put("/invoices/{invoice_id}", response_model=schemas.Invoice)
-async def update_invoice(invoice_id: str, invoice_update: schemas.InvoiceUpdate, db=Depends(get_db)):
-    updated = await crud.update_invoice(db, invoice_id, invoice_update)
+async def update_invoice(invoice_id: str, invoice_update: schemas.InvoiceUpdate, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
+    updated = await crud.update_invoice(db, invoice_id, invoice_update, current_user)
     if updated is None:
         raise HTTPException(status_code=404, detail="Invoice not found")
     return updated

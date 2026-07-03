@@ -6758,6 +6758,15 @@ async def create_invoice(db, invoice: schemas.InvoiceCreate):
     invoice_dict["timestamp"] = get_now().isoformat()
     if invoice_dict.get("status") == "Paid":
         invoice_dict["paymentDate"] = get_now().isoformat()
+        
+    user_name = invoice_dict.get("createdBy") or "Creator"
+    invoice_dict["logs"] = [{
+        "action": "Invoice Created",
+        "remarks": f"Invoice created with initial status: {invoice_dict.get('status', 'Pending')}",
+        "timestamp": get_now().isoformat(),
+        "userName": user_name
+    }]
+    
     result = await db.invoices.insert_one(invoice_dict)
     invoice_dict["id"] = str(result.inserted_id)
     if "_id" in invoice_dict:
@@ -6800,13 +6809,120 @@ async def get_invoice(db, invoice_id: str, current_user):
         if user_id_str not in shared_with and not (created_by == user_id_str and not access_managed):
             return None
             
-    return fix_id(row)
+def compare_line_items(old_items, new_items):
+    desc = []
+    old_items = old_items or []
+    new_items = new_items or []
+    
+    max_len = max(len(old_items), len(new_items))
+    for i in range(max_len):
+        if i >= len(old_items):
+            new_item = new_items[i]
+            desc.append(f"Added Item {i+1}: '{new_item.get('description', '')}' (Qty: {new_item.get('qty', 1)}, Rate: {new_item.get('rate', 0)})")
+        elif i >= len(new_items):
+            old_item = old_items[i]
+            desc.append(f"Removed Item {i+1}: '{old_item.get('description', '')}'")
+        else:
+            old_item = old_items[i]
+            new_item = new_items[i]
+            item_changes = []
+            for field in ["description", "rate", "qty", "discount", "sac"]:
+                old_f = old_item.get(field)
+                new_f = new_item.get(field)
+                if old_f != new_f:
+                    if old_f is None and (new_f == "" or new_f == 0):
+                        continue
+                    item_changes.append(f"{field} changed from '{old_f}' to '{new_f}'")
+            if item_changes:
+                desc.append(f"Item {i+1} ('{old_item.get('description', '')}') modified: {', '.join(item_changes)}")
+    return desc
 
-async def update_invoice(db, invoice_id: str, invoice_update: schemas.InvoiceUpdate):
+def compare_incentives(old_inc, new_inc):
+    desc = []
+    old_inc = old_inc or []
+    new_inc = new_inc or []
+    
+    max_len = max(len(old_inc), len(new_inc))
+    for i in range(max_len):
+        if i >= len(old_inc):
+            new_i = new_inc[i]
+            desc.append(f"Added Incentive: {new_i.get('employeeName', '')} (Amount: {new_i.get('amount', 0)})")
+        elif i >= len(new_inc):
+            old_i = old_inc[i]
+            desc.append(f"Removed Incentive: {old_i.get('employeeName', '')}")
+        else:
+            old_i = old_inc[i]
+            new_i = new_inc[i]
+            inc_changes = []
+            if old_i.get("employeeId") != new_i.get("employeeId") or old_i.get("employeeName") != new_i.get("employeeName"):
+                inc_changes.append(f"Employee changed to '{new_i.get('employeeName')}'")
+            if old_i.get("amount") != new_i.get("amount"):
+                inc_changes.append(f"Amount changed from '{old_i.get('amount')}' to '{new_i.get('amount')}'")
+            if inc_changes:
+                desc.append(f"Incentive {i+1} modified: {', '.join(inc_changes)}")
+    return desc
+
+async def update_invoice(db, invoice_id: str, invoice_update: schemas.InvoiceUpdate, current_user=None):
     update_data = invoice_update.dict(exclude_unset=True)
     
     existing = await db.invoices.find_one({"_id": ObjectId(invoice_id)})
-    was_paid = existing.get("status") == "Paid" if existing else False
+    if not existing:
+        return None
+        
+    user_name = "Unknown User"
+    if current_user:
+        user_name = current_user.get("name") or f"{current_user.get('firstName', '')} {current_user.get('lastName', '')}".strip() or "Unknown User"
+
+    new_logs = []
+    timestamp_str = get_now().isoformat()
+
+    changes_desc = []
+    for key, val in update_data.items():
+        if key in ["logs", "updated_at", "timestamp", "previousStatus"]:
+            continue
+        old_val = existing.get(key)
+        if val != old_val:
+            # Skip if both are falsy/empty/None
+            if (val is None or val == "" or val == []) and (old_val is None or old_val == "" or old_val == []):
+                continue
+            
+            if key == "lineItems":
+                old_list = [dict(x) if not isinstance(x, dict) else x for x in (old_val or [])]
+                new_list = [dict(x) if not isinstance(x, dict) else x for x in (val or [])]
+                diffs = compare_line_items(old_list, new_list)
+                if diffs:
+                    changes_desc.extend(diffs)
+            elif key == "incentives":
+                old_list = [dict(x) if not isinstance(x, dict) else x for x in (old_val or [])]
+                new_list = [dict(x) if not isinstance(x, dict) else x for x in (val or [])]
+                diffs = compare_incentives(old_list, new_list)
+                if diffs:
+                    changes_desc.extend(diffs)
+            elif key == "status":
+                new_logs.append({
+                    "action": f"Status Changed to {val}",
+                    "remarks": f"Status changed from '{old_val}' to '{val}'",
+                    "timestamp": timestamp_str,
+                    "userName": user_name
+                })
+            else:
+                import re
+                pretty_name = re.sub(r'(?<!^)(?=[A-Z])', ' ', key).title()
+                changes_desc.append(f"{pretty_name} changed from '{old_val}' to '{val}'")
+
+    if changes_desc:
+        new_logs.append({
+            "action": "Invoice Details Updated",
+            "remarks": ", ".join(changes_desc),
+            "timestamp": timestamp_str,
+            "userName": user_name
+        })
+
+    existing_logs = existing.get("logs") or []
+    if new_logs:
+        update_data["logs"] = existing_logs + new_logs
+
+    was_paid = existing.get("status") == "Paid"
     is_paid = update_data.get("status") == "Paid" if "status" in update_data else was_paid
     
     if is_paid and not was_paid:
