@@ -2657,6 +2657,12 @@ async def get_clients(db, skip: int = 0, limit: int = 10000, user_info: dict = N
                 import re
                 dept_regex = re.compile(f".*{re.escape(user.get('department'))}.*", re.IGNORECASE)
                 query["$or"].append({"department": dept_regex})
+
+            # If the user is HR, also give them access to the Creative department's clients for SMM access
+            if role == "hr" or (user and str(user.get("role", "")).lower().strip() == "hr"):
+                import re
+                creative_regex = re.compile(".*Creative.*", re.IGNORECASE)
+                query["$or"].append({"department": creative_regex})
             
     cursor = db.clients.find(query).sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
@@ -2991,6 +2997,13 @@ async def get_projects(db, userId: str = None, role: str = None, skip: int = 0, 
                 import re
                 dept_regex = re.compile(f".*{re.escape(dept)}.*", re.IGNORECASE)
                 or_conditions.append({"department": dept_regex})
+
+            # If the user is HR, also give them access to the Creative department's projects for SMM access
+            role_lower = str(role or "").lower().strip()
+            if role_lower == "hr" or (user and str(user.get("role", "")).lower().strip() == "hr"):
+                import re
+                creative_regex = re.compile(".*Creative.*", re.IGNORECASE)
+                or_conditions.append({"department": creative_regex})
 
             query["$or"] = or_conditions
 
