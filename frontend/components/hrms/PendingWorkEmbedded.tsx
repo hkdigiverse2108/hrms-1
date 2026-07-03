@@ -1292,6 +1292,9 @@ export function PendingWorkEmbedded({
                   {(() => {
                     const getTaskDepartment = () => {
                       if (!transferringTask) return "";
+                      if (defaultTaskType !== 'digital-marketing') {
+                        return "Creative";
+                      }
                       if (!transferringTask.isOtherWork) return "Creative";
                       const tType = transferringTask.type?.toLowerCase();
                       if (tType === 'development') return "Development";
