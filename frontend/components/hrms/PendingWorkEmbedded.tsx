@@ -261,7 +261,7 @@ export function PendingWorkEmbedded({
     }
   };
 
-  const isAdminOrTL = currentUser?.role === 'Team Leader' || currentUser?.role?.toLowerCase() === 'admin' || currentUser?.name === 'Admin Admin';
+  const isAdminOrTL = currentUser?.role === 'Team Leader' || currentUser?.role === 'HR' || currentUser?.role?.toLowerCase() === 'admin' || currentUser?.name === 'Admin Admin';
 
   const preFilteredTasks = useMemo(() => {
     const tasks: any[] = [];
