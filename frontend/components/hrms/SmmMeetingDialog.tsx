@@ -59,6 +59,17 @@ const formatDisplayDate = (dStr: string) => {
   }
 };
 
+const formatDurationLabel = (mins: number) => {
+  if (mins === 30) return "30 Minutes (Half Hour)";
+  if (mins < 60) return `${mins} Minutes`;
+  if (mins === 60) return "1 Hour";
+  if (mins % 60 === 0) return `${mins / 60} Hours`;
+  
+  const hrs = Math.floor(mins / 60);
+  const remainingMins = mins % 60;
+  return `${hrs} ${hrs === 1 ? 'Hour' : 'Hours'} ${remainingMins} Mins`;
+};
+
 // --- Multi-Select Employee Dropdown ---
 function EmployeeMultiSelect({ 
   employees, 
@@ -232,11 +243,17 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
   const [freeSlots, setFreeSlots] = useState<{ start: string; end: string }[]>([]);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
+  const [selectedDuration, setSelectedDuration] = useState<number>(30);
+  const [showCustomDuration, setShowCustomDuration] = useState<boolean>(false);
+  const [customHours, setCustomHours] = useState<string>("");
 
   // Edit mode employee selection
   const [editSelectedEmployeeIds, setEditSelectedEmployeeIds] = useState<string[]>([]);
   const [editFreeSlots, setEditFreeSlots] = useState<{ start: string; end: string }[]>([]);
   const [isLoadingEditSlots, setIsLoadingEditSlots] = useState(false);
+  const [editSelectedDuration, setEditSelectedDuration] = useState<number>(30);
+  const [showEditCustomDuration, setShowEditCustomDuration] = useState<boolean>(false);
+  const [editCustomHours, setEditCustomHours] = useState<string>("");
 
   // Time Validation Constants
   const todayStr = new Date().toISOString().split('T')[0];
@@ -278,7 +295,7 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
   };
 
   // Fetch free slots when date + attendees change (add mode)
-  const fetchFreeSlots = useCallback(async (empIds: string[], dateStr: string) => {
+  const fetchFreeSlots = useCallback(async (empIds: string[], dateStr: string, durationVal: number) => {
     if (!empIds.length || !dateStr) {
       setFreeSlots([]);
       return;
@@ -298,7 +315,7 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
         body: JSON.stringify({
           employeeIds: empIds,
           date: datePart,
-          durationMins: 30,
+          durationMins: durationVal,
         }),
       });
       if (res.ok) {
@@ -313,7 +330,7 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
   }, []);
 
   // Fetch free slots when date + attendees change (edit mode)
-  const fetchEditFreeSlots = useCallback(async (empIds: string[], dateStr: string) => {
+  const fetchEditFreeSlots = useCallback(async (empIds: string[], dateStr: string, durationVal: number) => {
     if (!empIds.length || !dateStr) {
       setEditFreeSlots([]);
       return;
@@ -332,7 +349,7 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
         body: JSON.stringify({
           employeeIds: empIds,
           date: datePart,
-          durationMins: 30,
+          durationMins: durationVal,
         }),
       });
       if (res.ok) {
@@ -349,16 +366,16 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
   // Watch for changes in add mode
   useEffect(() => {
     const idsToCheck = userId ? Array.from(new Set([...selectedEmployeeIds, userId])) : selectedEmployeeIds;
-    fetchFreeSlots(idsToCheck, meetingDate);
-  }, [selectedEmployeeIds, meetingDate, fetchFreeSlots, userId]);
+    fetchFreeSlots(idsToCheck, meetingDate, selectedDuration);
+  }, [selectedEmployeeIds, meetingDate, selectedDuration, fetchFreeSlots, userId]);
 
   // Watch for changes in edit mode
   useEffect(() => {
     if (editingIdx !== null) {
       const idsToCheck = userId ? Array.from(new Set([...editSelectedEmployeeIds, userId])) : editSelectedEmployeeIds;
-      fetchEditFreeSlots(idsToCheck, editDate);
+      fetchEditFreeSlots(idsToCheck, editDate, editSelectedDuration);
     }
-  }, [editSelectedEmployeeIds, editDate, editingIdx, fetchEditFreeSlots, userId]);
+  }, [editSelectedEmployeeIds, editDate, editSelectedDuration, editingIdx, fetchEditFreeSlots, userId]);
 
   // Sync selected employee IDs to attendees string
   useEffect(() => {
@@ -377,6 +394,64 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
       setEditAttendees(names.join(", "));
     }
   }, [editSelectedEmployeeIds, employees, editingIdx]);
+
+  // Synchronize times and duration in add mode
+  useEffect(() => {
+    if (startTime && endTime) {
+      try {
+        const [sh, sm] = startTime.split(":").map(Number);
+        const [eh, em] = endTime.split(":").map(Number);
+        const diff = (eh * 60 + em) - (sh * 60 + sm);
+        if (diff > 0 && diff !== selectedDuration) {
+          setSelectedDuration(diff);
+        }
+      } catch (e) {}
+    }
+  }, [startTime, endTime]);
+
+  useEffect(() => {
+    if (startTime && selectedDuration) {
+      try {
+        const [sh, sm] = startTime.split(":").map(Number);
+        const total = sh * 60 + sm + selectedDuration;
+        const eh = Math.floor(total / 60) % 24;
+        const em = total % 60;
+        const calculatedEnd = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
+        if (calculatedEnd !== endTime) {
+          setEndTime(calculatedEnd);
+        }
+      } catch (e) {}
+    }
+  }, [startTime, selectedDuration]);
+
+  // Synchronize times and duration in edit mode
+  useEffect(() => {
+    if (editStartTime && editEndTime) {
+      try {
+        const [sh, sm] = editStartTime.split(":").map(Number);
+        const [eh, em] = editEndTime.split(":").map(Number);
+        const diff = (eh * 60 + em) - (sh * 60 + sm);
+        if (diff > 0 && diff !== editSelectedDuration) {
+          setEditSelectedDuration(diff);
+        }
+      } catch (e) {}
+    }
+  }, [editStartTime, editEndTime]);
+
+  useEffect(() => {
+    if (editStartTime && editSelectedDuration) {
+      try {
+        const [sh, sm] = editStartTime.split(":").map(Number);
+        const total = sh * 60 + sm + editSelectedDuration;
+        const eh = Math.floor(total / 60) % 24;
+        const em = total % 60;
+        const calculatedEnd = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
+        if (calculatedEnd !== editEndTime) {
+          setEditEndTime(calculatedEnd);
+        }
+      } catch (e) {}
+    }
+  }, [editStartTime, editSelectedDuration]);
 
   const handleAddMeeting = async () => {
     if (!note.trim()) return;
@@ -415,6 +490,9 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
         setDuration("");
         setLink("");
         setFreeSlots([]);
+        setSelectedDuration(30);
+        setShowCustomDuration(false);
+        setCustomHours("");
         onUpdate();
       } else {
         toast.error("Failed to add meeting");
@@ -455,6 +533,9 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
         setEditNote("");
         setEditSelectedEmployeeIds([]);
         setEditFreeSlots([]);
+        setEditSelectedDuration(30);
+        setShowEditCustomDuration(false);
+        setEditCustomHours("");
         onUpdate();
       } else {
         toast.error("Failed to update meeting");
@@ -499,6 +580,40 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
     }
   };
 
+  // Helper: split free time blocks into chunks of selected duration with a 30-min sliding window step
+  const getDurationChunks = (slots: { start: string; end: string }[], durationMins: number) => {
+    const chunks: { start: string; end: string }[] = [];
+
+    const timeToMins = (t: string): number => {
+      const parts = t.split(":");
+      return Number(parts[0]) * 60 + Number(parts[1]);
+    };
+
+    const minsToTime = (m: number): string => {
+      const h = Math.floor(m / 60) % 24;
+      const mins = m % 60;
+      return `${String(h).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+    };
+
+    const step = 30; // 30 minutes sliding step
+
+    slots.forEach(slot => {
+      const startMins = timeToMins(slot.start);
+      const endMins = timeToMins(slot.end);
+      let current = startMins;
+
+      while (current + durationMins <= endMins) {
+        chunks.push({
+          start: minsToTime(current),
+          end: minsToTime(current + durationMins)
+        });
+        current += step;
+      }
+    });
+
+    return chunks;
+  };
+
   // Helper: resolve attendee names to employee IDs (for edit mode)
   const resolveAttendeesToIds = (attendeesStr: string): string[] => {
     if (!attendeesStr || employees.length === 0) return [];
@@ -510,14 +625,34 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
 
   // Helper: apply a free slot to the date/time picker
   const applyFreeSlot = (slot: { start: string; end: string }, mode: 'add' | 'edit') => {
+    const durationMins = mode === 'add' ? selectedDuration : editSelectedDuration;
+    
+    const calculateEndTime = (startStr: string, limitEndStr: string): string => {
+      try {
+        const [sh, sm] = startStr.split(":").map(Number);
+        const [eh, em] = limitEndStr.split(":").map(Number);
+        const startMins = sh * 60 + sm;
+        const limitMins = eh * 60 + em;
+        const targetMins = Math.min(startMins + durationMins, limitMins);
+        
+        const h = Math.floor(targetMins / 60);
+        const m = targetMins % 60;
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      } catch (e) {
+        return limitEndStr;
+      }
+    };
+    
+    const computedEnd = calculateEndTime(slot.start, slot.end);
+
     if (mode === 'add') {
       setStartTime(slot.start);
-      setEndTime(slot.end);
+      setEndTime(computedEnd);
     } else {
       setEditStartTime(slot.start);
-      setEditEndTime(slot.end);
+      setEditEndTime(computedEnd);
     }
-    toast.success(`Time slot ${slot.start} – ${slot.end} applied`);
+    toast.success(`Time slot ${slot.start} – ${computedEnd} applied`);
   };
 
   return (
@@ -617,6 +752,94 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
               />
             </div>
 
+            {/* Meeting Duration */}
+            <div className="space-y-1.5 mt-3">
+              <Label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Meeting Duration *</Label>
+              <Select 
+                value={showCustomDuration ? "custom" : String(selectedDuration)} 
+                onValueChange={(val) => {
+                  if (val === "custom") {
+                    setShowCustomDuration(true);
+                  } else {
+                    setSelectedDuration(Number(val));
+                    setShowCustomDuration(false);
+                  }
+                }}
+              >
+                <SelectTrigger className="h-8 text-xs bg-white border-slate-200 focus-visible:ring-brand-teal">
+                  <SelectValue placeholder="Select duration" />
+                </SelectTrigger>
+                <SelectContent className="max-h-[200px]">
+                  {(() => {
+                    const durationOptions = [30, 60, 120, 180, 240];
+                    if (!durationOptions.includes(selectedDuration)) {
+                      durationOptions.push(selectedDuration);
+                      durationOptions.sort((a, b) => a - b);
+                    }
+                    const items = durationOptions.map(mins => {
+                      return (
+                        <SelectItem key={mins} value={String(mins)}>
+                          {formatDurationLabel(mins)}
+                        </SelectItem>
+                      );
+                    });
+                    items.push(
+                      <SelectItem key="custom" value="custom" className="text-brand-teal font-medium hover:bg-brand-teal/5 focus:bg-brand-teal/5">
+                        + Custom Duration...
+                      </SelectItem>
+                    );
+                    return items;
+                  })()}
+                </SelectContent>
+              </Select>
+
+              {showCustomDuration && (
+                <div className="flex items-center gap-2 mt-1.5 p-2 bg-slate-50 border border-slate-100 rounded-md animate-in fade-in duration-200">
+                  <Input
+                    type="number"
+                    placeholder="Hours (e.g. 1.5)"
+                    value={customHours}
+                    onChange={(e) => setCustomHours(e.target.value)}
+                    className="h-8 text-xs bg-white border-slate-200 focus-visible:ring-brand-teal w-28"
+                    min="0.1"
+                    step="any"
+                    autoFocus
+                  />
+                  <span className="text-[10px] text-slate-500 font-medium">Hours</span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      const hours = parseFloat(customHours);
+                      if (hours > 0) {
+                        const mins = Math.round(hours * 60);
+                        setSelectedDuration(mins);
+                        setShowCustomDuration(false);
+                        setCustomHours("");
+                      } else {
+                        toast.error("Please enter a valid number of hours");
+                      }
+                    }}
+                    className="h-8 px-2 text-xs bg-brand-teal hover:bg-brand-teal-light text-white font-medium"
+                  >
+                    Add
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setShowCustomDuration(false);
+                      setCustomHours("");
+                    }}
+                    className="h-8 px-2 text-xs text-slate-500 hover:bg-slate-200"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              )}
+            </div>
+
             {/* Free Slots Section */}
             {(selectedEmployeeIds.length > 0 && meetingDate) && (
               <div className="mt-3 space-y-1.5">
@@ -629,9 +852,9 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
                     <Loader2 className="w-3 h-3 animate-spin text-brand-teal" />
                     <span className="text-[10px] text-slate-400">Finding free slots...</span>
                   </div>
-                ) : freeSlots.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {freeSlots.map((slot, idx) => (
+                ) : getDurationChunks(freeSlots, selectedDuration).length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5 max-h-[150px] overflow-y-auto p-1 border border-slate-100 rounded-lg custom-scrollbar w-full">
+                    {getDurationChunks(freeSlots, selectedDuration).map((slot, idx) => (
                       <FreeSlotBadge 
                         key={idx} 
                         slot={slot} 
@@ -755,6 +978,24 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
                                         eTime = m.duration.split("-")[1].trim();
                                       }
                                       setEditEndTime(eTime);
+
+                                      // Calculate duration mins for free slot lookup
+                                      let computedDuration = 30;
+                                      if (tPart && eTime) {
+                                        try {
+                                          const [sH, sM] = tPart.split(":").map(Number);
+                                          const [eH, eM] = eTime.split(":").map(Number);
+                                          const diff = (eH * 60 + eM) - (sH * 60 + sM);
+                                          if (diff > 0) {
+                                            computedDuration = diff;
+                                          }
+                                        } catch (e) {
+                                          console.error("Failed to parse computed duration:", e);
+                                        }
+                                      }
+                                      setEditSelectedDuration(computedDuration);
+                                      setShowEditCustomDuration(false);
+                                      setEditCustomHours("");
                                       
                                       setEditType(m.type || "");
                                       setEditLocation(m.location || "");
@@ -844,6 +1085,93 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
                                   isLoading={isLoadingEmployees}
                                 />
                               </div>
+                              {/* Edit mode: Meeting Duration */}
+                              <div className="space-y-1">
+                                <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Meeting Duration</Label>
+                                <Select 
+                                  value={showEditCustomDuration ? "custom" : String(editSelectedDuration)} 
+                                  onValueChange={(val) => {
+                                    if (val === "custom") {
+                                      setShowEditCustomDuration(true);
+                                    } else {
+                                      setEditSelectedDuration(Number(val));
+                                      setShowEditCustomDuration(false);
+                                    }
+                                  }}
+                                >
+                                  <SelectTrigger className="h-8 text-xs bg-white border-slate-200 focus-visible:ring-brand-teal">
+                                    <SelectValue placeholder="Select duration" />
+                                  </SelectTrigger>
+                                  <SelectContent className="max-h-[200px]">
+                                    {(() => {
+                                      const editDurationOptions = [30, 60, 120, 180, 240];
+                                      if (!editDurationOptions.includes(editSelectedDuration)) {
+                                        editDurationOptions.push(editSelectedDuration);
+                                        editDurationOptions.sort((a, b) => a - b);
+                                      }
+                                      const items = editDurationOptions.map(mins => {
+                                        return (
+                                          <SelectItem key={mins} value={String(mins)}>
+                                            {formatDurationLabel(mins)}
+                                          </SelectItem>
+                                        );
+                                      });
+                                      items.push(
+                                        <SelectItem key="custom" value="custom" className="text-brand-teal font-medium hover:bg-brand-teal/5 focus:bg-brand-teal/5">
+                                          + Custom Duration...
+                                        </SelectItem>
+                                      );
+                                      return items;
+                                    })()}
+                                  </SelectContent>
+                                </Select>
+
+                                {showEditCustomDuration && (
+                                  <div className="flex items-center gap-2 mt-1.5 p-2 bg-slate-50 border border-slate-100 rounded-md animate-in fade-in duration-200">
+                                    <Input
+                                      type="number"
+                                      placeholder="Hours (e.g. 1.5)"
+                                      value={editCustomHours}
+                                      onChange={(e) => setEditCustomHours(e.target.value)}
+                                      className="h-8 text-xs bg-white border-slate-200 focus-visible:ring-brand-teal w-28"
+                                      min="0.1"
+                                      step="any"
+                                      autoFocus
+                                    />
+                                    <span className="text-[10px] text-slate-500 font-medium">Hours</span>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      onClick={() => {
+                                        const hours = parseFloat(editCustomHours);
+                                        if (hours > 0) {
+                                          const mins = Math.round(hours * 60);
+                                          setEditSelectedDuration(mins);
+                                          setShowEditCustomDuration(false);
+                                          setEditCustomHours("");
+                                        } else {
+                                          toast.error("Please enter a valid number of hours");
+                                        }
+                                      }}
+                                      className="h-8 px-2 text-xs bg-brand-teal hover:bg-brand-teal-light text-white font-medium"
+                                    >
+                                      Add
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        setShowEditCustomDuration(false);
+                                        setEditCustomHours("");
+                                      }}
+                                      className="h-8 px-2 text-xs text-slate-500 hover:bg-slate-200"
+                                    >
+                                      Cancel
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
 
                               {/* Edit mode: free slots */}
                               {(editSelectedEmployeeIds.length > 0 && editDate) && (
@@ -857,9 +1185,9 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
                                       <Loader2 className="w-3 h-3 animate-spin text-brand-teal" />
                                       <span className="text-[10px] text-slate-400">Finding slots...</span>
                                     </div>
-                                  ) : editFreeSlots.length > 0 ? (
-                                    <div className="flex flex-wrap gap-1">
-                                      {editFreeSlots.map((slot, idx) => (
+                                  ) : getDurationChunks(editFreeSlots, editSelectedDuration).length > 0 ? (
+                                    <div className="flex flex-wrap gap-1 max-h-[120px] overflow-y-auto p-1 border border-slate-100 rounded-lg custom-scrollbar w-full">
+                                      {getDurationChunks(editFreeSlots, editSelectedDuration).map((slot, idx) => (
                                         <FreeSlotBadge 
                                           key={idx} 
                                           slot={slot} 
@@ -923,7 +1251,14 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
                                   variant="ghost" 
                                   size="sm" 
                                   className="h-7 text-[10px] font-bold text-slate-500"
-                                  onClick={() => { setEditingIdx(null); setEditSelectedEmployeeIds([]); setEditFreeSlots([]); }}
+                                  onClick={() => { 
+                                    setEditingIdx(null); 
+                                    setEditSelectedEmployeeIds([]); 
+                                    setEditFreeSlots([]); 
+                                    setEditSelectedDuration(30);
+                                    setShowEditCustomDuration(false);
+                                    setEditCustomHours("");
+                                  }}
                                 >
                                   Cancel
                                 </Button>
