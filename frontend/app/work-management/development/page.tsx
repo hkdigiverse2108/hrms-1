@@ -192,7 +192,7 @@ export default function TasksPage() {
     const isGlobalAdminOrHR = user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin' || user?.role === 'HR';
     if (isGlobalAdminOrHR) return true;
 
-    const userDept = user?.department;
+    const userDept = user?.department?.trim();
     if (!userDept || userDept.toLowerCase() !== 'development') {
       return false;
     }

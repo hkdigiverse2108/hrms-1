@@ -153,7 +153,7 @@ export function PendingWorkEmbedded({
     if (isGlobalAdminOrHR) return true;
 
     const taskDept = defaultTaskType === 'digital-marketing' ? 'Digital Marketing' : 'Creative';
-    const userDept = currentUser?.department;
+    const userDept = currentUser?.department?.trim();
     if (!userDept) return false;
 
     const isCreativeUser = userDept.toLowerCase() === 'creative' || userDept.toLowerCase() === 'smm' || userDept.toLowerCase() === 'social media marketing' || userDept.toLowerCase() === 'graphics';
