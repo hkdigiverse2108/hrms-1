@@ -10,7 +10,8 @@ import {
   MoreHorizontal,
   Loader2,
   Trash2,
-  History
+  History,
+  ChevronDown
 } from "lucide-react";
 import { exportToCSV } from "@/lib/export-utils";
 import { toast } from "sonner";
@@ -94,6 +95,7 @@ export default function TaskManagementPage() {
   const canDeletePerm = isAdmin || checkPermission('personal-tasks', 'canDelete');
   const [tasks, setTasks] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
   const [isMounted, setIsMounted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -117,13 +119,15 @@ export default function TaskManagementPage() {
     dueDate: string;
     status: string;
     priority: string;
+    department?: string;
   }>({
     title: "",
     description: "",
     assignedToIds: [],
     dueDate: "",
     status: "todo",
-    priority: "medium"
+    priority: "medium",
+    department: ""
   });
 
   // Get today's date in YYYY-MM-DD format for local timezone
@@ -143,12 +147,14 @@ export default function TaskManagementPage() {
     if (!user) return;
     setIsLoading(true);
     try {
-      const [tRes, eRes] = await Promise.all([
+      const [tRes, eRes, dRes] = await Promise.all([
         fetch(`${API_URL}/tasks?userId=${user.id}&role=${user.role}`),
-        fetch(`${API_URL}/employees`)
+        fetch(`${API_URL}/employees`),
+        fetch(`${API_URL}/departments`)
       ]);
       
       if (tRes.ok) setTasks(await tRes.json());
+      if (dRes.ok) setDepartments(await dRes.json());
       if (eRes.ok) {
         let emps = await eRes.json();
         if (user && !emps.some((e: any) => e.id === user.id)) {
@@ -188,13 +194,14 @@ export default function TaskManagementPage() {
           priority: newTask.priority,
           assignedToIds: idsToAssign,
           performedBy: user?.id,
-          userName: user?.name
+          userName: user?.name,
+          department: newTask.department || undefined
         })
       });
 
       if (response.ok) {
         setCreateModalOpen(false);
-        setNewTask({ title: "", description: "", assignedToIds: [], dueDate: "", status: "todo", priority: "medium" });
+        setNewTask({ title: "", description: "", assignedToIds: [], dueDate: "", status: "todo", priority: "medium", department: "" });
         fetchTasks();
         toast.success(idsToAssign.length > 1 ? `Task successfully assigned to ${idsToAssign.length} user(s)!` : "Task created successfully!");
       } else {
@@ -211,6 +218,14 @@ export default function TaskManagementPage() {
 
   const uniqueDesignations = Array.from(new Set(employees.map((e: any) => e.designation).filter(Boolean)));
   const uniqueDepartments = Array.from(new Set(employees.map((e: any) => e.department).filter(Boolean)));
+
+  const sortedDepartmentsList = [...departments].sort((a, b) => {
+    const nameA = (typeof a === 'string' ? a : a.name || "").toLowerCase();
+    const nameB = (typeof b === 'string' ? b : b.name || "").toLowerCase();
+    if (nameA.includes("admin") && !nameB.includes("admin")) return -1;
+    if (!nameA.includes("admin") && nameB.includes("admin")) return 1;
+    return nameA.localeCompare(nameB);
+  });
 
   const handleQuickSelect = (type: 'designation' | 'department', value: string) => {
     const matchingEmpIds = employees.filter((e: any) => e[type] === value).map((e: any) => e.id);
@@ -403,6 +418,7 @@ export default function TaskManagementPage() {
   // Filter State
   const [activeStatuses, setActiveStatuses] = useState<string[]>([]);
   const [activePriorities, setActivePriorities] = useState<string[]>([]);
+  const [activeDepartments, setActiveDepartments] = useState<string[]>([]);
   const [activeAssignees, setActiveAssignees] = useState<string[]>([]);
   const [activeDateRange, setActiveDateRange] = useState<{from: Date | undefined, to?: Date | undefined} | undefined>();
   const [assigneeDropdownOpen, setAssigneeDropdownOpen] = useState(false);
@@ -410,8 +426,9 @@ export default function TaskManagementPage() {
   const [createdByMe, setCreatedByMe] = useState(false);
 
   const [savedStatuses, setSavedStatuses] = useState<string[]>([]);
+  const [showDoubleOwnedOnly, setShowDoubleOwnedOnly] = useState<boolean>(false);
 
-  // Load saved status filters for the current user
+  // Load saved status filters and double owned filter for the current user
   useEffect(() => {
     if (user?.id) {
       const saved = localStorage.getItem(`task_saved_status_filters_${user.id}`);
@@ -425,6 +442,11 @@ export default function TaskManagementPage() {
         const defaultSaved = ['todo', 'on-hold', 'in-progress'];
         setSavedStatuses(defaultSaved);
         localStorage.setItem(`task_saved_status_filters_${user.id}`, JSON.stringify(defaultSaved));
+      }
+
+      const doubleOwnedSaved = localStorage.getItem(`task_double_owned_${user.id}`);
+      if (doubleOwnedSaved) {
+        setShowDoubleOwnedOnly(doubleOwnedSaved === 'true');
       }
     }
   }, [user]);
@@ -518,6 +540,11 @@ export default function TaskManagementPage() {
       ownershipMatch = isAssignedToMe || isCreatedByMe;
     }
 
+    // If double owned option is checked AND My Filter is active, restrict ownershipMatch to BOTH assigned to me AND created by me
+    if (activeStatuses.length > 0 && showDoubleOwnedOnly) {
+      ownershipMatch = isAssignedToMe && isCreatedByMe;
+    }
+
     // Additional quick filters (Assigned to me / Created by me toggles)
     if (assignedToMe && createdByMe) {
       ownershipMatch = ownershipMatch && (isAssignedToMe || isCreatedByMe);
@@ -527,7 +554,11 @@ export default function TaskManagementPage() {
       ownershipMatch = ownershipMatch && isCreatedByMe;
     }
 
-    return priorityMatch && assigneeMatch && dateMatch && ownershipMatch;
+    const departmentMatch = activeDepartments.length === 0 || 
+      (activeDepartments.includes("None / Personal") && (!task.department || task.department === "")) ||
+      activeDepartments.includes(task.department || "");
+
+    return priorityMatch && assigneeMatch && dateMatch && ownershipMatch && departmentMatch;
   });
 
   const filteredTasks = statsTasks.filter(task => {
@@ -596,30 +627,50 @@ export default function TaskManagementPage() {
                   </svg>
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-56 p-4 bg-white border border-slate-200 shadow-lg rounded-xl z-50">
+              <PopoverContent className="w-48 p-3 bg-white border border-slate-200 shadow-lg rounded-xl z-50">
                 <div className="space-y-3">
-                  <h4 className="font-bold text-slate-800 text-sm">Default Status Filters</h4>
-                  <p className="text-[11px] text-slate-500 leading-tight">Choose which task statuses you want to see by default when you load the page.</p>
-                  <div className="space-y-2 pt-1 border-t border-slate-100">
-                    {[
-                      { value: "todo", label: "To do" },
-                      { value: "on-hold", label: "On Hold" },
-                      { value: "in-progress", label: "In progress" },
-                      { value: "completed", label: "Completed" }
-                    ].map(status => {
-                      const isChecked = savedStatuses.includes(status.value);
-                      return (
-                        <label key={status.value} className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 hover:text-slate-900">
-                          <input 
-                            type="checkbox" 
-                            checked={isChecked}
-                            onChange={() => handleToggleSavedStatus(status.value)}
-                            className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-3.5 h-3.5"
-                          />
-                          {status.label}
-                        </label>
-                      );
-                    })}
+                  <div className="space-y-1.5">
+                    <h4 className="font-bold text-slate-800 text-[11px] uppercase tracking-wider">Default Statuses</h4>
+                    <div className="space-y-1.5 pt-1 border-t border-slate-100">
+                      {[
+                        { value: "todo", label: "To do" },
+                        { value: "on-hold", label: "On Hold" },
+                        { value: "in-progress", label: "In progress" },
+                        { value: "completed", label: "Completed" }
+                      ].map(status => {
+                        const isChecked = savedStatuses.includes(status.value);
+                        return (
+                          <label key={status.value} className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 hover:text-slate-900">
+                            <input 
+                              type="checkbox" 
+                              checked={isChecked}
+                              onChange={() => handleToggleSavedStatus(status.value)}
+                              className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-3.5 h-3.5"
+                            />
+                            {status.label}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5 pt-2 border-t border-slate-100">
+                    <h4 className="font-bold text-slate-800 text-[11px] uppercase tracking-wider">Personal Task</h4>
+                    <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 hover:text-slate-900 pt-1">
+                      <input 
+                        type="checkbox" 
+                        checked={showDoubleOwnedOnly}
+                        onChange={(e) => {
+                          const val = e.target.checked;
+                          setShowDoubleOwnedOnly(val);
+                          if (user?.id) {
+                            localStorage.setItem(`task_double_owned_${user.id}`, val ? 'true' : 'false');
+                          }
+                        }}
+                        className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-3.5 h-3.5"
+                      />
+                      Personal Tasks Only
+                    </label>
                   </div>
                 </div>
               </PopoverContent>
@@ -652,7 +703,7 @@ export default function TaskManagementPage() {
           <Dialog open={createModalOpen} onOpenChange={(val) => {
             setCreateModalOpen(val);
             if (!val) {
-              setNewTask({ title: "", description: "", assignedToIds: [], dueDate: "", status: "todo", priority: "medium" });
+              setNewTask({ title: "", description: "", assignedToIds: [], dueDate: "", status: "todo", priority: "medium", department: "" });
             }
           }}>
             <DialogTrigger asChild>
@@ -766,7 +817,7 @@ export default function TaskManagementPage() {
                     )}
                   </div>
                   
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-sm font-semibold text-foreground">Status</label>
                       <Select value={newTask.status} onValueChange={(val) => setNewTask({...newTask, status: val})}>
@@ -874,6 +925,25 @@ export default function TaskManagementPage() {
                         </SelectContent>
                       </Select>
                     </div>
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-foreground">Department (optional)</label>
+                      <Select value={newTask.department || ""} onValueChange={(val) => setNewTask({...newTask, department: val})}>
+                        <SelectTrigger className="bg-white w-full">
+                          <SelectValue placeholder="Select department" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {sortedDepartmentsList.map((dept: any) => {
+                            const deptName = typeof dept === 'string' ? dept : dept.name;
+                            return (
+                              <SelectItem key={deptName} value={deptName}>
+                                {deptName}
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -972,7 +1042,7 @@ export default function TaskManagementPage() {
       <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden flex flex-col">
         <div className="p-6 border-b border-border">
           {/* Inline Filters */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 animate-in fade-in slide-in-from-top-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 animate-in fade-in slide-in-from-top-2">
             {/* Status Filter */}
             <div className="space-y-2">
                 <label className="text-xs font-semibold text-foreground uppercase tracking-wider">Status</label>
@@ -1022,6 +1092,59 @@ export default function TaskManagementPage() {
                       </div>
                     )
                   })}
+                </div>
+              </div>
+
+              {/* Department Filter */}
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-foreground uppercase tracking-wider">Department</label>
+                <div className="flex flex-wrap gap-1.5">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-8 text-xs font-semibold bg-white border-border text-foreground hover:bg-gray-50 flex items-center justify-between gap-1 w-full max-w-[170px]">
+                        <span className="truncate">
+                          {activeDepartments.length === 0 
+                            ? "All Departments" 
+                            : activeDepartments.length === 1 
+                              ? activeDepartments[0] 
+                              : `${activeDepartments.length} Selected`}
+                        </span>
+                        <ChevronDown className="w-3.5 h-3.5 opacity-60 ml-auto flex-shrink-0" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[200px] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search departments..." />
+                        <CommandList>
+                          <CommandEmpty>No department found.</CommandEmpty>
+                          <CommandGroup>
+                           {sortedDepartmentsList.map((dept: any) => {
+                              const deptName = typeof dept === 'string' ? dept : dept.name;
+                              const isActive = activeDepartments.includes(deptName);
+                              return (
+                                <CommandItem 
+                                  key={deptName} 
+                                  value={deptName}
+                                  onSelect={() => {
+                                    toggleFilter(activeDepartments, setActiveDepartments, deptName);
+                                  }}
+                                  className="flex items-center gap-2 cursor-pointer"
+                                >
+                                  <input 
+                                    type="checkbox" 
+                                    checked={isActive} 
+                                    readOnly 
+                                    className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-3.5 h-3.5 cursor-pointer"
+                                  />
+                                  <span className="text-xs font-medium text-slate-700">{deptName}</span>
+                                </CommandItem>
+                              );
+                            })}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
               </div>
 
@@ -1129,7 +1252,7 @@ export default function TaskManagementPage() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-semibold text-foreground uppercase tracking-wider">Quick Filters</label>
-                  {(activeStatuses.length > 0 || activePriorities.length > 0 || activeAssignees.length > 0 || activeDateRange || assignedToMe || createdByMe) && (
+                  {(activeStatuses.length > 0 || activePriorities.length > 0 || activeDepartments.length > 0 || activeAssignees.length > 0 || activeDateRange || assignedToMe || createdByMe) && (
                     <Button 
                       variant="ghost" 
                       className="text-xs text-muted-foreground hover:text-foreground font-medium px-2 h-auto py-0"
@@ -1139,6 +1262,7 @@ export default function TaskManagementPage() {
                           localStorage.setItem(`task_status_filters_${user.id}`, JSON.stringify([]));
                         }
                         setActivePriorities([]);
+                        setActiveDepartments([]);
                         setActiveAssignees([]);
                         setActiveDateRange(undefined);
                         setAssignedToMe(false);
@@ -1189,6 +1313,7 @@ export default function TaskManagementPage() {
                   <th className="px-6 py-4 font-medium w-[30%]">Task</th>
                   <th className="px-6 py-4 font-medium">Assignee</th>
                   <th className="px-6 py-4 font-medium">Created by</th>
+                  <th className="px-6 py-4 font-medium">Department</th>
                   <th className="px-6 py-4 font-medium">Status</th>
                   <th className="px-6 py-4 font-medium">Priority</th>
                   <th className="px-6 py-4 font-medium">Due date</th>
@@ -1413,6 +1538,30 @@ export default function TaskManagementPage() {
                         </Avatar>
                         <span className="font-medium text-foreground text-sm">{task.assignedByName || 'System'}</span>
                       </div>
+                    </td>
+                    <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                      <Select 
+                        disabled={!canEdit} 
+                        value={task.department || ""} 
+                        onValueChange={(val) => {
+                          handleUpdateField(task.id, 'department', val);
+                          setTasks(prev => prev.map(t => t.id === task.id ? { ...t, department: val } : t));
+                        }}
+                      >
+                        <SelectTrigger className="h-8 w-[140px] px-2.5 py-1 rounded-md text-xs font-semibold border focus:ring-0 focus:ring-offset-0 bg-white border-border">
+                          <SelectValue placeholder="Select dept" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {sortedDepartmentsList.map((dept: any) => {
+                            const deptName = typeof dept === 'string' ? dept : dept.name;
+                            return (
+                              <SelectItem key={deptName} value={deptName}>
+                                <span className="text-xs font-semibold text-slate-800">{deptName}</span>
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
                     </td>
                     <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                       <Select disabled={!canEdit} defaultValue={task.status} onValueChange={(val) => handleUpdateField(task.id, 'status', val)}>
