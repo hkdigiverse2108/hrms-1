@@ -400,7 +400,7 @@ export default function MarketingReportsPage() {
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferringProject, setTransferringProject] = useState<any>(null);
   const [selectedReceiverId, setSelectedReceiverId] = useState("");
-  const [transferDate, setTransferDate] = useState("");
+  const [transferDates, setTransferDates] = useState<string[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [transferRequests, setTransferRequests] = useState<any[]>([]);
   const [isSendingTransfer, setIsSendingTransfer] = useState(false);
@@ -408,6 +408,17 @@ export default function MarketingReportsPage() {
   const acceptedTransfers = React.useMemo(() => {
     return transferRequests.filter(r => r.status === 'Accepted');
   }, [transferRequests]);
+
+  const handleAddDate = (dateStr: string) => {
+    if (!dateStr) return;
+    if (!transferDates.includes(dateStr)) {
+      setTransferDates(prev => [...prev, dateStr].sort());
+    }
+  };
+
+  const handleRemoveDate = (dateStr: string) => {
+    setTransferDates(prev => prev.filter(d => d !== dateStr));
+  };
 
   const isUserAuthorizedForReport = (report: any) => {
     if (isAdmin || checkPermission("marketing", "canEdit")) return true;
@@ -455,8 +466,8 @@ export default function MarketingReportsPage() {
       toast.error("Please select an employee to transfer this work to.");
       return;
     }
-    if (!transferDate) {
-      toast.error("Please select a date for the transfer.");
+    if (transferDates.length === 0) {
+      toast.error("Please select at least one date for the transfer.");
       return;
     }
     const receiver = employees.find((e: any) => e.id === selectedReceiverId);
@@ -464,44 +475,62 @@ export default function MarketingReportsPage() {
       toast.error("Selected employee not found.");
       return;
     }
-    const existing = transferRequests.find(r => 
-      String(r.taskId) === String(transferringProject.id) && 
-      normalizeDate(r.stage) === normalizeDate(transferDate) && 
-      r.status !== 'Rejected'
-    );
-    if (existing) {
-      toast.error(`A transfer request is already ${existing.status.toLowerCase()} for this date.`);
+
+    const duplicates: string[] = [];
+    const datesToTransfer: string[] = [];
+
+    transferDates.forEach(dateStr => {
+      const existing = transferRequests.find(r => 
+        String(r.taskId) === String(transferringProject.id) && 
+        normalizeDate(r.stage) === normalizeDate(dateStr) && 
+        r.status !== 'Rejected'
+      );
+      if (existing) {
+        duplicates.push(dateStr);
+      } else {
+        datesToTransfer.push(dateStr);
+      }
+    });
+
+    if (duplicates.length > 0) {
+      const formattedDupes = duplicates.map(d => {
+        try {
+          return format(new Date(d), "dd MMM yyyy");
+        } catch(e) {
+          return d;
+        }
+      }).join(", ");
+      toast.error(`Transfer requests already exist for: ${formattedDupes}. Please remove them or choose other dates.`);
       return;
     }
+
     setIsSendingTransfer(true);
     try {
-      const response = await fetch(`${API_URL}/work-transfer-requests`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          taskId: transferringProject.id,
-          taskType: "digital-marketing",
-          taskName: transferringProject.title,
-          stage: transferDate,
-          senderId: user?.id || user?._id || "",
-          senderName: user?.name || `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Unknown User",
-          receiverId: receiver.id,
-          receiverName: `${receiver.firstName} ${receiver.lastName || ''}`.trim(),
-        }),
-      });
-      if (response.ok) {
-        toast.success("Transfer request sent successfully.");
-        setIsTransferModalOpen(false);
-        setSelectedReceiverId("");
-        setTransferDate("");
-        fetchTransferRequests();
-      } else {
-        const err = await response.json();
-        toast.error(err.detail || "Failed to send transfer request.");
-      }
+      await Promise.all(datesToTransfer.map(async (dateStr) => {
+        return fetch(`${API_URL}/work-transfer-requests`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            taskId: transferringProject.id,
+            taskType: "digital-marketing",
+            taskName: transferringProject.title,
+            stage: dateStr,
+            senderId: user?.id || user?._id || "",
+            senderName: user?.name || `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Unknown User",
+            receiverId: receiver.id,
+            receiverName: `${receiver.firstName} ${receiver.lastName || ''}`.trim(),
+          }),
+        });
+      }));
+
+      toast.success(`Transfer requests sent successfully for ${datesToTransfer.length} date(s).`);
+      setIsTransferModalOpen(false);
+      setSelectedReceiverId("");
+      setTransferDates([]);
+      fetchTransferRequests();
     } catch (err) {
       console.error(err);
-      toast.error("Failed to send transfer request.");
+      toast.error("Failed to send transfer requests.");
     } finally {
       setIsSendingTransfer(false);
     }
@@ -2000,13 +2029,44 @@ export default function MarketingReportsPage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-700 block">Select Date of Transfer</label>
-              <Input
-                type="date"
-                value={transferDate}
-                onChange={(e) => setTransferDate(e.target.value)}
-                className="bg-white focus:ring-brand-teal focus:border-brand-teal"
-              />
+              <label className="text-sm font-semibold text-slate-700 block">Select Date(s) of Transfer</label>
+              <div className="flex gap-2">
+                <Input
+                  type="date"
+                  onChange={(e) => {
+                    handleAddDate(e.target.value);
+                    e.target.value = "";
+                  }}
+                  className="bg-white focus:ring-brand-teal focus:border-brand-teal flex-1"
+                />
+              </div>
+              {transferDates.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pt-1.5 max-h-[120px] overflow-y-auto custom-scrollbar">
+                  {transferDates.map(dateStr => {
+                    let displayDate = dateStr;
+                    try {
+                      const parsed = new Date(dateStr);
+                      displayDate = format(parsed, "dd MMM yyyy");
+                    } catch(e) {}
+                    return (
+                      <Badge 
+                        key={dateStr} 
+                        variant="secondary" 
+                        className="px-2 py-0.5 flex items-center gap-1.5 bg-slate-100 text-slate-700 border border-slate-200 shadow-none font-medium text-[11px] rounded"
+                      >
+                        <span>{displayDate}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveDate(dateStr)}
+                          className="text-slate-400 hover:text-slate-600 font-bold ml-0.5 focus:outline-none"
+                        >
+                          &times;
+                        </button>
+                      </Badge>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
           <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-100">
@@ -2706,7 +2766,7 @@ export default function MarketingReportsPage() {
                                                           e.stopPropagation();
                                                           setTransferringProject(p);
                                                           setSelectedReceiverId("");
-                                                          setTransferDate("");
+                                                          setTransferDates([]);
                                                           setIsTransferModalOpen(true);
                                                         }}
                                                         className="p-1.5 text-slate-500 hover:text-brand-teal hover:bg-brand-teal/10 rounded transition-all"
