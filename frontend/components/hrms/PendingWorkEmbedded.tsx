@@ -1213,22 +1213,32 @@ export function PendingWorkEmbedded({
                   <SelectValue placeholder="Choose employee..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {employees
-                    .filter((emp: any) => {
-                      if (emp.id === currentUser?.id) return false;
-                      const isAdminUser = currentUser?.role?.toLowerCase() === 'admin' || currentUser?.name === 'Admin Admin';
-                      if (isAdminUser) return true;
-                      if (!currentUser?.department) return true;
-                      return emp.department?.toLowerCase() === currentUser?.department?.toLowerCase();
-                    })
-                    .map((emp: any) => {
-                      const name = `${emp.firstName} ${emp.lastName || ''}`.trim();
-                      return (
-                        <SelectItem key={emp.id} value={emp.id}>
-                          {name} ({emp.role || 'Employee'})
-                        </SelectItem>
-                      );
-                    })}
+                  {(() => {
+                    const getTaskDepartment = () => {
+                      if (!transferringTask) return "";
+                      if (!transferringTask.isOtherWork) return "Creative";
+                      const tType = transferringTask.type?.toLowerCase();
+                      if (tType === 'development') return "Development";
+                      if (tType === 'digital-marketing') return "Digital Marketing";
+                      if (tType === 'creative' || tType === 'content-calendar') return "Creative";
+                      return currentUser?.department || "";
+                    };
+                    const targetDept = getTaskDepartment();
+                    return employees
+                      .filter((emp: any) => {
+                        if (emp.id === currentUser?.id) return false;
+                        if (!targetDept) return true;
+                        return emp.department?.toLowerCase() === targetDept.toLowerCase();
+                      })
+                      .map((emp: any) => {
+                        const name = `${emp.firstName} ${emp.lastName || ''}`.trim();
+                        return (
+                          <SelectItem key={emp.id} value={emp.id}>
+                            {name} ({emp.role || 'Employee'})
+                          </SelectItem>
+                        );
+                      });
+                  })()}
                 </SelectContent>
               </Select>
             </div>
