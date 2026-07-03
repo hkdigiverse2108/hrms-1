@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/common/PageHeader";
 import { 
   Users,
@@ -186,7 +186,20 @@ export default function CreativeClientsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [masterFilter, setMasterFilter] = useState("all");
+  const searchParams = useSearchParams();
+  const [masterFilter, setMasterFilter] = useState(searchParams.get("tab") || "all");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (masterFilter === "all") {
+      params.delete("tab");
+    } else {
+      params.set("tab", masterFilter);
+    }
+    const newSearch = params.toString();
+    const newUrl = `${window.location.pathname}${newSearch ? "?" + newSearch : ""}`;
+    router.replace(newUrl);
+  }, [masterFilter, router]);
   const [inlineEditing, setInlineEditing] = useState<{id: string, field: string} | null>(null);
 
   // Advanced Filters

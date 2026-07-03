@@ -85,7 +85,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
 
   // Combine employees with their report status for the selected date
   const displayData = useMemo(() => {
-    let filteredEmployees = employees.filter((e: any) => e.status?.toLowerCase() !== 'inactive')
+    let filteredEmployees = employees.filter((e: any) => e.status?.trim()?.toLowerCase() === 'active')
     
     if (!isAdmin && !isTeamLeader && !isHRUser) {
        filteredEmployees = filteredEmployees.filter((e: any) => e.id === user?.id)

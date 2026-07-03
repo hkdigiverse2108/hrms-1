@@ -219,9 +219,15 @@ export default function ProfilePage() {
         payload.endTime = convertTo12Hour(payload.endTime)
       }
 
-      if (payload.salary) {
-        payload.salary = parseFloat(payload.salary)
+      if (payload.salary === "" || payload.salary === undefined || payload.salary === null) {
+        payload.salary = null
+      } else {
+        const parsed = parseFloat(payload.salary)
+        payload.salary = isNaN(parsed) ? null : parsed
       }
+
+      if (payload.dob === "") payload.dob = null
+      if (payload.joinDate === "") payload.joinDate = null
 
       const response = await fetch(`${API_URL}/employees/${user.id}`, {
         method: 'PUT',

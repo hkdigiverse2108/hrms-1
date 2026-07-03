@@ -5251,8 +5251,8 @@ async def remove_work_rejection_penalty(db, employee_id: str, report_date):
 
 async def create_employee_daily_report(db, report: schemas.EmployeeDailyReportCreate):
     report_dict = report.dict()
-    performedBy = report_dict.pop("performedBy", None)
-    userName = report_dict.pop("userName", None)
+    performedBy = report_dict.get("performedBy", None)
+    userName = report_dict.get("userName", None)
     
     result = await db.employee_daily_reports.insert_one(report_dict)
     report_dict["id"] = str(result.inserted_id)
@@ -5755,8 +5755,8 @@ async def recalculate_sales_target(db, employee_id: str, month: Optional[str] = 
 
 async def update_employee_daily_report(db, report_id: str, report_update: schemas.EmployeeDailyReportUpdate):
     update_data = report_update.dict(exclude_unset=True)
-    performedBy = update_data.pop("performedBy", "Unknown")
-    userName = update_data.pop("userName", "Unknown User")
+    performedBy = update_data.get("performedBy", "Unknown")
+    userName = update_data.get("userName", "Unknown User")
     
     if not update_data:
         return fix_id(await db.employee_daily_reports.find_one({"_id": ObjectId(report_id)}))
