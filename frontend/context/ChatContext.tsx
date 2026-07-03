@@ -376,54 +376,84 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                          console.warn(e);
                        }
 
-                        // Desktop Notification
-                        if (typeof window !== "undefined" && !isUserViewingThisChat) {
-                          const senderName = data.sender || "Colleague";
-                          const body = data.text || "Sent an attachment";
-                          const title = "HariKrushn DigiVerse LLP";
-                          const notificationBody = `${senderName}\n${body}`;
-                          
-                          let avatarUrl = "/favicon.ico";
-                          if (data.senderAvatar) {
-                            const resolved = getAvatarUrl(data.senderAvatar);
-                            if (resolved) {
-                              avatarUrl = resolved.startsWith("/")
-                                ? `${window.location.origin}${resolved}`
-                                : resolved;
-                            }
-                          }
+                         // Desktop Notification
+                         if (typeof window !== "undefined" && !isUserViewingThisChat) {
+                           const senderName = data.sender || "Colleague";
+                           const body = data.text || "Sent an attachment";
+                           const title = "HariKrushn DigiVerse LLP";
+                           const notificationBody = `${senderName}\n${body}`;
+                           
+                           let avatarUrl = "/favicon.ico";
+                           if (data.senderAvatar) {
+                             const resolved = getAvatarUrl(data.senderAvatar);
+                             if (resolved) {
+                               avatarUrl = resolved.startsWith("/")
+                                 ? `${window.location.origin}${resolved}`
+                                 : resolved;
+                             }
+                           }
 
-                          if ((window as any).electronAPI && typeof (window as any).electronAPI.showNotification === 'function') {
-                            (window as any).electronAPI.showNotification(title, { 
-                              body: notificationBody, 
-                              icon: "/favicon.ico",
-                              clickUrl: `/chat?chatId=${messageChatId}&chatType=${isGroupMsg ? 'group' : 'personal'}`
-                            });
-                          } else if ("Notification" in window && Notification.permission === "granted") {
-                            const notif = new Notification(title, { 
-                              body: notificationBody, 
-                              icon: avatarUrl 
-                            });
-                            notif.onclick = () => {
-                              if (typeof window !== "undefined") {
-                                localStorage.setItem("selectedChatIdOnMount", messageChatId);
-                                localStorage.setItem("selectedChatTypeOnMount", isGroupMsg ? 'group' : 'personal');
-                                
-                                if (window.electronAPI && window.electronAPI.focusWindow) {
-                                  window.electronAPI.focusWindow();
-                                } else {
-                                  window.focus();
-                                }
-                                
-                                if (window.location.pathname !== "/chat") {
-                                  window.location.href = "/chat";
-                                } else {
-                                  window.dispatchEvent(new Event("chat-notification-click"));
-                                }
-                              }
-                            };
-                          }
-                        }
+                           // Skip browser notification if the user has an active Electron client running
+                           const isElectronClient = typeof window !== 'undefined' && !!(window as any).electronAPI;
+                           const skipBrowserNotification = !isElectronClient && data.hasElectronActive;
+
+                           if (skipBrowserNotification) {
+                             console.log("Skipping browser notification since active Electron client is running");
+                           } else {
+                             const triggerNotification = async () => {
+                               let iconDataUrl = "/favicon.ico";
+                               if (isElectronClient && data.senderAvatar) {
+                                 try {
+                                   const response = await fetch(avatarUrl);
+                                   const blob = await response.blob();
+                                   iconDataUrl = await new Promise<string>((resolve, reject) => {
+                                     const reader = new FileReader();
+                                     reader.onloadend = () => resolve(reader.result as string);
+                                     reader.onerror = reject;
+                                     reader.readAsDataURL(blob);
+                                   });
+                                 } catch (e) {
+                                   console.warn("Failed to convert avatar to data URL", e);
+                                   iconDataUrl = "/favicon.ico";
+                                 }
+                               } else {
+                                 iconDataUrl = avatarUrl;
+                               }
+
+                               if (isElectronClient && typeof (window as any).electronAPI.showNotification === 'function') {
+                                 (window as any).electronAPI.showNotification(title, { 
+                                   body: notificationBody, 
+                                   icon: iconDataUrl,
+                                   clickUrl: `/chat?chatId=${messageChatId}&chatType=${isGroupMsg ? 'group' : 'personal'}`
+                                 });
+                               } else if ("Notification" in window && Notification.permission === "granted") {
+                                 const notif = new Notification(title, { 
+                                   body: notificationBody, 
+                                   icon: avatarUrl 
+                                 });
+                                 notif.onclick = () => {
+                                   if (typeof window !== "undefined") {
+                                     localStorage.setItem("selectedChatIdOnMount", messageChatId);
+                                     localStorage.setItem("selectedChatTypeOnMount", isGroupMsg ? 'group' : 'personal');
+                                     
+                                     if (window.electronAPI && window.electronAPI.focusWindow) {
+                                       window.electronAPI.focusWindow();
+                                     } else {
+                                       window.focus();
+                                     }
+                                     
+                                     if (window.location.pathname !== "/chat") {
+                                       window.location.href = "/chat";
+                                     } else {
+                                       window.dispatchEvent(new Event("chat-notification-click"));
+                                     }
+                                   }
+                                 };
+                               }
+                             };
+                             triggerNotification();
+                           }
+                         }
                      }
                    }
                  }

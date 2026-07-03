@@ -50,6 +50,8 @@ import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { startOfToday, subDays, format, isSameDay, differenceInDays, parseISO, isAfter, startOfDay } from "date-fns";
 import { OtherWorkDialog } from "@/components/hrms/OtherWorkDialog";
 import { PendingWorkEmbedded } from "@/components/hrms/PendingWorkEmbedded";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Table,
   TableBody,
@@ -416,8 +418,46 @@ export default function MarketingReportsPage() {
     }
   };
 
+  const [transferRange, setTransferRange] = useState<DateRange | undefined>(undefined);
+
   const handleRemoveDate = (dateStr: string) => {
-    setTransferDates(prev => prev.filter(d => d !== dateStr));
+    setTransferDates(prev => {
+      const remaining = prev.filter(d => d !== dateStr);
+      // Synchronize range state
+      if (remaining.length === 0) {
+        setTransferRange(undefined);
+      } else {
+        const sorted = [...remaining].sort();
+        const [sy, sm, sd] = sorted[0].split('-').map(Number);
+        const [ey, em, ed] = sorted[sorted.length - 1].split('-').map(Number);
+        setTransferRange({
+          from: new Date(sy, sm - 1, sd),
+          to: new Date(ey, em - 1, ed)
+        });
+      }
+      return remaining;
+    });
+  };
+
+  const handleRangeSelect = (range: DateRange | undefined) => {
+    setTransferRange(range);
+    if (range?.from) {
+      const dates: string[] = [];
+      const start = new Date(range.from);
+      const end = range.to ? new Date(range.to) : new Date(range.from);
+      
+      let current = new Date(start);
+      while (current <= end) {
+        const year = current.getFullYear();
+        const month = String(current.getMonth() + 1).padStart(2, '0');
+        const day = String(current.getDate()).padStart(2, '0');
+        dates.push(`${year}-${month}-${day}`);
+        current.setDate(current.getDate() + 1);
+      }
+      setTransferDates(dates.sort());
+    } else {
+      setTransferDates([]);
+    }
   };
 
   const isUserAuthorizedForReport = (report: any) => {
@@ -523,11 +563,12 @@ export default function MarketingReportsPage() {
         });
       }));
 
-      toast.success(`Transfer requests sent successfully for ${datesToTransfer.length} date(s).`);
-      setIsTransferModalOpen(false);
-      setSelectedReceiverId("");
-      setTransferDates([]);
-      fetchTransferRequests();
+       toast.success(`Transfer requests sent successfully for ${datesToTransfer.length} date(s).`);
+       setIsTransferModalOpen(false);
+       setSelectedReceiverId("");
+       setTransferDates([]);
+       setTransferRange(undefined);
+       fetchTransferRequests();
     } catch (err) {
       console.error(err);
       toast.error("Failed to send transfer requests.");
@@ -2012,10 +2053,7 @@ export default function MarketingReportsPage() {
                   {employees
                     .filter((emp: any) => {
                       if (emp.id === user?.id) return false;
-                      const isAdminUser = user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin';
-                      if (isAdminUser) return true;
-                      if (!user?.department) return true;
-                      return emp.department?.toLowerCase() === user?.department?.toLowerCase();
+                      return emp.department?.toLowerCase() === 'digital marketing';
                     })
                     .map((emp: any) => {
                       const name = `${emp.firstName} ${emp.lastName || ''}`.trim();
@@ -2030,22 +2068,44 @@ export default function MarketingReportsPage() {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-semibold text-slate-700 block">Select Date(s) of Transfer</label>
-              <div className="flex gap-2">
-                <Input
-                  type="date"
-                  onChange={(e) => {
-                    handleAddDate(e.target.value);
-                    e.target.value = "";
-                  }}
-                  className="bg-white focus:ring-brand-teal focus:border-brand-teal flex-1"
-                />
+              <div className="flex flex-col gap-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start text-left font-normal h-9 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 focus:ring-brand-teal focus:border-brand-teal"
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4 text-slate-400" />
+                      {transferRange?.from ? (
+                        transferRange.to ? (
+                          <span>
+                            {format(transferRange.from, "dd MMM yyyy")} - {format(transferRange.to, "dd MMM yyyy")}
+                          </span>
+                        ) : (
+                          <span>{format(transferRange.from, "dd MMM yyyy")}</span>
+                        )
+                      ) : (
+                        <span className="text-slate-400">Select Date Range...</span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 bg-white shadow-md border border-slate-200 rounded-xl" align="start">
+                    <Calendar
+                      mode="range"
+                      selected={transferRange}
+                      onSelect={handleRangeSelect}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
               {transferDates.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 pt-1.5 max-h-[120px] overflow-y-auto custom-scrollbar">
                   {transferDates.map(dateStr => {
                     let displayDate = dateStr;
                     try {
-                      const parsed = new Date(dateStr);
+                      const [year, month, day] = dateStr.split('-').map(Number);
+                      const parsed = new Date(year, month - 1, day);
                       displayDate = format(parsed, "dd MMM yyyy");
                     } catch(e) {}
                     return (
@@ -2760,13 +2820,14 @@ export default function MarketingReportsPage() {
                                                         </button>
                                                       </>
                                                     )}
-                                                    {(p.assignedEmployeeId === user?.id || isAdmin) && (
+                                                    {(p.assignedEmployeeId === user?.id || isAdmin || !isRegularEmployee) && (
                                                       <button
                                                         onClick={(e) => {
                                                           e.stopPropagation();
                                                           setTransferringProject(p);
                                                           setSelectedReceiverId("");
                                                           setTransferDates([]);
+                                                          setTransferRange(undefined);
                                                           setIsTransferModalOpen(true);
                                                         }}
                                                         className="p-1.5 text-slate-500 hover:text-brand-teal hover:bg-brand-teal/10 rounded transition-all"

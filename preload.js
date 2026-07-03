@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openExternal: (url) => ipcRenderer.send('open-external', url),
   downloadAndOpen: (url, filename) => ipcRenderer.invoke('download-and-open', { url, filename }),
   saveAndOpen: (filename, arrayBuffer) => ipcRenderer.invoke('save-and-open', { filename, arrayBuffer }),
+  saveFile: (filename, arrayBuffer) => ipcRenderer.invoke('save-file', { filename, arrayBuffer }),
   saveSession: (sessionData) => ipcRenderer.send('save-session', sessionData),
   clearSession: () => ipcRenderer.send('clear-session'),
   getSession: () => ipcRenderer.invoke('get-session'),
