@@ -191,7 +191,7 @@ async def feedback_reminder_task():
         await asyncio.sleep(300) # Sleep for 5 minutes
 
 async def activity_logs_cleanup_task():
-    """Runs a periodic cleanup to remove activity logs (task_logs) older than 45 days."""
+    """Runs a periodic cleanup to remove activity logs older than 45 days and chats older than 90 days."""
     from database import db
     import datetime
     
@@ -200,14 +200,27 @@ async def activity_logs_cleanup_task():
     
     while True:
         try:
-            print("[Logs Cleanup] Starting periodic cleanup of old activity logs...", flush=True)
-            cutoff_date = datetime.datetime.now() - datetime.timedelta(days=45)
-            cutoff_str = cutoff_date.strftime("%Y-%m-%d %H:%M:%S")
-            
-            result = await db.task_logs.delete_many({
-                "timestamp": {"$lt": cutoff_str}
+            print("[Logs Cleanup] Starting periodic cleanup of database...", flush=True)
+            # 1. Activity Logs (45 days)
+            cutoff_logs = datetime.datetime.now() - datetime.timedelta(days=45)
+            cutoff_logs_str = cutoff_logs.strftime("%Y-%m-%d %H:%M:%S")
+            result_logs = await db.task_logs.delete_many({
+                "timestamp": {"$lt": cutoff_logs_str}
             })
-            print(f"[Logs Cleanup] Deleted {result.deleted_count} logs older than '{cutoff_str}'.", flush=True)
+            print(f"[Logs Cleanup] Deleted {result_logs.deleted_count} logs older than '{cutoff_logs_str}'.", flush=True)
+            
+            # 2. Chat Messages (90 days) - preserving saved messages
+            cutoff_chats = datetime.datetime.now() - datetime.timedelta(days=90)
+            cutoff_chats_str = cutoff_chats.isoformat()
+            result_chats = await db.messages.delete_many({
+                "timestamp": {"$lt": cutoff_chats_str},
+                "$or": [
+                    {"savedBy": {"$exists": False}},
+                    {"savedBy": None},
+                    {"savedBy": {"$size": 0}}
+                ]
+            })
+            print(f"[Logs Cleanup] Deleted {result_chats.deleted_count} chat messages older than '{cutoff_chats_str}'.", flush=True)
         except Exception as e:
             print(f"[Logs Cleanup] Error during cleanup: {e}", flush=True)
             
