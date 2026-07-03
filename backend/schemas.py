@@ -2227,6 +2227,7 @@ class ContentCalendarEntryBase(BaseModel):
     approval: Optional[str] = None
     isApproved: Optional[str] = None
     thumbnailLink: Optional[str] = None
+    caption: Optional[str] = None
     postingLinkOfIg: Optional[str] = None
     actualPostingDate: Optional[str] = None
     updatedBy: Optional[str] = None
@@ -2261,6 +2262,7 @@ class ContentCalendarEntryUpdate(BaseModel):
     approval: Optional[str] = None
     isApproved: Optional[str] = None
     thumbnailLink: Optional[str] = None
+    caption: Optional[str] = None
     postingLinkOfIg: Optional[str] = None
     actualPostingDate: Optional[str] = None
     updatedBy: Optional[str] = None
