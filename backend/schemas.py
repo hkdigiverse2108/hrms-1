@@ -1683,6 +1683,9 @@ class ChatGroup(ChatGroupBase):
     timestamp: str
     lastMessage: Optional[str] = None
     lastMessageTime: Optional[str] = None
+    lastMessageAttachmentName: Optional[str] = None
+    lastMessageSenderId: Optional[str] = None
+    lastMessageIsVoice: Optional[bool] = None
 
 class ChatChannelBase(BaseModel):
     name: str
@@ -1699,6 +1702,9 @@ class ChatChannel(ChatChannelBase):
     id: str
     lastMessage: Optional[str] = None
     lastMessageTime: Optional[str] = None
+    lastMessageAttachmentName: Optional[str] = None
+    lastMessageSenderId: Optional[str] = None
+    lastMessageIsVoice: Optional[bool] = None
 
 # Employee Document Schemas
 class EmployeeDocumentBase(BaseModel):

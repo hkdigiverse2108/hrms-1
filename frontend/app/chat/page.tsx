@@ -291,20 +291,88 @@ const VoicePreviewPlayer = ({ blob, duration, onDelete }: { blob: Blob; duration
   );
 };
 
+const getOpenUrl = (url: string | null | undefined) => {
+  if (!url) return "";
+  const full = url.startsWith('http') || url.startsWith('blob:') || url.startsWith('data:') ? url : `${API_URL}${url}`;
+  return full.replace("/uploads/", "/attachments/open/");
+};
+
+const getDownloadUrl = (url: string | null | undefined) => {
+  if (!url) return "";
+  const full = url.startsWith('http') || url.startsWith('blob:') || url.startsWith('data:') ? url : `${API_URL}${url}`;
+  return full.replace("/uploads/", "/attachments/download/");
+};
+
 const VoiceMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [isDownloaded, setIsDownloaded] = useState(msg._optimistic || false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  const fullUrl = getOpenUrl(msg.attachmentUrl);
+
   useEffect(() => {
-    const fullUrl = msg.attachmentUrl.startsWith('http') ? msg.attachmentUrl : `${API_URL}${msg.attachmentUrl}`;
-    const audio = new Audio(fullUrl);
+    if (msg._optimistic || !fullUrl) {
+      setIsDownloaded(true);
+      return;
+    }
+    const checkCache = async () => {
+      try {
+        const cache = await caches.open("chat-attachments-cache");
+        const cachedResponse = await cache.match(fullUrl);
+        if (cachedResponse) {
+          setIsDownloaded(true);
+        }
+      } catch (e) {
+        console.warn("Cache check failed", e);
+      }
+    };
+    checkCache();
+  }, [fullUrl, msg._optimistic]);
+
+  useEffect(() => {
+    if (!isDownloaded || !fullUrl) return;
+
+    const audio = new Audio();
+    audio.preload = 'auto';
     audioRef.current = audio;
 
+    const setupAudioSrc = async () => {
+      let audioSrc = encodeURI(fullUrl);
+      if (!msg._optimistic) {
+        try {
+          const cache = await caches.open("chat-attachments-cache");
+          const cachedResponse = await cache.match(fullUrl);
+          if (cachedResponse) {
+            const blob = await cachedResponse.blob();
+            audioSrc = window.URL.createObjectURL(blob);
+          }
+        } catch (e) {
+          console.warn("Cache retrieve failed, using remote URL", e);
+        }
+      }
+      audio.src = audioSrc;
+
+      if (audio.readyState >= 2) {
+        handleCanPlay();
+      }
+    };
+
     const handleLoadedMetadata = () => {
-      setDuration(audio.duration);
+      if (audio.duration && isFinite(audio.duration)) {
+        setDuration(audio.duration);
+      }
+    };
+
+    const handleCanPlay = () => {
+      setIsLoaded(true);
+      if (audio.duration && isFinite(audio.duration)) {
+        setDuration(audio.duration);
+      }
     };
 
     const handleTimeUpdate = () => {
@@ -321,20 +389,61 @@ const VoiceMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
       }
     };
 
+    const handleError = () => {
+      console.warn("Voice message failed to load:", fullUrl);
+      setIsLoaded(true);
+    };
+
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('canplay', handleCanPlay);
+    audio.addEventListener('canplaythrough', handleCanPlay);
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('error', handleError);
+
+    setupAudioSrc();
 
     return () => {
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('canplay', handleCanPlay);
+      audio.removeEventListener('canplaythrough', handleCanPlay);
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('error', handleError);
       if (audioController.current === audio) {
         audioController.current = null;
       }
       audio.pause();
+      if (audio.src && audio.src.startsWith('blob:')) {
+        window.URL.revokeObjectURL(audio.src);
+      }
+      audio.src = '';
     };
-  }, [msg.attachmentUrl]);
+  }, [msg.attachmentUrl, isDownloaded, fullUrl]);
+
+  const downloadAudio = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isDownloading) return;
+    setIsDownloading(true);
+    try {
+      const response = await fetch(encodeURI(fullUrl));
+      if (!response.ok) throw new Error("Fetch failed");
+      const blob = await response.blob();
+      const cache = await caches.open("chat-attachments-cache");
+      await cache.put(fullUrl, new Response(blob, {
+        headers: {
+          'Content-Type': blob.type,
+          'Content-Length': blob.size.toString()
+        }
+      }));
+      setIsDownloaded(true);
+    } catch (err) {
+      console.error(err);
+      toast.error("Audio download failed");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   const togglePlay = () => {
     if (audioRef.current) {
@@ -376,19 +485,47 @@ const VoiceMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
   const totalTime = formatTime(duration || msg.voiceDuration || 0);
   const msgTime = dayjs(msg.timestamp).format("h:mm a");
 
-  const playButton = (
-    <button
-      type="button"
-      onClick={togglePlay}
-      className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-[#54656f] hover:bg-black/5 transition-colors focus:outline-none"
-    >
-      {isPlaying ? (
-        <Pause className="w-[18px] h-[18px] fill-current" />
-      ) : (
-        <Play className="w-[18px] h-[18px] fill-current ml-0.5" />
-      )}
-    </button>
-  );
+  let playButton;
+  if (!isDownloaded) {
+    if (isDownloading) {
+      playButton = (
+        <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-[#54656f] select-none">
+          <div className="w-3.5 h-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
+        </div>
+      );
+    } else {
+      playButton = (
+        <button
+          type="button"
+          onClick={downloadAudio}
+          className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-[#54656f] hover:bg-black/5 transition-colors focus:outline-none border-none outline-none ring-0 focus:ring-0 focus-visible:outline-none"
+          title="Download audio"
+        >
+          <Download className="w-[18px] h-[18px]" />
+        </button>
+      );
+    }
+  } else if (!isLoaded) {
+    playButton = (
+      <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-[#54656f] select-none">
+        <div className="w-3.5 h-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  } else {
+    playButton = (
+      <button
+        type="button"
+        onClick={togglePlay}
+        className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-[#54656f] hover:bg-black/5 transition-colors focus:outline-none border-none outline-none ring-0 focus:ring-0 focus-visible:outline-none"
+      >
+        {isPlaying ? (
+          <Pause className="w-[18px] h-[18px] fill-current" />
+        ) : (
+          <Play className="w-[18px] h-[18px] fill-current ml-0.5" />
+        )}
+      </button>
+    );
+  }
 
   const progressSection = (
     <div className="flex-1 flex flex-col justify-center min-w-0 gap-[3px]">
@@ -404,7 +541,8 @@ const VoiceMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
           step="0.1"
           value={progress}
           onChange={handleSliderChange}
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10 border-none outline-none focus:outline-none focus:ring-0 ring-0 focus-visible:outline-none"
+          style={{ border: 'none', outline: 'none', boxShadow: 'none' }}
         />
         <div
           className="absolute top-1/2 -translate-y-1/2 w-[10px] h-[10px] rounded-full bg-[#06cf9c] shadow-sm pointer-events-none transition-none z-20"
@@ -419,7 +557,7 @@ const VoiceMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
   );
 
   const headphoneIcon = (
-    <div className="w-9 h-9 rounded-full bg-[#f59e0b] hover:bg-[#d97706] active:scale-95 transition-all flex items-center justify-center text-white shrink-0 cursor-pointer shadow-sm">
+    <div className="w-9 h-9 rounded-full bg-[#f59e0b] hover:bg-[#d97706] active:scale-95 transition-all flex items-center justify-center text-white shrink-0 cursor-pointer shadow-sm border-none outline-none ring-0">
       <Headphones className="w-[18px] h-[18px]" />
     </div>
   );
@@ -434,15 +572,15 @@ const VoiceMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
       <div className="flex items-center gap-1.5">
         {isMe ? (
           <>
+            {headphoneIcon}
             {playButton}
             {progressSection}
-            {headphoneIcon}
           </>
         ) : (
           <>
-            {headphoneIcon}
             {playButton}
             {progressSection}
+            {headphoneIcon}
           </>
         )}
       </div>
@@ -455,16 +593,68 @@ const AudioMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [isDownloaded, setIsDownloaded] = useState(msg._optimistic || false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  const fullUrl = getOpenUrl(msg.attachmentUrl);
+
   useEffect(() => {
-    const fullUrl = msg.attachmentUrl.startsWith('http') ? msg.attachmentUrl : `${API_URL}${msg.attachmentUrl}`;
+    if (msg._optimistic || !fullUrl) {
+      setIsDownloaded(true);
+      return;
+    }
+    const checkCache = async () => {
+      try {
+        const cache = await caches.open("chat-attachments-cache");
+        const cachedResponse = await cache.match(fullUrl);
+        if (cachedResponse) {
+          setIsDownloaded(true);
+        }
+      } catch (e) {
+        console.warn("Cache check failed", e);
+      }
+    };
+    checkCache();
+  }, [fullUrl, msg._optimistic]);
+
+  useEffect(() => {
+    if (!isDownloaded || !fullUrl) return;
+
     const audio = new Audio();
     audio.preload = 'auto';
-    audio.src = fullUrl;
     audioRef.current = audio;
 
+    const setupAudioSrc = async () => {
+      let audioSrc = encodeURI(fullUrl);
+      if (!msg._optimistic) {
+        try {
+          const cache = await caches.open("chat-attachments-cache");
+          const cachedResponse = await cache.match(fullUrl);
+          if (cachedResponse) {
+            const blob = await cachedResponse.blob();
+            audioSrc = window.URL.createObjectURL(blob);
+          }
+        } catch (e) {
+          console.warn("Cache retrieve failed, using remote URL", e);
+        }
+      }
+      audio.src = audioSrc;
+
+      if (audio.readyState >= 2) {
+        handleCanPlay();
+      }
+    };
+
     const handleLoadedMetadata = () => {
+      if (audio.duration && isFinite(audio.duration)) {
+        setDuration(audio.duration);
+      }
+    };
+
+    const handleCanPlay = () => {
+      setIsLoaded(true);
       if (audio.duration && isFinite(audio.duration)) {
         setDuration(audio.duration);
       }
@@ -490,23 +680,63 @@ const AudioMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
       }
     };
 
+    const handleError = () => {
+      console.warn("Audio file failed to load:", fullUrl);
+      setIsLoaded(true);
+    };
+
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('canplay', handleCanPlay);
+    audio.addEventListener('canplaythrough', handleCanPlay);
     audio.addEventListener('durationchange', handleDurationChange);
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('error', handleError);
+
+    setupAudioSrc();
 
     return () => {
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('canplay', handleCanPlay);
+      audio.removeEventListener('canplaythrough', handleCanPlay);
       audio.removeEventListener('durationchange', handleDurationChange);
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('error', handleError);
       if (audioController.current === audio) {
         audioController.current = null;
       }
       audio.pause();
+      if (audio.src && audio.src.startsWith('blob:')) {
+        window.URL.revokeObjectURL(audio.src);
+      }
       audio.src = '';
     };
-  }, [msg.attachmentUrl]);
+  }, [msg.attachmentUrl, isDownloaded, fullUrl]);
+
+  const downloadAudio = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isDownloading) return;
+    setIsDownloading(true);
+    try {
+      const response = await fetch(encodeURI(fullUrl));
+      if (!response.ok) throw new Error("Fetch failed");
+      const blob = await response.blob();
+      const cache = await caches.open("chat-attachments-cache");
+      await cache.put(fullUrl, new Response(blob, {
+        headers: {
+          'Content-Type': blob.type,
+          'Content-Length': blob.size.toString()
+        }
+      }));
+      setIsDownloaded(true);
+    } catch (err) {
+      console.error(err);
+      toast.error("Audio download failed");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   const togglePlay = () => {
     if (audioRef.current) {
@@ -548,19 +778,47 @@ const AudioMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
   const totalTime = formatTime(duration || msg.voiceDuration || 0);
   const msgTime = dayjs(msg.timestamp).format("h:mm a");
 
-  const playButton = (
-    <button
-      type="button"
-      onClick={togglePlay}
-      className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-[#54656f] hover:bg-black/5 transition-colors focus:outline-none"
-    >
-      {isPlaying ? (
-        <Pause className="w-[18px] h-[18px] fill-current" />
-      ) : (
-        <Play className="w-[18px] h-[18px] fill-current ml-0.5" />
-      )}
-    </button>
-  );
+  let playButton;
+  if (!isDownloaded) {
+    if (isDownloading) {
+      playButton = (
+        <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-[#54656f] select-none">
+          <div className="w-3.5 h-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
+        </div>
+      );
+    } else {
+      playButton = (
+        <button
+          type="button"
+          onClick={downloadAudio}
+          className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-[#54656f] hover:bg-black/5 transition-colors focus:outline-none border-none outline-none ring-0 focus:ring-0 focus-visible:outline-none"
+          title="Download audio"
+        >
+          <Download className="w-[18px] h-[18px]" />
+        </button>
+      );
+    }
+  } else if (!isLoaded) {
+    playButton = (
+      <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-[#54656f] select-none">
+        <div className="w-3.5 h-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  } else {
+    playButton = (
+      <button
+        type="button"
+        onClick={togglePlay}
+        className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-[#54656f] hover:bg-black/5 transition-colors focus:outline-none border-none outline-none ring-0 focus:ring-0 focus-visible:outline-none"
+      >
+        {isPlaying ? (
+          <Pause className="w-[18px] h-[18px] fill-current" />
+        ) : (
+          <Play className="w-[18px] h-[18px] fill-current ml-0.5" />
+        )}
+      </button>
+    );
+  }
 
   const progressSection = (
     <div className="flex-1 flex flex-col justify-center min-w-0 gap-[3px]">
@@ -576,7 +834,8 @@ const AudioMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
           step="0.1"
           value={progress}
           onChange={handleSliderChange}
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10 border-none outline-none focus:outline-none focus:ring-0 ring-0 focus-visible:outline-none"
+          style={{ border: 'none', outline: 'none', boxShadow: 'none' }}
         />
         <div
           className="absolute top-1/2 -translate-y-1/2 w-[10px] h-[10px] rounded-full bg-[#06cf9c] shadow-sm pointer-events-none transition-none z-20"
@@ -591,7 +850,7 @@ const AudioMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
   );
 
   const headphoneIcon = (
-    <div className="w-9 h-9 rounded-full bg-[#f59e0b] hover:bg-[#d97706] active:scale-95 transition-all flex items-center justify-center text-white shrink-0 cursor-pointer shadow-sm">
+    <div className="w-9 h-9 rounded-full bg-[#f59e0b] hover:bg-[#d97706] active:scale-95 transition-all flex items-center justify-center text-white shrink-0 cursor-pointer shadow-sm border-none outline-none ring-0">
       <Headphones className="w-[18px] h-[18px]" />
     </div>
   );
@@ -606,15 +865,15 @@ const AudioMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
       <div className="flex items-center gap-1.5">
         {isMe ? (
           <>
+            {headphoneIcon}
             {playButton}
             {progressSection}
-            {headphoneIcon}
           </>
         ) : (
           <>
-            {headphoneIcon}
             {playButton}
             {progressSection}
+            {headphoneIcon}
           </>
         )}
       </div>
@@ -626,8 +885,8 @@ const SmartMediaAttachment = ({ msg, isMe, setPreviewImageMsgId }: { msg: any; i
   const [isAudioOnly, setIsAudioOnly] = useState<boolean | null>(null);
 
   const cleanName = msg.attachmentName ? msg.attachmentName.replace(/^[a-f0-9]+_/, "").toLowerCase() : "";
-  const isWhatsAppAudio = cleanName.startsWith("whatsapp audio") || cleanName.includes("whatsapp audio");
-  const isAudioExtension = /\.(mp3|wav|m4a|ogg|aac|flac|webm)$/i.test(msg.attachmentName || "");
+  const isWhatsAppAudio = cleanName.startsWith("whatsapp audio") || cleanName.includes("whatsapp audio") || cleanName.includes("voice message") || cleanName.includes("voice_message");
+  const isAudioExtension = /\.(mp3|wav|m4a|ogg|aac|flac|webm|opus|amr|3gp)$/i.test(msg.attachmentName || "");
 
   useEffect(() => {
     if (isWhatsAppAudio || isAudioExtension) {
@@ -638,7 +897,7 @@ const SmartMediaAttachment = ({ msg, isMe, setPreviewImageMsgId }: { msg: any; i
       setIsAudioOnly(false);
       return;
     }
-    const fullUrl = msg.attachmentUrl.startsWith('http') ? msg.attachmentUrl : `${API_URL}${msg.attachmentUrl}`;
+    const fullUrl = (msg.attachmentUrl.startsWith('http') || msg.attachmentUrl.startsWith('blob:') || msg.attachmentUrl.startsWith('data:')) ? msg.attachmentUrl : `${API_URL}${msg.attachmentUrl}`;
     const video = document.createElement('video');
     video.preload = 'metadata';
     video.muted = true;
@@ -690,8 +949,8 @@ const SmartPreviewAttachment = ({ msg }: { msg: any }) => {
   const [isAudioOnly, setIsAudioOnly] = useState<boolean | null>(null);
 
   const cleanName = msg.attachmentName ? msg.attachmentName.replace(/^[a-f0-9]+_/, "").toLowerCase() : "";
-  const isWhatsAppAudio = cleanName.startsWith("whatsapp audio") || cleanName.includes("whatsapp audio");
-  const isAudioExtension = /\.(mp3|wav|m4a|ogg|aac|flac|webm)$/i.test(msg.attachmentName || "");
+  const isWhatsAppAudio = cleanName.startsWith("whatsapp audio") || cleanName.includes("whatsapp audio") || cleanName.includes("voice message") || cleanName.includes("voice_message");
+  const isAudioExtension = /\.(mp3|wav|m4a|ogg|aac|flac|webm|opus|amr|3gp)$/i.test(msg.attachmentName || "");
 
   useEffect(() => {
     if (isWhatsAppAudio || isAudioExtension) {
@@ -702,7 +961,7 @@ const SmartPreviewAttachment = ({ msg }: { msg: any }) => {
       setIsAudioOnly(false);
       return;
     }
-    const fullUrl = msg.attachmentUrl.startsWith('http') ? msg.attachmentUrl : `${API_URL}${msg.attachmentUrl}`;
+    const fullUrl = (msg.attachmentUrl.startsWith('http') || msg.attachmentUrl.startsWith('blob:') || msg.attachmentUrl.startsWith('data:')) ? msg.attachmentUrl : `${API_URL}${msg.attachmentUrl}`;
     const video = document.createElement('video');
     video.preload = 'metadata';
     video.muted = true;
@@ -821,8 +1080,6 @@ const VideoAttachment = ({ msg, setPreviewImageMsgId }: { msg: any; setPreviewIm
 
 const FileAttachment = ({ msg, handleOpenAttachment, renderCheckmarks }: { msg: any; handleOpenAttachment: (url: string, filename: string) => Promise<void>; renderCheckmarks: (msg: any, isImageOverlay: boolean) => React.ReactNode }) => {
   const [isDownloading, setIsDownloading] = useState(false);
-  const [pdfLoadError, setPdfLoadError] = useState(false);
-  const [pdfReady, setPdfReady] = useState(false);
   const cleanAttachmentName = msg.attachmentName ? msg.attachmentName.replace(/^[a-f0-9]+_/, "") : "";
   const isPdf = msg.attachmentName && /\.pdf$/i.test(msg.attachmentName);
 
@@ -839,22 +1096,38 @@ const FileAttachment = ({ msg, handleOpenAttachment, renderCheckmarks }: { msg: 
     }
   };
 
-  const cleanUrl = msg.attachmentUrl?.startsWith('blob:') ? msg.attachmentUrl : msg.attachmentUrl?.startsWith('http') ? msg.attachmentUrl : `${API_URL}${msg.attachmentUrl}`;
+  const openUrl = getOpenUrl(msg.attachmentUrl);
+  const downloadUrl = getDownloadUrl(msg.attachmentUrl);
 
-  useEffect(() => {
-    if (!isPdf || msg._optimistic) return;
-    const fullUrl = cleanUrl.startsWith('http') ? cleanUrl : `${API_URL}${cleanUrl}`;
-    fetch(fullUrl, { method: 'HEAD' })
-      .then(res => {
-        const ct = res.headers.get('content-type') || '';
-        if (res.ok && (ct.includes('pdf') || ct.includes('octet-stream'))) {
-          setPdfReady(true);
-        } else {
-          setPdfLoadError(true);
-        }
-      })
-      .catch(() => setPdfLoadError(true));
-  }, [cleanUrl, isPdf, msg._optimistic]);
+  const handleDownloadAttachment = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (msg._optimistic || isDownloading) return;
+    setIsDownloading(true);
+    try {
+      if (typeof window !== 'undefined' && (window as any).electronAPI?.saveFile) {
+        const response = await fetch(encodeURI(downloadUrl));
+        const blob = await response.blob();
+        const arrayBuffer = await blob.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+        await (window as any).electronAPI.saveFile(cleanAttachmentName, uint8Array);
+      } else {
+        const response = await fetch(encodeURI(downloadUrl));
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = cleanAttachmentName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Download failed");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   return (
     <div 
@@ -865,10 +1138,10 @@ const FileAttachment = ({ msg, handleOpenAttachment, renderCheckmarks }: { msg: 
       )}
     >
       {/* PDF Thumbnail Preview */}
-      {isPdf && !msg._optimistic && pdfReady && (
+      {isPdf && !msg._optimistic && (
         <div className="w-full h-[140px] overflow-hidden bg-slate-50 relative border-b border-black/5 select-none">
           <iframe
-            src={`${cleanUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+            src={`${encodeURI(openUrl)}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
             className="w-[116%] h-full pointer-events-none border-none origin-top"
             scrolling="no"
             style={{ overflow: 'hidden' }}
@@ -878,21 +1151,18 @@ const FileAttachment = ({ msg, handleOpenAttachment, renderCheckmarks }: { msg: 
         </div>
       )}
 
-      {/* PDF fallback icon when preview fails or not ready */}
-      {isPdf && (pdfLoadError || !pdfReady) && !msg._optimistic && (
-        <div className="w-full h-[100px] overflow-hidden bg-slate-50 relative border-b border-black/5 select-none flex flex-col items-center justify-center gap-2">
-          <div className="p-3 rounded-xl bg-rose-50 border border-rose-100">
-            <FileIcon className="w-8 h-8 text-rose-500 fill-rose-100" />
-          </div>
-          <span className="text-[10px] text-[#667781] font-medium">PDF Document</span>
-        </div>
-      )}
-
       {/* File Info Box */}
       <div className="flex items-center gap-3 p-3 relative">
-        <div className="p-2 rounded-lg bg-rose-50 border border-rose-100 shrink-0">
-          <FileIcon className="w-6 h-6 text-rose-500 fill-rose-100" />
-        </div>
+        {isPdf ? (
+          <div className="w-9 h-10 bg-[#ef4444] rounded flex flex-col items-center justify-center text-white font-extrabold text-[10px] uppercase select-none shrink-0 shadow-sm relative overflow-hidden leading-none pt-1">
+            <FileIcon className="w-4 h-4 text-white/90 fill-transparent stroke-[2.5]" />
+            <span className="text-[7.5px] font-black tracking-tighter mt-1 bg-[#be123c] w-full text-center py-0.5">PDF</span>
+          </div>
+        ) : (
+          <div className="p-2 rounded-lg bg-[#e2e8f0] border border-slate-200 shrink-0">
+            <FileIcon className="w-6 h-6 text-slate-500 fill-slate-100" />
+          </div>
+        )}
         <div className="min-w-0 flex-1">
           <p className="font-bold text-xs truncate text-[#111b21]">{cleanAttachmentName}</p>
           <div className="flex items-center justify-between mt-1">
@@ -920,6 +1190,31 @@ const FileAttachment = ({ msg, handleOpenAttachment, renderCheckmarks }: { msg: 
           </div>
         )}
       </div>
+
+      {/* PDF Footer Button Bar */}
+      {isPdf && !msg._optimistic && (
+        <div className={cn(
+          "flex border-t text-[11px] font-bold select-none divide-x",
+          msg.isMe 
+            ? "border-[#c3ebbc]/60 bg-[#c3ebbc]/20 divide-[#c3ebbc]/60" 
+            : "border-[#e2e5e7] bg-slate-50/60 divide-[#e2e5e7]"
+        )}>
+          <button
+            type="button"
+            onClick={handleAction}
+            className="flex-1 py-1.5 text-center text-[#00a884] hover:bg-black/5 active:bg-black/10 transition-colors uppercase tracking-wider"
+          >
+            Open
+          </button>
+          <button
+            type="button"
+            onClick={handleDownloadAttachment}
+            className="flex-1 py-1.5 text-center text-[#54656f] hover:bg-black/5 active:bg-black/10 transition-colors uppercase tracking-wider"
+          >
+            Save as...
+          </button>
+        </div>
+      )}
 
       {/* Upload loader overlay if optimistic */}
       {msg._optimistic && (
@@ -1035,6 +1330,17 @@ const stripFormatting = (text: string | null | undefined): string => {
     .replace(/\*(?!\s)([^*]+?)(?<!\s)\*/g, "$1")
     .replace(/_(?!\s)([^_]+?)(?<!\s)_/g, "$1")
     .replace(/~(?!\s)([^~]+?)(?<!\s)~/g, "$1");
+};
+
+const isAudioMessageText = (text: string | null | undefined): boolean => {
+  if (!text) return false;
+  const clean = text.toLowerCase();
+  return (
+    clean.includes("voice_message") || 
+    clean.includes("voice message") || 
+    clean.includes("whatsapp audio") ||
+    /\.(mp3|wav|m4a|ogg|aac|flac|webm|opus|amr|3gp)$/i.test(clean)
+  );
 };
 
 const highlightAndFormat = (text: string, searchQuery?: string): React.ReactNode => {
@@ -1681,7 +1987,7 @@ export default function ChatPage() {
       e.preventDefault();
       e.stopPropagation();
 
-      const bubbleElement = target.closest('.whatsapp-bubble');
+      const bubbleElement = target.closest('.whatsapp-bubble') || target.closest('.whatsapp-audio-bubble');
       if (bubbleElement) {
         const msgElement = target.closest('[id^="msg-"]');
         if (msgElement) {
@@ -2991,11 +3297,11 @@ export default function ChatPage() {
       toast.error(`This attachment is not available for download (URL: ${url}). Please send a NEW file to test.`);
       return;
     }
-    const fullUrl = url.startsWith('http') || url.startsWith('blob:') || url.startsWith('data:') || url.startsWith(API_URL) ? url : `${API_URL}${url}`;
+    const fullUrl = getDownloadUrl(url);
     let cleanFilename = filename.replace(/^[a-f0-9]+_/, "");
 
     try {
-      const response = await fetch(fullUrl);
+      const response = await fetch(encodeURI(fullUrl));
       if (!response.ok) {
         toast.error(`Failed to download: File not found or unavailable on the server.`);
         return;
@@ -3036,7 +3342,7 @@ export default function ChatPage() {
       toast.error(`This attachment is not available (URL: ${url}).`);
       return;
     }
-    const fullUrl = url.startsWith('http') || url.startsWith('blob:') || url.startsWith('data:') || url.startsWith(API_URL) ? url : `${API_URL}${url}`;
+    const fullUrl = getOpenUrl(url);
     const cleanFilename = filename.replace(/^[a-f0-9]+_/, "");
 
     // Show opening toast notification
@@ -3045,7 +3351,7 @@ export default function ChatPage() {
     // If running inside Electron, delegate to native download/save and system-open (opens in system default browser)
     if (typeof window !== 'undefined' && (window as any).electronAPI?.saveAndOpen) {
       try {
-        const response = await fetch(fullUrl);
+        const response = await fetch(encodeURI(fullUrl));
         if (!response.ok) {
           toast.error(`Failed to open: File not found or unavailable on the server.`, { id: "pdf-open" });
           return;
@@ -3054,14 +3360,12 @@ export default function ChatPage() {
         const arrayBuffer = await blob.arrayBuffer();
         const uint8Array = new Uint8Array(arrayBuffer);
         
-        await (window as any).electronAPI.saveAndOpen(filename, uint8Array);
+        await (window as any).electronAPI.saveAndOpen(cleanFilename, uint8Array);
         return;
       } catch (err) {
         console.warn("Electron native saveAndOpen failed, falling back:", err);
       }
     }
-
-    const isPdf = filename.toLowerCase().endsWith(".pdf");
 
     try {
       const cache = await caches.open("chat-attachments-cache");
@@ -3069,16 +3373,11 @@ export default function ChatPage() {
       if (cachedResponse) {
         const blob = await cachedResponse.blob();
         const blobUrl = window.URL.createObjectURL(blob);
-        if (isPdf) {
-          setPdfViewerUrl(blobUrl);
-          setPdfViewerTitle(cleanFilename);
-        } else {
-          window.open(blobUrl, '_blank');
-        }
+        window.open(blobUrl, '_blank');
         return;
       }
 
-      const response = await fetch(fullUrl);
+      const response = await fetch(encodeURI(fullUrl));
       if (!response.ok) {
         toast.error(`Failed to open: File not found or unavailable on the server.`, { id: "pdf-open" });
         return;
@@ -3094,20 +3393,10 @@ export default function ChatPage() {
       }));
 
       const blobUrl = window.URL.createObjectURL(blob);
-      if (isPdf) {
-        setPdfViewerUrl(blobUrl);
-        setPdfViewerTitle(cleanFilename);
-      } else {
-        window.open(blobUrl, '_blank');
-      }
+      window.open(blobUrl, '_blank');
     } catch (err) {
       console.warn("Open fallback:", err);
-      if (isPdf) {
-        setPdfViewerUrl(fullUrl);
-        setPdfViewerTitle(cleanFilename);
-      } else {
-        window.open(fullUrl, '_blank');
-      }
+      window.open(fullUrl, '_blank');
     }
   };
 
@@ -3765,7 +4054,11 @@ export default function ChatPage() {
           avatar: emp.profilePhoto
             ? (emp.profilePhoto.startsWith("http") ? emp.profilePhoto : `${API_URL}/uploads/${emp.profilePhoto}`)
             : null,
-          type: "personal"
+          type: "personal",
+          senderId: summary?.senderId,
+          isSeen: summary?.isSeen,
+          isVoice: summary?.isVoice || false,
+          attachmentName: summary?.attachmentName
         };
       })
       .sort((a: any, b: any) => {
@@ -4156,14 +4449,39 @@ export default function ChatPage() {
                           {employees.find(e => e.id === chat.id)?.statusEmoji && (
                             <span className="text-[10px] shrink-0">{employees.find(e => e.id === chat.id)?.statusEmoji}</span>
                           )}
-                          <p className="text-[12px] text-muted-foreground truncate">
+                          <p className="text-[12px] text-muted-foreground truncate flex items-center gap-1 min-w-0 max-w-full">
                             {drafts[chat.id] ? (
                               <>
-                                <span className="text-[#00a884] font-bold">Draft: </span>
-                                <span>{drafts[chat.id]}</span>
+                                <span className="text-[#00a884] font-bold shrink-0">Draft: </span>
+                                <span className="truncate">{drafts[chat.id]}</span>
                               </>
                             ) : (
-                              employees.find(e => e.id === chat.id)?.customStatus || stripFormatting(chat.lastMessage)
+                              (() => {
+                                const customStatus = employees.find(e => e.id === chat.id)?.customStatus;
+                                if (customStatus) {
+                                  return <span className="truncate">{customStatus}</span>;
+                                }
+                                const isMe = chat.senderId === user?.id;
+                                const isAudio = chat.isVoice || isAudioMessageText(chat.lastMessage) || (chat.attachmentName && /\.(webm|mp3|wav|ogg|m4a)$/i.test(chat.attachmentName));
+                                
+                                return (
+                                  <span className="flex items-center gap-1 min-w-0 max-w-full truncate">
+                                    {isMe && (
+                                      <span className="shrink-0 flex items-center">
+                                        {renderCheckmarks({ isMe, isSeen: chat.isSeen }, false)}
+                                      </span>
+                                    )}
+                                    {isAudio ? (
+                                      <span className="flex items-center gap-1 text-[#667781] font-semibold shrink-0">
+                                        <Headphones className="w-3.5 h-3.5 text-[#8696a0]" />
+                                        <span>Audio</span>
+                                      </span>
+                                    ) : (
+                                      <span className="truncate">{stripFormatting(chat.lastMessage)}</span>
+                                    )}
+                                  </span>
+                                );
+                              })()
                             )}
                           </p>
                         </div>
@@ -4230,14 +4548,36 @@ export default function ChatPage() {
                         <span className="text-[10px] font-semibold text-muted-foreground whitespace-nowrap shrink-0">{group.lastMessageTime}</span>
                       </div>
                       <div className="flex items-center justify-between gap-2">
-                        <p className="text-[12px] text-muted-foreground truncate flex-1">
+                        <p className="text-[12px] text-muted-foreground truncate flex items-center gap-1 min-w-0 max-w-full">
                           {drafts[group.id] ? (
                             <>
-                              <span className="text-[#00a884] font-bold">Draft: </span>
-                              <span>{drafts[group.id]}</span>
+                              <span className="text-[#00a884] font-bold shrink-0">Draft: </span>
+                              <span className="truncate">{drafts[group.id]}</span>
                             </>
                           ) : (
-                            stripFormatting(group.lastMessage) || "No messages yet"
+                            (() => {
+                              if (!group.lastMessage) return <span className="truncate">No messages yet</span>;
+                              const isMe = group.lastMessageSenderId === user?.id;
+                              const isAudio = group.lastMessageIsVoice || isAudioMessageText(group.lastMessage) || (group.lastMessageAttachmentName && /\.(webm|mp3|wav|ogg|m4a)$/i.test(group.lastMessageAttachmentName));
+                              
+                              return (
+                                <span className="flex items-center gap-1 min-w-0 max-w-full truncate">
+                                  {isMe && (
+                                    <span className="shrink-0 flex items-center">
+                                      {renderCheckmarks({ isMe, isSeen: false }, false)}
+                                    </span>
+                                  )}
+                                  {isAudio ? (
+                                    <span className="flex items-center gap-1 text-[#667781] font-semibold shrink-0">
+                                      <Headphones className="w-3.5 h-3.5 text-[#8696a0]" />
+                                      <span>Audio</span>
+                                    </span>
+                                  ) : (
+                                    <span className="truncate">{stripFormatting(group.lastMessage)}</span>
+                                  )}
+                                </span>
+                              );
+                            })()
                           )}
                         </p>
                         {(user?.role === 'Admin' || user?.role === 'HR' || group.createdBy === user?.id) && (
@@ -4325,14 +4665,38 @@ export default function ChatPage() {
                         <span className="text-[10px] font-semibold text-muted-foreground whitespace-nowrap shrink-0">{channel.lastMessageTime}</span>
                       </div>
                       <div className="flex items-center justify-between gap-2">
-                        <p className="text-[12px] text-muted-foreground truncate flex-1">
+                        <p className="text-[12px] text-muted-foreground truncate flex items-center gap-1 min-w-0 max-w-full">
                           {drafts[channel.id] ? (
                             <>
-                              <span className="text-[#00a884] font-bold">Draft: </span>
-                              <span>{drafts[channel.id]}</span>
+                              <span className="text-[#00a884] font-bold shrink-0">Draft: </span>
+                              <span className="truncate">{drafts[channel.id]}</span>
                             </>
                           ) : (
-                            stripFormatting(channel.lastMessage) || channel.description
+                            (() => {
+                              if (!channel.lastMessage || channel.lastMessage === channel.description) {
+                                return <span className="truncate">{channel.description || "No messages yet"}</span>;
+                              }
+                              const isMe = channel.lastMessageSenderId === user?.id;
+                              const isAudio = channel.lastMessageIsVoice || isAudioMessageText(channel.lastMessage) || (channel.lastMessageAttachmentName && /\.(webm|mp3|wav|ogg|m4a)$/i.test(channel.lastMessageAttachmentName));
+                              
+                              return (
+                                <span className="flex items-center gap-1 min-w-0 max-w-full truncate">
+                                  {isMe && (
+                                    <span className="shrink-0 flex items-center">
+                                      {renderCheckmarks({ isMe, isSeen: false }, false)}
+                                    </span>
+                                  )}
+                                  {isAudio ? (
+                                    <span className="flex items-center gap-1 text-[#667781] font-semibold shrink-0">
+                                      <Headphones className="w-3.5 h-3.5 text-[#8696a0]" />
+                                      <span>Audio</span>
+                                    </span>
+                                  ) : (
+                                    <span className="truncate">{stripFormatting(channel.lastMessage)}</span>
+                                  )}
+                                </span>
+                              );
+                            })()
                           )}
                         </p>
                         {(user?.role === "Admin" || user?.role === "HR") && (
@@ -5167,14 +5531,19 @@ export default function ChatPage() {
                               ) : (
                                 <div className="relative group/msg max-w-full w-fit">
                                   {(() => {
-                                    const isAudioMsg = msg.isVoice || (msg.attachmentName && !msg.isVoice && /\.(mp3|wav|m4a|ogg|aac|flac|webm)$/i.test(msg.attachmentName));
+                                    const isAudioMsg = msg.isVoice || (msg.attachmentName && !msg.isVoice && (
+                                      /\.(mp3|wav|m4a|ogg|aac|flac|webm|opus|amr|3gp)$/i.test(msg.attachmentName) ||
+                                      msg.attachmentName.toLowerCase().includes("whatsapp audio") ||
+                                      msg.attachmentName.toLowerCase().includes("voice message") ||
+                                      msg.attachmentName.toLowerCase().includes("voice_message")
+                                    ));
                                     const isMp4 = msg.attachmentName && !msg.isVoice && /\.mp4$/i.test(msg.attachmentName);
 
                                     if (isAudioMsg) {
                                       return (
                                         <div className={cn(
                                           msg.isMe ? "ml-auto" : "mr-auto",
-                                          "w-fit"
+                                          "w-fit whatsapp-audio-bubble"
                                         )}>
                                           {msg.isVoice ? (
                                             <VoiceMessagePlayer msg={msg} isMe={msg.isMe} />
@@ -5307,7 +5676,10 @@ export default function ChatPage() {
                                     {msg.attachmentName && !msg.isVoice && 
                                       !(/\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName)) && 
                                       !(/\.(mp4|mov|mkv)$/i.test(msg.attachmentName)) && 
-                                      !(/\.(mp3|wav|m4a|ogg|aac|flac|webm)$/i.test(msg.attachmentName)) && (
+                                      !(/\.(mp3|wav|m4a|ogg|aac|flac|webm|opus|amr|3gp)$/i.test(msg.attachmentName) ||
+                                        msg.attachmentName.toLowerCase().includes("whatsapp audio") ||
+                                        msg.attachmentName.toLowerCase().includes("voice message") ||
+                                        msg.attachmentName.toLowerCase().includes("voice_message")) && (
                                       <FileAttachment msg={msg} handleOpenAttachment={handleOpenAttachment} renderCheckmarks={renderCheckmarks} />
                                     )}
 

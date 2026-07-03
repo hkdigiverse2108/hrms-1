@@ -637,6 +637,54 @@ async def upload_profile_photo(user_id: str, file: UploadFile = File(...), db=De
 
     return updated_user
 
+@app.get("/attachments/open/{filename:path}")
+async def open_attachment(filename: str):
+    import re
+    import mimetypes
+    import urllib.parse
+    from fastapi.responses import FileResponse
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    clean_name = re.sub(r'^[a-f0-9]+_', '', filename)
+    content_type, _ = mimetypes.guess_type(file_path)
+    if not content_type:
+        content_type = "application/octet-stream"
+        
+    ascii_name = clean_name.encode('ascii', errors='ignore').decode('ascii')
+    encoded_name = urllib.parse.quote(clean_name)
+    headers = {
+        "Content-Disposition": f"inline; filename=\"{ascii_name}\"; filename*=UTF-8''{encoded_name}"
+    }
+    return FileResponse(
+        path=file_path,
+        media_type=content_type,
+        headers=headers
+    )
+
+@app.get("/attachments/download/{filename:path}")
+async def download_attachment(filename: str):
+    import re
+    import urllib.parse
+    from fastapi.responses import FileResponse
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    clean_name = re.sub(r'^[a-f0-9]+_', '', filename)
+    
+    ascii_name = clean_name.encode('ascii', errors='ignore').decode('ascii')
+    encoded_name = urllib.parse.quote(clean_name)
+    headers = {
+        "Content-Disposition": f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{encoded_name}"
+    }
+    return FileResponse(
+        path=file_path,
+        media_type="application/octet-stream",
+        headers=headers
+    )
+
 @app.post("/chat/upload")
 async def upload_chat_file(file: UploadFile = File(...)):
     contents = await file.read()

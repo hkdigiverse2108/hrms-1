@@ -4796,6 +4796,9 @@ async def get_chat_groups(db, user_id: str):
             if not text and (last_msg.get("attachmentUrl") or last_msg.get("attachmentName")):
                 text = "Sent a file"
             fixed["lastMessage"] = text
+            fixed["lastMessageAttachmentName"] = last_msg.get("attachmentName") or ""
+            fixed["lastMessageSenderId"] = str(last_msg.get("senderId", ""))
+            fixed["lastMessageIsVoice"] = bool(last_msg.get("isVoice", False))
             try:
                 from datetime import datetime
                 t_str = last_msg["timestamp"].replace("Z", "+00:00")
@@ -4806,6 +4809,9 @@ async def get_chat_groups(db, user_id: str):
         else:
             fixed["lastMessage"] = ""
             fixed["lastMessageTime"] = ""
+            fixed["lastMessageAttachmentName"] = ""
+            fixed["lastMessageSenderId"] = ""
+            fixed["lastMessageIsVoice"] = False
         fixed_rows.append(fixed)
     return fixed_rows
 
@@ -4929,7 +4935,8 @@ async def get_chat_summaries(db, user_id: str):
             "attachmentName": {"$first": "$attachmentName"},
             "timestamp": {"$first": "$timestamp"},
             "isSeen": {"$first": "$isSeen"},
-            "senderId": {"$first": "$senderId"}
+            "senderId": {"$first": "$senderId"},
+            "isVoice": {"$first": "$isVoice"}
         }}
     ]
     cursor = db.messages.aggregate(pipeline)
@@ -4982,6 +4989,9 @@ async def get_chat_channels(db):
             if not text and (last_msg.get("attachmentUrl") or last_msg.get("attachmentName")):
                 text = "Sent a file"
             fixed["lastMessage"] = text
+            fixed["lastMessageAttachmentName"] = last_msg.get("attachmentName") or ""
+            fixed["lastMessageSenderId"] = str(last_msg.get("senderId", ""))
+            fixed["lastMessageIsVoice"] = bool(last_msg.get("isVoice", False))
             try:
                 from datetime import datetime
                 t_str = last_msg["timestamp"].replace("Z", "+00:00")
@@ -4992,6 +5002,9 @@ async def get_chat_channels(db):
         else:
             fixed["lastMessage"] = fixed.get("description", "")
             fixed["lastMessageTime"] = ""
+            fixed["lastMessageAttachmentName"] = ""
+            fixed["lastMessageSenderId"] = ""
+            fixed["lastMessageIsVoice"] = False
         fixed_rows.append(fixed)
     return fixed_rows
 

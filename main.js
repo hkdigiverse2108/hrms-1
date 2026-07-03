@@ -804,17 +804,23 @@ function createWindow() {
     log(`Received show-notification event: ${title} - ${options?.body}`);
     try {
       const isPackaged = app.isPackaged;
-      let iconPath = undefined;
+      const { nativeImage } = require('electron');
+      let iconImage = undefined;
       if (options && options.icon) {
-        iconPath = isPackaged
-          ? path.join(process.resourcesPath, 'app', 'frontend', 'public', options.icon.replace(/^\//, ''))
-          : path.join(__dirname, 'frontend', 'public', options.icon.replace(/^\//, ''));
+        if (options.icon.startsWith('data:')) {
+          iconImage = nativeImage.createFromDataURL(options.icon);
+        } else {
+          const iconPath = isPackaged
+            ? path.join(process.resourcesPath, 'app', 'frontend', 'public', options.icon.replace(/^\//, ''))
+            : path.join(__dirname, 'frontend', 'public', options.icon.replace(/^\//, ''));
+          iconImage = nativeImage.createFromPath(iconPath);
+        }
       }
       
       const notif = new Notification({
         title: title,
         body: options?.body || '',
-        icon: iconPath
+        icon: iconImage
       });
       notif.show();
       if (mainWindow && !mainWindow.isFocused()) {
@@ -849,13 +855,34 @@ function createWindow() {
     }
   });
 
+  const openFile = async (destPath) => {
+    const isPdf = destPath.toLowerCase().endsWith('.pdf');
+    if (isPdf) {
+      const { exec } = require('child_process');
+      log(`Opening PDF in Chrome: ${destPath}`);
+      return new Promise((resolve) => {
+        exec(`start chrome "${destPath}"`, (error) => {
+          if (error) {
+            log(`Failed to open PDF in Chrome: ${error.message}. Falling back to default shell open.`);
+            const { shell } = require('electron');
+            shell.openPath(destPath).then(() => resolve()).catch(() => resolve());
+          } else {
+            resolve();
+          }
+        });
+      });
+    } else {
+      const { shell } = require('electron');
+      await shell.openPath(destPath);
+    }
+  };
+
   ipcMain.handle('download-and-open', async (event, { url, filename }) => {
     try {
       const fs = require('fs');
       const path = require('path');
       const http = require('http');
       const https = require('https');
-      const { shell } = require('electron');
 
       const cleanFilename = filename.replace(/^[a-f0-9]+_/, "");
       const destDir = path.join(app.getPath('userData'), 'transfers');
@@ -866,16 +893,17 @@ function createWindow() {
 
       if (fs.existsSync(destPath)) {
         log(`File already exists locally at: ${destPath}. Opening directly.`);
-        await shell.openPath(destPath);
+        await openFile(destPath);
         return { success: true, path: destPath };
       }
 
       log(`Downloading file from ${url} to ${destPath}`);
       const file = fs.createWriteStream(destPath);
-      const client = url.startsWith('https') ? https : http;
+      const encodedUrl = encodeURI(url);
+      const client = encodedUrl.startsWith('https') ? https : http;
 
       return new Promise((resolve, reject) => {
-        client.get(url, (response) => {
+        client.get(encodedUrl, (response) => {
           if (response.statusCode !== 200) {
             reject(new Error(`Failed to download: Status Code ${response.statusCode}`));
             return;
@@ -885,7 +913,7 @@ function createWindow() {
             file.close(async () => {
               log(`Download complete: ${destPath}. Opening.`);
               try {
-                await shell.openPath(destPath);
+                await openFile(destPath);
                 resolve({ success: true, path: destPath });
               } catch (openErr) {
                 reject(openErr);
@@ -907,7 +935,6 @@ function createWindow() {
     try {
       const fs = require('fs');
       const path = require('path');
-      const { shell } = require('electron');
 
       const hash = filename.match(/^[a-f0-9]+/)?.[0] || "default";
       const cleanFilename = filename.replace(/^[a-f0-9]+_/, "");
@@ -919,17 +946,40 @@ function createWindow() {
 
       if (fs.existsSync(destPath) && fs.statSync(destPath).size > 0) {
         log(`File already exists locally at: ${destPath}. Opening directly.`);
-        await shell.openPath(destPath);
+        await openFile(destPath);
         return { success: true, path: destPath };
       }
 
       log(`Saving file buffer to ${destPath}`);
       fs.writeFileSync(destPath, Buffer.from(arrayBuffer));
       log(`Save complete: ${destPath}. Opening.`);
-      await shell.openPath(destPath);
+      await openFile(destPath);
       return { success: true, path: destPath };
     } catch (err) {
       log(`Error in save-and-open: ${err.message}`);
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('save-file', async (event, { filename, arrayBuffer }) => {
+    try {
+      const fs = require('fs');
+      const { dialog } = require('electron');
+      const path = require('path');
+      
+      const { filePath } = await dialog.showSaveDialog(mainWindow, {
+        defaultPath: path.join(app.getPath('downloads'), filename.replace(/^[a-f0-9]+_/, "")),
+        title: 'Save File'
+      });
+      
+      if (filePath) {
+        fs.writeFileSync(filePath, Buffer.from(arrayBuffer));
+        log(`File saved successfully to: ${filePath}`);
+        return { success: true, path: filePath };
+      }
+      return { success: false, cancelled: true };
+    } catch (err) {
+      log(`Error in save-file: ${err.message}`);
       return { success: false, error: err.message };
     }
   });
