@@ -165,7 +165,7 @@ export default function EmployeeListPage() {
 
   const fetchEmployees = async () => {
     try {
-      const response = await fetch(`${API_URL}/employees`);
+      const response = await fetch(`${API_URL}/employees?include_inactive=true`);
       if (!response.ok) throw new Error("Failed to fetch employees");
       const data = await response.json();
       setEmployees(data);
