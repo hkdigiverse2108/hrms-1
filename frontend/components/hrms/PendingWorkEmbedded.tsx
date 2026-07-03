@@ -1038,7 +1038,7 @@ export function PendingWorkEmbedded({
                                 Pending Transfer to {getPendingTransferRequest(item)?.receiverName}
                               </span>
                             ) : (
-                              item.assigneeId === currentUser?.id && (
+                              (item.assigneeId === currentUser?.id || currentUser?.role?.toLowerCase() === 'admin' || currentUser?.name === 'Admin Admin') && (
                                 <Button
                                   onClick={() => handleOpenTransferModal(item)}
                                   variant="ghost"
@@ -1067,7 +1067,7 @@ export function PendingWorkEmbedded({
                                 Pending Transfer to {getPendingTransferRequest(item)?.receiverName}
                               </span>
                             ) : (
-                              item.assigneeId === currentUser?.id && (
+                              (item.assigneeId === currentUser?.id || currentUser?.role?.toLowerCase() === 'admin' || currentUser?.name === 'Admin Admin') && (
                                 <Button
                                   onClick={() => handleOpenTransferModal(item)}
                                   variant="ghost"
@@ -1216,6 +1216,8 @@ export function PendingWorkEmbedded({
                   {employees
                     .filter((emp: any) => {
                       if (emp.id === currentUser?.id) return false;
+                      const isAdminUser = currentUser?.role?.toLowerCase() === 'admin' || currentUser?.name === 'Admin Admin';
+                      if (isAdminUser) return true;
                       if (!currentUser?.department) return true;
                       return emp.department?.toLowerCase() === currentUser?.department?.toLowerCase();
                     })
