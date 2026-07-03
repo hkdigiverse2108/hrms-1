@@ -601,12 +601,18 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
       const startMins = timeToMins(slot.start);
       const endMins = timeToMins(slot.end);
       let current = startMins;
+      const remainder = current % 15;
+      if (remainder > 0) {
+        current += (15 - remainder);
+      }
 
       while (current + durationMins <= endMins) {
-        chunks.push({
-          start: minsToTime(current),
-          end: minsToTime(current + durationMins)
-        });
+        if (current >= 540 && current + durationMins <= 1110) {
+          chunks.push({
+            start: minsToTime(current),
+            end: minsToTime(current + durationMins)
+          });
+        }
         current += step;
       }
     });
