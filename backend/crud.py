@@ -7546,6 +7546,16 @@ async def delete_other_work(db, work_id: str):
     res = await db.other_work.delete_one({"_id": ObjectId(work_id)})
     return res.deleted_count > 0
 
+async def get_all_transfer_requests(db, task_id: str = None, task_type: str = None):
+    query = {}
+    if task_id:
+        query["taskId"] = task_id
+    if task_type:
+        query["taskType"] = task_type
+    cursor = db.work_transfer_requests.find(query).sort("createdDate", -1)
+    rows = await cursor.to_list(length=1000)
+    return [fix_id(row) for row in rows]
+
 async def create_transfer_request(db, request_data: dict):
     # Check if there is already a Pending request for the same taskId and stage
     existing = await db.work_transfer_requests.find_one({
@@ -7650,6 +7660,16 @@ async def respond_to_transfer_request(db, request_id: str, status: str):
                 await db.other_work.update_one(
                     {"_id": ObjectId(task_id)},
                     {"$set": {"assigneeId": receiver_id, "logs": logs}}
+                )
+        elif req.get("taskType") == "digital-marketing":
+            if ObjectId.is_valid(task_id):
+                await log_activity(
+                    db=db,
+                    action="Task Transferred",
+                    performedBy="System",
+                    userName="System",
+                    details=f"Digital Marketing work for Client/Project '{req.get('taskName')}' on date {req.get('stage')} transferred from {req.get('senderName')} to {req.get('receiverName')}.",
+                    projectId=task_id
                 )
         elif req.get("taskType") in ["wm-task", "wm-tasks"]:
             if ObjectId.is_valid(task_id):
