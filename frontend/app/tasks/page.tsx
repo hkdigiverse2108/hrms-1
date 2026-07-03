@@ -416,6 +416,7 @@ export default function TaskManagementPage() {
   };
 
   // Filter State
+  const [filterMode, setFilterMode] = useState<'all' | 'my_filter'>('all');
   const [activeStatuses, setActiveStatuses] = useState<string[]>([]);
   const [activePriorities, setActivePriorities] = useState<string[]>([]);
   const [activeDepartments, setActiveDepartments] = useState<string[]>([]);
@@ -434,12 +435,13 @@ export default function TaskManagementPage() {
       const saved = localStorage.getItem(`task_saved_status_filters_${user.id}`);
       if (saved) {
         try {
-          setSavedStatuses(JSON.parse(saved));
+          const parsed = JSON.parse(saved);
+          setSavedStatuses(parsed);
         } catch (e) {
           console.error(e);
         }
       } else {
-        const defaultSaved = ['todo', 'on-hold', 'in-progress'];
+        const defaultSaved = [];
         setSavedStatuses(defaultSaved);
         localStorage.setItem(`task_saved_status_filters_${user.id}`, JSON.stringify(defaultSaved));
       }
@@ -447,6 +449,19 @@ export default function TaskManagementPage() {
       const doubleOwnedSaved = localStorage.getItem(`task_double_owned_${user.id}`);
       if (doubleOwnedSaved) {
         setShowDoubleOwnedOnly(doubleOwnedSaved === 'true');
+      }
+
+      const savedMode = localStorage.getItem(`task_filter_mode_${user.id}`);
+      if (savedMode === 'my_filter') {
+        setFilterMode('my_filter');
+        if (saved) {
+          try {
+            setActiveStatuses(JSON.parse(saved));
+          } catch(e) {}
+        }
+      } else {
+        setFilterMode('all');
+        setActiveStatuses([]);
       }
     }
   }, [user]);
@@ -463,7 +478,7 @@ export default function TaskManagementPage() {
       localStorage.setItem(`task_saved_status_filters_${user.id}`, JSON.stringify(newSaved));
     }
     // If My Filter is currently active, apply the updates to view immediately
-    if (activeStatuses.length > 0) {
+    if (filterMode === 'my_filter') {
       setActiveStatuses(newSaved);
     }
   };
@@ -541,7 +556,7 @@ export default function TaskManagementPage() {
     }
 
     // If double owned option is checked AND My Filter is active, restrict ownershipMatch to BOTH assigned to me AND created by me
-    if (activeStatuses.length > 0 && showDoubleOwnedOnly) {
+    if (filterMode === 'my_filter' && showDoubleOwnedOnly) {
       ownershipMatch = isAssignedToMe && isCreatedByMe;
     }
 
@@ -562,7 +577,7 @@ export default function TaskManagementPage() {
   });
 
   const filteredTasks = statsTasks.filter(task => {
-    const statusMatch = activeStatuses.length === 0 || activeStatuses.includes(task.status) || (activeStatuses.includes('on-hold') && task.status === 'pending') || (activeStatuses.includes('pending') && task.status === 'on-hold');
+    const statusMatch = filterMode === 'all' || activeStatuses.includes(task.status) || (activeStatuses.includes('on-hold') && task.status === 'pending') || (activeStatuses.includes('pending') && task.status === 'on-hold');
     return statusMatch;
   });
 
@@ -590,9 +605,13 @@ export default function TaskManagementPage() {
             <Button 
               variant="ghost" 
               size="sm" 
-              className={`h-8 text-[12px] font-bold px-3.5 ${activeStatuses.length === 0 ? 'bg-brand-teal text-white hover:bg-brand-teal/90 hover:text-white' : 'text-slate-500 hover:text-slate-700'}`}
+              className={`h-8 text-[12px] font-bold px-3.5 ${filterMode === 'all' ? 'bg-brand-teal text-white hover:bg-brand-teal/90 hover:text-white' : 'text-slate-500 hover:text-slate-700'}`}
               onClick={() => {
+                setFilterMode('all');
                 setActiveStatuses([]);
+                if (user?.id) {
+                  localStorage.setItem(`task_filter_mode_${user.id}`, 'all');
+                }
               }}
             >
               All
@@ -600,14 +619,16 @@ export default function TaskManagementPage() {
             <Button 
               variant="ghost" 
               size="sm" 
-              className={`h-8 text-[12px] font-bold px-3.5 ${activeStatuses.length > 0 ? 'bg-brand-teal text-white hover:bg-brand-teal/90 hover:text-white' : 'text-slate-500 hover:text-slate-700'}`}
+              className={`h-8 text-[12px] font-bold px-3.5 ${filterMode === 'my_filter' ? 'bg-brand-teal text-white hover:bg-brand-teal/90 hover:text-white' : 'text-slate-500 hover:text-slate-700'}`}
               onClick={() => {
+                setFilterMode('my_filter');
                 if (user?.id) {
+                  localStorage.setItem(`task_filter_mode_${user.id}`, 'my_filter');
                   const saved = localStorage.getItem(`task_saved_status_filters_${user.id}`);
                   if (saved) {
                     setActiveStatuses(JSON.parse(saved));
                   } else {
-                    const defaultSaved = ['todo', 'on-hold', 'in-progress'];
+                    const defaultSaved = [];
                     setActiveStatuses(defaultSaved);
                     localStorage.setItem(`task_saved_status_filters_${user.id}`, JSON.stringify(defaultSaved));
                   }
