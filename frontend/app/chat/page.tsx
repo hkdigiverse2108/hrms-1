@@ -1742,8 +1742,7 @@ export default function ChatPage() {
   const mediaMessages = useMemo(() => {
     return currentMessages.filter(msg => 
       msg.attachmentName && 
-      !msg.isVoice && 
-      (/\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName) || /\.(mp4|mov|mkv)$/i.test(msg.attachmentName) || /\.(mp3|wav|m4a|ogg|aac|flac|webm)$/i.test(msg.attachmentName))
+      (msg.isVoice || /\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName) || /\.(mp4|mov|mkv)$/i.test(msg.attachmentName) || /\.(mp3|wav|m4a|ogg|aac|flac|webm)$/i.test(msg.attachmentName))
     );
   }, [currentMessages]);
 
