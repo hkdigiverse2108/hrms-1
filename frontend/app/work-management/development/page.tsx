@@ -147,11 +147,33 @@ export default function TasksPage() {
   const fetchTransferRequests = async () => {
     if (!user?.id) return;
     try {
-      const res = await fetch(`${API_URL}/task-transfers?userId=${user.id}`);
-      if (res.ok) {
-        const data = await res.json();
-        setIncomingRequests(data.incoming || []);
-        setOutgoingRequests(data.outgoing || []);
+      const isUserAdminOrTL = isUserAdmin || isTeamLeader || user.role === 'Team Leader' || user.role === 'HR' || user.role?.toLowerCase() === 'admin' || user.name === 'Admin Admin';
+      if (isUserAdminOrTL) {
+        const [allRes, outgoingRes] = await Promise.all([
+          fetch(`${API_URL}/work-transfer-requests?taskType=wm-task`),
+          fetch(`${API_URL}/work-transfer-requests/outgoing/${user.id}?taskType=wm-task`)
+        ]);
+        if (allRes.ok) {
+          const reqs = await allRes.json();
+          setIncomingRequests(reqs.filter((r: any) => r.taskType === 'wm-task' || r.taskType === 'wm-tasks'));
+        }
+        if (outgoingRes.ok) {
+          const out = await outgoingRes.json();
+          setOutgoingRequests(out.filter((r: any) => r.taskType === 'wm-task' || r.taskType === 'wm-tasks'));
+        }
+      } else {
+        const [incomingRes, outgoingRes] = await Promise.all([
+          fetch(`${API_URL}/work-transfer-requests/incoming/${user.id}?taskType=wm-task`),
+          fetch(`${API_URL}/work-transfer-requests/outgoing/${user.id}?taskType=wm-task`)
+        ]);
+        if (incomingRes.ok) {
+          const inc = await incomingRes.json();
+          setIncomingRequests(inc.filter((r: any) => r.taskType === 'wm-task' || r.taskType === 'wm-tasks'));
+        }
+        if (outgoingRes.ok) {
+          const out = await outgoingRes.json();
+          setOutgoingRequests(out.filter((r: any) => r.taskType === 'wm-task' || r.taskType === 'wm-tasks'));
+        }
       }
     } catch (e) {
       console.error("Error fetching transfer requests:", e);
@@ -164,6 +186,22 @@ export default function TasksPage() {
 
   const getAcceptedTransferRequest = (item: any) => {
     return incomingRequests.find(r => r.taskId === item.id && r.status === 'Accepted');
+  };
+
+  const canTransferTask = (task: any) => {
+    const isGlobalAdminOrHR = user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin' || user?.role === 'HR';
+    if (isGlobalAdminOrHR) return true;
+
+    const userDept = user?.department;
+    if (!userDept || userDept.toLowerCase() !== 'development') {
+      return false;
+    }
+
+    const isTeamLeaderOfDept = user?.role === 'Team Leader' || user?.designation?.toLowerCase() === 'team leader' || isTeamLeader;
+    if (isTeamLeaderOfDept) return true;
+
+    const isAssignedToUser = task.assignedToId === user?.id || task.assignedToId === user?._id;
+    return isAssignedToUser;
   };
 
   const handleOpenTransferModal = (task: any) => {
@@ -188,7 +226,7 @@ export default function TasksPage() {
         receiverName: receiverName
       };
 
-      const res = await fetch(`${API_URL}/task-transfers/request`, {
+      const res = await fetch(`${API_URL}/work-transfer-requests`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -213,8 +251,10 @@ export default function TasksPage() {
 
   const handleRespondRequest = async (requestId: string, status: 'Accepted' | 'Rejected') => {
     try {
-      const res = await fetch(`${API_URL}/task-transfers/${requestId}/respond?status=${status}`, {
-        method: 'POST'
+      const res = await fetch(`${API_URL}/work-transfer-requests/${requestId}/respond`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
       });
       if (res.ok) {
         toast.success(`Task transfer request ${status.toLowerCase()} successfully`);
@@ -860,7 +900,7 @@ export default function TasksPage() {
                     : 'border-transparent text-slate-500 hover:text-slate-800'
                 }`}
               >
-                Received Requests ({incomingRequests.length})
+                {(isUserAdmin || isTeamLeader || user?.role === 'Team Leader' || user?.role === 'HR' || user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin') ? 'All Requests' : 'Received Requests'} ({incomingRequests.length})
               </button>
               <button
                 onClick={() => setRequestsTab('outgoing')}
@@ -870,7 +910,7 @@ export default function TasksPage() {
                     : 'border-transparent text-slate-500 hover:text-slate-800'
                 }`}
               >
-                Sent Requests ({outgoingRequests.length})
+                {(isUserAdmin || isTeamLeader || user?.role === 'Team Leader' || user?.role === 'HR' || user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin') ? 'My Sent Requests' : 'Sent Requests'} ({outgoingRequests.length})
               </button>
             </div>
 
@@ -880,7 +920,7 @@ export default function TasksPage() {
                 incomingRequests.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-2">
                     <ArrowLeftRight className="w-8 h-8 text-slate-300 animate-pulse" />
-                    <p className="text-sm font-medium">No received transfer requests.</p>
+                    <p className="text-sm font-medium">No transfer requests.</p>
                   </div>
                 ) : (
                   <table className="w-full text-left text-sm text-slate-600">
@@ -890,6 +930,7 @@ export default function TasksPage() {
                         <th className="px-6 py-4 whitespace-nowrap">Task Name</th>
                         <th className="px-6 py-4 whitespace-nowrap">Stage</th>
                         <th className="px-6 py-4 whitespace-nowrap">From</th>
+                        {(isUserAdmin || isTeamLeader || user?.role === 'Team Leader' || user?.role === 'HR' || user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin') && <th className="px-6 py-4 whitespace-nowrap">To</th>}
                         <th className="px-6 py-4 whitespace-nowrap">Status</th>
                         <th className="px-6 py-4 text-right whitespace-nowrap">Action</th>
                       </tr>
@@ -911,6 +952,11 @@ export default function TasksPage() {
                           <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-700">
                             {req.senderName}
                           </td>
+                          {(isUserAdmin || isTeamLeader || user?.role === 'Team Leader' || user?.role === 'HR' || user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin') && (
+                            <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-700">
+                              {req.receiverName}
+                            </td>
+                          )}
                           <td className="px-6 py-4 whitespace-nowrap">
                             <Badge 
                               variant="secondary"
@@ -1388,7 +1434,7 @@ export default function TasksPage() {
                              <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                               <div className="flex items-center justify-center gap-2">
                                 <button onClick={(e) => { e.stopPropagation(); fetchLogs(task.id, task.title); }} className="p-1.5 hover:bg-brand-teal/10 rounded-md text-brand-teal transition-colors" title="View History"><History className="w-3.5 h-3.5" /></button>
-                                {(!isRegularEmployee || task.assignedToId === user?.id) && !getPendingTransferRequest(task) && (
+                                {canTransferTask(task) && !getPendingTransferRequest(task) && (
                                   <button 
                                     onClick={(e) => { e.stopPropagation(); handleOpenTransferModal(task); }} 
                                     className="p-1.5 hover:bg-indigo-50 rounded-md text-indigo-600 hover:text-indigo-700 transition-colors" 
@@ -1519,7 +1565,7 @@ export default function TasksPage() {
                                 <div className="min-h-[24px] relative">
                                   <div className="float-right ml-2 -mt-1 flex items-start gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button onClick={(e) => { e.stopPropagation(); fetchLogs(task.id, task.title); }} className="p-1 hover:bg-slate-200 rounded-md text-slate-400 hover:text-brand-teal" title="View Logs"><History className="w-3.5 h-3.5" /></button>
-                                    {(!isRegularEmployee || task.assignedToId === user?.id) && !getPendingTransferRequest(task) && (
+                                    {canTransferTask(task) && !getPendingTransferRequest(task) && (
                                       <button 
                                         onClick={(e) => { e.stopPropagation(); handleOpenTransferModal(task); }} 
                                         className="p-1 hover:bg-slate-200 rounded-md text-slate-400 hover:text-indigo-600" 

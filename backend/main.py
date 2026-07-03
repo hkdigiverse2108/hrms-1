@@ -3303,8 +3303,9 @@ async def delete_other_work(entry_id: str, db=Depends(get_db)):
 
 # --- Work Transfer Request API ---
 @app.get("/work-transfer-requests", response_model=List[schemas.WorkTransferRequest])
-async def get_all_transfer_requests(task_id: Optional[str] = None, task_type: Optional[str] = None, db=Depends(get_db)):
-    return await crud.get_all_transfer_requests(db, task_id, task_type)
+async def get_all_transfer_requests(task_id: Optional[str] = None, task_type: Optional[str] = None, taskType: Optional[str] = None, db=Depends(get_db)):
+    actual_task_type = taskType or task_type
+    return await crud.get_all_transfer_requests(db, task_id, actual_task_type)
 
 @app.post("/work-transfer-requests", response_model=schemas.WorkTransferRequest)
 async def create_transfer_request(request: schemas.WorkTransferRequestCreate, db=Depends(get_db)):
@@ -3316,12 +3317,14 @@ async def create_transfer_request(request: schemas.WorkTransferRequestCreate, db
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/work-transfer-requests/incoming/{employee_id}", response_model=List[schemas.WorkTransferRequest])
-async def get_incoming_transfer_requests(employee_id: str, db=Depends(get_db)):
-    return await crud.get_incoming_transfer_requests(db, employee_id)
+async def get_incoming_transfer_requests(employee_id: str, task_type: Optional[str] = None, taskType: Optional[str] = None, db=Depends(get_db)):
+    actual_task_type = taskType or task_type
+    return await crud.get_incoming_transfer_requests(db, employee_id, actual_task_type)
 
 @app.get("/work-transfer-requests/outgoing/{employee_id}", response_model=List[schemas.WorkTransferRequest])
-async def get_outgoing_transfer_requests(employee_id: str, db=Depends(get_db)):
-    return await crud.get_outgoing_transfer_requests(db, employee_id)
+async def get_outgoing_transfer_requests(employee_id: str, task_type: Optional[str] = None, taskType: Optional[str] = None, db=Depends(get_db)):
+    actual_task_type = taskType or task_type
+    return await crud.get_outgoing_transfer_requests(db, employee_id, actual_task_type)
 
 @app.put("/work-transfer-requests/{request_id}/respond", response_model=schemas.WorkTransferRequest)
 async def respond_to_transfer_request(request_id: str, payload: dict, db=Depends(get_db)):
