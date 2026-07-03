@@ -409,6 +409,53 @@ export default function TaskManagementPage() {
   const [assignedToMe, setAssignedToMe] = useState(false);
   const [createdByMe, setCreatedByMe] = useState(false);
 
+  const [savedStatuses, setSavedStatuses] = useState<string[]>([]);
+
+  // Load saved status filters for the current user
+  useEffect(() => {
+    if (user?.id) {
+      const saved = localStorage.getItem(`task_saved_status_filters_${user.id}`);
+      if (saved) {
+        try {
+          setSavedStatuses(JSON.parse(saved));
+        } catch (e) {
+          console.error(e);
+        }
+      } else {
+        const defaultSaved = ['todo', 'on-hold', 'in-progress'];
+        setSavedStatuses(defaultSaved);
+        localStorage.setItem(`task_saved_status_filters_${user.id}`, JSON.stringify(defaultSaved));
+      }
+    }
+  }, [user]);
+
+  const handleToggleSavedStatus = (val: string) => {
+    let newSaved: string[];
+    if (savedStatuses.includes(val)) {
+      newSaved = savedStatuses.filter(item => item !== val);
+    } else {
+      newSaved = [...savedStatuses, val];
+    }
+    setSavedStatuses(newSaved);
+    if (user?.id) {
+      localStorage.setItem(`task_saved_status_filters_${user.id}`, JSON.stringify(newSaved));
+    }
+    // If My Filter is currently active, apply the updates to view immediately
+    if (activeStatuses.length > 0) {
+      setActiveStatuses(newSaved);
+    }
+  };
+
+  const handleToggleStatusFilter = (val: string) => {
+    let newStatuses: string[];
+    if (activeStatuses.includes(val)) {
+      newStatuses = activeStatuses.filter(item => item !== val);
+    } else {
+      newStatuses = [...activeStatuses, val];
+    }
+    setActiveStatuses(newStatuses);
+  };
+
   const toggleFilter = (state: string[], setState: React.Dispatch<React.SetStateAction<string[]>>, val: string) => {
     if (state.includes(val)) {
       setState(state.filter(item => item !== val));
@@ -507,6 +554,78 @@ export default function TaskManagementPage() {
       >
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto mt-4 sm:mt-0">
           
+          {/* Combined Filter Settings Box (All | My Filter | Settings Icon) */}
+          <div className="flex items-center bg-white border border-slate-200 rounded-lg p-1">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className={`h-8 text-[12px] font-bold px-3.5 ${activeStatuses.length === 0 ? 'bg-brand-teal text-white hover:bg-brand-teal/90 hover:text-white' : 'text-slate-500 hover:text-slate-700'}`}
+              onClick={() => {
+                setActiveStatuses([]);
+              }}
+            >
+              All
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className={`h-8 text-[12px] font-bold px-3.5 ${activeStatuses.length > 0 ? 'bg-brand-teal text-white hover:bg-brand-teal/90 hover:text-white' : 'text-slate-500 hover:text-slate-700'}`}
+              onClick={() => {
+                if (user?.id) {
+                  const saved = localStorage.getItem(`task_saved_status_filters_${user.id}`);
+                  if (saved) {
+                    setActiveStatuses(JSON.parse(saved));
+                  } else {
+                    const defaultSaved = ['todo', 'on-hold', 'in-progress'];
+                    setActiveStatuses(defaultSaved);
+                    localStorage.setItem(`task_saved_status_filters_${user.id}`, JSON.stringify(defaultSaved));
+                  }
+                }
+              }}
+            >
+              My Filter
+            </Button>
+            
+            <div className="h-4 w-[1px] bg-slate-200 mx-1" />
+
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-slate-700 bg-transparent border-0" title="Task Settings">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.43l-1.003.828c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.43l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128c.332-.183.582-.495.645-.869L9.594 3.94ZM12 15.75a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5Z" />
+                  </svg>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-56 p-4 bg-white border border-slate-200 shadow-lg rounded-xl z-50">
+                <div className="space-y-3">
+                  <h4 className="font-bold text-slate-800 text-sm">Default Status Filters</h4>
+                  <p className="text-[11px] text-slate-500 leading-tight">Choose which task statuses you want to see by default when you load the page.</p>
+                  <div className="space-y-2 pt-1 border-t border-slate-100">
+                    {[
+                      { value: "todo", label: "To do" },
+                      { value: "on-hold", label: "On Hold" },
+                      { value: "in-progress", label: "In progress" },
+                      { value: "completed", label: "Completed" }
+                    ].map(status => {
+                      const isChecked = savedStatuses.includes(status.value);
+                      return (
+                        <label key={status.value} className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 hover:text-slate-900">
+                          <input 
+                            type="checkbox" 
+                            checked={isChecked}
+                            onChange={() => handleToggleSavedStatus(status.value)}
+                            className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-3.5 h-3.5"
+                          />
+                          {status.label}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
+
           {isAdmin && (
             <div className="flex items-center bg-white border border-slate-200 rounded-lg p-1">
               <Button 
@@ -868,7 +987,7 @@ export default function TaskManagementPage() {
                     return (
                       <div 
                         key={status.value}
-                        onClick={() => toggleFilter(activeStatuses, setActiveStatuses, status.value)}
+                        onClick={() => handleToggleStatusFilter(status.value)}
                         className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer transition-colors border ${
                           isActive 
                             ? 'bg-brand-light/20 border-brand-teal/30 text-brand-teal' 
@@ -1016,6 +1135,9 @@ export default function TaskManagementPage() {
                       className="text-xs text-muted-foreground hover:text-foreground font-medium px-2 h-auto py-0"
                       onClick={() => {
                         setActiveStatuses([]);
+                        if (user?.id) {
+                          localStorage.setItem(`task_status_filters_${user.id}`, JSON.stringify([]));
+                        }
                         setActivePriorities([]);
                         setActiveAssignees([]);
                         setActiveDateRange(undefined);
