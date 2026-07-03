@@ -1194,6 +1194,7 @@ class TaskBase(BaseModel):
     priority: Optional[str] = "medium" # low, medium, high, urgent
     remarks: Optional[str] = None
     createdDate: Optional[RobustDate] = None
+    department: Optional[str] = None
 
 class TaskCreate(TaskBase):
     performedBy: Optional[str] = None
@@ -1212,6 +1213,7 @@ class TaskUpdate(BaseModel):
     remarks: Optional[str] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
+    department: Optional[str] = None
 
 class Task(TaskBase):
     id: str
