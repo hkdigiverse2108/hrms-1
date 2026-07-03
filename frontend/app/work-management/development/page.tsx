@@ -188,6 +188,22 @@ export default function TasksPage() {
     return incomingRequests.find(r => r.taskId === item.id && r.status === 'Accepted');
   };
 
+  const canTransferTask = (task: any) => {
+    const isGlobalAdminOrHR = user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin' || user?.role === 'HR';
+    if (isGlobalAdminOrHR) return true;
+
+    const userDept = user?.department;
+    if (!userDept || userDept.toLowerCase() !== 'development') {
+      return false;
+    }
+
+    const isTeamLeaderOfDept = user?.role === 'Team Leader' || user?.designation?.toLowerCase() === 'team leader' || isTeamLeader;
+    if (isTeamLeaderOfDept) return true;
+
+    const isAssignedToUser = task.assignedToId === user?.id || task.assignedToId === user?._id;
+    return isAssignedToUser;
+  };
+
   const handleOpenTransferModal = (task: any) => {
     setTransferringTask(task);
     setSelectedReceiverId('');
@@ -1418,7 +1434,7 @@ export default function TasksPage() {
                              <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                               <div className="flex items-center justify-center gap-2">
                                 <button onClick={(e) => { e.stopPropagation(); fetchLogs(task.id, task.title); }} className="p-1.5 hover:bg-brand-teal/10 rounded-md text-brand-teal transition-colors" title="View History"><History className="w-3.5 h-3.5" /></button>
-                                {(!isRegularEmployee || task.assignedToId === user?.id) && !getPendingTransferRequest(task) && (
+                                {canTransferTask(task) && !getPendingTransferRequest(task) && (
                                   <button 
                                     onClick={(e) => { e.stopPropagation(); handleOpenTransferModal(task); }} 
                                     className="p-1.5 hover:bg-indigo-50 rounded-md text-indigo-600 hover:text-indigo-700 transition-colors" 
@@ -1549,7 +1565,7 @@ export default function TasksPage() {
                                 <div className="min-h-[24px] relative">
                                   <div className="float-right ml-2 -mt-1 flex items-start gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button onClick={(e) => { e.stopPropagation(); fetchLogs(task.id, task.title); }} className="p-1 hover:bg-slate-200 rounded-md text-slate-400 hover:text-brand-teal" title="View Logs"><History className="w-3.5 h-3.5" /></button>
-                                    {(!isRegularEmployee || task.assignedToId === user?.id) && !getPendingTransferRequest(task) && (
+                                    {canTransferTask(task) && !getPendingTransferRequest(task) && (
                                       <button 
                                         onClick={(e) => { e.stopPropagation(); handleOpenTransferModal(task); }} 
                                         className="p-1 hover:bg-slate-200 rounded-md text-slate-400 hover:text-indigo-600" 

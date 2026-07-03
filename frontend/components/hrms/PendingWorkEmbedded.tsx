@@ -148,6 +148,23 @@ export function PendingWorkEmbedded({
     }
   };
 
+  const canTransferTask = (item: any) => {
+    const isGlobalAdminOrHR = currentUser?.role?.toLowerCase() === 'admin' || currentUser?.name === 'Admin Admin' || currentUser?.role === 'HR';
+    if (isGlobalAdminOrHR) return true;
+
+    const taskDept = defaultTaskType === 'digital-marketing' ? 'Digital Marketing' : 'Creative';
+    const userDept = currentUser?.department;
+    if (!userDept || userDept.toLowerCase() !== taskDept.toLowerCase()) {
+      return false;
+    }
+
+    const isTeamLeaderOfDept = currentUser?.role === 'Team Leader' || currentUser?.designation?.toLowerCase() === 'team leader';
+    if (isTeamLeaderOfDept) return true;
+
+    const isAssignedToUser = item.assigneeId === currentUser?.id || item.assigneeId === currentUser?._id;
+    return isAssignedToUser;
+  };
+
   const handleOpenTransferModal = (task: any) => {
     setTransferringTask(task);
     setSelectedReceiverId('');
@@ -1093,7 +1110,7 @@ export function PendingWorkEmbedded({
                                 Pending Transfer to {getPendingTransferRequest(item)?.receiverName}
                               </span>
                             ) : (
-                              (item.assigneeId === currentUser?.id || currentUser?.role?.toLowerCase() === 'admin' || currentUser?.name === 'Admin Admin' || currentUser?.role?.toLowerCase() === 'team leader') && (
+                              canTransferTask(item) && (
                                 <Button
                                   onClick={() => handleOpenTransferModal(item)}
                                   variant="ghost"
@@ -1122,7 +1139,7 @@ export function PendingWorkEmbedded({
                                 Pending Transfer to {getPendingTransferRequest(item)?.receiverName}
                               </span>
                             ) : (
-                              (item.assigneeId === currentUser?.id || currentUser?.role?.toLowerCase() === 'admin' || currentUser?.name === 'Admin Admin' || currentUser?.role?.toLowerCase() === 'team leader') && (
+                              canTransferTask(item) && (
                                 <Button
                                   onClick={() => handleOpenTransferModal(item)}
                                   variant="ghost"
