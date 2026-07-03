@@ -719,8 +719,8 @@ async def get_system_time():
     }
 
 @app.get("/employees", response_model=List[schemas.Employee])
-async def read_employees(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
-    return await crud.get_employees(db, skip=skip, limit=limit)
+async def read_employees(skip: int = 0, limit: int = 10000, include_inactive: bool = False, db=Depends(get_db)):
+    return await crud.get_employees(db, skip=skip, limit=limit, include_inactive=include_inactive)
 
 @app.get("/employees/{employee_id}", response_model=schemas.Employee)
 async def read_employee(employee_id: str, db=Depends(get_db)):

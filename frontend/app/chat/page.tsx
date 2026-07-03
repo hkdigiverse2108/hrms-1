@@ -303,7 +303,7 @@ const getDownloadUrl = (url: string | null | undefined) => {
   return full.replace("/uploads/", "/attachments/download/");
 };
 
-const VoiceMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
+const VoiceMessagePlayer = ({ msg, isMe, renderCheckmarks }: { msg: any; isMe: boolean; renderCheckmarks?: (msg: any) => React.ReactNode }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
@@ -551,7 +551,10 @@ const VoiceMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
       </div>
       <div className="flex items-center justify-between select-none">
         <span className="text-[10px] text-[#667781] tabular-nums">{isPlaying ? displayTime : totalTime}</span>
-        <span className="text-[10px] text-[#667781] tabular-nums">{msgTime}</span>
+        <div className="flex items-center gap-1 select-none">
+          <span className="text-[10px] text-[#667781] tabular-nums">{msgTime}</span>
+          {renderCheckmarks && renderCheckmarks(msg)}
+        </div>
       </div>
     </div>
   );
@@ -588,7 +591,7 @@ const VoiceMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
   );
 };
 
-const AudioMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
+const AudioMessagePlayer = ({ msg, isMe, renderCheckmarks }: { msg: any; isMe: boolean; renderCheckmarks?: (msg: any) => React.ReactNode }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
@@ -844,7 +847,10 @@ const AudioMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
       </div>
       <div className="flex items-center justify-between select-none">
         <span className="text-[10px] text-[#667781] tabular-nums">{isPlaying ? displayTime : totalTime}</span>
-        <span className="text-[10px] text-[#667781] tabular-nums">{msgTime}</span>
+        <div className="flex items-center gap-1 select-none">
+          <span className="text-[10px] text-[#667781] tabular-nums">{msgTime}</span>
+          {renderCheckmarks && renderCheckmarks(msg)}
+        </div>
       </div>
     </div>
   );
@@ -1736,8 +1742,7 @@ export default function ChatPage() {
   const mediaMessages = useMemo(() => {
     return currentMessages.filter(msg => 
       msg.attachmentName && 
-      !msg.isVoice && 
-      (/\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName) || /\.(mp4|mov|mkv)$/i.test(msg.attachmentName) || /\.(mp3|wav|m4a|ogg|aac|flac|webm)$/i.test(msg.attachmentName))
+      (msg.isVoice || /\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName) || /\.(mp4|mov|mkv)$/i.test(msg.attachmentName) || /\.(mp3|wav|m4a|ogg|aac|flac|webm)$/i.test(msg.attachmentName))
     );
   }, [currentMessages]);
 
@@ -1871,6 +1876,9 @@ export default function ChatPage() {
     if (!msg.isMe) return null;
     if (msg._optimistic) {
       return <Clock className={cn("w-3 h-3", isImageOverlay ? "text-white/70" : "text-[#8696a0]")} />;
+    }
+    if (msg.isSeen) {
+      return <CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" />;
     }
 
     const isGroupMsg = !!msg.groupId || msg.receiverId === "group" || msg.type === "group";
@@ -3322,15 +3330,20 @@ export default function ChatPage() {
       );
       if (ext) cleanFilename += ext;
 
-      const blobUrl = window.URL.createObjectURL(blob);
-
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = cleanFilename || 'download';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
+      if (typeof window !== 'undefined' && (window as any).electronAPI?.saveFile) {
+        const arrayBuffer = await blob.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+        await (window as any).electronAPI.saveFile(cleanFilename, uint8Array);
+      } else {
+        const blobUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = cleanFilename || 'download';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
+      }
     } catch (err) {
       console.warn("Download fallback:", err);
       window.open(fullUrl, '_blank');
@@ -4468,7 +4481,7 @@ export default function ChatPage() {
                                   <span className="flex items-center gap-1 min-w-0 max-w-full truncate">
                                     {isMe && (
                                       <span className="shrink-0 flex items-center">
-                                        {renderCheckmarks({ isMe, isSeen: chat.isSeen }, false)}
+                                        {renderCheckmarks({ isMe, isSeen: chat.isSeen, receiverId: chat.id }, false)}
                                       </span>
                                     )}
                                     {isAudio ? (
@@ -5546,9 +5559,9 @@ export default function ChatPage() {
                                           "w-fit whatsapp-audio-bubble"
                                         )}>
                                           {msg.isVoice ? (
-                                            <VoiceMessagePlayer msg={msg} isMe={msg.isMe} />
+                                            <VoiceMessagePlayer msg={msg} isMe={msg.isMe} renderCheckmarks={renderCheckmarks} />
                                           ) : (
-                                            <AudioMessagePlayer msg={msg} isMe={msg.isMe} />
+                                            <AudioMessagePlayer msg={msg} isMe={msg.isMe} renderCheckmarks={renderCheckmarks} />
                                           )}
                                         </div>
                                       );
@@ -5571,7 +5584,7 @@ export default function ChatPage() {
                                       "whatsapp-bubble text-[14.2px] leading-[19px] whitespace-pre-wrap break-words [word-break:break-word] select-text relative flow-root",
                                       (msg.attachmentName && !msg.isVoice && /\.(mov|mkv)$/i.test(msg.attachmentName))
                                         ? "w-[280px] sm:w-[360px]"
-                                        : (msg.attachmentName && !msg.isVoice && /\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName)) || imageGroups[msg.id]
+                                        : (msg.attachmentName && !msg.isVoice && /\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName) && msg.text) || imageGroups[msg.id]
                                           ? "w-[280px] sm:w-[360px]"
                                           : (msg.attachmentName && !msg.isVoice)
                                             ? "w-[280px] sm:w-[320px]"

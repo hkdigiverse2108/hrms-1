@@ -323,8 +323,11 @@ async def update_employee(db, employee_id: str, employee_update: schemas.Employe
     updated_doc = await db.employees.find_one({"_id": ObjectId(employee_id)})
     return fix_id(updated_doc)
 
-async def get_employees(db, skip: int = 0, limit: int = 100):
-    cursor = db.employees.find().sort("_id", -1).skip(skip).limit(limit)
+async def get_employees(db, skip: int = 0, limit: int = 100, include_inactive: bool = False):
+    query = {}
+    if not include_inactive:
+        query["status"] = {"$ne": "inactive"}
+    cursor = db.employees.find(query).sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
