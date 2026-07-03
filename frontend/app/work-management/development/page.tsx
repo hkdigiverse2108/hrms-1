@@ -147,11 +147,33 @@ export default function TasksPage() {
   const fetchTransferRequests = async () => {
     if (!user?.id) return;
     try {
-      const res = await fetch(`${API_URL}/task-transfers?userId=${user.id}`);
-      if (res.ok) {
-        const data = await res.json();
-        setIncomingRequests(data.incoming || []);
-        setOutgoingRequests(data.outgoing || []);
+      const isUserAdminOrTL = isUserAdmin || isTeamLeader || user.role === 'Team Leader' || user.role === 'HR' || user.role?.toLowerCase() === 'admin' || user.name === 'Admin Admin';
+      if (isUserAdminOrTL) {
+        const [allRes, outgoingRes] = await Promise.all([
+          fetch(`${API_URL}/work-transfer-requests?taskType=wm-task`),
+          fetch(`${API_URL}/work-transfer-requests/outgoing/${user.id}?taskType=wm-task`)
+        ]);
+        if (allRes.ok) {
+          const reqs = await allRes.json();
+          setIncomingRequests(reqs.filter((r: any) => r.taskType === 'wm-task' || r.taskType === 'wm-tasks'));
+        }
+        if (outgoingRes.ok) {
+          const out = await outgoingRes.json();
+          setOutgoingRequests(out.filter((r: any) => r.taskType === 'wm-task' || r.taskType === 'wm-tasks'));
+        }
+      } else {
+        const [incomingRes, outgoingRes] = await Promise.all([
+          fetch(`${API_URL}/work-transfer-requests/incoming/${user.id}?taskType=wm-task`),
+          fetch(`${API_URL}/work-transfer-requests/outgoing/${user.id}?taskType=wm-task`)
+        ]);
+        if (incomingRes.ok) {
+          const inc = await incomingRes.json();
+          setIncomingRequests(inc.filter((r: any) => r.taskType === 'wm-task' || r.taskType === 'wm-tasks'));
+        }
+        if (outgoingRes.ok) {
+          const out = await outgoingRes.json();
+          setOutgoingRequests(out.filter((r: any) => r.taskType === 'wm-task' || r.taskType === 'wm-tasks'));
+        }
       }
     } catch (e) {
       console.error("Error fetching transfer requests:", e);
@@ -188,7 +210,7 @@ export default function TasksPage() {
         receiverName: receiverName
       };
 
-      const res = await fetch(`${API_URL}/task-transfers/request`, {
+      const res = await fetch(`${API_URL}/work-transfer-requests`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -213,8 +235,10 @@ export default function TasksPage() {
 
   const handleRespondRequest = async (requestId: string, status: 'Accepted' | 'Rejected') => {
     try {
-      const res = await fetch(`${API_URL}/task-transfers/${requestId}/respond?status=${status}`, {
-        method: 'POST'
+      const res = await fetch(`${API_URL}/work-transfer-requests/${requestId}/respond`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
       });
       if (res.ok) {
         toast.success(`Task transfer request ${status.toLowerCase()} successfully`);
@@ -860,7 +884,7 @@ export default function TasksPage() {
                     : 'border-transparent text-slate-500 hover:text-slate-800'
                 }`}
               >
-                Received Requests ({incomingRequests.length})
+                {(isUserAdmin || isTeamLeader || user?.role === 'Team Leader' || user?.role === 'HR' || user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin') ? 'All Requests' : 'Received Requests'} ({incomingRequests.length})
               </button>
               <button
                 onClick={() => setRequestsTab('outgoing')}
@@ -870,7 +894,7 @@ export default function TasksPage() {
                     : 'border-transparent text-slate-500 hover:text-slate-800'
                 }`}
               >
-                Sent Requests ({outgoingRequests.length})
+                {(isUserAdmin || isTeamLeader || user?.role === 'Team Leader' || user?.role === 'HR' || user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin') ? 'My Sent Requests' : 'Sent Requests'} ({outgoingRequests.length})
               </button>
             </div>
 
@@ -880,7 +904,7 @@ export default function TasksPage() {
                 incomingRequests.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-2">
                     <ArrowLeftRight className="w-8 h-8 text-slate-300 animate-pulse" />
-                    <p className="text-sm font-medium">No received transfer requests.</p>
+                    <p className="text-sm font-medium">No transfer requests.</p>
                   </div>
                 ) : (
                   <table className="w-full text-left text-sm text-slate-600">
@@ -890,6 +914,7 @@ export default function TasksPage() {
                         <th className="px-6 py-4 whitespace-nowrap">Task Name</th>
                         <th className="px-6 py-4 whitespace-nowrap">Stage</th>
                         <th className="px-6 py-4 whitespace-nowrap">From</th>
+                        {(isUserAdmin || isTeamLeader || user?.role === 'Team Leader' || user?.role === 'HR' || user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin') && <th className="px-6 py-4 whitespace-nowrap">To</th>}
                         <th className="px-6 py-4 whitespace-nowrap">Status</th>
                         <th className="px-6 py-4 text-right whitespace-nowrap">Action</th>
                       </tr>
@@ -911,6 +936,11 @@ export default function TasksPage() {
                           <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-700">
                             {req.senderName}
                           </td>
+                          {(isUserAdmin || isTeamLeader || user?.role === 'Team Leader' || user?.role === 'HR' || user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin') && (
+                            <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-700">
+                              {req.receiverName}
+                            </td>
+                          )}
                           <td className="px-6 py-4 whitespace-nowrap">
                             <Badge 
                               variant="secondary"

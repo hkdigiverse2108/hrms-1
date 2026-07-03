@@ -226,6 +226,7 @@ export default function MarketingReportsPage() {
     isAdmin || checkPermission("marketing", "canDelete");
 
   const [activeTab, setActiveTab] = useState("daily");
+  const [showTransfers, setShowTransfers] = useState(false);
   const [dailyReports, setDailyReports] = useState<any[]>([]);
   const [projectRemarks, setProjectRemarks] = useState<any[]>([]);
   const [showAddForm, setShowAddForm] = useState(true);
@@ -494,7 +495,8 @@ export default function MarketingReportsPage() {
     try {
       const res = await fetch(`${API_URL}/work-transfer-requests?taskType=digital-marketing`);
       if (res.ok) {
-        setTransferRequests(await res.json());
+        const data = await res.json();
+        setTransferRequests(data.filter((r: any) => r.taskType === 'digital-marketing'));
       }
     } catch (err) {
       console.error("Failed to fetch transfer requests", err);
@@ -2314,26 +2316,59 @@ export default function MarketingReportsPage() {
       </Dialog>
 
       {/* Header Area */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
-            <BarChart3 className="w-8 h-8 text-brand-teal" />
-            Marketing Reports
-          </h1>
-          <p className="text-slate-500 text-sm mt-1">
-            Track daily performance and monthly ROI metrics
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          {(isAdmin || user?.role === 'Team Leader' || user?.role === 'HR') && <OtherWorkDialog source="digital-marketing" />}
-        </div>
-      </div>
+      {(() => {
+        const isUserAdminOrTL = isAdmin || user?.role === 'Team Leader' || user?.role === 'HR' || user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin' || user?.designation?.toLowerCase() === 'team leader';
+        const pendingCount = transferRequests.filter((r: any) => {
+          const isPending = r.status === 'Pending';
+          if (!isPending) return false;
+          if (isUserAdminOrTL) return true;
+          return r.receiverId === user?.id || r.receiverId === user?._id;
+        }).length;
+
+        return (
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
+                <BarChart3 className="w-8 h-8 text-brand-teal" />
+                Marketing Reports
+              </h1>
+              <p className="text-slate-500 text-sm mt-1">
+                Track daily performance and monthly ROI metrics
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setActiveTab("tasks");
+                  setShowTransfers(true);
+                }}
+                className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold shadow-xs h-10 px-4 rounded-lg flex items-center gap-2 transition-all text-sm"
+              >
+                <ArrowLeftRight className="w-4 h-4 text-slate-500" />
+                Transfer Requests
+                {pendingCount > 0 && (
+                  <span className="bg-indigo-600 text-white text-[9px] px-1.5 py-0.5 rounded-full font-black">
+                    {pendingCount}
+                  </span>
+                )}
+              </Button>
+              {(isAdmin || user?.role === 'Team Leader' || user?.role === 'HR') && <OtherWorkDialog source="digital-marketing" />}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Tabs & Search */}
       <Tabs
         defaultValue="daily"
         value={activeTab}
-        onValueChange={setActiveTab}
+        onValueChange={(val) => {
+          setActiveTab(val);
+          if (val !== "tasks") {
+            setShowTransfers(false);
+          }
+        }}
         className="w-full flex-1 flex flex-col min-h-0"
       >
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
@@ -4124,7 +4159,16 @@ export default function MarketingReportsPage() {
           </div>
         </TabsContent>
         <TabsContent value="tasks" className="flex-1 overflow-hidden mt-0">
-          <PendingWorkEmbedded type="all" defaultTaskType="digital-marketing" hideTaskTypeFilter hideStageFilter hideProjectFilter />
+          <PendingWorkEmbedded 
+            type="all" 
+            defaultTaskType="digital-marketing" 
+            hideTaskTypeFilter 
+            hideStageFilter 
+            hideProjectFilter 
+            showTransferRequests={showTransfers}
+            onShowTransferRequestsChange={setShowTransfers}
+            onRespond={fetchTransferRequests}
+          />
         </TabsContent>
         {user?.role?.toLowerCase() === 'admin' && (
           <TabsContent value="analysis" className="flex-1 overflow-y-auto mt-0 px-1 pb-10">

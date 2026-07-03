@@ -7800,7 +7800,10 @@ async def get_all_transfer_requests(db, task_id: str = None, task_type: str = No
     if task_id:
         query["taskId"] = task_id
     if task_type:
-        query["taskType"] = task_type
+        if task_type in ["smm", "all"]:
+            query["taskType"] = {"$in": ["content-calendar", "creative", "other-work"]}
+        else:
+            query["taskType"] = task_type
     cursor = db.work_transfer_requests.find(query).sort("createdDate", -1)
     rows = await cursor.to_list(length=1000)
     return [fix_id(row) for row in rows]
@@ -7835,13 +7838,25 @@ async def create_transfer_request(db, request_data: dict):
         
     return fix_id(doc)
 
-async def get_incoming_transfer_requests(db, receiver_id: str):
-    cursor = db.work_transfer_requests.find({"receiverId": receiver_id}).sort("createdDate", -1)
+async def get_incoming_transfer_requests(db, receiver_id: str, task_type: str = None):
+    query = {"receiverId": receiver_id}
+    if task_type:
+        if task_type in ["smm", "all"]:
+            query["taskType"] = {"$in": ["content-calendar", "creative", "other-work"]}
+        else:
+            query["taskType"] = task_type
+    cursor = db.work_transfer_requests.find(query).sort("createdDate", -1)
     rows = await cursor.to_list(length=1000)
     return [fix_id(row) for row in rows]
 
-async def get_outgoing_transfer_requests(db, sender_id: str):
-    cursor = db.work_transfer_requests.find({"senderId": sender_id}).sort("createdDate", -1)
+async def get_outgoing_transfer_requests(db, sender_id: str, task_type: str = None):
+    query = {"senderId": sender_id}
+    if task_type:
+        if task_type in ["smm", "all"]:
+            query["taskType"] = {"$in": ["content-calendar", "creative", "other-work"]}
+        else:
+            query["taskType"] = task_type
+    cursor = db.work_transfer_requests.find(query).sort("createdDate", -1)
     rows = await cursor.to_list(length=1000)
     return [fix_id(row) for row in rows]
 

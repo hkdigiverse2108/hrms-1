@@ -29,13 +29,19 @@ export function PendingWorkEmbedded({
   defaultTaskType = "all",
   hideTaskTypeFilter = false,
   hideStageFilter = false,
-  hideProjectFilter = false
+  hideProjectFilter = false,
+  showTransferRequests,
+  onShowTransferRequestsChange,
+  onRespond
 }: { 
   type?: "pending-work" | "todays-work" | "upcoming-work" | "completed-work" | "all",
   defaultTaskType?: string,
   hideTaskTypeFilter?: boolean,
   hideStageFilter?: boolean,
-  hideProjectFilter?: boolean
+  hideProjectFilter?: boolean,
+  showTransferRequests?: boolean,
+  onShowTransferRequestsChange?: (val: boolean) => void,
+  onRespond?: () => void
 }) {
   const router = useRouter();
   
@@ -62,8 +68,31 @@ export function PendingWorkEmbedded({
   
   const [incomingRequests, setIncomingRequests] = useState<any[]>([]);
   const [outgoingRequests, setOutgoingRequests] = useState<any[]>([]);
+
+  const filteredIncoming = incomingRequests.filter((r: any) => {
+    if (defaultTaskType === 'digital-marketing') {
+      return r.taskType === 'digital-marketing';
+    } else {
+      return r.taskType === 'content-calendar' || r.taskType === 'other-work' || r.taskType === 'creative';
+    }
+  });
+
+  const filteredOutgoing = outgoingRequests.filter((r: any) => {
+    if (defaultTaskType === 'digital-marketing') {
+      return r.taskType === 'digital-marketing';
+    } else {
+      return r.taskType === 'content-calendar' || r.taskType === 'other-work' || r.taskType === 'creative';
+    }
+  });
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
-  const [viewingTransferRequests, setViewingTransferRequests] = useState(false);
+  const [viewingTransferRequestsInternal, setViewingTransferRequestsInternal] = useState(false);
+  const viewingTransferRequests = showTransferRequests !== undefined ? showTransferRequests : viewingTransferRequestsInternal;
+  const setViewingTransferRequests = (val: boolean) => {
+    setViewingTransferRequestsInternal(val);
+    if (onShowTransferRequestsChange) {
+      onShowTransferRequestsChange(val);
+    }
+  };
   const [requestsTab, setRequestsTab] = useState<'incoming' | 'outgoing'>('incoming');
   const [transferringTask, setTransferringTask] = useState<any>(null);
   const [selectedReceiverId, setSelectedReceiverId] = useState<string>('');
@@ -174,6 +203,9 @@ export function PendingWorkEmbedded({
       if (response.ok) {
         toast.success(`Transfer request ${status.toLowerCase()} successfully.`);
         fetchData();
+        if (onRespond) {
+          onRespond();
+        }
       } else {
         const err = await response.json();
         toast.error(err.detail || `Failed to ${status.toLowerCase()} request.`);
@@ -215,15 +247,30 @@ export function PendingWorkEmbedded({
       ]);
 
       if (user?.id) {
-        const [incomingRes, outgoingRes] = await Promise.all([
-          fetch(`${API_URL}/work-transfer-requests/incoming/${user.id}`),
-          fetch(`${API_URL}/work-transfer-requests/outgoing/${user.id}`)
-        ]);
-        if (incomingRes.ok) {
-          setIncomingRequests(await incomingRes.json());
-        }
-        if (outgoingRes.ok) {
-          setOutgoingRequests(await outgoingRes.json());
+        const isUserAdminOrTL = user.role === 'Team Leader' || user.role === 'HR' || user.role?.toLowerCase() === 'admin' || user.name === 'Admin Admin';
+        const taskTypeQuery = defaultTaskType ? `?taskType=${defaultTaskType}` : "";
+        if (isUserAdminOrTL) {
+          const [allRes, outgoingRes] = await Promise.all([
+            fetch(`${API_URL}/work-transfer-requests${taskTypeQuery}`),
+            fetch(`${API_URL}/work-transfer-requests/outgoing/${user.id}${taskTypeQuery}`)
+          ]);
+          if (allRes.ok) {
+            setIncomingRequests(await allRes.json());
+          }
+          if (outgoingRes.ok) {
+            setOutgoingRequests(await outgoingRes.json());
+          }
+        } else {
+          const [incomingRes, outgoingRes] = await Promise.all([
+            fetch(`${API_URL}/work-transfer-requests/incoming/${user.id}${taskTypeQuery}`),
+            fetch(`${API_URL}/work-transfer-requests/outgoing/${user.id}${taskTypeQuery}`)
+          ]);
+          if (incomingRes.ok) {
+            setIncomingRequests(await incomingRes.json());
+          }
+          if (outgoingRes.ok) {
+            setOutgoingRequests(await outgoingRes.json());
+          }
         }
       }
       
@@ -538,7 +585,7 @@ export function PendingWorkEmbedded({
                   : 'border-transparent text-slate-500 hover:text-slate-800'
               }`}
             >
-              Received Requests ({incomingRequests.length})
+              {isAdminOrTL ? 'All Requests' : 'Received Requests'} ({filteredIncoming.length})
             </button>
             <button
               onClick={() => setRequestsTab('outgoing')}
@@ -548,16 +595,16 @@ export function PendingWorkEmbedded({
                   : 'border-transparent text-slate-500 hover:text-slate-800'
               }`}
             >
-              Sent Requests ({outgoingRequests.length})
+              {isAdminOrTL ? 'My Sent Requests' : 'Sent Requests'} ({filteredOutgoing.length})
             </button>
           </div>
 
           <div className="flex-1 overflow-x-auto bg-white">
             {requestsTab === 'incoming' ? (
-              incomingRequests.length === 0 ? (
+              filteredIncoming.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-2">
                   <ArrowLeftRight className="w-8 h-8 text-slate-300 animate-pulse" />
-                  <p className="text-sm font-medium">No received transfer requests.</p>
+                  <p className="text-sm font-medium">No transfer requests.</p>
                 </div>
               ) : (
                 <table className="w-full text-left text-sm text-slate-600">
@@ -567,12 +614,13 @@ export function PendingWorkEmbedded({
                       <th className="px-6 py-4 whitespace-nowrap">Task Name</th>
                       <th className="px-6 py-4 whitespace-nowrap">Stage</th>
                       <th className="px-6 py-4 whitespace-nowrap">From</th>
+                      {isAdminOrTL && <th className="px-6 py-4 whitespace-nowrap">To</th>}
                       <th className="px-6 py-4 whitespace-nowrap">Status</th>
                       <th className="px-6 py-4 text-right whitespace-nowrap">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {incomingRequests.map(req => (
+                    {filteredIncoming.map(req => (
                       <tr key={req.id} className="hover:bg-slate-50/50 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500">
                           {new Date(req.createdDate).toLocaleDateString()}
@@ -588,6 +636,11 @@ export function PendingWorkEmbedded({
                         <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-700">
                           {req.senderName}
                         </td>
+                        {isAdminOrTL && (
+                          <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-700">
+                            {req.receiverName}
+                          </td>
+                        )}
                         <td className="px-6 py-4 whitespace-nowrap">
                           <Badge 
                             variant="secondary"
@@ -631,7 +684,7 @@ export function PendingWorkEmbedded({
                 </table>
               )
             ) : (
-              outgoingRequests.length === 0 ? (
+              filteredOutgoing.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-2">
                   <ArrowLeftRight className="w-8 h-8 text-slate-300 animate-pulse" />
                   <p className="text-sm font-medium">No sent transfer requests.</p>
@@ -648,7 +701,7 @@ export function PendingWorkEmbedded({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {outgoingRequests.map(req => (
+                    {filteredOutgoing.map(req => (
                       <tr key={req.id} className="hover:bg-slate-50/50 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500">
                           {new Date(req.createdDate).toLocaleDateString()}
@@ -700,20 +753,22 @@ export function PendingWorkEmbedded({
                   </h2>
                 </div>
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setViewingTransferRequests(true)}
-                  className="bg-white border-slate-200 hover:bg-slate-50 text-slate-700 rounded-full flex items-center gap-1.5 font-semibold text-xs shadow-sm h-8"
-                >
-                  <ArrowLeftRight className="w-3.5 h-3.5 text-slate-500" />
-                  Transfer Requests
-                  {incomingRequests.filter(r => r.status === 'Pending').length > 0 && (
-                    <span className="bg-indigo-600 text-white text-[9px] px-1.5 py-0.5 rounded-full font-black">
-                      {incomingRequests.filter(r => r.status === 'Pending').length}
-                    </span>
-                  )}
-                </Button>
+                {defaultTaskType !== 'digital-marketing' && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setViewingTransferRequests(true)}
+                    className="bg-white border-slate-200 hover:bg-slate-50 text-slate-700 rounded-full flex items-center gap-1.5 font-semibold text-xs shadow-sm h-8"
+                  >
+                    <ArrowLeftRight className="w-3.5 h-3.5 text-slate-500" />
+                    Transfer Requests
+                    {filteredIncoming.filter(r => r.status === 'Pending').length > 0 && (
+                      <span className="bg-indigo-600 text-white text-[9px] px-1.5 py-0.5 rounded-full font-black">
+                        {filteredIncoming.filter(r => r.status === 'Pending').length}
+                      </span>
+                    )}
+                  </Button>
+                )}
               </div>
           
           <div className="relative w-full sm:w-72">
