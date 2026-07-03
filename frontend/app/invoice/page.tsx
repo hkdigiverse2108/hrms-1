@@ -1108,20 +1108,23 @@ export default function AllInvoicesPage() {
         subtitle={selectedInvoiceForLogs?.invoiceNumber}
         logs={(() => {
           const apiLogs = selectedInvoiceForLogs?.logs || [];
-          if (apiLogs.length === 0 && selectedInvoiceForLogs) {
-            return [{
-              userName: selectedInvoiceForLogs.createdBy || "Creator",
-              timestamp: selectedInvoiceForLogs.timestamp || selectedInvoiceForLogs.created_at || new Date().toISOString(),
-              action: "Invoice Created",
-              details: `Invoice created with initial status: ${selectedInvoiceForLogs.status || "Pending"}`
-            }];
-          }
-          return apiLogs.map((log: any) => ({
+          const processedLogs = apiLogs.map((log: any) => ({
             userName: log.userName,
             timestamp: log.timestamp,
             action: log.action,
             details: log.remarks || ""
           }));
+
+          const hasCreationLog = processedLogs.some((l: any) => l.action === "Invoice Created");
+          if (!hasCreationLog && selectedInvoiceForLogs) {
+            processedLogs.unshift({
+              userName: selectedInvoiceForLogs.createdBy || "Creator",
+              timestamp: selectedInvoiceForLogs.timestamp || selectedInvoiceForLogs.created_at || new Date().toISOString(),
+              action: "Invoice Created",
+              details: `Invoice created with initial status: ${selectedInvoiceForLogs.status || "Pending"}`
+            });
+          }
+          return processedLogs;
         })()}
         isLoading={false}
       />
