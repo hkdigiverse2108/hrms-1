@@ -251,6 +251,10 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       menuItems.push(getItem(<Link href="/restrictions">Restrictions</Link>, "/restrictions", <ShieldHalf className="w-5 h-5" />));
     }
 
+    if (isAdmin || checkPermission('activity-logs', 'canView')) {
+      menuItems.push(getItem(<Link href="/activity-logs">Activity Logs</Link>, "/activity-logs", <Activity className="w-5 h-5" />));
+    }
+
     return menuItems;
   }, [user, settings, pathname, permissions, checkPermission]);
 
@@ -283,6 +287,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (pathname.startsWith("/recruitment")) return [pathname];
     if (pathname.startsWith("/payroll")) return [pathname];
     if (pathname.startsWith("/restrictions")) return ["/restrictions"];
+    if (pathname.startsWith("/activity-logs")) return ["/activity-logs"];
     return [];
   };
 

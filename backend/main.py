@@ -16,7 +16,26 @@ import google_auth
 import asyncio
 from datetime import datetime
 import pytz
-from bson import ObjectId
+async def get_actor_from_request(request: Request, db):
+    authorization = request.headers.get("Authorization")
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+        try:
+            from jose import jwt
+            from bson import ObjectId
+            from auth import SECRET_KEY, ALGORITHM
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM], options={"verify_exp": False})
+            user_id = payload.get("sub")
+            if user_id:
+                user = await db.employees.find_one({"_id": ObjectId(user_id) if len(user_id) == 24 else user_id})
+                if user:
+                    return str(user.get("_id")), user.get("name", "System User")
+        except Exception as e:
+            print(f"JWT Decode error in get_actor_from_request: {e}", flush=True)
+            pass
+    else:
+        print(f"No Authorization header found in request: {request.url}", flush=True)
+    return "System", "System User"
 
 async def content_calendar_reminder_task():
     from database import db
@@ -663,20 +682,24 @@ async def read_employee(employee_id: str, db=Depends(get_db)):
     return employee
 
 @app.post("/employees", response_model=schemas.Employee)
-async def create_employee(employee: schemas.EmployeeCreate, db=Depends(get_db)):
-    return await crud.create_employee(db, employee)
+async def create_employee(employee: schemas.EmployeeCreate, request: Request, db=Depends(get_db)):
+    performed_by, user_name = await get_actor_from_request(request, db)
+    return await crud.create_employee(db, employee, performed_by=performed_by, user_name=user_name)
 
 @app.put("/employees/{employee_id}", response_model=schemas.Employee)
-async def update_employee(employee_id: str, employee_update: schemas.EmployeeUpdate, db=Depends(get_db)):
-    updated = await crud.update_employee(db, employee_id, employee_update)
+async def update_employee(employee_id: str, employee_update: schemas.EmployeeUpdate, request: Request, db=Depends(get_db)):
+    performed_by, user_name = await get_actor_from_request(request, db)
+    updated = await crud.update_employee(db, employee_id, employee_update, performed_by=performed_by, user_name=user_name)
     if not updated:
         raise HTTPException(status_code=404, detail="Employee not found")
     return updated
 
 @app.delete("/employees/{employee_id}")
-async def delete_employee(employee_id: str, db=Depends(get_db)):
-    await crud.delete_employee(db, employee_id)
+async def delete_employee(employee_id: str, request: Request, db=Depends(get_db)):
+    performed_by, user_name = await get_actor_from_request(request, db)
+    await crud.delete_employee(db, employee_id, performed_by=performed_by, user_name=user_name)
     return {"message": "Employee deleted successfully"}
+
 
 # Attendance Endpoints
 @app.get("/attendance", response_model=List[schemas.Attendance])
@@ -689,9 +712,10 @@ async def get_attendance_status(employee_id: str, db=Depends(get_db)):
     return status if status else {"status": "Logged Out"}
 
 @app.post("/attendance/punch-in/{employee_id}")
-async def punch_in(employee_id: str, payload: Optional[schemas.PunchInRequest] = None, db=Depends(get_db)):
+async def punch_in(employee_id: str, request: Request, payload: Optional[schemas.PunchInRequest] = None, db=Depends(get_db)):
     punch_in_time = payload.punch_in_time if payload else None
-    result = await crud.punch_in(db, employee_id, punch_in_time=punch_in_time)
+    performed_by, user_name = await get_actor_from_request(request, db)
+    result = await crud.punch_in(db, employee_id, punch_in_time=punch_in_time, performed_by=performed_by, user_name=user_name)
     if not result:
         raise HTTPException(status_code=400, detail="Punch in failed")
     return result
@@ -703,8 +727,9 @@ async def create_attendance(attendance: schemas.AttendanceCreate, db=Depends(get
     return await crud.create_manual_attendance(db, attendance)
 
 @app.put("/attendance/{attendance_id}", response_model=schemas.Attendance)
-async def update_attendance(attendance_id: str, attendance_update: schemas.AttendanceUpdate, db=Depends(get_db)):
-    updated = await crud.update_attendance(db, attendance_id, attendance_update)
+async def update_attendance(attendance_id: str, attendance_update: schemas.AttendanceUpdate, request: Request, db=Depends(get_db)):
+    performed_by, user_name = await get_actor_from_request(request, db)
+    updated = await crud.update_attendance(db, attendance_id, attendance_update, performed_by=performed_by, user_name=user_name)
     if not updated:
         raise HTTPException(status_code=404, detail="Attendance record not found")
     return updated
@@ -727,9 +752,10 @@ async def delete_multiple_attendance(request: dict, db=Depends(get_db)):
     return {"message": f"Deleted {len(attendance_ids)} records"}
 
 @app.post("/attendance/punch-out/{employee_id}")
-async def punch_out(employee_id: str, payload: Optional[schemas.PunchOutRequest] = None, db=Depends(get_db)):
+async def punch_out(employee_id: str, request: Request, payload: Optional[schemas.PunchOutRequest] = None, db=Depends(get_db)):
     punch_out_time = payload.punch_out_time if payload else None
-    result = await crud.punch_out(db, employee_id, punch_out_time=punch_out_time)
+    performed_by, user_name = await get_actor_from_request(request, db)
+    result = await crud.punch_out(db, employee_id, punch_out_time=punch_out_time, performed_by=performed_by, user_name=user_name)
     if not result:
         raise HTTPException(status_code=400, detail="Punch out failed")
     return result
@@ -758,15 +784,18 @@ async def read_user_leave_requests(employee_id: str, skip: int = 0, limit: int =
     return await crud.get_user_leave_requests(db, employee_id, skip=skip, limit=limit)
 
 @app.post("/leaves", response_model=schemas.LeaveRequest)
-async def create_leave_request(leave: schemas.LeaveRequestCreate, db=Depends(get_db)):
-    return await crud.create_leave_request(db, leave)
+async def create_leave_request(leave: schemas.LeaveRequestCreate, request: Request, db=Depends(get_db)):
+    performed_by, user_name = await get_actor_from_request(request, db)
+    return await crud.create_leave_request(db, leave, performed_by=performed_by, user_name=user_name)
 
 @app.put("/leaves/{leave_id}", response_model=schemas.LeaveRequest)
-async def update_leave_request(leave_id: str, leave_update: schemas.LeaveRequestUpdate, db=Depends(get_db)):
-    return await crud.update_leave_request(db, leave_id, leave_update.dict(exclude_unset=True))
+async def update_leave_request(leave_id: str, leave_update: schemas.LeaveRequestUpdate, request: Request, db=Depends(get_db)):
+    performed_by, user_name = await get_actor_from_request(request, db)
+    return await crud.update_leave_request(db, leave_id, leave_update.dict(exclude_unset=True), performed_by=performed_by, user_name=user_name)
 
 @app.patch("/leaves/{leave_id}/status", response_model=schemas.LeaveRequest)
-async def update_leave_status(leave_id: str, update_data: schemas.LeaveRequestUpdate, db=Depends(get_db)):
+async def update_leave_status(leave_id: str, update_data: schemas.LeaveRequestUpdate, request: Request, db=Depends(get_db)):
+    performed_by, user_name = await get_actor_from_request(request, db)
     return await crud.update_leave_request_status(
         db, 
         leave_id, 
@@ -776,12 +805,15 @@ async def update_leave_status(leave_id: str, update_data: schemas.LeaveRequestUp
         update_data.approved_by_id,
         update_data.approved_by_photo,
         update_data.reject_reason,
-        update_data.approve_reason
+        update_data.approve_reason,
+        performed_by=performed_by,
+        user_name=user_name
     )
 
 @app.delete("/leaves/{leave_id}")
-async def delete_leave_request(leave_id: str, db=Depends(get_db)):
-    success = await crud.delete_leave_request(db, leave_id)
+async def delete_leave_request(leave_id: str, request: Request, db=Depends(get_db)):
+    performed_by, user_name = await get_actor_from_request(request, db)
+    success = await crud.delete_leave_request(db, leave_id, performed_by=performed_by, user_name=user_name)
     if not success:
         raise HTTPException(status_code=404, detail="Leave request not found")
     return {"message": "Leave request deleted successfully"}
@@ -806,13 +838,14 @@ async def read_payroll(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_payroll(db, skip=skip, limit=limit)
 
 @app.post("/payroll/process")
-async def process_payroll(request: dict, db=Depends(get_db)):
+async def process_payroll(request: dict, request_obj: Request, db=Depends(get_db)):
     # request should contain month and year
     month = request.get("month")
     year = request.get("year")
     if not month or not year:
         raise HTTPException(status_code=400, detail="Month and year required")
-    return await crud.run_payroll_processing(db, month, year)
+    performed_by, user_name = await get_actor_from_request(request_obj, db)
+    return await crud.run_payroll_processing(db, month, year, performed_by=performed_by, user_name=user_name)
 
 @app.put("/payroll/{payroll_id}", response_model=schemas.Payroll)
 async def update_payroll(payroll_id: str, request: dict, db=Depends(get_db)):
@@ -1130,22 +1163,29 @@ async def delete_review(review_id: str, db=Depends(get_db)): return await crud.d
 @app.get("/remarks", response_model=List[schemas.Remark])
 async def read_remarks(skip: int = 0, limit: int = 10000, db=Depends(get_db)): return await crud.get_remarks(db, skip, limit)
 @app.post("/remarks", response_model=schemas.Remark)
-async def create_remark(remark: schemas.RemarkCreate, db=Depends(get_db)): return await crud.create_remark(db, remark)
+async def create_remark(remark: schemas.RemarkCreate, request: Request, db=Depends(get_db)):
+    performed_by, user_name = await get_actor_from_request(request, db)
+    return await crud.create_remark(db, remark, performed_by=performed_by, user_name=user_name)
 @app.put("/remarks/{remark_id}", response_model=schemas.Remark)
-async def update_remark(remark_id: str, update: schemas.RemarkUpdate, db=Depends(get_db)): return await crud.update_remark(db, remark_id, update)
+async def update_remark(remark_id: str, update: schemas.RemarkUpdate, request: Request, db=Depends(get_db)):
+    performed_by, user_name = await get_actor_from_request(request, db)
+    return await crud.update_remark(db, remark_id, update, performed_by=performed_by, user_name=user_name)
 @app.delete("/remarks/{remark_id}")
-async def delete_remark(remark_id: str, db=Depends(get_db)):
-    await crud.delete_remark(db, remark_id)
+async def delete_remark(remark_id: str, request: Request, db=Depends(get_db)):
+    performed_by, user_name = await get_actor_from_request(request, db)
+    await crud.delete_remark(db, remark_id, performed_by=performed_by, user_name=user_name)
     return {"message": "Remark soft-deleted successfully"}
 
 @app.post("/remarks/{remark_id}/restore")
-async def restore_remark(remark_id: str, db=Depends(get_db)):
-    await crud.restore_remark(db, remark_id)
+async def restore_remark(remark_id: str, request: Request, db=Depends(get_db)):
+    performed_by, user_name = await get_actor_from_request(request, db)
+    await crud.restore_remark(db, remark_id, performed_by=performed_by, user_name=user_name)
     return {"message": "Remark restored successfully"}
 
 @app.delete("/remarks/{remark_id}/permanent")
-async def permanently_delete_remark(remark_id: str, db=Depends(get_db)):
-    await crud.permanently_delete_remark(db, remark_id)
+async def permanently_delete_remark(remark_id: str, request: Request, db=Depends(get_db)):
+    performed_by, user_name = await get_actor_from_request(request, db)
+    await crud.permanently_delete_remark(db, remark_id, performed_by=performed_by, user_name=user_name)
     return {"message": "Remark permanently deleted"}
 
 # Penalty Type Endpoints
@@ -1366,6 +1406,31 @@ async def read_task_logs(
     db=Depends(get_db)
 ):
     return await crud.get_task_logs(db, taskId=taskId, projectId=projectId, clientId=clientId, dailyReportId=dailyReportId, monthlyReportId=monthlyReportId)
+
+@app.get("/admin/activity-logs")
+async def read_all_activity_logs(
+    performedBy: Optional[str] = None,
+    action: Optional[str] = None,
+    search: Optional[str] = None,
+    startDate: Optional[str] = None,
+    endDate: Optional[str] = None,
+    limit: int = 50,
+    skip: int = 0,
+    db=Depends(get_db),
+    current_user=Depends(auth.require_admin_or_activity_logs)
+):
+    logs, total = await crud.get_all_activity_logs(
+        db,
+        performedBy=performedBy,
+        action=action,
+        search=search,
+        startDate=startDate,
+        endDate=endDate,
+        limit=limit,
+        skip=skip
+    )
+    return {"logs": logs, "total": total}
+
 
 @app.post("/task-logs", response_model=schemas.TaskLog)
 async def create_task_log(log: schemas.TaskLogBase, db=Depends(get_db)):
@@ -2108,8 +2173,9 @@ async def read_user_permissions(employee_id: str, db=Depends(get_db)):
     return await crud.get_user_permissions(db, employee_id)
 
 @app.post("/user-permissions/{employee_id}", response_model=schemas.UserPermission)
-async def update_user_permissions(employee_id: str, permissions: schemas.UserPermissionUpdate, db=Depends(get_db)):
-    return await crud.save_user_permissions(db, employee_id, permissions)
+async def update_user_permissions(employee_id: str, permissions: schemas.UserPermissionUpdate, request: Request, db=Depends(get_db)):
+    performed_by, user_name = await get_actor_from_request(request, db)
+    return await crud.save_user_permissions(db, employee_id, permissions, performed_by=performed_by, user_name=user_name)
 
 # Permission Presets Routes
 @app.get("/permission-presets", response_model=List[schemas.PermissionPreset])
