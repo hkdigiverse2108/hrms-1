@@ -173,9 +173,17 @@ async def archive_and_delete_one(db, collection_name: str, query: dict):
         await db[archive_collection].insert_one(doc)
     await db[collection_name].delete_one(query)
 
-async def delete_employee(db, employee_id: str):
+async def delete_employee(db, employee_id: str, performed_by: str = "System", user_name: str = "System User"):
     existing = await db.employees.find_one({"_id": ObjectId(employee_id)})
     if existing:
+        await log_activity(
+            db=db,
+            action="Employee Deleted",
+            performedBy=performed_by,
+            userName=user_name,
+            details=f"Employee '{existing.get('name')}' (ID: {existing.get('employeeId', 'N/A')}) was deleted from the system.",
+            employeeId=employee_id
+        )
         old_photo = existing.get("profilePhoto")
         if old_photo and not old_photo.startswith("http"):
             import os
@@ -253,7 +261,7 @@ async def sync_employee_salary_to_structure(db, employee_id: str, salary_amount:
         print(f"Error syncing salary to structure: {e}")
 
 
-async def update_employee(db, employee_id: str, employee_update: schemas.EmployeeUpdate):
+async def update_employee(db, employee_id: str, employee_update: schemas.EmployeeUpdate, performed_by: str = "System", user_name: str = "System User"):
     # Fetch existing employee first to handle name recalculation
     existing = await db.employees.find_one({"_id": ObjectId(employee_id)})
     if not existing:
@@ -285,6 +293,9 @@ async def update_employee(db, employee_id: str, employee_update: schemas.Employe
             name = f"{first} {middle} {last}"
         update_data["name"] = name
 
+    # Diff updates
+    log_details, diffs = format_field_changes(existing, update_data, f"Employee '{existing.get('name')}'")
+
     await db.employees.update_one(
         {"_id": ObjectId(employee_id)},
         {"$set": update_data}
@@ -293,6 +304,17 @@ async def update_employee(db, employee_id: str, employee_update: schemas.Employe
     if "salary" in update_data and update_data["salary"] is not None:
         await sync_employee_salary_to_structure(db, employee_id, update_data["salary"])
     
+    if diffs:
+        await log_activity(
+            db=db,
+            action="Employee Updated",
+            performedBy=performed_by,
+            userName=user_name,
+            details=log_details,
+            diffs=diffs,
+            employeeId=employee_id
+        )
+
     try:
         await ws_manager.broadcast_all("data_refresh", {"entity": "employees"})
     except Exception:
@@ -732,7 +754,7 @@ async def create_bonus_deduction(db, item: schemas.BonusDeductionCreate):
     doc = await db.bonus_deductions.find_one({"_id": result.inserted_id})
     return fix_id(doc)
 
-async def run_payroll_processing(db, month: str, year: int):
+async def run_payroll_processing(db, month: str, year: int, performed_by: str = "System", user_name: str = "System User"):
     # 1. Get all employees
     employees = await get_employees(db, limit=1000)
     
@@ -1199,9 +1221,17 @@ async def run_payroll_processing(db, month: str, year: int):
     except Exception as e_notif:
         print(f"Error sending payslip notifications: {e_notif}")
 
+    await log_activity(
+        db=db,
+        action="Payroll Processed",
+        performedBy=performed_by,
+        userName=user_name,
+        details=f"Processed payroll for {month} {year}."
+    )
+
     return payroll_results
 
-async def create_employee(db, employee: schemas.EmployeeCreate):
+async def create_employee(db, employee: schemas.EmployeeCreate, performed_by: str = "System", user_name: str = "System User"):
     is_admin = employee.role and employee.role.lower() == "admin"
     
     if not is_admin:
@@ -1239,12 +1269,22 @@ async def create_employee(db, employee: schemas.EmployeeCreate):
     if employee.salary is not None and employee.salary > 0:
         await sync_employee_salary_to_structure(db, employee_dict["id"], employee.salary)
         
+    await log_activity(
+        db=db,
+        action="Employee Created",
+        performedBy=performed_by,
+        userName=user_name,
+        details=f"Employee '{name}' (ID: {next_id or 'N/A'}) was created.",
+        employeeId=employee_dict["id"]
+    )
+
     try:
         await ws_manager.broadcast_all("data_refresh", {"entity": "employees"})
     except Exception:
         pass
         
     return employee_dict
+
 
 # Department CRUD
 async def get_departments(db, skip: int = 0, limit: int = 100):
@@ -1766,21 +1806,79 @@ async def get_remarks(db, skip: int = 0, limit: int = 100):
         item["amount"] = p_amount
         
     return items
-async def create_remark(db, remark: schemas.RemarkCreate): 
+async def create_remark(db, remark: schemas.RemarkCreate, performed_by: str = "System", user_name: str = "System User"): 
     remark_dict = remark.dict()
     if not remark_dict.get("date"):
         remark_dict["date"] = get_now().strftime("%d-%m-%Y")
-    return await create_item(db, "remarks", remark_dict)
-async def update_remark(db, remark_id: str, update: schemas.RemarkUpdate): return await update_item(db, "remarks", remark_id, update.dict(exclude_unset=True))
-async def delete_remark(db, remark_id: str):
+    res = await create_item(db, "remarks", remark_dict)
+    if res:
+        await log_activity(
+            db=db,
+            action="Remark Created",
+            performedBy=performed_by,
+            userName=user_name,
+            details=f"Remark of type '{remark_dict.get('type')}' was created for '{remark_dict.get('employeeName')}' by '{remark_dict.get('addedBy', 'System')}' details: {remark_dict.get('details')}",
+            remarkId=res.get("id")
+        )
+    return res
+
+async def update_remark(db, remark_id: str, update: schemas.RemarkUpdate, performed_by: str = "System", user_name: str = "System User"): 
+    existing = await db.remarks.find_one({"_id": ObjectId(remark_id)})
+    update_data = update.dict(exclude_unset=True)
+    res = await update_item(db, "remarks", remark_id, update_data)
+    if existing and res:
+        log_details, diffs = format_field_changes(existing, update_data, f"Remark for '{existing.get('employeeName')}'")
+        if diffs:
+            await log_activity(
+                db=db,
+                action="Remark Updated",
+                performedBy=performed_by,
+                userName=user_name,
+                details=log_details,
+                diffs=diffs,
+                remarkId=remark_id
+            )
+    return res
+
+async def delete_remark(db, remark_id: str, performed_by: str = "System", user_name: str = "System User"):
+    existing = await db.remarks.find_one({"_id": ObjectId(remark_id)})
+    if existing:
+        await log_activity(
+            db=db,
+            action="Remark Deleted",
+            performedBy=performed_by,
+            userName=user_name,
+            details=f"Remark of type '{existing.get('type')}' for '{existing.get('employeeName')}' was deleted (soft delete).",
+            remarkId=remark_id
+        )
     await db.remarks.update_one({"_id": ObjectId(remark_id)}, {"$set": {"isDeleted": True}})
     return True
 
-async def restore_remark(db, remark_id: str):
+async def restore_remark(db, remark_id: str, performed_by: str = "System", user_name: str = "System User"):
+    existing = await db.remarks.find_one({"_id": ObjectId(remark_id)})
+    if existing:
+        await log_activity(
+            db=db,
+            action="Remark Restored",
+            performedBy=performed_by,
+            userName=user_name,
+            details=f"Remark of type '{existing.get('type')}' for '{existing.get('employeeName')}' was restored.",
+            remarkId=remark_id
+        )
     await db.remarks.update_one({"_id": ObjectId(remark_id)}, {"$set": {"isDeleted": False}})
     return True
 
-async def permanently_delete_remark(db, remark_id: str):
+async def permanently_delete_remark(db, remark_id: str, performed_by: str = "System", user_name: str = "System User"):
+    existing = await db.remarks.find_one({"_id": ObjectId(remark_id)})
+    if existing:
+        await log_activity(
+            db=db,
+            action="Remark Permanently Deleted",
+            performedBy=performed_by,
+            userName=user_name,
+            details=f"Remark of type '{existing.get('type')}' for '{existing.get('employeeName')}' was permanently deleted.",
+            remarkId=remark_id
+        )
     return await delete_item(db, "remarks", remark_id)
 
 async def get_events(db, skip: int = 0, limit: int = 100): return await get_items(db, "events", skip, limit)
@@ -1924,7 +2022,7 @@ async def get_attendance_status(db, employee_id: str):
     record = records[0] if records else None
     return fix_id(record)
 
-async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None):
+async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None, performed_by: str = "System", user_name: str = "System User"):
     employee = await get_employee(db, employee_id)
     if not employee or employee.get("status", "").lower() == "inactive":
         return None
@@ -2098,6 +2196,14 @@ async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None):
             }
         )
         updated_doc = await db.attendance.find_one({"_id": existing_record["_id"]})
+        await log_activity(
+            db=db,
+            action="Clock In",
+            performedBy=performed_by if performed_by != "System" else employee_id,
+            userName=user_name if user_name != "System User" else employee.get("name", "Staff"),
+            details=f"Employee clocked in at {now_time_str} (Resumed existing session).",
+            attendanceId=str(updated_doc["_id"])
+        )
         return fix_id(updated_doc)
     
     # First punch of the day: create new record (use naive date so MongoDB stores it as exactly today's midnight UTC date)
@@ -2125,11 +2231,19 @@ async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None):
     
     result = await db.attendance.insert_one(attendance_data)
     attendance_data["id"] = str(result.inserted_id)
+    await log_activity(
+        db=db,
+        action="Clock In",
+        performedBy=performed_by if performed_by != "System" else employee_id,
+        userName=user_name if user_name != "System User" else employee.get("name", "Staff"),
+        details=f"Employee clocked in at {now_time_str}.",
+        attendanceId=attendance_data["id"]
+    )
     if "_id" in attendance_data:
         attendance_data.pop("_id")
     return attendance_data
 
-async def punch_out(db, employee_id: str, punch_out_time: Optional[str] = None):
+async def punch_out(db, employee_id: str, punch_out_time: Optional[str] = None, performed_by: str = "System", user_name: str = "System User"):
     status = await get_attendance_status(db, employee_id)
     if not status:
         return None
@@ -2146,6 +2260,17 @@ async def punch_out(db, employee_id: str, punch_out_time: Optional[str] = None):
         close_dt = get_now()
 
     updated = await _apply_punch_out_to_record(db, record, close_dt)
+    if updated:
+        emp_name = record.get("employeeName", "Staff")
+        time_str = close_dt.strftime("%H:%M:%S")
+        await log_activity(
+            db=db,
+            action="Clock Out",
+            performedBy=performed_by if performed_by != "System" else employee_id,
+            userName=user_name if user_name != "System User" else emp_name,
+            details=f"Employee clocked out at {time_str}.",
+            attendanceId=str(record["_id"])
+        )
     return fix_id(updated)
 
 async def create_manual_attendance(db, attendance: schemas.AttendanceCreate):
@@ -2190,48 +2315,64 @@ async def create_manual_attendance(db, attendance: schemas.AttendanceCreate):
         attendance_dict.pop("_id")
     return attendance_dict
 
-async def update_attendance(db, attendance_id: str, attendance_update: schemas.AttendanceUpdate):
+async def update_attendance(db, attendance_id: str, attendance_update: schemas.AttendanceUpdate, performed_by: str = "System", user_name: str = "System User"):
+    existing = await db.attendance.find_one({"_id": ObjectId(attendance_id)})
+    if not existing:
+        return None
+
     update_data = attendance_update.dict(exclude_unset=True)
     
     # Recalculate workHours if checkIn or checkOut are updated
     if "checkIn" in update_data or "checkOut" in update_data or "date" in update_data:
-        existing = await db.attendance.find_one({"_id": ObjectId(attendance_id)})
-        if existing:
-            date_val = update_data.get("date") or existing.get("date")
-            ci_val = update_data.get("checkIn") or existing.get("checkIn")
-            co_val = update_data.get("checkOut") or existing.get("checkOut")
-            
-            if ci_val and co_val:
-                try:
-                    if isinstance(date_val, (datetime, date)):
-                        date_str = date_val.strftime("%Y-%m-%d")
-                    else:
-                        date_str = str(date_val).split('T')[0].split(' ')[0]
-                    
-                    # Pad seconds if not present
-                    if len(ci_val.split(':')) == 2: ci_val = f"{ci_val}:00"
-                    if len(co_val.split(':')) == 2: co_val = f"{co_val}:00"
-                    
-                    start = datetime.strptime(f"{date_str} {ci_val}", "%Y-%m-%d %H:%M:%S")
-                    end = datetime.strptime(f"{date_str} {co_val}", "%Y-%m-%d %H:%M:%S")
-                    if end < start:
-                        end += timedelta(days=1)
-                    duration = end - start
-                    total_seconds = max(0.0, duration.total_seconds())
-                    
-                    hours, remainder = divmod(int(total_seconds), 3600)
-                    minutes, _ = divmod(remainder, 60)
-                    
-                    update_data["workHours"] = f"{hours}h {minutes}m"
-                    update_data["accumulatedWorkSeconds"] = total_seconds
-                    update_data["punches"] = [{"punchIn": ci_val, "punchOut": co_val}]
-                except Exception as e:
-                    print(f"Error updating work hours calculation: {e}")
+        date_val = update_data.get("date") or existing.get("date")
+        ci_val = update_data.get("checkIn") or existing.get("checkIn")
+        co_val = update_data.get("checkOut") or existing.get("checkOut")
+        
+        if ci_val and co_val:
+            try:
+                if isinstance(date_val, (datetime, date)):
+                    date_str = date_val.strftime("%Y-%m-%d")
+                else:
+                    date_str = str(date_val).split('T')[0].split(' ')[0]
+                
+                # Pad seconds if not present
+                if len(ci_val.split(':')) == 2: ci_val = f"{ci_val}:00"
+                if len(co_val.split(':')) == 2: co_val = f"{co_val}:00"
+                
+                start = datetime.strptime(f"{date_str} {ci_val}", "%Y-%m-%d %H:%M:%S")
+                end = datetime.strptime(f"{date_str} {co_val}", "%Y-%m-%d %H:%M:%S")
+                if end < start:
+                    end += timedelta(days=1)
+                duration = end - start
+                total_seconds = max(0.0, duration.total_seconds())
+                
+                hours, remainder = divmod(int(total_seconds), 3600)
+                minutes, _ = divmod(remainder, 60)
+                
+                update_data["workHours"] = f"{hours}h {minutes}m"
+                update_data["accumulatedWorkSeconds"] = total_seconds
+                update_data["punches"] = [{"punchIn": ci_val, "punchOut": co_val}]
+            except Exception as e:
+                print(f"Error updating work hours calculation: {e}")
+
+    log_details, diffs = format_field_changes(existing, update_data, f"Attendance for '{existing.get('employeeName')}'")
 
     await db.attendance.update_one(
         {"_id": ObjectId(attendance_id)},
         {"$set": update_data}
     )
+    
+    if diffs:
+        await log_activity(
+            db=db,
+            action="Attendance Updated",
+            performedBy=performed_by,
+            userName=user_name,
+            details=log_details,
+            diffs=diffs,
+            attendanceId=attendance_id
+        )
+
     updated = await db.attendance.find_one({"_id": ObjectId(attendance_id)})
     return fix_id(updated)
 
@@ -2313,7 +2454,7 @@ async def break_out(db, employee_id: str):
     return fix_id(result)
 
 # Leave Request CRUD
-async def create_leave_request(db, leave: schemas.LeaveRequestCreate):
+async def create_leave_request(db, leave: schemas.LeaveRequestCreate, performed_by: str = "System", user_name: str = "System User"):
     leave_dict = leave.dict()
     leave_dict["status"] = "Pending"
     leave_dict["requested_on"] = get_now().strftime("%d-%m-%Y %H:%M")
@@ -2321,6 +2462,15 @@ async def create_leave_request(db, leave: schemas.LeaveRequestCreate):
     leave_dict["id"] = str(result.inserted_id)
     if "_id" in leave_dict:
         leave_dict.pop("_id")
+
+    await log_activity(
+        db=db,
+        action="Leave Requested",
+        performedBy=performed_by,
+        userName=user_name,
+        details=f"{leave_dict['employee_name']} requested {leave_dict['type']} leave from {leave_dict['start_date']} to {leave_dict['end_date']}. Duration: {leave_dict['duration']}. Reason: {leave_dict['reason']}",
+        leaveId=leave_dict["id"]
+    )
 
     # Notify HR and Admin
     try:
@@ -2478,12 +2628,14 @@ async def auto_create_leave_attendance(db, employee_id: str, start_date, end_dat
         if (curr - s).days > 365:
             break
 
-async def update_leave_request(db, leave_id: str, update_data: dict):
+async def update_leave_request(db, leave_id: str, update_data: dict, performed_by: str = "System", user_name: str = "System User"):
     # Fetch current leave request
     leave = await db.leave_requests.find_one({"_id": ObjectId(leave_id)})
     if not leave:
         return None
     
+    log_details, diffs = format_field_changes(leave, update_data, f"Leave Request for '{leave.get('employee_name')}'")
+
     await db.leave_requests.update_one(
         {"_id": ObjectId(leave_id)},
         {"$set": update_data}
@@ -2532,11 +2684,22 @@ async def update_leave_request(db, leave_id: str, update_data: dict):
             type="leave",
             created_at=get_now().strftime("%d-%m-%Y %H:%M")
         ))
+
+    if diffs:
+        await log_activity(
+            db=db,
+            action="Leave Updated",
+            performedBy=performed_by,
+            userName=user_name,
+            details=log_details,
+            diffs=diffs,
+            leaveId=leave_id
+        )
         
     result = await db.leave_requests.find_one({"_id": ObjectId(leave_id)})
     return fix_id(result)
 
-async def update_leave_request_status(db, leave_id: str, status: str, approved_by: str = None, approved_by_role: str = None, approved_by_id: str = None, approved_by_photo: str = None, reject_reason: str = None, approve_reason: str = None):
+async def update_leave_request_status(db, leave_id: str, status: str, approved_by: str = None, approved_by_role: str = None, approved_by_id: str = None, approved_by_photo: str = None, reject_reason: str = None, approve_reason: str = None, performed_by: str = "System", user_name: str = "System User"):
     update_data = {"status": status}
     if approved_by:
         update_data["approved_by"] = approved_by
@@ -2550,7 +2713,7 @@ async def update_leave_request_status(db, leave_id: str, status: str, approved_b
         update_data["reject_reason"] = reject_reason
     if approve_reason:
         update_data["approve_reason"] = approve_reason
-    return await update_leave_request(db, leave_id, update_data)
+    return await update_leave_request(db, leave_id, update_data, performed_by=performed_by, user_name=user_name)
 
 
 # Notification CRUD
@@ -2602,7 +2765,17 @@ async def mark_all_notifications_as_read(db, employee_id: str):
     )
     return {"message": "All notifications marked as read"}
 
-async def delete_leave_request(db, leave_id: str):
+async def delete_leave_request(db, leave_id: str, performed_by: str = "System", user_name: str = "System User"):
+    leave = await db.leave_requests.find_one({"_id": ObjectId(leave_id)})
+    if leave:
+        await log_activity(
+            db=db,
+            action="Leave Request Deleted",
+            performedBy=performed_by,
+            userName=user_name,
+            details=f"Leave request for '{leave.get('employee_name')}' from {leave.get('start_date')} to {leave.get('end_date')} was deleted.",
+            leaveId=leave_id
+        )
     result = await db.leave_requests.delete_one({"_id": ObjectId(leave_id)})
     return result.deleted_count > 0
 
@@ -3655,7 +3828,7 @@ def format_field_changes(old_doc: dict, update_data: dict, entity_prefix: str = 
     return prefix_str + ", ".join(details), diffs
 
 # Activity Log CRUD
-async def log_activity(db, action: str, performedBy: str, userName: str, details: str, diffs: list = None, taskId: str = None, projectId: str = None, clientId: str = None, leadId: str = None, dailyReportId: str = None, monthlyReportId: str = None, applicationId: str = None, assetId: str = None, categoryId: str = None):
+async def log_activity(db, action: str, performedBy: str, userName: str, details: str, diffs: list = None, taskId: str = None, projectId: str = None, clientId: str = None, leadId: str = None, dailyReportId: str = None, monthlyReportId: str = None, applicationId: str = None, assetId: str = None, categoryId: str = None, employeeId: str = None, leaveId: str = None, attendanceId: str = None, remarkId: str = None):
     log_entry = {
         "action": action,
         "performedBy": performedBy,
@@ -3673,6 +3846,10 @@ async def log_activity(db, action: str, performedBy: str, userName: str, details
     if applicationId: log_entry["applicationId"] = applicationId
     if assetId: log_entry["assetId"] = assetId
     if categoryId: log_entry["categoryId"] = categoryId
+    if employeeId: log_entry["employeeId"] = employeeId
+    if leaveId: log_entry["leaveId"] = leaveId
+    if attendanceId: log_entry["attendanceId"] = attendanceId
+    if remarkId: log_entry["remarkId"] = remarkId
     
     await db.task_logs.insert_one(log_entry)
 
@@ -3722,6 +3899,33 @@ async def get_task_logs(db, taskId: str = None, projectId: str = None, clientId:
     cursor = db.task_logs.find(query).sort("timestamp", -1)
     rows = await cursor.to_list(length=100)
     return [fix_id(row) for row in rows]
+
+async def get_all_activity_logs(db, performedBy: str = None, action: str = None, search: str = None, startDate: str = None, endDate: str = None, limit: int = 50, skip: int = 0):
+    query = {}
+    if performedBy:
+        query["userName"] = {"$regex": performedBy, "$options": "i"}
+    if action:
+        query["action"] = action
+    if search:
+        query["$or"] = [
+            {"details": {"$regex": search, "$options": "i"}},
+            {"action": {"$regex": search, "$options": "i"}},
+            {"userName": {"$regex": search, "$options": "i"}},
+            {"performedBy": {"$regex": search, "$options": "i"}}
+        ]
+    if startDate or endDate:
+        time_query = {}
+        if startDate:
+            time_query["$gte"] = f"{startDate} 00:00:00"
+        if endDate:
+            time_query["$lte"] = f"{endDate} 23:59:59"
+        query["timestamp"] = time_query
+
+    cursor = db.task_logs.find(query).sort("timestamp", -1).skip(skip).limit(limit)
+    total = await db.task_logs.count_documents(query)
+    rows = await cursor.to_list(length=limit)
+    return [fix_id(row) for row in rows], total
+
 
 async def update_task_log(db, log_id: str, new_details: str):
     await db.task_logs.update_one({"_id": ObjectId(log_id)}, {"$set": {"details": new_details}})
@@ -5807,7 +6011,16 @@ async def get_user_permissions(db, employee_id: str):
         return None
     return fix_id(doc)
 
-async def save_user_permissions(db, employee_id: str, permissions_data: schemas.UserPermissionUpdate):
+async def save_user_permissions(db, employee_id: str, permissions_data: schemas.UserPermissionUpdate, performed_by: str = "System", user_name: str = "System User"):
+    # Fetch employee to get their name
+    employee = await db.employees.find_one({"_id": ObjectId(employee_id) if len(employee_id) == 24 else employee_id})
+    emp_name = employee.get("name", "Staff") if employee else "Staff"
+    
+    # Check if there was a previous preset or permissions
+    existing = await db.user_permissions.find_one({"employeeId": employee_id})
+    old_preset = existing.get("presetId", "Custom") if existing else "None"
+    new_preset = permissions_data.presetId or "Custom"
+
     # Upsert pattern
     await db.user_permissions.update_one(
         {"employeeId": employee_id},
@@ -5817,6 +6030,16 @@ async def save_user_permissions(db, employee_id: str, permissions_data: schemas.
         }},
         upsert=True
     )
+    
+    await log_activity(
+        db=db,
+        action="Permissions Updated",
+        performedBy=performed_by,
+        userName=user_name,
+        details=f"Permissions updated for '{emp_name}'. Preset changed from '{old_preset}' to '{new_preset}'.",
+        employeeId=employee_id
+    )
+    
     doc = await db.user_permissions.find_one({"employeeId": employee_id})
     return fix_id(doc)
 
