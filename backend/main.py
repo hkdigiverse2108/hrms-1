@@ -3227,6 +3227,10 @@ async def delete_other_work(entry_id: str, db=Depends(get_db)):
     return {"message": "Entry deleted successfully"}
 
 # --- Work Transfer Request API ---
+@app.get("/work-transfer-requests", response_model=List[schemas.WorkTransferRequest])
+async def get_all_transfer_requests(task_id: Optional[str] = None, task_type: Optional[str] = None, db=Depends(get_db)):
+    return await crud.get_all_transfer_requests(db, task_id, task_type)
+
 @app.post("/work-transfer-requests", response_model=schemas.WorkTransferRequest)
 async def create_transfer_request(request: schemas.WorkTransferRequestCreate, db=Depends(get_db)):
     try:

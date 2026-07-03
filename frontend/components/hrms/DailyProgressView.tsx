@@ -301,8 +301,12 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
     )},
     { key: 'note' as const, header: 'Verification Note', render: (record: any) => (
       record.note ? (
-        <span className="text-[11px] text-slate-600 font-medium italic break-words max-w-[200px] block" title={record.note}>
-          "{record.note}"
+        <span 
+          className="text-[11px] text-slate-600 font-medium block" 
+          style={{ wordBreak: 'normal', overflowWrap: 'break-word', whiteSpace: 'normal', maxWidth: '200px' }} 
+          title={record.note}
+        >
+          {record.note}
         </span>
       ) : (
         <span className="text-[10px] text-slate-400 italic">No note added</span>

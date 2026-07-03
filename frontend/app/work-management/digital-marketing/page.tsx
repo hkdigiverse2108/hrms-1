@@ -35,6 +35,7 @@ import {
   Settings,
   Maximize,
   Minimize,
+  ArrowLeftRight,
 } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
@@ -396,6 +397,144 @@ export default function MarketingReportsPage() {
   const [isSavingDailyMetrics, setIsSavingDailyMetrics] = useState(false);
   
   const [systemSettings, setSystemSettings] = useState<any>(null);
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [transferringProject, setTransferringProject] = useState<any>(null);
+  const [selectedReceiverId, setSelectedReceiverId] = useState("");
+  const [transferDates, setTransferDates] = useState<string[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [transferRequests, setTransferRequests] = useState<any[]>([]);
+  const [isSendingTransfer, setIsSendingTransfer] = useState(false);
+
+  const acceptedTransfers = React.useMemo(() => {
+    return transferRequests.filter(r => r.status === 'Accepted');
+  }, [transferRequests]);
+
+  const handleAddDate = (dateStr: string) => {
+    if (!dateStr) return;
+    if (!transferDates.includes(dateStr)) {
+      setTransferDates(prev => [...prev, dateStr].sort());
+    }
+  };
+
+  const handleRemoveDate = (dateStr: string) => {
+    setTransferDates(prev => prev.filter(d => d !== dateStr));
+  };
+
+  const isUserAuthorizedForReport = (report: any) => {
+    if (isAdmin || checkPermission("marketing", "canEdit")) return true;
+    if (!user) return false;
+    const proj = projects.find(p => String(p.id) === String(report.projectId));
+    if (!proj) return false;
+    const isOriginalAssignee = proj.assignedEmployeeId === user.id;
+    const isTransferredToMe = acceptedTransfers.some(t => 
+      String(t.taskId) === String(report.projectId) && 
+      normalizeDate(t.stage) === normalizeDate(report.date) && 
+      t.receiverId === user.id
+    );
+    const isTransferredToSomeoneElse = acceptedTransfers.some(t => 
+      String(t.taskId) === String(report.projectId) && 
+      normalizeDate(t.stage) === normalizeDate(report.date) && 
+      t.receiverId !== user.id
+    );
+    return (isOriginalAssignee && !isTransferredToSomeoneElse) || isTransferredToMe;
+  };
+
+  const fetchEmployees = async () => {
+    try {
+      const res = await fetch(`${API_URL}/employees`);
+      if (res.ok) {
+        setEmployees(await res.json());
+      }
+    } catch (err) {
+      console.error("Failed to fetch employees", err);
+    }
+  };
+
+  const fetchTransferRequests = async () => {
+    try {
+      const res = await fetch(`${API_URL}/work-transfer-requests?taskType=digital-marketing`);
+      if (res.ok) {
+        setTransferRequests(await res.json());
+      }
+    } catch (err) {
+      console.error("Failed to fetch transfer requests", err);
+    }
+  };
+
+  const handleSendTransferRequest = async () => {
+    if (!selectedReceiverId) {
+      toast.error("Please select an employee to transfer this work to.");
+      return;
+    }
+    if (transferDates.length === 0) {
+      toast.error("Please select at least one date for the transfer.");
+      return;
+    }
+    const receiver = employees.find((e: any) => e.id === selectedReceiverId);
+    if (!receiver) {
+      toast.error("Selected employee not found.");
+      return;
+    }
+
+    const duplicates: string[] = [];
+    const datesToTransfer: string[] = [];
+
+    transferDates.forEach(dateStr => {
+      const existing = transferRequests.find(r => 
+        String(r.taskId) === String(transferringProject.id) && 
+        normalizeDate(r.stage) === normalizeDate(dateStr) && 
+        r.status !== 'Rejected'
+      );
+      if (existing) {
+        duplicates.push(dateStr);
+      } else {
+        datesToTransfer.push(dateStr);
+      }
+    });
+
+    if (duplicates.length > 0) {
+      const formattedDupes = duplicates.map(d => {
+        try {
+          return format(new Date(d), "dd MMM yyyy");
+        } catch(e) {
+          return d;
+        }
+      }).join(", ");
+      toast.error(`Transfer requests already exist for: ${formattedDupes}. Please remove them or choose other dates.`);
+      return;
+    }
+
+    setIsSendingTransfer(true);
+    try {
+      await Promise.all(datesToTransfer.map(async (dateStr) => {
+        return fetch(`${API_URL}/work-transfer-requests`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            taskId: transferringProject.id,
+            taskType: "digital-marketing",
+            taskName: transferringProject.title,
+            stage: dateStr,
+            senderId: user?.id || user?._id || "",
+            senderName: user?.name || `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Unknown User",
+            receiverId: receiver.id,
+            receiverName: `${receiver.firstName} ${receiver.lastName || ''}`.trim(),
+          }),
+        });
+      }));
+
+      toast.success(`Transfer requests sent successfully for ${datesToTransfer.length} date(s).`);
+      setIsTransferModalOpen(false);
+      setSelectedReceiverId("");
+      setTransferDates([]);
+      fetchTransferRequests();
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to send transfer requests.");
+    } finally {
+      setIsSendingTransfer(false);
+    }
+  };
 
   const fetchDailyMetricsData = async (projectId: string, dateStr: string) => {
     try {
@@ -676,6 +815,8 @@ export default function MarketingReportsPage() {
     fetchData();
     fetchClients();
     fetchProjects();
+    fetchEmployees();
+    fetchTransferRequests();
   }, [
     activeTab,
     selectedClientFilter,
@@ -719,8 +860,7 @@ export default function MarketingReportsPage() {
 
   const fetchProjects = async () => {
     try {
-      const userParams = user ? `?userId=${user.id}&role=${user.role}` : "";
-      const res = await fetch(`${API_URL}/projects${userParams}`);
+      const res = await fetch(`${API_URL}/projects`);
       if (res.ok) {
         const data = await res.json();
         setProjects(
@@ -812,6 +952,28 @@ export default function MarketingReportsPage() {
     const project = projects.find(p => p.id === projectId);
     if (project && project.status === "on-hold") {
       toast.error("Cannot add daily report because the associated project is on hold.");
+      return;
+    }
+
+    const isAuthToAdd = () => {
+      if (isAdmin || checkPermission("marketing", "canAdd")) return true;
+      if (!project) return false;
+      const isOriginalAssignee = project.assignedEmployeeId === user?.id;
+      const isTransferredToMe = acceptedTransfers.some(t => 
+        String(t.taskId) === String(project.id) && 
+        normalizeDate(t.stage) === normalizeDate(chosenDate) && 
+        t.receiverId === user?.id
+      );
+      const isTransferredToSomeoneElse = acceptedTransfers.some(t => 
+        String(t.taskId) === String(project.id) && 
+        normalizeDate(t.stage) === normalizeDate(chosenDate) && 
+        t.receiverId !== user?.id
+      );
+      return (isOriginalAssignee && !isTransferredToSomeoneElse) || isTransferredToMe;
+    };
+
+    if (!isAuthToAdd()) {
+      toast.error("You do not have permission to add reports for this project and date.");
       return;
     }
 
@@ -1047,9 +1209,12 @@ export default function MarketingReportsPage() {
         return;
       }
     }
-    if (type === "daily" && !canEditMarketing) {
-      toast.error("You do not have permission to edit reports");
-      return;
+    if (type === "daily") {
+      const report = dailyReports.find((r: any) => r.id === id);
+      if (!canEditMarketing && !isUserAuthorizedForReport(report)) {
+        toast.error("You do not have permission to edit reports");
+        return;
+      }
     }
     try {
       const payload =
@@ -1266,13 +1431,14 @@ export default function MarketingReportsPage() {
     !val || val === 0 || val === "0" || String(val).trim() === "";
 
   const startEditingRow = (report: any) => {
-    if (!canEditMarketing) return;
+    if (!canEditMarketing && !isUserAuthorizedForReport(report)) return;
     setEditingRowId(report.id);
     setEditFormData({ ...report });
   };
 
   const saveRowEdit = async (id: string, type: "daily" | "monthly") => {
-    if (!canEditMarketing) return;
+    const report = dailyReports.find(r => r.id === id);
+    if (!canEditMarketing && !isUserAuthorizedForReport(report)) return;
 
     if (type === "daily") {
       const report = dailyReports.find(r => r.id === id);
@@ -1537,7 +1703,18 @@ export default function MarketingReportsPage() {
     if ((taskFilterType === "my" || isRegularEmployee) && user?.id) {
       const assocProj = projects.find(p => String(p.id) === String(r.projectId));
       if (assocProj) {
-        matchesTaskType = assocProj.assignedEmployeeId === user.id;
+        const isOriginalAssignee = assocProj.assignedEmployeeId === user.id;
+        const isTransferredToMe = acceptedTransfers.some(t => 
+          String(t.taskId) === String(r.projectId) && 
+          normalizeDate(t.stage) === normalizeDate(r.date) && 
+          t.receiverId === user.id
+        );
+        const isTransferredToSomeoneElse = acceptedTransfers.some(t => 
+          String(t.taskId) === String(r.projectId) && 
+          normalizeDate(t.stage) === normalizeDate(r.date) && 
+          t.receiverId !== user.id
+        );
+        matchesTaskType = (isOriginalAssignee && !isTransferredToSomeoneElse) || isTransferredToMe;
       } else {
         matchesTaskType = false;
       }
@@ -1807,6 +1984,105 @@ export default function MarketingReportsPage() {
         logs={reportLogs}
         isLoading={isLoadingLogs}
       />
+
+      {/* Work Transfer Modal */}
+      <Dialog open={isTransferModalOpen} onOpenChange={setIsTransferModalOpen}>
+        <DialogContent className="sm:max-w-[425px] bg-white rounded-2xl shadow-xl border border-slate-100 p-6">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
+              <ArrowLeftRight className="w-5 h-5 text-brand-teal" />
+              <span>Transfer Digital Marketing Work</span>
+            </DialogTitle>
+            <div className="text-[11px] text-slate-400 font-medium tracking-tight mt-1">
+              Select an employee and date to transfer this daily report work.
+            </div>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-xs space-y-1.5">
+              <div>Project: <span className="font-semibold text-slate-800">{transferringProject?.title}</span></div>
+              <div>Client: <span className="font-semibold text-slate-800">{clients.find(c => c.id === transferringProject?.clientId)?.companyName || "Unknown"}</span></div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-700 block">Select Employee to Transfer To</label>
+              <Select value={selectedReceiverId} onValueChange={setSelectedReceiverId}>
+                <SelectTrigger className="w-full focus:ring-brand-teal focus:border-brand-teal bg-white">
+                  <SelectValue placeholder="Choose employee..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {employees
+                    .filter((emp: any) => {
+                      if (emp.id === user?.id) return false;
+                      const isAdminUser = user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin';
+                      if (isAdminUser) return true;
+                      if (!user?.department) return true;
+                      return emp.department?.toLowerCase() === user?.department?.toLowerCase();
+                    })
+                    .map((emp: any) => {
+                      const name = `${emp.firstName} ${emp.lastName || ''}`.trim();
+                      return (
+                        <SelectItem key={emp.id} value={emp.id}>
+                          {name} ({emp.role || 'Employee'})
+                        </SelectItem>
+                      );
+                    })}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-700 block">Select Date(s) of Transfer</label>
+              <div className="flex gap-2">
+                <Input
+                  type="date"
+                  onChange={(e) => {
+                    handleAddDate(e.target.value);
+                    e.target.value = "";
+                  }}
+                  className="bg-white focus:ring-brand-teal focus:border-brand-teal flex-1"
+                />
+              </div>
+              {transferDates.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pt-1.5 max-h-[120px] overflow-y-auto custom-scrollbar">
+                  {transferDates.map(dateStr => {
+                    let displayDate = dateStr;
+                    try {
+                      const parsed = new Date(dateStr);
+                      displayDate = format(parsed, "dd MMM yyyy");
+                    } catch(e) {}
+                    return (
+                      <Badge 
+                        key={dateStr} 
+                        variant="secondary" 
+                        className="px-2 py-0.5 flex items-center gap-1.5 bg-slate-100 text-slate-700 border border-slate-200 shadow-none font-medium text-[11px] rounded"
+                      >
+                        <span>{displayDate}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveDate(dateStr)}
+                          className="text-slate-400 hover:text-slate-600 font-bold ml-0.5 focus:outline-none"
+                        >
+                          &times;
+                        </button>
+                      </Badge>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-100">
+            <Button variant="outline" onClick={() => setIsTransferModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-brand-teal hover:bg-brand-teal/90 text-white font-semibold"
+              disabled={isSendingTransfer}
+              onClick={handleSendTransferRequest}
+            >
+              {isSendingTransfer ? "Sending..." : "Send Request"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={!!viewClientReports}
@@ -2398,7 +2674,12 @@ export default function MarketingReportsPage() {
                     const filteredProjs = clientProjs.filter((p) => {
                       if (p.status === "on-hold") return false;
                       if ((taskFilterType === "my" || isRegularEmployee) && user?.id) {
-                        return p.assignedEmployeeId === user.id;
+                        const isOriginalAssignee = p.assignedEmployeeId === user.id;
+                        const isTransferredToMe = acceptedTransfers.some(t => 
+                          String(t.taskId) === String(p.id) && 
+                          t.receiverId === user.id
+                        );
+                        return isOriginalAssignee || isTransferredToMe;
                       }
                       return true;
                     });
@@ -2450,34 +2731,51 @@ export default function MarketingReportsPage() {
                                                     <span className="text-amber-600 font-medium ml-1">({days.onHold}d hold)</span>
                                                   ) : null}
                                                 </div>
-                                                {canEditMarketing && (
                                                   <div className="flex items-center gap-1 shrink-0">
-                                                    <button
-                                                      onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        fetchLogs(p, "project-remark");
-                                                      }}
-                                                      className="p-1.5 text-slate-500 hover:text-brand-teal hover:bg-brand-teal/10 rounded transition-all"
-                                                      title="View Logs"
-                                                    >
-                                                      <History className="w-[18px] h-[18px]" />
-                                                    </button>
-                                                    <button
-                                                      onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setDailyMetricsProject(p);
-                                                        setProjectEndDate(p.endDate ? p.endDate.split('T')[0] : "");
-                                                        const dateStr = dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : new Date().toISOString().split("T")[0];
-                                                        fetchDailyMetricsData(p.id, dateStr);
-                                                        setDailyMetricsOpen(true);
-                                                      }}
-                                                      className="p-1.5 text-slate-500 hover:text-brand-teal hover:bg-brand-teal/10 rounded transition-all"
-                                                      title="Daily Project Metrics"
-                                                    >
-                                                      <Settings className="w-[18px] h-[18px]" />
-                                                    </button>
+                                                    {canEditMarketing && (
+                                                      <>
+                                                        <button
+                                                          onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            fetchLogs(p, "project-remark");
+                                                          }}
+                                                          className="p-1.5 text-slate-500 hover:text-brand-teal hover:bg-brand-teal/10 rounded transition-all"
+                                                          title="View Logs"
+                                                        >
+                                                          <History className="w-[18px] h-[18px]" />
+                                                        </button>
+                                                        <button
+                                                          onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setDailyMetricsProject(p);
+                                                            setProjectEndDate(p.endDate ? p.endDate.split('T')[0] : "");
+                                                            const dateStr = dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : new Date().toISOString().split("T")[0];
+                                                            fetchDailyMetricsData(p.id, dateStr);
+                                                            setDailyMetricsOpen(true);
+                                                          }}
+                                                          className="p-1.5 text-slate-500 hover:text-brand-teal hover:bg-brand-teal/10 rounded transition-all"
+                                                          title="Daily Project Metrics"
+                                                        >
+                                                          <Settings className="w-[18px] h-[18px]" />
+                                                        </button>
+                                                      </>
+                                                    )}
+                                                    {(p.assignedEmployeeId === user?.id || isAdmin) && (
+                                                      <button
+                                                        onClick={(e) => {
+                                                          e.stopPropagation();
+                                                          setTransferringProject(p);
+                                                          setSelectedReceiverId("");
+                                                          setTransferDates([]);
+                                                          setIsTransferModalOpen(true);
+                                                        }}
+                                                        className="p-1.5 text-slate-500 hover:text-brand-teal hover:bg-brand-teal/10 rounded transition-all"
+                                                        title="Transfer Work"
+                                                      >
+                                                        <ArrowLeftRight className="w-[18px] h-[18px]" />
+                                                      </button>
+                                                    )}
                                                   </div>
-                                                )}
                                               </div>
                                             </div>
                                           </div>
@@ -2693,7 +2991,26 @@ export default function MarketingReportsPage() {
                                                     {report.date ? (() => {
                                                       try {
                                                         const parsed = new Date(report.date);
-                                                        return format(parsed, "dd MMM yyyy");
+                                                        const formattedDate = format(parsed, "dd MMM yyyy");
+                                                        const transfer = transferRequests.find(t => 
+                                                          String(t.taskId) === String(report.projectId) && 
+                                                          normalizeDate(t.stage) === normalizeDate(report.date)
+                                                        );
+                                                        return (
+                                                          <div className="flex flex-col gap-1">
+                                                            <span>{formattedDate}</span>
+                                                            {transfer && transfer.status === 'Pending' && (
+                                                              <span className="text-[9px] text-amber-600 bg-amber-50 border border-amber-200 px-1 py-0.5 rounded font-semibold whitespace-nowrap">
+                                                                Pending Transfer to {transfer.receiverName}
+                                                              </span>
+                                                            )}
+                                                            {transfer && transfer.status === 'Accepted' && (
+                                                              <span className="text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-1 py-0.5 rounded font-semibold whitespace-nowrap">
+                                                                Transferred to {transfer.receiverName}
+                                                              </span>
+                                                            )}
+                                                          </div>
+                                                        );
                                                       } catch (e) {
                                                         return report.date;
                                                       }

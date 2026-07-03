@@ -1372,44 +1372,66 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
                                 className="h-8 text-xs px-2 py-1"
                                 value={editForm[key] || ""}
                                 onChange={(e) => setEditForm({ ...editForm, [key]: e.target.value })}
+                                placeholder={key === "reference" || key.toLowerCase().includes("link") ? "Enter link(s) separated by spaces or commas..." : ""}
                               />
                             )
                           ) : (
-                            <div 
-                              className="truncate px-1 cursor-pointer min-h-[20px] flex items-center text-xs" 
-                              onClick={() => startEditing(entry)}
-                              title={entry[key] || ""}
-                            >
-                              {entry[key] && (key.toLowerCase().includes("link") || key === "reference") && entry[key].startsWith("http") ? (
-                                <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
-                                  <a href={entry[key]} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-500 text-xs flex-1 truncate" style={{ textDecoration: 'underline' }}>
-                                    Link
-                                  </a>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-5 w-5 hover:bg-slate-100"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      navigator.clipboard.writeText(entry[key]);
-                                      toast.success("Link copied!");
-                                    }}
-                                  >
-                                    <Copy className="h-3 w-3 text-slate-400 hover:text-slate-600" />
-                                  </Button>
-                                </div>
-                              ) : (
-                                <>
-                                  {formatDateDisplay(entry[key]) || null}
-                                  {key === "postingDate" && isDue && (
-                                    <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-100 text-red-800">
-                                      Due
-                                    </span>
-                                  )}
-                                </>
-                              )}
-                            </div>
-                          )}
+                             <div 
+                               className="px-1 cursor-pointer min-h-[20px] flex items-center text-xs w-full overflow-hidden" 
+                               onClick={() => startEditing(entry)}
+                               title={entry[key] || ""}
+                             >
+                               {(() => {
+                                 if (entry[key] && (key.toLowerCase().includes("link") || key === "reference")) {
+                                   const matches = entry[key].match(/(https?:\/\/[^\s,;]+|www\.[^\s,;]+)/gi);
+                                   if (matches && matches.length > 0) {
+                                     return (
+                                       <div className="flex flex-wrap items-center gap-1 w-full">
+                                         {matches.map((matchUrl: string, idx: number) => {
+                                           let url = matchUrl;
+                                           if (url.toLowerCase().startsWith("www.")) {
+                                             url = "https://" + url;
+                                           }
+                                           return (
+                                             <div key={idx} className="flex items-center gap-1 bg-blue-50 text-blue-600 px-1 py-0.5 rounded border border-blue-100 text-[10px] select-none hover:bg-blue-100/70 transition-colors">
+                                               <a href={url} target="_blank" rel="noopener noreferrer" className="hover:underline font-semibold max-w-[80px] truncate" title={url} onClick={e => e.stopPropagation()}>
+                                                 {matches.length > 1 ? `Link ${idx + 1}` : "Link"}
+                                               </a>
+                                               <Button
+                                                 variant="ghost"
+                                                 size="icon"
+                                                 className="h-3 w-3 p-0 hover:bg-blue-200/55 rounded flex items-center justify-center shadow-none border-none bg-transparent"
+                                                 onClick={(e) => {
+                                                   e.stopPropagation();
+                                                   navigator.clipboard.writeText(url);
+                                                   toast.success("Link copied!");
+                                                 }}
+                                               >
+                                                 <Copy className="h-2 w-2 text-blue-400 hover:text-blue-600" />
+                                               </Button>
+                                             </div>
+                                           );
+                                         })}
+                                       </div>
+                                     );
+                                   }
+                                 }
+
+                                 return (
+                                   <>
+                                     <span className="truncate flex-1">
+                                       {formatDateDisplay(entry[key]) || null}
+                                     </span>
+                                     {key === "postingDate" && isDue && (
+                                       <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-100 text-red-800 shrink-0">
+                                         Due
+                                       </span>
+                                     )}
+                                   </>
+                                 );
+                               })()}
+                             </div>
+                           )}
                         </td>
                       ))}
                       <td 

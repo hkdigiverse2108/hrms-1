@@ -2830,6 +2830,12 @@ async def get_clients(db, skip: int = 0, limit: int = 10000, user_info: dict = N
                 import re
                 dept_regex = re.compile(f".*{re.escape(user.get('department'))}.*", re.IGNORECASE)
                 query["$or"].append({"department": dept_regex})
+
+            # If the user is HR, also give them access to the Creative department's clients for SMM access
+            if role == "hr" or (user and str(user.get("role", "")).lower().strip() == "hr"):
+                import re
+                creative_regex = re.compile(".*Creative.*", re.IGNORECASE)
+                query["$or"].append({"department": creative_regex})
             
     cursor = db.clients.find(query).sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
@@ -3164,6 +3170,13 @@ async def get_projects(db, userId: str = None, role: str = None, skip: int = 0, 
                 import re
                 dept_regex = re.compile(f".*{re.escape(dept)}.*", re.IGNORECASE)
                 or_conditions.append({"department": dept_regex})
+
+            # If the user is HR, also give them access to the Creative department's projects for SMM access
+            role_lower = str(role or "").lower().strip()
+            if role_lower == "hr" or (user and str(user.get("role", "")).lower().strip() == "hr"):
+                import re
+                creative_regex = re.compile(".*Creative.*", re.IGNORECASE)
+                or_conditions.append({"department": creative_regex})
 
             query["$or"] = or_conditions
 
@@ -7769,6 +7782,16 @@ async def delete_other_work(db, work_id: str):
     res = await db.other_work.delete_one({"_id": ObjectId(work_id)})
     return res.deleted_count > 0
 
+async def get_all_transfer_requests(db, task_id: str = None, task_type: str = None):
+    query = {}
+    if task_id:
+        query["taskId"] = task_id
+    if task_type:
+        query["taskType"] = task_type
+    cursor = db.work_transfer_requests.find(query).sort("createdDate", -1)
+    rows = await cursor.to_list(length=1000)
+    return [fix_id(row) for row in rows]
+
 async def create_transfer_request(db, request_data: dict):
     # Check if there is already a Pending request for the same taskId and stage
     existing = await db.work_transfer_requests.find_one({
@@ -7874,6 +7897,43 @@ async def respond_to_transfer_request(db, request_id: str, status: str):
                     {"_id": ObjectId(task_id)},
                     {"$set": {"assigneeId": receiver_id, "logs": logs}}
                 )
+        elif req.get("taskType") == "digital-marketing":
+            if ObjectId.is_valid(task_id):
+                await log_activity(
+                    db=db,
+                    action="Task Transferred",
+                    performedBy="System",
+                    userName="System",
+                    details=f"Digital Marketing work for Client/Project '{req.get('taskName')}' on date {req.get('stage')} transferred from {req.get('senderName')} to {req.get('receiverName')}.",
+                    projectId=task_id
+                )
+        elif req.get("taskType") in ["wm-task", "wm-tasks"]:
+            if ObjectId.is_valid(task_id):
+                old_task = await db.wm_tasks.find_one({"_id": ObjectId(task_id)})
+                if old_task:
+                    await db.wm_tasks.update_one(
+                        {"_id": ObjectId(task_id)},
+                        {"$set": {
+                            "assignedToId": receiver_id,
+                            "assignedToName": req.get("receiverName")
+                        }}
+                    )
+                    try:
+                        await log_task_activity(
+                            db, 
+                            task_id, 
+                            "Updated", 
+                            "System", 
+                            "System", 
+                            f"Task assigned to {req.get('receiverName')} via transfer from {req.get('senderName')}.",
+                            diffs=[{
+                                "field": "assignedToName",
+                                "old": old_task.get("assignedToName"),
+                                "new": req.get("receiverName")
+                            }]
+                        )
+                    except Exception as e_log:
+                        print(f"Error logging task activity for wm-task transfer: {e_log}")
 
     # Create and broadcast notification to sender
     try:
