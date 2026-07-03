@@ -2760,7 +2760,7 @@ export default function MarketingReportsPage() {
                                                         </button>
                                                       </>
                                                     )}
-                                                    {(p.assignedEmployeeId === user?.id || isAdmin) && (
+                                                    {(p.assignedEmployeeId === user?.id || isAdmin || !isRegularEmployee) && (
                                                       <button
                                                         onClick={(e) => {
                                                           e.stopPropagation();
