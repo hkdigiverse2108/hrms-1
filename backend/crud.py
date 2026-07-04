@@ -8178,6 +8178,13 @@ async def respond_to_transfer_request(db, request_id: str, status: str):
                 )
         elif req.get("taskType") == "digital-marketing":
             if ObjectId.is_valid(task_id):
+                await db.projects.update_one(
+                    {"_id": ObjectId(task_id)},
+                    {"$set": {
+                        "assignedEmployeeId": receiver_id,
+                        "assignedEmployeeName": req.get("receiverName")
+                    }}
+                )
                 await log_activity(
                     db=db,
                     action="Task Transferred",
