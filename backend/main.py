@@ -580,23 +580,30 @@ from fastapi.exceptions import RequestValidationError
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     import json
+    import os
     try:
         body = await request.body()
         body_str = body.decode("utf-8", errors="ignore")
     except Exception:
         body_str = "could not read body"
+    
+    errors = exc.errors()
+    print(f"Validation error on {request.method} {request.url}: {errors}")
+    
     try:
-        with open(r"C:\Users\HP\.gemini\antigravity-ide\brain\5ad84fb6-14ca-4620-b3df-37249aad3dcd\validation_error.json", "w", encoding="utf-8") as f:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        err_path = os.path.join(current_dir, "validation_error.json")
+        with open(err_path, "w", encoding="utf-8") as f:
             json.dump({
                 "url": str(request.url),
-                "errors": exc.errors(),
+                "errors": errors,
                 "body": body_str
             }, f, indent=2)
     except Exception as ex:
         print("Error writing validation error to file:", ex)
     return JSONResponse(
         status_code=422,
-        content={"detail": exc.errors()}
+        content={"detail": errors}
     )
 
 # CORS: read allowed origins from env (comma-separated), fallback to localhost for dev
