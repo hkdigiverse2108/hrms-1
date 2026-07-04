@@ -223,6 +223,7 @@ async def activity_logs_cleanup_task():
             print(f"[Logs Cleanup] Deleted {result_chats.deleted_count} chat messages older than '{cutoff_chats_str}'.", flush=True)
         except Exception as e:
             print(f"[Logs Cleanup] Error during cleanup: {e}", flush=True)
+        await asyncio.sleep(86400) # Check once a day (24 hours)
             
 async def auto_inactive_employee_task():
     from database import db
@@ -3423,6 +3424,31 @@ async def respond_to_transfer_request(request_id: str, payload: dict, db=Depends
     if not updated:
         raise HTTPException(status_code=404, detail="Request not found")
     return updated
+
+# --- Gallery Endpoints ---
+@app.get("/gallery", response_model=List[schemas.Gallery])
+async def read_galleries(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+    return await crud.get_galleries(db, skip, limit)
+
+@app.post("/gallery", response_model=schemas.Gallery)
+async def create_gallery_entry(gallery: schemas.GalleryCreate, db=Depends(get_db)):
+    return await crud.create_gallery(db, gallery)
+
+@app.put("/gallery/{gallery_id}", response_model=schemas.Gallery)
+async def update_gallery_entry(gallery_id: str, payload: dict, db=Depends(get_db)):
+    if "date" in payload and payload["date"] == "":
+        payload["date"] = None
+    updated = await crud.update_gallery(db, gallery_id, payload)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Gallery entry not found")
+    return updated
+
+@app.delete("/gallery/{gallery_id}")
+async def delete_gallery_entry(gallery_id: str, db=Depends(get_db)):
+    success = await crud.delete_gallery(db, gallery_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Gallery entry not found")
+    return {"status": "success"}
 
 if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", os.environ.get("PORT", 8000)))
