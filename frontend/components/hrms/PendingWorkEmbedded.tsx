@@ -527,8 +527,7 @@ export function PendingWorkEmbedded({
         const isClientIssue = hasApplicableRemark && t.remark.startsWith('[CLIENT ISSUE] ');
 
         if (type === 'pending-work') {
-          if (isClientIssue) return true;
-          return hasApplicableRemark;
+          return isClientIssue;
         }
         
         if (type === 'completed-work') {
