@@ -49,6 +49,7 @@ const DEFAULT_MODULES = [
   { moduleName: 'chat', displayName: 'Chat', tabUrl: '/chat' },
   { moduleName: 'settings', displayName: 'Settings', tabUrl: '/settings' },
   { moduleName: 'activity-logs', displayName: 'Activity Logs', tabUrl: '/activity-logs' },
+  { moduleName: 'gallery', displayName: 'Gallery', tabUrl: '/workspace/gallery' },
 ]
 
 export function UserPermissionsModal({
