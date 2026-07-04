@@ -24,6 +24,27 @@ const isStageSubsequentOrEqual = (stageName: string, remarkStageName: string, po
   return stageIdx >= remarkIdx;
 };
 
+const parseLocalDate = (dateStr: string) => {
+  if (!dateStr) return new Date(0);
+  if (dateStr.includes('T')) {
+    const d = new Date(dateStr);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+  const delimiter = dateStr.includes('-') ? '-' : '/';
+  const parts = dateStr.split(delimiter);
+  if (parts.length === 3) {
+    if (parts[0].length === 4) {
+      return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]), 0, 0, 0, 0);
+    } else if (parts[2].length === 4) {
+      return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]), 0, 0, 0, 0);
+    }
+  }
+  const d = new Date(dateStr);
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
 export function PendingWorkEmbedded({ 
   type = "pending-work",
   defaultTaskType = "all",
@@ -509,14 +530,10 @@ export function PendingWorkEmbedded({
           if (type === 'completed-work') return t.status === 'Approved';
           if (type === 'pending-work') return t.status === 'Pending' || t.status === 'Ready for Review';
           
-          const deadlineDate = new Date(t.deadline);
-          deadlineDate.setHours(0, 0, 0, 0);
+          const deadlineDate = parseLocalDate(t.deadline);
           
-          const assignDate = t.created_at ? new Date(t.created_at) : deadlineDate;
-          assignDate.setHours(0, 0, 0, 0);
-
-          if (type === 'todays-work') return (assignDate <= today || deadlineDate <= today) && t.status === 'Pending';
-          if (type === 'upcoming-work') return deadlineDate > today && assignDate > today && t.status === 'Pending';
+          if (type === 'todays-work') return deadlineDate <= today && t.status === 'Pending';
+          if (type === 'upcoming-work') return deadlineDate > today && t.status === 'Pending';
           return true;
         }
 
@@ -537,8 +554,7 @@ export function PendingWorkEmbedded({
         // If it's a client issue, it should ONLY show in pending work!
         if (isClientIssue) return false;
         
-        const deadlineDate = new Date(t.deadline);
-        deadlineDate.setHours(0, 0, 0, 0);
+        const deadlineDate = parseLocalDate(t.deadline);
         
         if (type === 'todays-work') return deadlineDate <= today;
         if (type === 'upcoming-work') return deadlineDate > today;
