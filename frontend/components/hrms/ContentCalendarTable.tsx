@@ -150,17 +150,17 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
     setLogsDialogOpen(true);
   };
   const tableHeaders = [
-    "Posting Date", "Posting Day", "Post/Reel", "Concept", "Topic", "Reference",
+    "Posting Date", "Posting Day", "Post/Reel", "Topic", "Concept", "Reference",
     "Script Date", "Script Link", "Shoot Date", "Shoot Link", "Editing Start",
     "Final Reel Link", "Final Post Link", "Approval by Het", "Is Approved", "Thumbnail Link",
-    "Posting Link IG", "Actual Posting Date", "Remark", ""
+    "Caption", "Posting Link IG", "Actual Posting Date", "Remark", ""
   ];
 
   const fieldKeys = [
-    "postingDate", "postingDay", "postReel", "concept", "topic", "reference",
+    "postingDate", "postingDay", "postReel", "topic", "concept", "reference",
     "scriptDate", "scriptLink", "shootDate", "shootLink", "editingStart",
     "finalReelLink", "finalPostLink", "approval", "isApproved", "thumbnailLink",
-    "postingLinkOfIg", "actualPostingDate", "remark"
+    "caption", "postingLinkOfIg", "actualPostingDate", "remark"
   ];
   
   const [selectedColumnsForPdf, setSelectedColumnsForPdf] = useState<string[]>(tableHeaders.filter(h => h !== ""));

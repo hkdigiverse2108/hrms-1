@@ -1297,7 +1297,19 @@ function EventsSidebar({ user, leaves }: { user: any, leaves: any[] }) {
         };
       });
 
-      const allCombined = [...eventsData, ...birthdayEvents];
+      const resignationEvents = empData.filter((emp: any) => emp.hasResignation && emp.resignationDate).map((emp: any) => {
+        const empName = emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || 'Employee';
+        return {
+          id: `resignation-${emp.id}`,
+          type: 'resignation',
+          title: `${empName} - Last Day`,
+          description: 'Last working day.',
+          date: emp.resignationDate,
+          originalResignationDate: emp.resignationDate
+        };
+      });
+
+      const allCombined = [...eventsData, ...birthdayEvents, ...resignationEvents];
       setEvents(allCombined.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime()));
     } catch (err) {
       console.error("Error fetching events:", err);
@@ -1496,11 +1508,14 @@ function EventsSidebar({ user, leaves }: { user: any, leaves: any[] }) {
              <div className={`${
                event.type === 'meeting' ? 'bg-[#F0FDF4] text-green-600' : 
                event.type === 'discussion' ? 'bg-[#EFF6FF] text-blue-600' : 
+               event.type === 'birthday' ? 'bg-[#FFF7ED] text-orange-600' : 
+               event.type === 'resignation' ? 'bg-[#FEF2F2] text-red-600' :
                'bg-[#FFF7ED] text-orange-600'
              } p-3 rounded-xl`}>
                {event.type === 'meeting' ? <CalendarIcon className="w-5 h-5" /> : 
                 event.type === 'discussion' ? <MessageSquare className="w-5 h-5" /> : 
                 event.type === 'birthday' ? <Cake className="w-5 h-5" /> : 
+                event.type === 'resignation' ? <UserX className="w-5 h-5" /> :
                 <CalendarIcon className="w-5 h-5" />}
              </div>
              <div className="flex-1 min-w-0">
@@ -1509,11 +1524,11 @@ function EventsSidebar({ user, leaves }: { user: any, leaves: any[] }) {
              </div>
              <div className="text-right">
                <div className="text-[13px] font-bold text-[#111827]">{dayjs(event.date).format("DD MMM")}</div>
-               {event.type !== 'birthday' && (
+               {event.type !== 'birthday' && event.type !== 'resignation' && (
                  <div className="text-[11px] text-gray-400 font-medium">{event.time}</div>
                )}
                
-               {canAddEvents && event.type !== 'birthday' && (
+               {canAddEvents && event.type !== 'birthday' && event.type !== 'resignation' && (
                  <div className="flex items-center justify-end gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button 
                       onClick={() => handleEditClick(event)}
