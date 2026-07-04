@@ -2387,3 +2387,18 @@ class OtherWork(OtherWorkBase):
     id: str
     class Config:
         from_attributes = True
+
+# --- Gallery ---
+class GalleryBase(BaseModel):
+    eventName: str
+    date: RobustDate = None
+    link: Optional[str] = ""
+    purpose: Optional[str] = ""
+
+class GalleryCreate(GalleryBase):
+    pass
+
+class Gallery(GalleryBase):
+    id: str
+    class Config:
+        from_attributes = True

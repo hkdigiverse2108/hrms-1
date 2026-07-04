@@ -81,6 +81,7 @@ const PERMISSION_GROUPS = [
       { moduleName: 'blank-canvas', displayName: 'Blank Canvas', tabUrl: '/workspace/blank-canvas' },
       { moduleName: 'seating-arrangement', displayName: 'Seating Arrangement', tabUrl: '/workspace/seating' },
       { moduleName: 'resource-management', displayName: 'Resource Management', tabUrl: '/workspace/resource' },
+      { moduleName: 'gallery', displayName: 'Gallery', tabUrl: '/workspace/gallery' },
     ]
   },
   {

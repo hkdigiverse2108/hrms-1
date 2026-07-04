@@ -8228,3 +8228,16 @@ async def respond_to_transfer_request(db, request_id: str, status: str):
                 
     updated = await db.work_transfer_requests.find_one({"_id": ObjectId(request_id)})
     return fix_id(updated)
+
+# --- Gallery CRUD ---
+async def get_galleries(db, skip: int = 0, limit: int = 100):
+    return await get_items(db, "gallery", skip, limit)
+
+async def create_gallery(db, gallery: schemas.GalleryCreate):
+    return await create_item(db, "gallery", gallery.dict())
+
+async def update_gallery(db, gallery_id: str, update: dict):
+    return await update_item(db, "gallery", gallery_id, update)
+
+async def delete_gallery(db, gallery_id: str):
+    return await delete_item(db, "gallery", gallery_id)
