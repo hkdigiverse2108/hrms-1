@@ -965,8 +965,7 @@ async def run_payroll_processing(db, month: str, year: int, performed_by: str = 
                         attendance_present_days += 0.5 # Worked the other half of the day
                         if l_type in ["annual", "monthly leave", "monthly_leave"]:
                             monthly_leave_days += 0.5
-                        if l_type in ["monthly leave", "monthly_leave"]:
-                            paid_monthly_leave_days += 0.5
+                        # Half-day monthly leaves are not allowed/counted as paid monthly leaves
                     else:
                         full_day_leave_days += 1.0
                         if l_type in ["annual", "monthly leave", "monthly_leave"]:
@@ -978,7 +977,8 @@ async def run_payroll_processing(db, month: str, year: int, performed_by: str = 
                 else:
                     unapproved_absent_days += 1.0
         
-        allowed_leaves = 0.0
+        allowed_leaves = float(system_settings.get("allowedMonthlyPaidLeaves", 1.0))
+        paid_monthly_leave_days = min(paid_monthly_leave_days, allowed_leaves)
         total_leaves_taken = full_day_leave_days + half_day_leave_days
         
         # Calculate Loss of Pay (LOP) days (excluding paid monthly leaves)
