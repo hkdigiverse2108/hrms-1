@@ -157,10 +157,17 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
       }
       
       // Auto-set department when employee is selected
-      if (field === "assignedToId" && value) {
-        const emp = employees.find(e => e.id === value);
-        if (emp && emp.department) {
-          newData.department = emp.department;
+      if (field === "assignedToId") {
+        if (value) {
+          const emp = employees.find(e => e.id === value);
+          if (emp) {
+            if (emp.department) {
+              newData.department = emp.department;
+            }
+            newData.assignedToName = `${emp.firstName} ${emp.lastName || ''}`.trim();
+          }
+        } else {
+          newData.assignedToName = "Unassigned";
         }
       }
 

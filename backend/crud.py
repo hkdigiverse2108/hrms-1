@@ -3616,13 +3616,17 @@ async def update_task(db, task_id: str, task: schemas.TaskUpdate):
             update_data["assignedToId"] = None
             update_data["assignedToName"] = None
 
-    elif update_data.get("assignedToId"):
-        try:
-            employee = await db.employees.find_one({"_id": ObjectId(update_data["assignedToId"])})
-            if employee and not update_data.get("assignedToName"):
-                update_data["assignedToName"] = f"{employee.get('firstName')} {employee.get('lastName')}"
-        except Exception:
-            pass
+    elif "assignedToId" in update_data:
+        assign_id = update_data.get("assignedToId")
+        if assign_id:
+            try:
+                employee = await db.employees.find_one({"_id": ObjectId(assign_id)})
+                if employee:
+                    update_data["assignedToName"] = f"{employee.get('firstName')} {employee.get('lastName')}"
+            except Exception:
+                pass
+        else:
+            update_data["assignedToName"] = "Unassigned"
 
     if update_data:
         await db.tasks.update_one({"_id": ObjectId(task_id)}, {"$set": update_data})
