@@ -940,20 +940,22 @@ export default function EmployeeDocumentsPage() {
   employees.forEach((emp: any) => {
     if (emp.bondsHistory && emp.bondsHistory.length > 0) {
       emp.bondsHistory.forEach((bond: any, idx: number) => {
-        contractRows.push({
-          id: `${emp.id}-bond-${idx}`,
-          employeeId: emp.id,
-          employeeName: emp.name,
-          employeeCode: emp.employeeId,
-          designation: emp.designation,
-          type: 'Bond',
-          startDate: bond.startDate,
-          endDate: bond.endDate,
-          displayDetails: `Start: ${bond.startDate || 'N/A'} · End: ${bond.endDate || 'N/A'}`,
-          sortDate: bond.endDate || bond.startDate || ''
-        });
+        if (bond.startDate || bond.endDate) {
+          contractRows.push({
+            id: `${emp.id}-bond-${idx}`,
+            employeeId: emp.id,
+            employeeName: emp.name,
+            employeeCode: emp.employeeId,
+            designation: emp.designation,
+            type: 'Bond',
+            startDate: bond.startDate,
+            endDate: bond.endDate,
+            displayDetails: `Start: ${bond.startDate || 'N/A'} · End: ${bond.endDate || 'N/A'}`,
+            sortDate: bond.endDate || bond.startDate || ''
+          });
+        }
       });
-    } else if (emp.hasBond) {
+    } else if (emp.hasBond && (emp.bondStartDate || emp.bondEndDate)) {
       contractRows.push({
         id: `${emp.id}-bond`,
         employeeId: emp.id,
@@ -967,7 +969,7 @@ export default function EmployeeDocumentsPage() {
         sortDate: emp.bondEndDate || emp.bondStartDate || ''
       });
     }
-    if (emp.hasNoticePeriod) {
+    if (emp.hasNoticePeriod && (emp.noticePeriodStartDate || emp.noticePeriodDays)) {
       contractRows.push({
         id: `${emp.id}-notice`,
         employeeId: emp.id,
@@ -981,7 +983,7 @@ export default function EmployeeDocumentsPage() {
         sortDate: emp.noticePeriodStartDate || ''
       });
     }
-    if (emp.hasResignation) {
+    if (emp.hasResignation && emp.resignationDate) {
       contractRows.push({
         id: `${emp.id}-resignation`,
         employeeId: emp.id,
@@ -994,7 +996,7 @@ export default function EmployeeDocumentsPage() {
         sortDate: emp.resignationDate || ''
       });
     }
-    if (emp.hasEmployment) {
+    if (emp.hasEmployment && emp.employmentStartDate) {
       contractRows.push({
         id: `${emp.id}-employment`,
         employeeId: emp.id,

@@ -1348,9 +1348,14 @@ def sync_active_bond(data: dict):
                 active_bond = parsed_bonds[-1]
             
             # Update base fields for backward compatibility
-            data["hasBond"] = True
-            data["bondStartDate"] = datetime.combine(active_bond[0], datetime.min.time())
-            data["bondEndDate"] = datetime.combine(active_bond[1], datetime.min.time())
+            if data.get("hasBond") is not False and data.get("hasBond") != "false" and data.get("hasBond") != "False":
+                data["hasBond"] = True
+                data["bondStartDate"] = datetime.combine(active_bond[0], datetime.min.time())
+                data["bondEndDate"] = datetime.combine(active_bond[1], datetime.min.time())
+            else:
+                data["hasBond"] = False
+                data["bondStartDate"] = datetime.combine(active_bond[0], datetime.min.time())
+                data["bondEndDate"] = datetime.combine(active_bond[1], datetime.min.time())
         else:
             data["hasBond"] = False
             data["bondStartDate"] = None
