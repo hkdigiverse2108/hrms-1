@@ -131,6 +131,44 @@ def serialize_robust_datetime_dmy(v: Optional[datetime], info: SerializationInfo
         return v.strftime("%d-%m-%Y %H:%M")
     return v
 
+def parse_robust_int(v: Any) -> Optional[int]:
+    if v is None:
+        return None
+    if isinstance(v, int):
+        return v
+    if isinstance(v, float):
+        return int(v)
+    if isinstance(v, str):
+        v_clean = v.strip()
+        if not v_clean:
+            return None
+        try:
+            return int(v_clean)
+        except ValueError:
+            try:
+                return int(float(v_clean))
+            except ValueError:
+                raise ValueError(f"Cannot parse integer: {v}")
+    raise ValueError("Must be an integer or a string containing an integer")
+
+def parse_robust_float(v: Any) -> Optional[float]:
+    if v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    if isinstance(v, str):
+        v_clean = v.strip()
+        if not v_clean:
+            return None
+        try:
+            return float(v_clean)
+        except ValueError:
+            raise ValueError(f"Cannot parse float: {v}")
+    raise ValueError("Must be a number or a string containing a number")
+
+RobustInt = Annotated[Optional[int], BeforeValidator(parse_robust_int)]
+RobustFloat = Annotated[Optional[float], BeforeValidator(parse_robust_float)]
+
 RobustDate = Annotated[Optional[date], BeforeValidator(parse_robust_date), PlainSerializer(serialize_robust_date_standard, when_used='always')]
 RobustDateDMY = Annotated[Optional[date], BeforeValidator(parse_robust_date), PlainSerializer(serialize_robust_date_dmy, when_used='always')]
 RobustDatetime = Annotated[Optional[datetime], BeforeValidator(parse_robust_datetime), PlainSerializer(serialize_robust_datetime_standard, when_used='always')]
@@ -189,7 +227,7 @@ class EmployeeBase(BaseModel):
     status: Optional[str] = "active"
     gender: Optional[str] = "Male"
     position: Optional[str] = "Intern"
-    salary: Optional[float] = None
+    salary: RobustFloat = None
     company: Optional[str] = None
     role: Optional[str] = None
     upiId: Optional[str] = None
@@ -215,7 +253,7 @@ class EmployeeBase(BaseModel):
     bondStartDate: Optional[RobustDate] = None
     bondEndDate: Optional[RobustDate] = None
     hasNoticePeriod: Optional[bool] = False
-    noticePeriodDays: Optional[int] = None
+    noticePeriodDays: RobustInt = None
     noticePeriodStartDate: Optional[RobustDate] = None
     hasResignation: Optional[bool] = False
     resignationDate: Optional[RobustDate] = None
@@ -240,7 +278,7 @@ class EmployeeUpdate(BaseModel):
     joinDate: Optional[RobustDate] = None
     status: Optional[str] = None
     gender: Optional[str] = None
-    salary: Optional[float] = None
+    salary: RobustFloat = None
     company: Optional[str] = None
     role: Optional[str] = None
     upiId: Optional[str] = None
@@ -265,7 +303,7 @@ class EmployeeUpdate(BaseModel):
     bondStartDate: Optional[RobustDate] = None
     bondEndDate: Optional[RobustDate] = None
     hasNoticePeriod: Optional[bool] = None
-    noticePeriodDays: Optional[int] = None
+    noticePeriodDays: RobustInt = None
     noticePeriodStartDate: Optional[RobustDate] = None
     hasResignation: Optional[bool] = None
     resignationDate: Optional[RobustDate] = None
