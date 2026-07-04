@@ -136,6 +136,12 @@ RobustDateDMY = Annotated[Optional[date], BeforeValidator(parse_robust_date), Pl
 RobustDatetime = Annotated[Optional[datetime], BeforeValidator(parse_robust_datetime), PlainSerializer(serialize_robust_datetime_standard, when_used='always')]
 RobustDatetimeDMY = Annotated[Optional[datetime], BeforeValidator(parse_robust_datetime), PlainSerializer(serialize_robust_datetime_dmy, when_used='always')]
 
+class BondDetail(PydanticBaseModel):
+    id: Optional[str] = None
+    startDate: RobustDate = None
+    endDate: RobustDate = None
+    status: Optional[str] = "active"
+
 def parse_robust_assigned_to(v: Any) -> List[str]:
     if v is None:
         return []
@@ -215,6 +221,7 @@ class EmployeeBase(BaseModel):
     resignationDate: Optional[RobustDate] = None
     hasEmployment: Optional[bool] = False
     employmentStartDate: Optional[RobustDate] = None
+    bondsHistory: Optional[List[BondDetail]] = []
 
 class EmployeeCreate(EmployeeBase):
     pass
@@ -264,6 +271,7 @@ class EmployeeUpdate(BaseModel):
     resignationDate: Optional[RobustDate] = None
     hasEmployment: Optional[bool] = None
     employmentStartDate: Optional[RobustDate] = None
+    bondsHistory: Optional[List[BondDetail]] = None
 
 class Employee(EmployeeBase):
     id: str

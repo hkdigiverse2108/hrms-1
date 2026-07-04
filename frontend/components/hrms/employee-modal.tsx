@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/select'
 import { useApi } from '@/hooks/useApi'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Building2, Landmark, Users2, Clock, ShieldCheck, CreditCard, UserCircle, FileText } from 'lucide-react'
+import { Building2, Landmark, Users2, Clock, ShieldCheck, CreditCard, UserCircle, FileText, Plus, Trash2 } from 'lucide-react'
 import { TIME_OPTIONS } from '@/lib/constants'
 
 interface EmployeeModalProps {
@@ -115,6 +115,7 @@ export function EmployeeModal({
     resignationDate: '',
     hasEmployment: false,
     employmentStartDate: '',
+    bondsHistory: [],
   }
 
   const [formData, setFormData] = useState<any>(initialData)
@@ -149,7 +150,9 @@ export function EmployeeModal({
         const parts = endTime.split(':');
         endTime = `${parts[0]}:${parts[1]}`;
       }
-      setFormData({ ...initialData, ...employee, startTime, endTime, requiredDocuments: reqDocs })
+      let bondsHistory = employee.bondsHistory || [];
+      if (!Array.isArray(bondsHistory)) bondsHistory = [];
+      setFormData({ ...initialData, ...employee, startTime, endTime, requiredDocuments: reqDocs, bondsHistory })
     } else {
       setFormData(initialData)
     }
@@ -501,7 +504,7 @@ export function EmployeeModal({
             <div className="flex items-center gap-4">
               <div className="flex-1 space-y-2">
                 <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Start Time</Label>
-                <Select value={formData.startTime} onValueChange={(v) => setFormData({ ...formData, startTime: v })}>
+                <Select key={`start-${formData.startTime}`} value={formData.startTime} onValueChange={(v) => setFormData({ ...formData, startTime: v })}>
                   <SelectTrigger className="bg-slate-50/50 border-slate-200">
                     <SelectValue placeholder="Start Time" />
                   </SelectTrigger>
@@ -513,7 +516,7 @@ export function EmployeeModal({
               <div className="pt-6 text-slate-400 font-bold">to</div>
               <div className="flex-1 space-y-2">
                 <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">End Time</Label>
-                <Select value={formData.endTime} onValueChange={(v) => setFormData({ ...formData, endTime: v })}>
+                <Select key={`end-${formData.endTime}`} value={formData.endTime} onValueChange={(v) => setFormData({ ...formData, endTime: v })}>
                   <SelectTrigger className="bg-slate-50/50 border-slate-200">
                     <SelectValue placeholder="End Time" />
                   </SelectTrigger>
@@ -570,7 +573,12 @@ export function EmployeeModal({
                   <Checkbox
                     id="modal-hasBond"
                     checked={formData.hasBond}
-                    onCheckedChange={(checked) => handleModalChange('hasBond', checked)}
+                    onCheckedChange={(checked) => {
+                      handleModalChange('hasBond', checked)
+                      if (checked && (!formData.bondsHistory || formData.bondsHistory.length === 0)) {
+                        handleModalChange('bondsHistory', [{ id: String(Date.now()), startDate: '', endDate: '', status: 'active' }])
+                      }
+                    }}
                     className="data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
                   />
                   <Label htmlFor="modal-hasBond" className="text-sm font-semibold text-slate-700 cursor-pointer">
@@ -578,27 +586,76 @@ export function EmployeeModal({
                   </Label>
                 </div>
                 {formData.hasBond && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-7 animate-in fade-in slide-in-from-left-2 duration-200">
-                    <div className="space-y-2">
-                      <Label htmlFor="modal-bondStartDate" className="text-xs font-bold text-slate-500 uppercase tracking-tight">Bond Start Date</Label>
-                      <Input
-                        id="modal-bondStartDate"
-                        type="date"
-                        value={formData.bondStartDate || ''}
-                        onChange={(e) => handleModalChange('bondStartDate', e.target.value)}
-                        className="bg-white border-slate-200 focus:bg-white transition-all"
-                      />
+                  <div className="space-y-4 pl-7 animate-in fade-in slide-in-from-left-2 duration-200">
+                    <div className="space-y-3">
+                      {(formData.bondsHistory || []).map((bond: any, index: number) => {
+                        const todayStr = new Date().toLocaleDateString('en-CA')
+                        const isExpired = bond.endDate && bond.endDate < todayStr
+                        return (
+                          <div key={bond.id || index} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end border-b border-slate-100 pb-3 last:border-0 last:pb-0">
+                            <div className="md:col-span-5 space-y-2">
+                              <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Bond Start Date</Label>
+                              <Input
+                                type="date"
+                                value={bond.startDate || ''}
+                                disabled={isExpired}
+                                onChange={(e) => {
+                                  const newHistory = [...formData.bondsHistory]
+                                  newHistory[index].startDate = e.target.value
+                                  handleModalChange('bondsHistory', newHistory)
+                                }}
+                                className="bg-white border-slate-200 focus:bg-white transition-all h-10 disabled:bg-slate-50 disabled:text-slate-400"
+                              />
+                            </div>
+                            <div className="md:col-span-5 space-y-2">
+                              <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Bond End Date</Label>
+                              <Input
+                                type="date"
+                                value={bond.endDate || ''}
+                                disabled={isExpired}
+                                onChange={(e) => {
+                                  const newHistory = [...formData.bondsHistory]
+                                  newHistory[index].endDate = e.target.value
+                                  handleModalChange('bondsHistory', newHistory)
+                                }}
+                                className="bg-white border-slate-200 focus:bg-white transition-all h-10 disabled:bg-slate-50 disabled:text-slate-400"
+                              />
+                            </div>
+                            <div className="md:col-span-2 flex items-center justify-end">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 h-10 w-10 rounded-lg"
+                                onClick={() => {
+                                  const newHistory = formData.bondsHistory.filter((_: any, idx: number) => idx !== index)
+                                  handleModalChange('bondsHistory', newHistory)
+                                  if (newHistory.length === 0) {
+                                    handleModalChange('hasBond', false)
+                                  }
+                                }}
+                                title="Delete Bond Record"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="modal-bondEndDate" className="text-xs font-bold text-slate-500 uppercase tracking-tight">Bond End Date</Label>
-                      <Input
-                        id="modal-bondEndDate"
-                        type="date"
-                        value={formData.bondEndDate || ''}
-                        onChange={(e) => handleModalChange('bondEndDate', e.target.value)}
-                        className="bg-white border-slate-200 focus:bg-white transition-all"
-                      />
-                    </div>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-dashed border-brand-teal text-brand-teal hover:bg-brand-teal/5 font-bold h-10 rounded-lg flex items-center gap-2"
+                      onClick={() => {
+                        const newHistory = [...(formData.bondsHistory || []), { id: String(Date.now()), startDate: '', endDate: '', status: 'active' }]
+                        handleModalChange('bondsHistory', newHistory)
+                      }}
+                    >
+                      <Plus className="h-4 w-4" />
+                      Renew / Add New Bond
+                    </Button>
                   </div>
                 )}
               </div>

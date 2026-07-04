@@ -20,7 +20,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { useApi } from '@/hooks/useApi'
-import { Save, Plus, Loader2, Image as ImageIcon, X, Eye, EyeOff } from 'lucide-react'
+import { Save, Plus, Loader2, Image as ImageIcon, X, Eye, EyeOff, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -69,6 +69,7 @@ export interface EmployeeFormData {
   resignationDate: string
   hasEmployment: boolean
   employmentStartDate: string
+  bondsHistory: any[]
 }
 
 interface EmployeeFormProps {
@@ -119,6 +120,7 @@ const defaultFormData: EmployeeFormData = {
   resignationDate: '',
   hasEmployment: false,
   employmentStartDate: '',
+  bondsHistory: [],
 }
 
 const calculateResignationDate = (startDateStr: string, daysCountStr: string, holidays: any[]) => {
@@ -226,6 +228,8 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
             }
           } else if (k === 'hasBond' || k === 'hasNoticePeriod' || k === 'hasResignation' || k === 'hasEmployment') {
             sanitizedData[k] = (value === true || value === 'true') as any
+          } else if (k === 'bondsHistory') {
+            sanitizedData[k] = (Array.isArray(value) ? value : []) as any;
           } else if (typeof value === 'object' && value !== null) {
             // Handle if backend returns an object for a field (e.g., department: {name: '...'})
             sanitizedData[k] = String((value as any).name || (value as any).title || (value as any).label || JSON.stringify(value)) as any
@@ -493,7 +497,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
                 Working Hours{<span className="text-red-500 ml-1 text-lg font-bold">*</span>}:
               </Label>
               <div className="flex items-center gap-4 flex-1 max-w-[400px]">
-                <Select value={formData.startTime} onValueChange={(v) => handleChange('startTime', v)} required>
+                <Select key={`start-${formData.startTime}`} value={formData.startTime} onValueChange={(v) => handleChange('startTime', v)} required>
                   <SelectTrigger className="flex-1 bg-white border-gray-200 focus:ring-brand-teal h-10 shadow-sm">
                     <SelectValue placeholder="Start Time" />
                   </SelectTrigger>
@@ -502,7 +506,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
                   </SelectContent>
                 </Select>
                 <span className="text-gray-400 font-medium whitespace-nowrap">to</span>
-                <Select value={formData.endTime} onValueChange={(v) => handleChange('endTime', v)} required>
+                <Select key={`end-${formData.endTime}`} value={formData.endTime} onValueChange={(v) => handleChange('endTime', v)} required>
                   <SelectTrigger className="flex-1 bg-white border-gray-200 focus:ring-brand-teal h-10 shadow-sm">
                     <SelectValue placeholder="End Time" />
                   </SelectTrigger>
@@ -623,7 +627,12 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
                 <Checkbox
                   id="hasBond"
                   checked={formData.hasBond}
-                  onCheckedChange={(checked) => handleChange('hasBond', checked)}
+                  onCheckedChange={(checked) => {
+                    handleChange('hasBond', checked)
+                    if (checked && (!formData.bondsHistory || formData.bondsHistory.length === 0)) {
+                      handleChange('bondsHistory', [{ id: String(Date.now()), startDate: '', endDate: '', status: 'active' }])
+                    }
+                  }}
                   className="data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
                 />
                 <Label htmlFor="hasBond" className="text-sm font-semibold text-gray-700 cursor-pointer">
@@ -631,27 +640,76 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
                 </Label>
               </div>
               {formData.hasBond && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-7 animate-in fade-in slide-in-from-left-2 duration-200">
-                  <div className="space-y-2">
-                    <Label htmlFor="bondStartDate" className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Bond Start Date</Label>
-                    <Input
-                      id="bondStartDate"
-                      type="date"
-                      value={formData.bondStartDate || ''}
-                      onChange={(e) => handleChange('bondStartDate', e.target.value)}
-                      className="h-10 rounded-lg border-gray-200 focus:border-brand-teal focus:ring-brand-teal"
-                    />
+                <div className="space-y-4 pl-7 animate-in fade-in slide-in-from-left-2 duration-200">
+                  <div className="space-y-3">
+                    {(formData.bondsHistory || []).map((bond: any, index: number) => {
+                      const todayStr = new Date().toLocaleDateString('en-CA')
+                      const isExpired = bond.endDate && bond.endDate < todayStr
+                      return (
+                        <div key={bond.id || index} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end border-b border-gray-50 pb-3 last:border-0 last:pb-0">
+                          <div className="md:col-span-5 space-y-2">
+                            <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Bond Start Date</Label>
+                            <Input
+                              type="date"
+                              value={bond.startDate || ''}
+                              disabled={isExpired}
+                              onChange={(e) => {
+                                const newHistory = [...formData.bondsHistory]
+                                newHistory[index].startDate = e.target.value
+                                handleChange('bondsHistory', newHistory)
+                              }}
+                              className="h-10 rounded-lg border-gray-200 focus:border-brand-teal focus:ring-brand-teal disabled:bg-slate-50 disabled:text-slate-400"
+                            />
+                          </div>
+                          <div className="md:col-span-5 space-y-2">
+                            <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Bond End Date</Label>
+                            <Input
+                              type="date"
+                              value={bond.endDate || ''}
+                              disabled={isExpired}
+                              onChange={(e) => {
+                                const newHistory = [...formData.bondsHistory]
+                                newHistory[index].endDate = e.target.value
+                                handleChange('bondsHistory', newHistory)
+                              }}
+                              className="h-10 rounded-lg border-gray-200 focus:border-brand-teal focus:ring-brand-teal disabled:bg-slate-50 disabled:text-slate-400"
+                            />
+                          </div>
+                        <div className="md:col-span-2 flex items-center justify-end">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 h-10 w-10 rounded-lg"
+                            onClick={() => {
+                              const newHistory = formData.bondsHistory.filter((_: any, idx: number) => idx !== index)
+                              handleChange('bondsHistory', newHistory)
+                              if (newHistory.length === 0) {
+                                handleChange('hasBond', false)
+                              }
+                            }}
+                            title="Delete Bond Record"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                    })}
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="bondEndDate" className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Bond End Date</Label>
-                    <Input
-                      id="bondEndDate"
-                      type="date"
-                      value={formData.bondEndDate || ''}
-                      onChange={(e) => handleChange('bondEndDate', e.target.value)}
-                      className="h-10 rounded-lg border-gray-200 focus:border-brand-teal focus:ring-brand-teal"
-                    />
-                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-dashed border-brand-teal text-brand-teal hover:bg-brand-teal/5 font-bold h-10 rounded-lg flex items-center gap-2"
+                    onClick={() => {
+                      const newHistory = [...(formData.bondsHistory || []), { id: String(Date.now()), startDate: '', endDate: '', status: 'active' }]
+                      handleChange('bondsHistory', newHistory)
+                    }}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Renew / Add New Bond
+                  </Button>
                 </div>
               )}
             </div>

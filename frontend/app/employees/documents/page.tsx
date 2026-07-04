@@ -938,7 +938,22 @@ export default function EmployeeDocumentsPage() {
 
   const contractRows: any[] = [];
   employees.forEach((emp: any) => {
-    if (emp.hasBond) {
+    if (emp.bondsHistory && emp.bondsHistory.length > 0) {
+      emp.bondsHistory.forEach((bond: any, idx: number) => {
+        contractRows.push({
+          id: `${emp.id}-bond-${idx}`,
+          employeeId: emp.id,
+          employeeName: emp.name,
+          employeeCode: emp.employeeId,
+          designation: emp.designation,
+          type: 'Bond',
+          startDate: bond.startDate,
+          endDate: bond.endDate,
+          displayDetails: `Start: ${bond.startDate || 'N/A'} · End: ${bond.endDate || 'N/A'}`,
+          sortDate: bond.endDate || bond.startDate || ''
+        });
+      });
+    } else if (emp.hasBond) {
       contractRows.push({
         id: `${emp.id}-bond`,
         employeeId: emp.id,

@@ -268,6 +268,7 @@ async def update_employee(db, employee_id: str, employee_update: schemas.Employe
         return None
     
     update_data = employee_update.dict(exclude_unset=True)
+    sync_active_bond(update_data)
     
     # If a new profile photo is uploaded/edited, delete the old one from the uploads folder
     if "profilePhoto" in update_data and update_data["profilePhoto"] != existing.get("profilePhoto"):
@@ -1305,6 +1306,56 @@ async def run_payroll_processing(db, month: str, year: int, performed_by: str = 
 
     return payroll_results
 
+def sync_active_bond(data: dict):
+    # Parse bondsHistory if present
+    bonds = data.get("bondsHistory")
+    if bonds is not None:
+        def parse_date(val):
+            if not val:
+                return None
+            if isinstance(val, datetime):
+                return val.date()
+            if isinstance(val, date):
+                return val
+            val_str = str(val).strip().split('T')[0].split(' ')[0]
+            for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y/%m/%d"):
+                try:
+                    return datetime.strptime(val_str, fmt).date()
+                except ValueError:
+                    continue
+            return None
+
+        # Filter active bonds or sort them
+        parsed_bonds = []
+        for b in bonds:
+            s_date = parse_date(b.get("startDate"))
+            e_date = parse_date(b.get("endDate"))
+            if s_date and e_date:
+                parsed_bonds.append((s_date, e_date, b))
+        
+        if parsed_bonds:
+            # Sort by startDate, endDate
+            parsed_bonds.sort(key=lambda x: (x[0], x[1]))
+            # Let's find if there is an active one covering today's date
+            today = date.today()
+            active_bond = None
+            for s, e, b in parsed_bonds:
+                if b.get("status") == "active" or (s <= today <= e):
+                    active_bond = (s, e, b)
+            
+            # If no active bond matches today's date, pick the latest one in the list
+            if not active_bond:
+                active_bond = parsed_bonds[-1]
+            
+            # Update base fields for backward compatibility
+            data["hasBond"] = True
+            data["bondStartDate"] = datetime.combine(active_bond[0], datetime.min.time())
+            data["bondEndDate"] = datetime.combine(active_bond[1], datetime.min.time())
+        else:
+            data["hasBond"] = False
+            data["bondStartDate"] = None
+            data["bondEndDate"] = None
+
 async def create_employee(db, employee: schemas.EmployeeCreate, performed_by: str = "System", user_name: str = "System User"):
     is_admin = employee.role and employee.role.lower() == "admin"
     
@@ -1327,6 +1378,7 @@ async def create_employee(db, employee: schemas.EmployeeCreate, performed_by: st
     
     employee_dict = employee.dict()
     employee_dict["name"] = name
+    sync_active_bond(employee_dict)
     
     if next_id:
         employee_dict["employeeId"] = next_id # Override frontend generation unless it's admin with no ID provided

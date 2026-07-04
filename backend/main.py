@@ -236,12 +236,16 @@ async def auto_inactive_employee_task():
             settings = await crud.get_system_settings(db)
             if settings.get("autoInactiveAfterResignation") == True:
                 now = datetime.now(pytz.timezone('Asia/Kolkata'))
+                today_midnight = datetime(now.year, now.month, now.day, 0, 0, 0)
                 today_str = now.strftime("%Y-%m-%d")
                 
                 active_employees = await db.employees.find({
                     "status": "active",
                     "hasResignation": True,
-                    "resignationDate": {"$ne": None, "$lt": today_str}
+                    "$or": [
+                        {"resignationDate": {"$lt": today_midnight}},
+                        {"resignationDate": {"$lt": today_str}}
+                    ]
                 }).to_list(length=1000)
                 
                 for emp in active_employees:
@@ -571,6 +575,29 @@ async def lifespan(app):
     # Reload trigger: 1
 
 app = FastAPI(title="HRMS API", lifespan=lifespan)
+
+from fastapi.exceptions import RequestValidationError
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    import json
+    try:
+        body = await request.body()
+        body_str = body.decode("utf-8", errors="ignore")
+    except Exception:
+        body_str = "could not read body"
+    try:
+        with open(r"C:\Users\HP\.gemini\antigravity-ide\brain\5ad84fb6-14ca-4620-b3df-37249aad3dcd\validation_error.json", "w", encoding="utf-8") as f:
+            json.dump({
+                "url": str(request.url),
+                "errors": exc.errors(),
+                "body": body_str
+            }, f, indent=2)
+    except Exception as ex:
+        print("Error writing validation error to file:", ex)
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors()}
+    )
 
 # CORS: read allowed origins from env (comma-separated), fallback to localhost for dev
 _default_origins = "http://localhost:3535,http://127.0.0.1:3535,http://localhost:3550,http://127.0.0.1:3550"
