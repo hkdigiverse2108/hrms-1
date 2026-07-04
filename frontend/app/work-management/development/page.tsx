@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { ClipboardList, Plus, Pencil, Trash2, Calendar, User, Loader2, Search, Briefcase, CheckCircle2, Circle, History, AlertTriangle, MoreHorizontal, X, FilePlus, Check, ChevronsUpDown, ChevronLeft, ArrowLeftRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -442,8 +442,51 @@ export default function TasksPage() {
       console.error("Error deleting task:", err);
     }
   };
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const mouseMoveListenerRef = useRef<((e: MouseEvent) => void) | null>(null);
+  const dragScrollIntervalRef = useRef<any>(null);
+
+  const handleDragStart = () => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const rect = container.getBoundingClientRect();
+      const edgeSize = 100;
+      const speed = 12;
+      
+      const leftEdge = rect.left + edgeSize;
+      const rightEdge = rect.right - edgeSize;
+      
+      clearInterval(dragScrollIntervalRef.current);
+      
+      if (e.clientX > rightEdge && e.clientX < rect.right + 50) {
+        const intensity = Math.min(1, (e.clientX - rightEdge) / edgeSize);
+        dragScrollIntervalRef.current = setInterval(() => {
+          container.scrollLeft += speed * intensity;
+        }, 16);
+      } else if (e.clientX < leftEdge && e.clientX > rect.left - 50) {
+        const intensity = Math.min(1, (leftEdge - e.clientX) / edgeSize);
+        dragScrollIntervalRef.current = setInterval(() => {
+          container.scrollLeft -= speed * intensity;
+        }, 16);
+      }
+    };
+    
+    mouseMoveListenerRef.current = handleMouseMove;
+    window.addEventListener("mousemove", handleMouseMove);
+  };
 
   const onDragEnd = async (result: DropResult) => {
+    if (mouseMoveListenerRef.current) {
+      window.removeEventListener("mousemove", mouseMoveListenerRef.current);
+      mouseMoveListenerRef.current = null;
+    }
+    if (dragScrollIntervalRef.current) {
+      clearInterval(dragScrollIntervalRef.current);
+      dragScrollIntervalRef.current = null;
+    }
+
     if (!canEditTask) {
       toast.error("You do not have permission to edit tasks");
       return;
@@ -1474,8 +1517,8 @@ export default function TasksPage() {
             )}
           </div>
         ) : (
-    <DragDropContext onDragEnd={onDragEnd}>
-      <div className="flex gap-4 h-full overflow-x-auto pb-4 items-start px-2 custom-scrollbar">
+    <DragDropContext onDragStart={handleDragStart} onDragEnd={onDragEnd}>
+      <div ref={scrollContainerRef} className="flex gap-4 h-full overflow-x-auto pb-4 items-start px-2 custom-scrollbar">
         {STAGES.map(stage => (
           <div key={stage.id} className="flex flex-col flex-1 min-w-[230px] h-full bg-slate-50/80 rounded-[20px] border border-slate-200 overflow-hidden shadow-sm">
             <div className="flex items-center justify-between p-4 pb-3">
