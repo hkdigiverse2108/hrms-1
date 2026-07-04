@@ -224,8 +224,46 @@ async def activity_logs_cleanup_task():
         except Exception as e:
             print(f"[Logs Cleanup] Error during cleanup: {e}", flush=True)
             
-        # Run cleanup every 24 hours
-        await asyncio.sleep(86400)
+async def auto_inactive_employee_task():
+    from database import db
+    import crud
+    
+    print("[Auto Inactive Employee] Task started.", flush=True)
+    await asyncio.sleep(20) # wait for startup
+    
+    while True:
+        try:
+            settings = await crud.get_system_settings(db)
+            if settings.get("autoInactiveAfterResignation") == True:
+                now = datetime.now(pytz.timezone('Asia/Kolkata'))
+                today_str = now.strftime("%Y-%m-%d")
+                
+                active_employees = await db.employees.find({
+                    "status": "active",
+                    "hasResignation": True,
+                    "resignationDate": {"$ne": None, "$lt": today_str}
+                }).to_list(length=1000)
+                
+                for emp in active_employees:
+                    emp_id = str(emp["_id"]) if "_id" in emp else emp.get("id")
+                    print(f"[Auto Inactive] Setting employee {emp.get('name')} ({emp_id}) to inactive. Resignation date was {emp.get('resignationDate')}.", flush=True)
+                    
+                    await db.employees.update_one(
+                        {"_id": emp["_id"]},
+                        {"$set": {"status": "inactive"}}
+                    )
+                    
+                    await crud.log_activity(
+                        db=db,
+                        action="Employee Inactivated",
+                        performedBy="System",
+                        userName="System Auto-Inactivator",
+                        details=f"Automatically set status to inactive on next day of resignation date ({emp.get('resignationDate')})."
+                    )
+        except Exception as e:
+            print(f"[Auto Inactive Employee] Error: {e}", flush=True)
+            
+        await asyncio.sleep(1800) # Check every 30 minutes
 
 async def monthly_report_scheduler_task():
     from database import db
@@ -508,6 +546,7 @@ async def lifespan(app):
     feedback_task = asyncio.create_task(feedback_reminder_task())
     monthly_report_task = asyncio.create_task(monthly_report_scheduler_task())
     logs_cleanup_task = asyncio.create_task(activity_logs_cleanup_task())
+    auto_inactive_task = asyncio.create_task(auto_inactive_employee_task())
     yield
     # --- Shutdown ---
     try:
@@ -525,6 +564,8 @@ async def lifespan(app):
             monthly_report_task.cancel()
         if not logs_cleanup_task.done():
             logs_cleanup_task.cancel()
+        if not auto_inactive_task.done():
+            auto_inactive_task.cancel()
     except Exception:
         pass
     # Reload trigger: 1

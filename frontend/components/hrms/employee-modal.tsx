@@ -30,6 +30,40 @@ interface EmployeeModalProps {
   mode: 'add' | 'edit' | 'view'
 }
 
+const calculateResignationDate = (startDateStr: string, daysCountStr: string, holidays: any[]) => {
+  if (!startDateStr || !daysCountStr) return '';
+  const daysCount = parseInt(daysCountStr);
+  if (isNaN(daysCount) || daysCount <= 0) return '';
+
+  const parts = startDateStr.split('-');
+  let currentDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+  let daysAdded = 0;
+  
+  while (daysAdded < daysCount) {
+    const dayOfWeek = currentDate.getDay(); // 0 is Sunday
+    
+    const year = currentDate.getFullYear();
+    const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+    const day = String(currentDate.getDate()).padStart(2, '0');
+    const dStr = `${year}-${month}-${day}`;
+    
+    const isHoliday = holidays.some(h => h.date && h.date.startsWith(dStr));
+    
+    if (dayOfWeek !== 0 && !isHoliday) {
+      daysAdded++;
+    }
+    
+    if (daysAdded < daysCount) {
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+  }
+  
+  const year = currentDate.getFullYear();
+  const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+  const day = String(currentDate.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export function EmployeeModal({
   open,
   onOpenChange,
@@ -41,6 +75,7 @@ export function EmployeeModal({
   const departments = data?.departments || []
   const designations = data?.designations || []
   const documentTypes = (data as any)?.documentTypes || []
+  const holidays = (data as any)?.holidays || []
 
   const initialData = {
     firstName: '',
@@ -67,9 +102,19 @@ export function EmployeeModal({
     department: '',
     designation: '',
     status: 'active',
-    workingHoursStart: '09:30 AM',
-    workingHoursEnd: '06:30 PM',
+    startTime: '09:30',
+    endTime: '18:30',
     requiredDocuments: [],
+    hasBond: false,
+    bondStartDate: '',
+    bondEndDate: '',
+    hasNoticePeriod: false,
+    noticePeriodDays: '',
+    noticePeriodStartDate: '',
+    hasResignation: false,
+    resignationDate: '',
+    hasEmployment: false,
+    employmentStartDate: '',
   }
 
   const [formData, setFormData] = useState<any>(initialData)
@@ -113,6 +158,22 @@ export function EmployeeModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     onSave(formData)
+  }
+
+  const handleModalChange = (field: string, value: any) => {
+    setFormData((prev: any) => {
+      const next = { ...prev, [field]: value }
+      if (field === 'noticePeriodDays' || field === 'noticePeriodStartDate' || field === 'hasNoticePeriod') {
+        if (next.hasNoticePeriod && next.noticePeriodStartDate && next.noticePeriodDays) {
+          const calculatedDate = calculateResignationDate(next.noticePeriodStartDate, next.noticePeriodDays, holidays)
+          if (calculatedDate) {
+            next.hasResignation = true
+            next.resignationDate = calculatedDate
+          }
+        }
+      }
+      return next
+    })
   }
 
   const isViewMode = mode === 'view'
@@ -440,7 +501,7 @@ export function EmployeeModal({
             <div className="flex items-center gap-4">
               <div className="flex-1 space-y-2">
                 <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Start Time</Label>
-                <Select value={formData.workingHoursStart} onValueChange={(v) => setFormData({ ...formData, workingHoursStart: v })}>
+                <Select value={formData.startTime} onValueChange={(v) => setFormData({ ...formData, startTime: v })}>
                   <SelectTrigger className="bg-slate-50/50 border-slate-200">
                     <SelectValue placeholder="Start Time" />
                   </SelectTrigger>
@@ -452,7 +513,7 @@ export function EmployeeModal({
               <div className="pt-6 text-slate-400 font-bold">to</div>
               <div className="flex-1 space-y-2">
                 <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">End Time</Label>
-                <Select value={formData.workingHoursEnd} onValueChange={(v) => setFormData({ ...formData, workingHoursEnd: v })}>
+                <Select value={formData.endTime} onValueChange={(v) => setFormData({ ...formData, endTime: v })}>
                   <SelectTrigger className="bg-slate-50/50 border-slate-200">
                     <SelectValue placeholder="End Time" />
                   </SelectTrigger>
@@ -498,6 +559,150 @@ export function EmployeeModal({
               )}
             </div>
           </div>
+
+          {/* Bond, Notice Period & Resignation Section */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+            <SectionTitle icon={FileText} title="Service Terms" />
+            <div className="flex flex-col gap-6">
+              {/* Bond Checkbox and fields */}
+              <div className="bg-slate-50/50 p-5 rounded-2xl border border-slate-100 space-y-4">
+                <div className="flex items-center space-x-3">
+                  <Checkbox
+                    id="modal-hasBond"
+                    checked={formData.hasBond}
+                    onCheckedChange={(checked) => handleModalChange('hasBond', checked)}
+                    className="data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
+                  />
+                  <Label htmlFor="modal-hasBond" className="text-sm font-semibold text-slate-700 cursor-pointer">
+                    Employee is under Bond
+                  </Label>
+                </div>
+                {formData.hasBond && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-7 animate-in fade-in slide-in-from-left-2 duration-200">
+                    <div className="space-y-2">
+                      <Label htmlFor="modal-bondStartDate" className="text-xs font-bold text-slate-500 uppercase tracking-tight">Bond Start Date</Label>
+                      <Input
+                        id="modal-bondStartDate"
+                        type="date"
+                        value={formData.bondStartDate || ''}
+                        onChange={(e) => handleModalChange('bondStartDate', e.target.value)}
+                        className="bg-white border-slate-200 focus:bg-white transition-all"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="modal-bondEndDate" className="text-xs font-bold text-slate-500 uppercase tracking-tight">Bond End Date</Label>
+                      <Input
+                        id="modal-bondEndDate"
+                        type="date"
+                        value={formData.bondEndDate || ''}
+                        onChange={(e) => handleModalChange('bondEndDate', e.target.value)}
+                        className="bg-white border-slate-200 focus:bg-white transition-all"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Notice Period Checkbox and fields */}
+              <div className="bg-slate-50/50 p-5 rounded-2xl border border-slate-100 space-y-4">
+                <div className="flex items-center space-x-3">
+                  <Checkbox
+                    id="modal-hasNoticePeriod"
+                    checked={formData.hasNoticePeriod}
+                    onCheckedChange={(checked) => handleModalChange('hasNoticePeriod', checked)}
+                    className="data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
+                  />
+                  <Label htmlFor="modal-hasNoticePeriod" className="text-sm font-semibold text-slate-700 cursor-pointer">
+                    Employee is on Notice Period
+                  </Label>
+                </div>
+                {formData.hasNoticePeriod && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-7 animate-in fade-in slide-in-from-left-2 duration-200">
+                    <div className="space-y-2">
+                      <Label htmlFor="modal-noticePeriodStartDate" className="text-xs font-bold text-slate-500 uppercase tracking-tight">Notice Period Start Date</Label>
+                      <Input
+                        id="modal-noticePeriodStartDate"
+                        type="date"
+                        value={formData.noticePeriodStartDate || ''}
+                        onChange={(e) => handleModalChange('noticePeriodStartDate', e.target.value)}
+                        className="bg-white border-slate-200 focus:bg-white transition-all"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="modal-noticePeriodDays" className="text-xs font-bold text-slate-500 uppercase tracking-tight">Notice Period Days</Label>
+                      <Input
+                        id="modal-noticePeriodDays"
+                        type="number"
+                        placeholder="e.g. 30"
+                        value={formData.noticePeriodDays || ''}
+                        onChange={(e) => handleModalChange('noticePeriodDays', e.target.value)}
+                        className="bg-white border-slate-200 focus:bg-white transition-all"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Resignation Checkbox and fields */}
+              <div className="bg-slate-50/50 p-5 rounded-2xl border border-slate-100 space-y-4">
+                <div className="flex items-center space-x-3">
+                  <Checkbox
+                    id="modal-hasResignation"
+                    checked={formData.hasResignation}
+                    onCheckedChange={(checked) => handleModalChange('hasResignation', checked)}
+                    className="data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
+                  />
+                  <Label htmlFor="modal-hasResignation" className="text-sm font-semibold text-slate-700 cursor-pointer">
+                    Employee has Resigned
+                  </Label>
+                </div>
+                {formData.hasResignation && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-7 animate-in fade-in slide-in-from-left-2 duration-200">
+                    <div className="space-y-2">
+                      <Label htmlFor="modal-resignationDate" className="text-xs font-bold text-slate-500 uppercase tracking-tight">Resignation Date</Label>
+                      <Input
+                        id="modal-resignationDate"
+                        type="date"
+                        value={formData.resignationDate || ''}
+                        onChange={(e) => handleModalChange('resignationDate', e.target.value)}
+                        className="bg-white border-slate-200 focus:bg-white transition-all"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Employment Checkbox and fields */}
+              <div className="bg-slate-50/50 p-5 rounded-2xl border border-slate-100 space-y-4">
+                <div className="flex items-center space-x-3">
+                  <Checkbox
+                    id="modal-hasEmployment"
+                    checked={formData.hasEmployment}
+                    onCheckedChange={(checked) => handleModalChange('hasEmployment', checked)}
+                    className="data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
+                  />
+                  <Label htmlFor="modal-hasEmployment" className="text-sm font-semibold text-slate-700 cursor-pointer">
+                    Employee Accepted Employment
+                  </Label>
+                </div>
+                {formData.hasEmployment && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-7 animate-in fade-in slide-in-from-left-2 duration-200">
+                    <div className="space-y-2">
+                      <Label htmlFor="modal-employmentStartDate" className="text-xs font-bold text-slate-500 tracking-tight">Employment Start Date</Label>
+                      <Input
+                        id="modal-employmentStartDate"
+                        type="date"
+                        value={formData.employmentStartDate || ''}
+                        onChange={(e) => handleModalChange('employmentStartDate', e.target.value)}
+                        className="bg-white border-slate-200 focus:bg-white transition-all"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
 
           <div className="flex justify-end gap-4 pt-4 sticky bottom-0 bg-slate-50/90 backdrop-blur-sm p-4 -m-4 border-t border-slate-200 z-10">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="px-8 h-12 rounded-xl font-bold text-slate-600 hover:bg-slate-100 border-slate-200">

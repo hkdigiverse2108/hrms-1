@@ -59,6 +59,16 @@ export interface EmployeeFormData {
   gender: string
   position: string
   requiredDocuments: string[]
+  hasBond: boolean
+  bondStartDate: string
+  bondEndDate: string
+  hasNoticePeriod: boolean
+  noticePeriodDays: string
+  noticePeriodStartDate: string
+  hasResignation: boolean
+  resignationDate: string
+  hasEmployment: boolean
+  employmentStartDate: string
 }
 
 interface EmployeeFormProps {
@@ -99,7 +109,51 @@ const defaultFormData: EmployeeFormData = {
   gender: 'Male',
   position: 'Intern',
   requiredDocuments: [],
+  hasBond: false,
+  bondStartDate: '',
+  bondEndDate: '',
+  hasNoticePeriod: false,
+  noticePeriodDays: '',
+  noticePeriodStartDate: '',
+  hasResignation: false,
+  resignationDate: '',
+  hasEmployment: false,
+  employmentStartDate: '',
 }
+
+const calculateResignationDate = (startDateStr: string, daysCountStr: string, holidays: any[]) => {
+  if (!startDateStr || !daysCountStr) return '';
+  const daysCount = parseInt(daysCountStr);
+  if (isNaN(daysCount) || daysCount <= 0) return '';
+
+  const parts = startDateStr.split('-');
+  let currentDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+  let daysAdded = 0;
+  
+  while (daysAdded < daysCount) {
+    const dayOfWeek = currentDate.getDay(); // 0 is Sunday
+    
+    const year = currentDate.getFullYear();
+    const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+    const day = String(currentDate.getDate()).padStart(2, '0');
+    const dStr = `${year}-${month}-${day}`;
+    
+    const isHoliday = holidays.some(h => h.date && h.date.startsWith(dStr));
+    
+    if (dayOfWeek !== 0 && !isHoliday) {
+      daysAdded++;
+    }
+    
+    if (daysAdded < daysCount) {
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+  }
+  
+  const year = currentDate.getFullYear();
+  const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+  const day = String(currentDate.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: EmployeeFormProps) {
   const { data, refresh } = useApi()
@@ -108,6 +162,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
   const roles = data?.roles || []
   const relations = data?.relations || []
   const documentTypes = (data as any)?.documentTypes || []
+  const holidays = (data as any)?.holidays || []
   
   const [formData, setFormData] = useState<EmployeeFormData>(defaultFormData)
   const [showPassword, setShowPassword] = useState(false)
@@ -169,6 +224,8 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
             } else {
               sanitizedData[k] = strVal;
             }
+          } else if (k === 'hasBond' || k === 'hasNoticePeriod' || k === 'hasResignation' || k === 'hasEmployment') {
+            sanitizedData[k] = (value === true || value === 'true') as any
           } else if (typeof value === 'object' && value !== null) {
             // Handle if backend returns an object for a field (e.g., department: {name: '...'})
             sanitizedData[k] = String((value as any).name || (value as any).title || (value as any).label || JSON.stringify(value)) as any
@@ -176,7 +233,8 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
             sanitizedData[k] = String(value) as any
           }
         } else {
-          sanitizedData[k] = (defaultFormData as any)[k] || ''
+          const defVal = (defaultFormData as any)[k]
+          sanitizedData[k] = defVal !== undefined ? defVal : ''
         }
       })
       
@@ -201,8 +259,20 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
     onSubmit(formData)
   }
 
-  const handleChange = (field: keyof EmployeeFormData, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }))
+  const handleChange = (field: keyof EmployeeFormData, value: any) => {
+    setFormData((prev) => {
+      const next = { ...prev, [field]: value }
+      if (field === 'noticePeriodDays' || field === 'noticePeriodStartDate' || field === 'hasNoticePeriod') {
+        if (next.hasNoticePeriod && next.noticePeriodStartDate && next.noticePeriodDays) {
+          const calculatedDate = calculateResignationDate(next.noticePeriodStartDate, next.noticePeriodDays, holidays)
+          if (calculatedDate) {
+            next.hasResignation = true
+            next.resignationDate = calculatedDate
+          }
+        }
+      }
+      return next
+    })
   }
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -533,6 +603,153 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
               {documentTypes.length === 0 && (
                 <div className="col-span-full text-gray-500 text-sm italic">
                   No document types available. Please add some in the Admin Settings.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Bond, Notice Period & Resignation Section */}
+      <div className="space-y-6 pt-6 max-w-4xl border-t border-gray-100">
+        <div className="flex items-start gap-4">
+          <Label className="w-44 text-left font-medium text-gray-700 pt-3">
+            Service Terms:
+          </Label>
+          <div className="flex-1 space-y-6">
+            {/* Bond Checkbox and fields */}
+            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-4">
+              <div className="flex items-center space-x-3">
+                <Checkbox
+                  id="hasBond"
+                  checked={formData.hasBond}
+                  onCheckedChange={(checked) => handleChange('hasBond', checked)}
+                  className="data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
+                />
+                <Label htmlFor="hasBond" className="text-sm font-semibold text-gray-700 cursor-pointer">
+                  Employee is under Bond
+                </Label>
+              </div>
+              {formData.hasBond && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-7 animate-in fade-in slide-in-from-left-2 duration-200">
+                  <div className="space-y-2">
+                    <Label htmlFor="bondStartDate" className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Bond Start Date</Label>
+                    <Input
+                      id="bondStartDate"
+                      type="date"
+                      value={formData.bondStartDate || ''}
+                      onChange={(e) => handleChange('bondStartDate', e.target.value)}
+                      className="h-10 rounded-lg border-gray-200 focus:border-brand-teal focus:ring-brand-teal"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bondEndDate" className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Bond End Date</Label>
+                    <Input
+                      id="bondEndDate"
+                      type="date"
+                      value={formData.bondEndDate || ''}
+                      onChange={(e) => handleChange('bondEndDate', e.target.value)}
+                      className="h-10 rounded-lg border-gray-200 focus:border-brand-teal focus:ring-brand-teal"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Notice Period Checkbox and fields */}
+            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-4">
+              <div className="flex items-center space-x-3">
+                <Checkbox
+                  id="hasNoticePeriod"
+                  checked={formData.hasNoticePeriod}
+                  onCheckedChange={(checked) => handleChange('hasNoticePeriod', checked)}
+                  className="data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
+                />
+                <Label htmlFor="hasNoticePeriod" className="text-sm font-semibold text-gray-700 cursor-pointer">
+                  Employee is on Notice Period
+                </Label>
+              </div>
+              {formData.hasNoticePeriod && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-7 animate-in fade-in slide-in-from-left-2 duration-200">
+                  <div className="space-y-2">
+                    <Label htmlFor="noticePeriodStartDate" className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Notice Period Start Date</Label>
+                    <Input
+                      id="noticePeriodStartDate"
+                      type="date"
+                      value={formData.noticePeriodStartDate || ''}
+                      onChange={(e) => handleChange('noticePeriodStartDate', e.target.value)}
+                      className="h-10 rounded-lg border-gray-200 focus:border-brand-teal focus:ring-brand-teal"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="noticePeriodDays" className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Notice Period Days</Label>
+                    <Input
+                      id="noticePeriodDays"
+                      type="number"
+                      placeholder="e.g. 30"
+                      value={formData.noticePeriodDays || ''}
+                      onChange={(e) => handleChange('noticePeriodDays', e.target.value)}
+                      className="h-10 rounded-lg border-gray-200 focus:border-brand-teal focus:ring-brand-teal"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Resignation Checkbox and fields */}
+            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-4">
+              <div className="flex items-center space-x-3">
+                <Checkbox
+                  id="hasResignation"
+                  checked={formData.hasResignation}
+                  onCheckedChange={(checked) => handleChange('hasResignation', checked)}
+                  className="data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
+                />
+                <Label htmlFor="hasResignation" className="text-sm font-semibold text-gray-700 cursor-pointer">
+                  Employee has Resigned
+                </Label>
+              </div>
+              {formData.hasResignation && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-7 animate-in fade-in slide-in-from-left-2 duration-200">
+                  <div className="space-y-2">
+                    <Label htmlFor="resignationDate" className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Resignation Date</Label>
+                    <Input
+                      id="resignationDate"
+                      type="date"
+                      value={formData.resignationDate || ''}
+                      onChange={(e) => handleChange('resignationDate', e.target.value)}
+                      className="h-10 rounded-lg border-gray-200 focus:border-brand-teal focus:ring-brand-teal"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Employment Checkbox and fields */}
+            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-4">
+              <div className="flex items-center space-x-3">
+                <Checkbox
+                  id="hasEmployment"
+                  checked={formData.hasEmployment}
+                  onCheckedChange={(checked) => handleChange('hasEmployment', checked)}
+                  className="data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
+                />
+                <Label htmlFor="hasEmployment" className="text-sm font-semibold text-gray-700 cursor-pointer">
+                  Employee Accepted Employment
+                </Label>
+              </div>
+              {formData.hasEmployment && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-7 animate-in fade-in slide-in-from-left-2 duration-200">
+                  <div className="space-y-2">
+                    <Label htmlFor="employmentStartDate" className="text-xs font-semibold text-gray-500 tracking-wider">Employment Start Date</Label>
+                    <Input
+                      id="employmentStartDate"
+                      type="date"
+                      value={formData.employmentStartDate || ''}
+                      onChange={(e) => handleChange('employmentStartDate', e.target.value)}
+                      className="h-10 rounded-lg border-gray-200 focus:border-brand-teal focus:ring-brand-teal"
+                    />
+                  </div>
                 </div>
               )}
             </div>

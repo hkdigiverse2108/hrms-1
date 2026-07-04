@@ -205,6 +205,16 @@ class EmployeeBase(BaseModel):
     securityDepositExempt: Optional[bool] = False
     securityDepositDirectPayments: Optional[List[Dict[str, Any]]] = []
     googleCalendarTokens: Optional[Dict[str, Any]] = None
+    hasBond: Optional[bool] = False
+    bondStartDate: Optional[RobustDate] = None
+    bondEndDate: Optional[RobustDate] = None
+    hasNoticePeriod: Optional[bool] = False
+    noticePeriodDays: Optional[int] = None
+    noticePeriodStartDate: Optional[RobustDate] = None
+    hasResignation: Optional[bool] = False
+    resignationDate: Optional[RobustDate] = None
+    hasEmployment: Optional[bool] = False
+    employmentStartDate: Optional[RobustDate] = None
 
 class EmployeeCreate(EmployeeBase):
     pass
@@ -244,6 +254,16 @@ class EmployeeUpdate(BaseModel):
     requiredDocuments: Optional[List[str]] = None
     securityDepositExempt: Optional[bool] = None
     securityDepositDirectPayments: Optional[List[Dict[str, Any]]] = None
+    hasBond: Optional[bool] = None
+    bondStartDate: Optional[RobustDate] = None
+    bondEndDate: Optional[RobustDate] = None
+    hasNoticePeriod: Optional[bool] = None
+    noticePeriodDays: Optional[int] = None
+    noticePeriodStartDate: Optional[RobustDate] = None
+    hasResignation: Optional[bool] = None
+    resignationDate: Optional[RobustDate] = None
+    hasEmployment: Optional[bool] = None
+    employmentStartDate: Optional[RobustDate] = None
 
 class Employee(EmployeeBase):
     id: str
@@ -1441,6 +1461,7 @@ class SystemSettingsBase(BaseModel):
     addHoldDaysToEndDate: Optional[bool] = True
     invoiceClientDepartments: Optional[List[str]] = []
     showNamesInRemarksToAdmin: Optional[bool] = True
+    autoInactiveAfterResignation: Optional[bool] = False
 
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
@@ -1477,6 +1498,7 @@ class SystemSettingsUpdate(BaseModel):
     addHoldDaysToEndDate: Optional[bool] = None
     invoiceClientDepartments: Optional[List[str]] = None
     showNamesInRemarksToAdmin: Optional[bool] = None
+    autoInactiveAfterResignation: Optional[bool] = None
 
 class SystemSettings(SystemSettingsBase):
     id: str

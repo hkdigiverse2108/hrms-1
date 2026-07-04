@@ -825,6 +825,77 @@ async def run_payroll_processing(db, month: str, year: int, performed_by: str = 
             if h_date_str not in sunday_dates:
                 unique_holidays += 1
 
+        # Check employment start date restriction
+        emp_start_day = 1
+        adjusted_gross = salary["monthlyGross"]
+        is_future_employment = False
+        post_employment_working_days = 0
+
+        # Helper to parse employmentStartDate
+        def parse_emp_date(val):
+            if not val:
+                return None
+            if isinstance(val, datetime):
+                return val.date()
+            if isinstance(val, date):
+                return val
+            val_str = str(val).strip().split('T')[0].split(' ')[0]
+            for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y/%m/%d"):
+                try:
+                    return datetime.strptime(val_str, fmt).date()
+                except ValueError:
+                    continue
+            return None
+
+        if emp.get("hasEmployment") and emp.get("employmentStartDate"):
+            emp_start = parse_emp_date(emp["employmentStartDate"])
+            if emp_start:
+                month_start_date = date(year, month_num, 1)
+                month_end_date = date(year, month_num, num_days)
+                if emp_start > month_end_date:
+                    is_future_employment = True
+                    adjusted_gross = 0.0
+                elif emp_start >= month_start_date:
+                    emp_start_day = emp_start.day
+                    
+                    # Calculate working days in this month before/after employment start
+                    pre_employment_working_days = 0
+                    post_employment_working_days = 0
+                    
+                    sunday_dates_set_tmp = set(sunday_dates)
+                    holiday_dates_set_tmp = {
+                        h["date"].strftime("%Y-%m-%d") if isinstance(h["date"], (date, datetime)) else h["date"]
+                        for h in month_holidays if "date" in h
+                    }
+                    
+                    for d in range(1, num_days + 1):
+                        d_str = f"{year}-{str(month_num).zfill(2)}-{str(d).zfill(2)}"
+                        if d_str not in sunday_dates_set_tmp and d_str not in holiday_dates_set_tmp:
+                            if d < emp_start_day:
+                                pre_employment_working_days += 1
+                            else:
+                                post_employment_working_days += 1
+                                
+                    total_wd = pre_employment_working_days + post_employment_working_days
+                    if total_wd > 0:
+                        adjusted_gross = salary["monthlyGross"] * (post_employment_working_days / total_wd)
+                    else:
+                        adjusted_gross = 0.0
+
+        if is_future_employment:
+            salary = dict(salary)
+            salary["monthlyGross"] = 0.0
+            total_working_days = 1
+            per_day_gross = 0.0
+        elif emp_start_day > 1:
+            salary = dict(salary)
+            salary["monthlyGross"] = adjusted_gross
+            total_working_days = post_employment_working_days if post_employment_working_days > 0 else 1
+            per_day_gross = adjusted_gross / total_working_days
+        else:
+            total_working_days = num_days - sundays - unique_holidays
+            per_day_gross = salary["monthlyGross"] / total_working_days
+
         # 1. Map out approved leaves for this month with deduction factors
         # Robust query checking both camelCase and snake_case for employee ID, and case-insensitive status
         leave_cursor = db.leave_requests.find({
@@ -950,7 +1021,7 @@ async def run_payroll_processing(db, month: str, year: int, performed_by: str = 
         unapproved_absent_days = 0.0
         attendance_present_days = 0.0
  
-        for d in range(1, num_days + 1):
+        for d in range(emp_start_day, num_days + 1):
             date_str = f"{year}-{str(month_num).zfill(2)}-{str(d).zfill(2)}"
             
             # We only care about scheduled working days
