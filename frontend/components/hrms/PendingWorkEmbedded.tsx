@@ -262,7 +262,7 @@ export function PendingWorkEmbedded({
       const [entriesRes, clientsRes, pRes, otherWorkRes, employeesRes] = await Promise.all([
         fetch(`${API_URL}/content-calendar/all`),
         fetch(`${API_URL}/clients`),
-        fetch(`${API_URL}/projects${user ? `?userId=${user.id}&role=${user.role}` : ''}`),
+        fetch(`${API_URL}/projects`),
         fetch(`${API_URL}/other-work/all`),
         fetch(`${API_URL}/employees`)
       ]);
