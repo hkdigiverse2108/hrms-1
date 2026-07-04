@@ -67,6 +67,22 @@ export default function EditEmployeePage() {
         delete payload.password
       }
 
+      if (payload.noticePeriodDays === '' || payload.noticePeriodDays === null || payload.noticePeriodDays === undefined) {
+        payload.noticePeriodDays = null;
+      } else {
+        payload.noticePeriodDays = parseInt(payload.noticePeriodDays) || null;
+      }
+
+      const dateFields = [
+        'dob', 'joinDate', 'bondStartDate', 'bondEndDate', 
+        'noticePeriodStartDate', 'resignationDate', 'employmentStartDate'
+      ];
+      dateFields.forEach(field => {
+        if (payload[field] === '') {
+          payload[field] = null;
+        }
+      });
+
       const response = await fetch(`${API_URL}/employees/${employeeId}`, {
         method: 'PUT',
         headers: {
@@ -79,7 +95,20 @@ export default function EditEmployeePage() {
         router.push('/employees')
       } else {
         const error = await response.json()
-        toast.error(`Error: ${error.detail || 'Failed to update employee'}`)
+        let errMsg = 'Failed to update employee';
+        if (error.detail) {
+          if (typeof error.detail === 'string') {
+            errMsg = error.detail;
+          } else if (Array.isArray(error.detail)) {
+            errMsg = error.detail.map((e: any) => {
+              const field = e.loc ? e.loc.filter((l: any) => l !== 'body').join('.') : '';
+              return `${field ? field + ': ' : ''}${e.msg}`;
+            }).join(' | ');
+          } else {
+            errMsg = JSON.stringify(error.detail);
+          }
+        }
+        toast.error(`Error: ${errMsg}`, { duration: 10000 });
       }
     } catch (error) {
       console.error('Error updating employee:', error)
