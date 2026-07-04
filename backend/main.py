@@ -582,6 +582,7 @@ from fastapi.exceptions import RequestValidationError
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     import json
     import os
+    import sys
     try:
         body = await request.body()
         body_str = body.decode("utf-8", errors="ignore")
@@ -589,7 +590,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         body_str = "could not read body"
     
     errors = exc.errors()
-    print(f"Validation error on {request.method} {request.url}: {errors}")
+    sys.stderr.write(f"\nVALIDATION_ERROR_DETAILS: {json.dumps({'url': str(request.url), 'errors': errors, 'body': body_str})}\n")
+    sys.stderr.flush()
     
     try:
         current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -601,7 +603,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
                 "body": body_str
             }, f, indent=2)
     except Exception as ex:
-        print("Error writing validation error to file:", ex)
+        sys.stderr.write(f"Error writing validation error to file: {ex}\n")
+        sys.stderr.flush()
     return JSONResponse(
         status_code=422,
         content={"detail": errors}
