@@ -245,6 +245,32 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
   };
 
   useEffect(() => {
+    if (highlightTask && clientId) {
+      fetch(`${API_URL}/content-calendar?clientId=${clientId}`)
+        .then(res => {
+          if (res.ok) return res.json();
+          throw new Error("Failed to fetch entries");
+        })
+        .then(data => {
+          if (Array.isArray(data)) {
+            const task = data.find(t => t.id === highlightTask);
+            if (task) {
+              const dateVal = task.postingDate || task.scriptDate || task.shootDate || task.editingStart || task.actualPostingDate || task.monthYear;
+              if (dateVal && typeof dateVal === 'string') {
+                if (dateVal.match(/^\d{4}-\d{2}-\d{2}/)) {
+                  setSelectedDate(dateVal);
+                } else if (dateVal.match(/^\d{4}-\d{2}/)) {
+                  setSelectedDate(`${dateVal}-01`);
+                }
+              }
+            }
+          }
+        })
+        .catch(err => console.error(err));
+    }
+  }, [highlightTask, clientId]);
+
+  useEffect(() => {
     fetchEntries();
     fetchSettings();
   }, [clientId, monthYear]);
