@@ -171,6 +171,10 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       menuItems.push(getItem("Recruitment", "recruitment-sub", <Briefcase className="w-5 h-5" />, recruitmentChildren));
     }
 
+    if (isAdmin || checkPermission('company-finance', 'canView')) {
+      menuItems.push(getItem(<Link href="/company-finance">Company Finance</Link>, "/company-finance", <Landmark className="w-5 h-5" />));
+    }
+
     if (isAdmin || checkPermission('attendance', 'canView')) {
       menuItems.push(getItem(<Link href="/attendance">Attendance</Link>, "/attendance", <Clock className="w-5 h-5" />));
     }
@@ -291,6 +295,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (pathname.startsWith("/payroll")) return [pathname];
     if (pathname.startsWith("/restrictions")) return ["/restrictions"];
     if (pathname.startsWith("/activity-logs")) return ["/activity-logs"];
+    if (pathname.startsWith("/company-finance")) return ["/company-finance"];
     return [];
   };
 
