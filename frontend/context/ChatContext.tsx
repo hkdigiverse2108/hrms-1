@@ -141,11 +141,17 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!user || !user.id) return;
-    fetchInitialUnreadCounts();
-    fetchOnlineUsers();
     let reconnectTimeout: any;
     let reconnectAttempts = 0;
     let active = true;
+
+    // Defer chat initialization to avoid competing with rendering-critical API calls
+    const initTimer = setTimeout(() => {
+      if (!active) return;
+      fetchInitialUnreadCounts();
+      fetchOnlineUsers();
+      connectWebSocket();
+    }, 2000);
 
     const connectWebSocket = async () => {
       const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -466,10 +472,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       };
     };
 
-    connectWebSocket();
 
     return () => {
       active = false;
+      clearTimeout(initTimer);
       clearTimeout(reconnectTimeout);
       if (wsRef.current) {
         wsRef.current.close();

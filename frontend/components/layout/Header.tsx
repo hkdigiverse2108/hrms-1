@@ -87,7 +87,9 @@ export function Header() {
 
   useEffect(() => {
     if (user?.id) {
-      fetchNotifications();
+      // Defer notifications fetch to avoid competing with rendering-critical calls
+      const timer = setTimeout(() => fetchNotifications(), 1500);
+      return () => clearTimeout(timer);
     }
   }, [user?.id]);
 

@@ -92,22 +92,33 @@ export function AppLayout({ children }: { children: ReactNode }) {
     reason: ""
   });
   const [isSubmittingRecovery, setIsSubmittingRecovery] = useState(false);
-  const [systemSettings, setSystemSettings] = useState<any>(null);
+  const [systemSettings, setSystemSettings] = useState<any>(() => {
+    // Restore cached settings instantly
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('system-settings-cache');
+        if (cached) return JSON.parse(cached);
+      } catch {}
+    }
+    return null;
+  });
 
   useEffect(() => {
     if (isPublicPage || !user) return;
-    const fetchSettings = async () => {
+    // Defer to avoid competing with rendering-critical calls
+    const timer = setTimeout(async () => {
       try {
         const res = await fetch(`${API_URL}/system-settings`);
         if (res.ok) {
           const data = await res.json();
           setSystemSettings(data);
+          localStorage.setItem('system-settings-cache', JSON.stringify(data));
         }
       } catch (err) {
         console.warn("Error fetching settings in AppLayout:", err);
       }
-    };
-    fetchSettings();
+    }, 1000);
+    return () => clearTimeout(timer);
   }, [user, isPublicPage]);
 
   // Desktop auto-update states
@@ -638,8 +649,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
     };
     window.addEventListener("attendance-update", handleAttendanceUpdate);
 
-    // Initial check on mount
-    checkPendingRecovery().catch(e => console.warn("Recovery check error:", e));
+    // Initial check on mount (deferred to avoid competing with rendering-critical API calls)
+    const recoveryTimer = setTimeout(() => {
+      checkPendingRecovery().catch(e => console.warn("Recovery check error:", e));
+    }, 3000);
 
     // 2. Track OS/browser activity and set inactivity timeouts
     const events = ["mousemove", "keydown", "mousedown", "touchstart", "scroll", "click"];
@@ -654,6 +667,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     resetInactivityTimer();
 
     return () => {
+      clearTimeout(recoveryTimer);
       window.removeEventListener("focus", handleFocus);
       window.removeEventListener("attendance-update", handleAttendanceUpdate);
       events.forEach((e) => window.removeEventListener(e, handleActivity));
