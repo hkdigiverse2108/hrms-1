@@ -160,6 +160,35 @@ export default function SchedulePage() {
     setIsConfigSaving(true);
     try {
       const empId = appConfig.employeeId || user?.id || user?.employeeId;
+
+      // Check for duplicate members
+      const currentHost = empId;
+      const currentMembers = [String(currentHost), ...(appConfig.employeeIds || []).map(String)].sort();
+      
+      const duplicateConfig = allConfigs.find(cfg => {
+        // Exclude the configuration we are currently editing
+        const isSelf = cfg.id === appConfig.id || 
+                       (cfg._id && cfg._id === appConfig.id) || 
+                       (appConfig._id && cfg.id === appConfig._id) || 
+                       (cfg._id && appConfig._id && cfg._id === appConfig._id);
+        if (isSelf) return false;
+        
+        // Only active booking pages count
+        if (!cfg.active) return false;
+        
+        const otherHost = cfg.employeeId || "";
+        const otherMembers = [String(otherHost), ...(cfg.employeeIds || []).map(String)].sort();
+        
+        return currentMembers.length === otherMembers.length && 
+               currentMembers.every((val, idx) => val === otherMembers[idx]);
+      });
+      
+      if (duplicateConfig) {
+        alert(`A booking link already exists with these same members: "${duplicateConfig.title || 'Untitled'}"`);
+        setIsConfigSaving(false);
+        return;
+      }
+
       const token = localStorage.getItem('token');
       const res = await fetch(`${API_URL}/appointments/config`, {
         method: "POST",
