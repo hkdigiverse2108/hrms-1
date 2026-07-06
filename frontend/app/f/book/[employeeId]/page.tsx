@@ -50,23 +50,27 @@ export default function PublicBookingPage() {
     if (employeeId) {
       fetchWeekSlots();
     }
-  }, [employeeId, currentWeekStart]);
+  }, [employeeId, currentWeekStart, config?.id]);
 
   const fetchDetails = async () => {
     setIsLoading(true);
     try {
-      // Fetch employee info
-      const empRes = await fetch(`${API_URL}/employees/${employeeId}`);
-      if (empRes.ok) {
-        const empData = await empRes.json();
-        setEmployee(empData);
-      }
-
-      // Fetch scheduling config
+      // Fetch scheduling config first (since employeeId parameter might be a config ID or an employee ID)
       const configRes = await fetch(`${API_URL}/appointments/config/${employeeId}`);
+      let realEmpId = employeeId;
       if (configRes.ok) {
         const configData = await configRes.json();
         setConfig(configData);
+        if (configData.employeeId) {
+          realEmpId = configData.employeeId;
+        }
+      }
+
+      // Fetch employee info using realEmpId
+      const empRes = await fetch(`${API_URL}/employees/${realEmpId}`);
+      if (empRes.ok) {
+        const empData = await empRes.json();
+        setEmployee(empData);
       }
     } catch (err) {
       console.error("Error fetching details:", err);
@@ -79,9 +83,11 @@ export default function PublicBookingPage() {
   const fetchWeekSlots = async () => {
     setIsLoadingSlots(true);
     try {
+      const configIdParam = config?.id || config?._id || (employeeId !== config?.employeeId ? employeeId : "");
+      const querySuffix = configIdParam ? `&configId=${configIdParam}` : "";
       const promises = weekDays.map(async (day) => {
         const dateStr = day.format("YYYY-MM-DD");
-        const res = await fetch(`${API_URL}/appointments/public/slots?employeeId=${employeeId}&date=${dateStr}`);
+        const res = await fetch(`${API_URL}/appointments/public/slots?employeeId=${employeeId}&date=${dateStr}${querySuffix}`);
         if (res.ok) {
           const data = await res.json();
           return { date: dateStr, slots: data.slots || [] };
@@ -114,6 +120,7 @@ export default function PublicBookingPage() {
       const fullName = `${form.firstName} ${form.lastName}`;
       const payload = {
         employeeId,
+        configId: config?.id || config?._id || employeeId,
         date: selectedSlotDate.format("YYYY-MM-DD"),
         startTime: selectedSlot.start,
         endTime: selectedSlot.end,

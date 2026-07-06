@@ -2621,8 +2621,9 @@ async def get_free_slots(request: dict, db=Depends(get_db)):
 # --- Appointment Scheduling APIs ---
 @app.get("/appointments/config")
 @app.get("/api/appointments/config")
-async def get_all_appointment_configs(db=Depends(get_db)):
-    cursor = db.appointment_configs.find({})
+async def get_all_appointment_configs(employeeId: Optional[str] = None, db=Depends(get_db)):
+    query = {"employeeId": employeeId} if employeeId else {}
+    cursor = db.appointment_configs.find(query)
     configs = await cursor.to_list(length=1000)
     return [crud.fix_id(c) for c in configs]
 
@@ -2663,12 +2664,28 @@ async def save_appointment_config(config: dict, db=Depends(get_db), _token=Depen
             
     return await crud.save_appointment_config(db, config)
 
+@app.delete("/appointments/config/{config_id}")
+@app.delete("/api/appointments/config/{config_id}")
+async def delete_appointment_config(config_id: str, db=Depends(get_db), _token=Depends(auth.require_auth)):
+    curr_user_id = str(_token.get("sub"))
+    user_role = _token.get("role")
+    
+    if ObjectId.is_valid(config_id) and len(str(config_id)) == 24:
+        existing = await db.appointment_configs.find_one({"_id": ObjectId(config_id)})
+        if existing and str(existing.get("employeeId")) != curr_user_id and user_role not in ["Admin", "HR"]:
+            raise HTTPException(status_code=403, detail="Not authorized to delete this configuration")
+            
+    success = await crud.delete_appointment_config(db, config_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Configuration not found or invalid ID")
+    return {"status": "success", "deleted": True}
+
 @app.get("/appointments/public/slots")
 @app.get("/api/appointments/public/slots")
-async def get_public_slots(employeeId: str, date: str, db=Depends(get_db)):
+async def get_public_slots(employeeId: str, date: str, configId: Optional[str] = None, db=Depends(get_db)):
     if not employeeId or not date:
         raise HTTPException(status_code=400, detail="employeeId and date are required")
-    slots = await crud.calculate_public_slots(db, employeeId, date)
+    slots = await crud.calculate_public_slots(db, employeeId, date, config_id=configId)
     return {"slots": slots}
 
 @app.post("/appointments/public/book")
@@ -2678,6 +2695,7 @@ async def public_book_appointment(booking: dict, db=Depends(get_db)):
     date_str = booking.get("date")
     start_time = booking.get("startTime")
     end_time = booking.get("endTime")
+    config_id = booking.get("configId") or booking.get("linkId")
     
     if not all([employee_id, date_str, start_time, end_time]):
         raise HTTPException(status_code=400, detail="Missing required booking details")
@@ -2703,10 +2721,27 @@ async def public_book_appointment(booking: dict, db=Depends(get_db)):
     client_email = booking.get("attendeeEmail", "")
     reason = booking.get("description", "")
 
-    config = await db.appointment_configs.find_one({"employeeId": employee_id})
+    config = None
+    if config_id and ObjectId.is_valid(config_id) and len(str(config_id)) == 24:
+        config = await db.appointment_configs.find_one({"_id": ObjectId(config_id)})
+    if not config and ObjectId.is_valid(employee_id) and len(str(employee_id)) == 24:
+        config = await db.appointment_configs.find_one({"_id": ObjectId(employee_id)})
+    if not config:
+        config = await db.appointment_configs.find_one({"employeeId": employee_id})
+
     co_host_ids = []
-    if config and config.get("employeeIds"):
-        co_host_ids = [str(x) for x in config.get("employeeIds")]
+    real_emp_id = employee_id
+    if config:
+        if config.get("employeeIds"):
+            co_host_ids = [str(x) for x in config.get("employeeIds")]
+        if config.get("employeeId"):
+            real_emp_id = str(config.get("employeeId"))
+            if real_emp_id != str(employee_id):
+                real_q = {"_id": ObjectId(real_emp_id)} if ObjectId.is_valid(real_emp_id) else {"_id": real_emp_id}
+                real_emp = await db.employees.find_one(real_q)
+                if real_emp:
+                    emp = real_emp
+                    employee_id = real_emp_id
     
     schedule_data = {
         "title": booking.get("title", f"Appointment with {client_name}"),

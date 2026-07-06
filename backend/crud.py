@@ -7701,30 +7701,52 @@ async def delete_schedule(db, schedule_id: str):
 
 # --- Appointment Configuration Operations ---
 async def get_appointment_config(db, employee_id: str):
-    config = await db.appointment_configs.find_one({"employeeId": employee_id})
+    config = None
+    if ObjectId.is_valid(employee_id) and len(str(employee_id)) == 24:
+        config = await db.appointment_configs.find_one({"_id": ObjectId(employee_id)})
+    if not config:
+        config = await db.appointment_configs.find_one({"employeeId": employee_id})
     return fix_id(config) if config else None
+
+async def delete_appointment_config(db, config_id: str):
+    if not ObjectId.is_valid(config_id):
+        return False
+    res = await db.appointment_configs.delete_one({"_id": ObjectId(config_id)})
+    return res.deleted_count > 0
 
 async def save_appointment_config(db, config_data: dict):
     employee_id = config_data.get("employeeId")
     if not employee_id:
         raise ValueError("employeeId is required")
     
-    # Update or insert
-    existing = await db.appointment_configs.find_one({"employeeId": employee_id})
-    if existing:
-        await db.appointment_configs.update_one(
-            {"_id": existing["_id"]},
-            {"$set": config_data}
-        )
-        updated = await db.appointment_configs.find_one({"_id": existing["_id"]})
-        return fix_id(updated)
-    else:
-        new_doc = await db.appointment_configs.insert_one(config_data)
-        created = await db.appointment_configs.find_one({"_id": new_doc.inserted_id})
-        return fix_id(created)
+    config_id = config_data.get("id") or config_data.get("_id")
+    data_to_save = {k: v for k, v in config_data.items() if k not in ["id", "_id"]}
+    
+    if config_id and ObjectId.is_valid(config_id) and len(str(config_id)) == 24:
+        existing = await db.appointment_configs.find_one({"_id": ObjectId(config_id)})
+        if existing:
+            data_to_save["updated_at"] = datetime.now()
+            await db.appointment_configs.update_one(
+                {"_id": ObjectId(config_id)},
+                {"$set": data_to_save}
+            )
+            updated = await db.appointment_configs.find_one({"_id": ObjectId(config_id)})
+            return fix_id(updated)
+            
+    data_to_save["created_at"] = datetime.now()
+    data_to_save["updated_at"] = datetime.now()
+    new_doc = await db.appointment_configs.insert_one(data_to_save)
+    created = await db.appointment_configs.find_one({"_id": new_doc.inserted_id})
+    return fix_id(created)
 
-async def calculate_public_slots(db, employee_id: str, date_str: str):
-    config = await db.appointment_configs.find_one({"employeeId": employee_id})
+async def calculate_public_slots(db, employee_id: str, date_str: str, config_id: str = None):
+    config = None
+    if config_id and ObjectId.is_valid(config_id) and len(str(config_id)) == 24:
+        config = await db.appointment_configs.find_one({"_id": ObjectId(config_id)})
+    if not config and ObjectId.is_valid(employee_id) and len(str(employee_id)) == 24:
+        config = await db.appointment_configs.find_one({"_id": ObjectId(employee_id)})
+    if not config:
+        config = await db.appointment_configs.find_one({"employeeId": employee_id})
     if not config or not config.get("active", True):
         return []
     
@@ -7746,7 +7768,8 @@ async def calculate_public_slots(db, employee_id: str, date_str: str):
     if not day_slots:
         return []
     
-    all_member_ids = [employee_id]
+    real_emp_id = config.get("employeeId", employee_id)
+    all_member_ids = [str(real_emp_id)]
     if config.get("employeeIds"):
         all_member_ids.extend([str(x) for x in config.get("employeeIds")])
     all_member_ids = list(set(all_member_ids))

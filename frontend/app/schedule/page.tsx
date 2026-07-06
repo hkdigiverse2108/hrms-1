@@ -86,13 +86,13 @@ export default function SchedulePage() {
   const [allConfigs, setAllConfigs] = useState<any[]>([]);
 
   const fetchConfig = async () => {
-    const empId = user?.id || user?.employeeId;
-    if (!empId) return;
+    const idToFetch = appConfig?.id || appConfig?._id || user?.id || user?.employeeId;
+    if (!idToFetch) return;
     try {
-      const res = await fetch(`${API_URL}/appointments/config/${empId}`, { cache: "no-store" });
+      const res = await fetch(`${API_URL}/appointments/config/${idToFetch}`, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
-        if (data && data.employeeId) {
+        if (data && (data.employeeId || data.id || data._id)) {
           if (!data.active) {
             setAppConfig({
               ...data,
@@ -170,8 +170,10 @@ export default function SchedulePage() {
         body: JSON.stringify({ ...appConfig, employeeId: empId })
       });
       if (res.ok) {
+        const savedData = await res.json();
         toast.success("Appointment schedule configuration saved");
         setConfigModalOpen(false);
+        setAppConfig(savedData);
         fetchAllConfigs(); // Refresh the list of all configurations!
       } else {
         toast.error("Failed to save configuration");
@@ -1160,6 +1162,7 @@ export default function SchedulePage() {
               const empId = user?.id || user?.employeeId || "";
               if (!appConfig.active) {
                 setAppConfig({
+                  id: null,
                   employeeId: empId,
                   title: "",
                   duration: 60,
@@ -1173,7 +1176,8 @@ export default function SchedulePage() {
                     Sunday: []
                   },
                   timezone: "Asia/Kolkata",
-                  active: true
+                  active: true,
+                  employeeIds: []
                 });
               }
               setIsConfiguring(true);
@@ -1714,29 +1718,29 @@ export default function SchedulePage() {
                   <button 
                     onClick={() => {
                       const empId = user?.id || user?.employeeId || "";
-                      if (!appConfig.active) {
-                        setAppConfig({
-                          employeeId: empId,
-                          title: "",
-                          duration: 60,
-                          availability: {
-                            Monday: [{ start: "09:00", end: "17:00" }],
-                            Tuesday: [{ start: "09:00", end: "17:00" }],
-                            Wednesday: [{ start: "09:00", end: "17:00" }],
-                            Thursday: [{ start: "09:00", end: "17:00" }],
-                            Friday: [{ start: "09:00", end: "17:00" }],
-                            Saturday: [],
-                            Sunday: []
-                          },
-                          timezone: "Asia/Kolkata",
-                          active: true
-                        });
-                      }
+                      setAppConfig({
+                        id: null,
+                        employeeId: empId,
+                        title: "New Booking Page",
+                        duration: 30,
+                        availability: {
+                          Monday: [{ start: "09:00", end: "17:00" }],
+                          Tuesday: [{ start: "09:00", end: "17:00" }],
+                          Wednesday: [{ start: "09:00", end: "17:00" }],
+                          Thursday: [{ start: "09:00", end: "17:00" }],
+                          Friday: [{ start: "09:00", end: "17:00" }],
+                          Saturday: [],
+                          Sunday: []
+                        },
+                        timezone: "Asia/Kolkata",
+                        active: true,
+                        employeeIds: []
+                      });
                       setIsConfiguring(true);
                       setViewMode("week");
                     }} 
                     className="text-slate-500 hover:text-slate-800 p-0.5 rounded hover:bg-slate-100 transition-colors"
-                    title="Edit Booking Page"
+                    title="Add Booking Page"
                   >
                     <Plus className="w-3.5 h-3.5" />
                   </button>
@@ -1753,16 +1757,20 @@ export default function SchedulePage() {
                 </div>
               </div>
               
-              {/* Booking Page List Item */}
               {/* Booking Page List Items */}
-              {bookingPagesExpanded && allConfigs.filter(cfg => cfg.active).map((cfg) => {
+              {bookingPagesExpanded && allConfigs.filter(cfg => {
+                const currId = String(user?.id || user?.employeeId || "");
+                const cfgEmpId = String(cfg.employeeId || "");
+                return !currId || cfgEmpId === currId;
+              }).map((cfg) => {
                 const ownerName = employees.find(e => String(e.id) === String(cfg.employeeId) || String(e.employeeId) === String(cfg.employeeId))?.name || "Employee";
                 const displayTitle = cfg.title || `${ownerName}'s Schedule`;
-                const link = `${window.location.origin}/f/book/${cfg.employeeId}`;
+                const targetId = cfg.id || cfg._id || cfg.employeeId;
+                const link = `${window.location.origin}/f/book/${targetId}`;
 
                 return (
                   <div 
-                    key={`sidebar-booking-page-${cfg.employeeId}`}
+                    key={`sidebar-booking-page-${targetId}`}
                     className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-slate-100 cursor-pointer group transition-all relative"
                     onClick={() => {
                       setAppConfig(cfg);
@@ -1811,7 +1819,7 @@ export default function SchedulePage() {
                     </div>
 
                     {/* Dropdown Menu (Popup) for this specific booking page */}
-                    {showSidebarMenu && menuConfig?.employeeId === cfg.employeeId && (
+                    {showSidebarMenu && (menuConfig?.id === cfg.id || menuConfig?.employeeId === cfg.employeeId) && (
                       <>
                         <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setShowSidebarMenu(false); }} />
                         <div className="absolute right-2 top-8 bg-white border border-slate-200 rounded-lg shadow-xl py-1 w-44 z-50 text-left">
@@ -1820,7 +1828,8 @@ export default function SchedulePage() {
                             onClick={(e) => {
                               e.stopPropagation();
                               setShowSidebarMenu(false);
-                              const link = `${window.location.origin}/f/book/${menuConfig.employeeId}`;
+                              const targetId = menuConfig.id || menuConfig._id || menuConfig.employeeId;
+                              const link = `${window.location.origin}/f/book/${targetId}`;
                               window.open(link, '_blank');
                             }}
                           >
@@ -1853,18 +1862,12 @@ export default function SchedulePage() {
                               if (isConfirmed) {
                                 try {
                                   const token = localStorage.getItem('token');
-                                  const res = await fetch(`${API_URL}/appointments/config`, {
-                                    method: "POST",
+                                  const targetId = menuConfig.id || menuConfig._id || menuConfig.employeeId;
+                                  const res = await fetch(`${API_URL}/appointments/config/${targetId}`, {
+                                    method: "DELETE",
                                     headers: { 
-                                      "Content-Type": "application/json",
                                       ...(token ? { "Authorization": `Bearer ${token}` } : {})
-                                    },
-                                    body: JSON.stringify({
-                                      employeeId: menuConfig.employeeId,
-                                      duration: 30,
-                                      availability: { Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [], Sunday: [] },
-                                      active: false
-                                    })
+                                    }
                                   });
                                   if (res.ok) {
                                     setShowDetailsCard(false);
@@ -2506,7 +2509,8 @@ export default function SchedulePage() {
               variant="outline"
               className="rounded-full px-5 py-2 h-9 text-xs text-blue-600 border-blue-200 hover:bg-blue-50 font-semibold gap-1.5 flex items-center"
               onClick={() => {
-                const link = `${window.location.origin}/f/book/${appConfig.employeeId}`;
+                const targetId = appConfig.id || appConfig._id || appConfig.employeeId;
+                const link = `${window.location.origin}/f/book/${targetId}`;
                 window.open(link, '_blank');
               }}
             >
@@ -2518,7 +2522,8 @@ export default function SchedulePage() {
             <Button
               className="rounded-full px-5 py-2 h-9 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold gap-1.5 flex items-center shadow-sm"
               onClick={() => {
-                const link = `${window.location.origin}/f/book/${appConfig.employeeId}`;
+                const targetId = appConfig.id || appConfig._id || appConfig.employeeId;
+                const link = `${window.location.origin}/f/book/${targetId}`;
                 navigator.clipboard.writeText(link);
                 toast.success("Link copied!");
               }}
