@@ -1205,7 +1205,7 @@ export default function SchedulePage() {
                     Sunday: []
                   },
                   timezone: "Asia/Kolkata",
-                  active: true,
+                  active: false,
                   employeeIds: []
                 });
               }
@@ -1762,7 +1762,7 @@ export default function SchedulePage() {
                           Sunday: []
                         },
                         timezone: "Asia/Kolkata",
-                        active: true,
+                        active: false,
                         employeeIds: []
                       });
                       setIsConfiguring(true);
