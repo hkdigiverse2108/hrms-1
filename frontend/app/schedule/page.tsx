@@ -3,16 +3,17 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { DatePicker, TimePicker, Popconfirm, Tooltip as AntTooltip, Select as AntSelect } from "antd";
 import dayjs from "dayjs";
-import { Plus, Loader2, ChevronLeft, ChevronRight, X, Search, CalendarCheck, RefreshCcw } from "lucide-react";
+import { Plus, Loader2, ChevronLeft, ChevronRight, X, Search, CalendarCheck, RefreshCcw, Copy, Link, Calendar, ChevronUp, ChevronDown } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import { useUserContext } from "@/context/UserContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { toast } from "sonner";
 import { DayPicker } from "react-day-picker";
+import { useConfirm } from "@/context/ConfirmContext";
 
 /* ───── color palette for employees ───── */
 const EMPLOYEE_COLORS = [
@@ -43,12 +44,144 @@ type ViewMode = "day" | "week";
 export default function SchedulePage() {
   const { user, getISTNow, updateUser } = useUserContext();
   const { checkPermission, isAdmin } = usePermissions();
+  const { confirm } = useConfirm();
   const [isSyncing, setIsSyncing] = useState(false);
   const canAdd = isAdmin || checkPermission('schedule', 'canAdd');
   const canDeletePerm = isAdmin || checkPermission('schedule', 'canDelete');
   const [currentDate, setCurrentDate] = useState(dayjs(getISTNow()));
   const [calendarMonth, setCalendarMonth] = useState<Date>(dayjs(getISTNow()).toDate());
   const [schedules, setSchedules] = useState<any[]>([]);
+
+  const [configModalOpen, setConfigModalOpen] = useState(false);
+  const [isConfiguring, setIsConfiguring] = useState(false);
+  const [isConfigSaving, setIsConfigSaving] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [showDetailsCard, setShowDetailsCard] = useState(false);
+  const [hideAvailabilityFromCalendar, setHideAvailabilityFromCalendar] = useState(false);
+  const [showSidebarMenu, setShowSidebarMenu] = useState(false);
+  const [bookingPagesExpanded, setBookingPagesExpanded] = useState(true);
+  const [customDurationModalOpen, setCustomDurationModalOpen] = useState(false);
+  const [customDurationValue, setCustomDurationValue] = useState(1);
+  const [customDurationUnit, setCustomDurationUnit] = useState<"minutes" | "hours">("hours");
+  const [memberSearchQuery, setMemberSearchQuery] = useState("");
+  const [appConfig, setAppConfig] = useState<any>({
+    employeeId: "",
+    employeeIds: [],
+    title: "",
+    duration: 60,
+    availability: {
+      Monday: [{ start: "09:00", end: "17:00" }],
+      Tuesday: [{ start: "09:00", end: "17:00" }],
+      Wednesday: [{ start: "09:00", end: "17:00" }],
+      Thursday: [{ start: "09:00", end: "17:00" }],
+      Friday: [{ start: "09:00", end: "17:00" }],
+      Saturday: [],
+      Sunday: []
+    },
+    timezone: "Asia/Kolkata",
+    active: true
+  });
+
+  const [menuConfig, setMenuConfig] = useState<any>(null);
+  const [allConfigs, setAllConfigs] = useState<any[]>([]);
+
+  const fetchConfig = async () => {
+    const empId = user?.id || user?.employeeId;
+    if (!empId) return;
+    try {
+      const res = await fetch(`${API_URL}/appointments/config/${empId}`, { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.employeeId) {
+          if (!data.active) {
+            setAppConfig({
+              ...data,
+              active: false,
+              title: "",
+              duration: 60,
+              employeeIds: data.employeeIds || [],
+              availability: {
+                Monday: [{ start: "09:00", end: "17:00" }],
+                Tuesday: [{ start: "09:00", end: "17:00" }],
+                Wednesday: [{ start: "09:00", end: "17:00" }],
+                Thursday: [{ start: "09:00", end: "17:00" }],
+                Friday: [{ start: "09:00", end: "17:00" }],
+                Saturday: [],
+                Sunday: []
+              }
+            });
+          } else {
+            setAppConfig({
+              ...data,
+              employeeIds: data.employeeIds || []
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching config:", err);
+    }
+  };
+
+  const fetchAllConfigs = async () => {
+    try {
+      const res = await fetch(`${API_URL}/appointments/config`, { cache: "no-store" });
+      if (res.ok) {
+        setAllConfigs(await res.json());
+      }
+    } catch (err) {
+      console.error("Error fetching all configs:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchAllConfigs();
+  }, []);
+
+  useEffect(() => {
+    if ((user?.id || user?.employeeId) && !isConfiguring) {
+      fetchConfig();
+    }
+  }, [user, isConfiguring]);
+
+  const duplicateToAll = (sourceDay: string) => {
+    const sourceSlots = appConfig.availability[sourceDay] || [];
+    const newAvailability = { ...appConfig.availability };
+    Object.keys(newAvailability).forEach(day => {
+      if (day !== "Saturday" && day !== "Sunday") {
+        newAvailability[day] = JSON.parse(JSON.stringify(sourceSlots));
+      }
+    });
+    setAppConfig({ ...appConfig, availability: newAvailability });
+    toast.success(`Copied ${sourceDay}'s schedule to Monday - Friday`);
+  };
+
+  const handleSaveConfig = async () => {
+    setIsConfigSaving(true);
+    try {
+      const empId = appConfig.employeeId || user?.id || user?.employeeId;
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/appointments/config`, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ ...appConfig, employeeId: empId })
+      });
+      if (res.ok) {
+        toast.success("Appointment schedule configuration saved");
+        setConfigModalOpen(false);
+        fetchAllConfigs(); // Refresh the list of all configurations!
+      } else {
+        toast.error("Failed to save configuration");
+      }
+    } catch (err) {
+      toast.error("Error saving configuration");
+    } finally {
+      setIsConfigSaving(false);
+    }
+  };
 
   // Sync user profile from server to detect Google Calendar tokens
   const syncUserProfile = React.useCallback(async () => {
@@ -507,18 +640,25 @@ export default function SchedulePage() {
 
   /* ───── filtered schedules ───── */
   /* ───── filtered schedules ───── */
+  const activeConfigEmployees = useMemo(() => {
+    if (!isConfiguring) return selectedEmployeeIds;
+    const hostId = appConfig.employeeId || user?.id || user?.employeeId || "";
+    return [String(hostId), ...(appConfig.employeeIds || []).map(String)];
+  }, [isConfiguring, selectedEmployeeIds, appConfig.employeeId, appConfig.employeeIds, user]);
+
   const filterByEmployee = (items: any[]) =>
     items.filter(s => {
-      if (selectedEmployeeIds.includes(String(s.employeeId))) return true;
-      if (selectedEmployeeIds.some(id => {
+      const targetIds = activeConfigEmployees;
+      if (targetIds.includes(String(s.employeeId))) return true;
+      if (targetIds.some(id => {
         const emp = employees.find(e => String(e.id) === id);
         return emp && (String(emp.employeeId) === String(s.employeeId));
       })) return true;
 
       if (s.attendees && Array.isArray(s.attendees)) {
         if (s.attendees.some((attId: string) => 
-          selectedEmployeeIds.includes(String(attId)) ||
-          selectedEmployeeIds.some(id => {
+          targetIds.includes(String(attId)) ||
+          targetIds.some(id => {
              const emp = employees.find(e => String(e.id) === id);
              return emp && (String(emp.employeeId) === String(attId));
           })
@@ -530,6 +670,32 @@ export default function SchedulePage() {
   const timeToMinutes = (timeStr: string) => {
     const parts = timeStr.split(':');
     return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+  };
+
+  const isSlotFree = (startMins: number, endMins: number, dateStr: string) => {
+    const hostId = appConfig.employeeId || user?.id || user?.employeeId || "";
+    const allMemberIds = [String(hostId), ...(appConfig.employeeIds || []).map(String)];
+    
+    // Find if any of these members is busy during this time on this date
+    const dateSchedules = schedules.filter(s => {
+      const sDate = typeof s.date === "string" ? s.date.split("T")[0] : dayjs(s.date).format("YYYY-MM-DD");
+      return sDate === dateStr;
+    });
+
+    for (const s of dateSchedules) {
+      const sStart = timeToMinutes(s.startTime);
+      const sEnd = timeToMinutes(s.endTime);
+      
+      const matchesMember = allMemberIds.includes(String(s.employeeId)) || 
+        (s.attendees || []).some((attId: any) => allMemberIds.includes(String(attId)));
+        
+      if (matchesMember) {
+        if (Math.max(startMins, sStart) < Math.min(endMins, sEnd)) {
+          return false; // Busy!
+        }
+      }
+    }
+    return true; // Free!
   };
 
   /* group overlapping events for side-by-side layout */
@@ -679,7 +845,13 @@ export default function SchedulePage() {
       <div className="text-xs max-w-[200px]">
         <div className="font-bold mb-1">{displayTitle}</div>
         {canSeeDetails && event.createdBy && (
-          <div><strong>Created By:</strong> {employees.find(e => String(e.id) === String(event.createdBy) || String(e.employeeId) === String(event.createdBy))?.name || "Unknown"}</div>
+          <div>
+            <strong>Created By:</strong> {
+              String(event.createdBy) === "public"
+                ? (event.title ? event.title.split(" ")[0] : "Public")
+                : (employees.find(e => String(e.id) === String(event.createdBy) || String(e.employeeId) === String(event.createdBy))?.name?.split(" ")[0] || "Unknown")
+            }
+          </div>
         )}
         {canSeeDetails && event.attendees && event.attendees.length > 0 && (
           <div className="mt-1">
@@ -879,7 +1051,7 @@ export default function SchedulePage() {
                     <label className="text-sm font-medium">Date</label>
                     <DatePicker
                       className="w-full h-10"
-                      value={dayjs(form.date)}
+                      value={form.date && dayjs(form.date).isValid() ? dayjs(form.date) : undefined}
                       onChange={d => setForm({ ...form, date: d ? d.format("YYYY-MM-DD") : "" })}
                       format="YYYY-MM-DD"
                       getPopupContainer={(trigger) => trigger.parentNode as HTMLElement}
@@ -979,174 +1151,861 @@ export default function SchedulePage() {
             </DialogContent>
           </Dialog>
         )}
+
+        {canAdd && (
+          <Button
+            variant="outline"
+            className="border-brand-teal text-brand-teal hover:bg-brand-teal/5 font-medium shadow-sm ml-2"
+            onClick={() => {
+              const empId = user?.id || user?.employeeId || "";
+              if (!appConfig.active) {
+                setAppConfig({
+                  employeeId: empId,
+                  title: "",
+                  duration: 60,
+                  availability: {
+                    Monday: [{ start: "09:00", end: "17:00" }],
+                    Tuesday: [{ start: "09:00", end: "17:00" }],
+                    Wednesday: [{ start: "09:00", end: "17:00" }],
+                    Thursday: [{ start: "09:00", end: "17:00" }],
+                    Friday: [{ start: "09:00", end: "17:00" }],
+                    Saturday: [],
+                    Sunday: []
+                  },
+                  timezone: "Asia/Kolkata",
+                  active: true
+                });
+              }
+              setIsConfiguring(true);
+              setViewMode("week");
+            }}
+          >
+            <Calendar className="w-4 h-4 mr-2" />
+            Appointment Setup
+          </Button>
+        )}
       </PageHeader>
 
       {/* ═══════ MAIN LAYOUT ═══════ */}
       <div className="flex gap-0 bg-white rounded-xl shadow-sm border border-border overflow-hidden" style={{ height: "calc(100vh - 180px)" }}>
 
         {/* ─── LEFT SIDEBAR ─── */}
-        <div className="w-[260px] shrink-0 border-r border-border flex flex-col bg-gray-50/50">
-
-          {/* Mini Calendar */}
-          <div className="p-3 border-b border-border">
-            <div className="flex items-center justify-between mb-2 px-1">
-              <h2 className="text-sm font-semibold text-foreground">
-                {dayjs(calendarMonth).format("MMMM YYYY")}
-              </h2>
-              <div className="flex items-center gap-0.5">
-                <button
-                  onClick={() => setCalendarMonth(dayjs(calendarMonth).subtract(1, 'month').toDate())}
-                  className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-gray-200 transition-colors text-muted-foreground"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setCalendarMonth(dayjs(calendarMonth).add(1, 'month').toDate())}
-                  className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-gray-200 transition-colors text-muted-foreground"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-            <DayPicker
-              mode="single"
-              selected={currentDate.toDate()}
-              onSelect={handleDayClick}
-              month={calendarMonth}
-              onMonthChange={setCalendarMonth}
-              showOutsideDays
-              classNames={{
-                root: "w-full [--cell-size:28px]",
-                months: "w-full",
-                month: "w-full",
-                month_caption: "hidden",
-                nav: "hidden",
-                table: "w-full border-collapse",
-                weekdays: "flex w-full",
-                weekday: "flex-1 text-center text-[10px] font-medium text-muted-foreground uppercase py-1 select-none",
-                week: "flex w-full mt-0.5",
-                day: "flex-1 flex items-center justify-center p-0 text-xs [&_button]:w-7 [&_button]:h-7 [&_button]:rounded-full [&_button]:flex [&_button]:items-center [&_button]:justify-center [&_button]:cursor-pointer [&_button]:hover:bg-gray-200 [&_button]:transition-colors [&_button]:font-medium [&_button]:border-0 [&_button]:bg-transparent [&_button]:text-foreground",
-                selected: "[&_button]:!bg-brand-teal [&_button]:!text-white [&_button]:hover:!bg-brand-teal",
-                today: "[&_button]:bg-brand-teal/10 [&_button]:text-brand-teal [&_button]:font-bold",
-                outside: "[&_button]:text-muted-foreground/40",
-              }}
-            />
-          </div>
-
-          {/* Employee List */}
-          <div className="flex-1 flex flex-col min-h-0">
-            <div className="px-4 pt-4 pb-2 border-b border-border/50">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2.5">Employees</h3>
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        {isConfiguring ? (
+          <div className="w-[360px] shrink-0 border-r border-border flex flex-col bg-white overflow-hidden p-6 space-y-6">
+            
+            {/* Header: Title and Close button */}
+            <div className="flex items-start justify-between shrink-0">
+              <div className="flex-1 mr-4">
+                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                  Bookable Appointment Schedule
+                </div>
                 <input
                   type="text"
-                  placeholder="Search employees..."
-                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-brand-teal transition-all"
-                  value={employeeSearch}
-                  onChange={(e) => setEmployeeSearch(e.target.value)}
+                  value={appConfig.title || ""}
+                  onChange={(e) => setAppConfig({ ...appConfig, title: e.target.value })}
+                  className="w-full text-xl font-medium border-b-2 border-slate-300 focus:border-blue-600 outline-none pb-1 mt-2 transition-colors"
                 />
               </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 rounded-full hover:bg-slate-100"
+                onClick={() => setIsConfiguring(false)}
+              >
+                <X className="w-5 h-5 text-slate-600" />
+              </Button>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-1">
-              {employees.filter(emp => emp.name.toLowerCase().includes(employeeSearch.toLowerCase())).map((emp, idx) => {
-                const color = EMPLOYEE_COLORS[idx % EMPLOYEE_COLORS.length];
-                const isChecked = selectedEmployeeIds.includes(String(emp.id));
-                const isCurrentUser = user && (String(emp.id) === String(user.id || user.employeeId) || String(emp.employeeId) === String(user.id || user.employeeId));
+
+            {/* Content body wrapper (scrollable) */}
+             <div className="flex-1 overflow-y-auto pr-1 space-y-6 custom-scrollbar">
+              
+              {/* Active Toggle & Booking Link */}
+              <div className="space-y-3 bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-semibold text-xs text-slate-800">Active Booking Link</div>
+                    <div className="text-[10px] text-slate-500 leading-tight">Enable or disable booking appointments</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    className="w-9 h-5 bg-gray-200 checked:bg-blue-600 rounded-full cursor-pointer"
+                    checked={appConfig.active}
+                    onChange={(e) => setAppConfig({ ...appConfig, active: e.target.checked })}
+                  />
+                </div>
+              </div>
+
+              {/* Select Members Section */}
+              <div className="flex gap-4">
+                <div className="mt-1">
+                  <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 005.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </div>
+                <div className="flex-1 space-y-2">
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-800 leading-tight">Co-hosts / Members</h4>
+                    <p className="text-[11px] text-slate-500 leading-tight">Select other employees who should attend</p>
+                  </div>
+                  
+                  <div className="border border-slate-200 rounded-lg p-2 max-h-40 overflow-y-auto bg-slate-50 space-y-1.5 custom-scrollbar">
+                    <input
+                      type="text"
+                      placeholder="Search member..."
+                      className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-[11px] outline-none mb-1 focus:border-brand-teal"
+                      onChange={(e) => setMemberSearchQuery(e.target.value)}
+                      value={memberSearchQuery}
+                    />
+                    
+                    {/* Render Main Host first (checked & disabled) */}
+                    {(() => {
+                      const hostId = appConfig.employeeId || user?.id || user?.employeeId || "";
+                      const hostEmp = employees.find(e => String(e.id) === String(hostId) || String(e.employeeId) === String(hostId));
+                      if (!hostEmp) return null;
+                      return (
+                        <label key={`host-${hostId}`} className="flex items-center gap-2 text-xs text-slate-700 font-semibold p-0.5 bg-slate-100 rounded cursor-not-allowed opacity-80">
+                          <input
+                            type="checkbox"
+                            checked={true}
+                            disabled={true}
+                            className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-3.5 h-3.5 cursor-not-allowed"
+                          />
+                          <span className="truncate">{hostEmp.name} (Host)</span>
+                        </label>
+                      );
+                    })()}
+
+                    {employees
+                      .filter(emp => {
+                        const hostId = appConfig.employeeId || user?.id || user?.employeeId || "";
+                        return String(emp.id) !== String(hostId) && String(emp.employeeId) !== String(hostId) && emp.name?.toLowerCase().includes((memberSearchQuery || "").toLowerCase());
+                      })
+                      .map((emp) => {
+                        const empId = String(emp.id);
+                        const isChecked = (appConfig.employeeIds || []).includes(empId);
+                        return (
+                          <label key={empId} className="flex items-center gap-2 text-xs text-slate-700 hover:text-slate-900 cursor-pointer p-0.5 hover:bg-slate-100 rounded">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                let newIds = [...(appConfig.employeeIds || [])];
+                                if (e.target.checked) {
+                                  newIds.push(empId);
+                                } else {
+                                  newIds = newIds.filter(id => id !== empId);
+                                }
+                                setAppConfig({ ...appConfig, employeeIds: newIds });
+                              }}
+                              className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-3.5 h-3.5"
+                            />
+                            <span className="truncate">{emp.name}</span>
+                          </label>
+                        );
+                      })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-slate-100" />
+
+              {/* 1. Appointment Duration Section */}
+              <div className="flex gap-4">
+                <div className="mt-1">
+                  <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div className="flex-1 space-y-2">
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-800 leading-tight">Appointment duration</h4>
+                    <p className="text-[11px] text-slate-500 leading-tight">How long should each appointment last?</p>
+                  </div>
+                  
+                  <Select
+                    value={[15, 30, 45, 60, 90, 120].includes(appConfig.duration) ? String(appConfig.duration) : String(appConfig.duration)}
+                    onValueChange={(val) => {
+                      if (val === "custom") {
+                        const isHours = appConfig.duration >= 60;
+                        setCustomDurationValue(isHours ? Math.round(appConfig.duration / 60) : appConfig.duration);
+                        setCustomDurationUnit(isHours ? "hours" : "minutes");
+                        setCustomDurationModalOpen(true);
+                      } else {
+                        setAppConfig({ ...appConfig, duration: parseInt(val) });
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="w-full h-9 bg-slate-50 border-slate-200 text-slate-700 text-xs">
+                      <SelectValue placeholder="Select duration" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="15">15 minutes</SelectItem>
+                      <SelectItem value="30">30 minutes</SelectItem>
+                      <SelectItem value="45">45 minutes</SelectItem>
+                      <SelectItem value="60">1 hour</SelectItem>
+                      <SelectItem value="90">1.5 hours</SelectItem>
+                      <SelectItem value="120">2 hours</SelectItem>
+                      {![15, 30, 45, 60, 90, 120].includes(appConfig.duration) && (
+                        <SelectItem value={String(appConfig.duration)}>
+                          {appConfig.duration % 60 === 0 
+                            ? `${appConfig.duration / 60} ${appConfig.duration / 60 === 1 ? 'hour' : 'hours'}` 
+                            : `${appConfig.duration} minutes`}
+                        </SelectItem>
+                      )}
+                      <SelectItem value="custom">Custom...</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="border-t border-slate-100" />
+
+              {/* 2. General Availability Section */}
+              <div className="flex gap-4">
+                <div className="mt-1">
+                  <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <div className="flex-1 space-y-3">
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-800 leading-tight">General availability</h4>
+                    <p className="text-[11px] text-slate-500 leading-tight">
+                      Set when you're regularly available for appointments.
+                    </p>
+                  </div>
+
+                  <Select
+                    value={appConfig.recurrence || "weekly"}
+                    onValueChange={(val) => {
+                      setAppConfig({
+                        ...appConfig,
+                        recurrence: val,
+                        specificDates: appConfig.specificDates || {}
+                      });
+                    }}
+                  >
+                    <SelectTrigger className="w-36 h-8 bg-slate-50 border-slate-200 text-slate-700 text-xs font-medium">
+                      <SelectValue placeholder="Repeat weekly" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="weekly">Repeat weekly</SelectItem>
+                      <SelectItem value="none">Does not repeat</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {appConfig.recurrence === "none" ? (
+                    /* Specific Dates Editor UI */
+                    <div className="space-y-3 pt-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-semibold text-slate-700">Specific Dates</span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-[10px] text-blue-600 border-blue-200 hover:bg-blue-50 flex items-center gap-1 rounded-md px-2 py-0.5"
+                          onClick={() => {
+                            const todayStr = dayjs(getISTNow()).format("YYYY-MM-DD");
+                            const newSpecificDates = { ...(appConfig.specificDates || {}) };
+                            if (!newSpecificDates[todayStr]) {
+                              newSpecificDates[todayStr] = [{ start: "09:00", end: "17:00" }];
+                            } else {
+                              let offset = 1;
+                              while (newSpecificDates[dayjs(getISTNow()).add(offset, 'day').format("YYYY-MM-DD")]) {
+                                offset++;
+                              }
+                              const nextDateStr = dayjs(getISTNow()).add(offset, 'day').format("YYYY-MM-DD");
+                              newSpecificDates[nextDateStr] = [{ start: "09:00", end: "17:00" }];
+                            }
+                            setAppConfig({ ...appConfig, specificDates: newSpecificDates });
+                          }}
+                        >
+                          <Plus className="w-3.5 h-3.5 mr-0.5" /> Add Date
+                        </Button>
+                      </div>
+
+                      {Object.keys(appConfig.specificDates || {}).length === 0 ? (
+                        <div className="text-center py-4 border border-dashed border-slate-200 rounded-lg text-slate-400 text-[10px]">
+                          No specific dates added yet. Click "+ Add Date".
+                        </div>
+                      ) : (
+                        <div className="space-y-2 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
+                          {Object.entries(appConfig.specificDates || {}).map(([dateStr, slots]: [string, any]) => {
+                            return (
+                              <div key={dateStr} className="flex flex-col gap-1.5 p-2 bg-slate-50 border border-slate-200 rounded-lg">
+                                <div className="flex items-center justify-between gap-2">
+                                  <DatePicker
+                                    className="h-7 text-[11px] flex-1 bg-white border-slate-200"
+                                    value={dayjs(dateStr).isValid() ? dayjs(dateStr) : undefined}
+                                    onChange={(newD) => {
+                                      if (!newD) return;
+                                      const newDateStr = newD.format("YYYY-MM-DD");
+                                      if (newDateStr === dateStr) return;
+                                      const newSpecificDates = { ...(appConfig.specificDates || {}) };
+                                      newSpecificDates[newDateStr] = slots;
+                                      delete newSpecificDates[dateStr];
+                                      setAppConfig({ ...appConfig, specificDates: newSpecificDates });
+                                    }}
+                                    format="MMM D, YYYY"
+                                    allowClear={false}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="p-1 text-slate-400 hover:text-red-600 rounded hover:bg-slate-200"
+                                    onClick={() => {
+                                      const newSpecificDates = { ...(appConfig.specificDates || {}) };
+                                      delete newSpecificDates[dateStr];
+                                      setAppConfig({ ...appConfig, specificDates: newSpecificDates });
+                                    }}
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                  </button>
+                                </div>
+
+                                {slots.map((s: any, sIdx: number) => (
+                                  <div key={sIdx} className="flex items-center gap-1">
+                                    <select
+                                      value={s.start || "09:00"}
+                                      onChange={(e) => {
+                                        const newSpecificDates = { ...(appConfig.specificDates || {}) };
+                                        const updatedSlots = [...(newSpecificDates[dateStr] || [])];
+                                        updatedSlots[sIdx] = { ...updatedSlots[sIdx], start: e.target.value };
+                                        newSpecificDates[dateStr] = updatedSlots;
+                                        setAppConfig({ ...appConfig, specificDates: newSpecificDates });
+                                      }}
+                                      className="bg-white text-slate-700 border border-slate-200 rounded px-1.5 py-0.5 text-[10px] text-center w-[75px] cursor-pointer outline-none"
+                                    >
+                                      {TIME_OPTIONS.map(opt => (
+                                        <option key={`start-${opt.value}`} value={opt.value}>
+                                          {opt.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <span className="text-slate-400 text-[10px]">—</span>
+                                    <select
+                                      value={s.end || "17:00"}
+                                      onChange={(e) => {
+                                        const newSpecificDates = { ...(appConfig.specificDates || {}) };
+                                        const updatedSlots = [...(newSpecificDates[dateStr] || [])];
+                                        updatedSlots[sIdx] = { ...updatedSlots[sIdx], end: e.target.value };
+                                        newSpecificDates[dateStr] = updatedSlots;
+                                        setAppConfig({ ...appConfig, specificDates: newSpecificDates });
+                                      }}
+                                      className="bg-white text-slate-700 border border-slate-200 rounded px-1.5 py-0.5 text-[10px] text-center w-[75px] cursor-pointer outline-none"
+                                    >
+                                      {TIME_OPTIONS.map(opt => (
+                                        <option key={`end-${opt.value}`} value={opt.value}>
+                                          {opt.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    /* Weekly Availability Grid */
+                    <div className="space-y-3.5 pt-2">
+                      {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((day) => {
+                        const slots = appConfig.availability[day] || [];
+                        const isAvailable = slots.length > 0;
+
+                        const toggleDay = (checked: boolean) => {
+                          const newAvail = { ...appConfig.availability };
+                          if (checked) {
+                            newAvail[day] = [{ start: "09:00", end: "17:00" }];
+                          } else {
+                            newAvail[day] = [];
+                          }
+                          setAppConfig({ ...appConfig, availability: newAvail });
+                        };
+
+                        const updateTime = (index: number, field: "start" | "end", val: string) => {
+                          const newAvail = { ...appConfig.availability };
+                          const newSlots = [...(newAvail[day] || [])];
+                          if (newSlots[index]) {
+                            newSlots[index] = { ...newSlots[index], [field]: val };
+                          }
+                          newAvail[day] = newSlots;
+                          setAppConfig({ ...appConfig, availability: newAvail });
+                        };
+
+                        return (
+                          <div key={day} className="flex items-center justify-between text-xs gap-3">
+                            <div className="w-10 shrink-0 font-medium text-slate-600">
+                              {day.substring(0, 3)}
+                            </div>
+
+                            {isAvailable ? (
+                              <div className="flex items-center gap-1.5 flex-1 justify-end">
+                                <select
+                                  value={slots[0]?.start || "09:00"}
+                                  onChange={(e) => updateTime(0, "start", e.target.value)}
+                                  className="bg-[#f1f3f4] text-slate-700 hover:bg-[#e8eaed] transition-colors rounded px-2 py-1.5 text-xs text-center border-none outline-none w-[90px] cursor-pointer"
+                                >
+                                  {TIME_OPTIONS.map(opt => (
+                                    <option key={`start-${opt.value}`} value={opt.value}>
+                                      {opt.label}
+                                    </option>
+                                  ))}
+                                </select>
+                                <span className="text-slate-400 font-light">—</span>
+                                <select
+                                  value={slots[0]?.end || "17:00"}
+                                  onChange={(e) => updateTime(0, "end", e.target.value)}
+                                  className="bg-[#f1f3f4] text-slate-700 hover:bg-[#e8eaed] transition-colors rounded px-2 py-1.5 text-xs text-center border-none outline-none w-[90px] cursor-pointer"
+                                >
+                                  {TIME_OPTIONS.map(opt => (
+                                    <option key={`end-${opt.value}`} value={opt.value}>
+                                      {opt.label}
+                                    </option>
+                                  ))}
+                                </select>
+                                
+                                {/* Make Unavailable (Block/Ban icon) */}
+                                <button
+                                  type="button"
+                                  title="Make unavailable"
+                                  className="p-1 rounded-full hover:bg-slate-100 shrink-0 text-slate-500 transition-colors"
+                                  onClick={() => toggleDay(false)}
+                                >
+                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636" />
+                                  </svg>
+                                </button>
+
+                                {/* Add slot (Plus icon) */}
+                                <button
+                                  type="button"
+                                  title="Add slot"
+                                  className="p-1 rounded-full hover:bg-slate-100 shrink-0 text-slate-500 transition-colors"
+                                  onClick={() => {
+                                    toast.info("Split slots are currently configured for standard schedules.");
+                                  }}
+                                >
+                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                                  </svg>
+                                </button>
+
+                                {/* Copy to all (Copy icon) */}
+                                <button
+                                  type="button"
+                                  title="Copy to all days"
+                                  className="p-1 rounded-full hover:bg-slate-100 shrink-0 text-slate-500 transition-colors"
+                                  onClick={() => {
+                                    duplicateToAll(day);
+                                    toast.success(`Copied ${day}'s schedule to all weekdays`);
+                                  }}
+                                >
+                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                                  </svg>
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-between flex-1 pl-1">
+                                <span className="text-slate-400 italic">Unavailable</span>
+                                <button
+                                  type="button"
+                                  className="p-1 rounded-full hover:bg-slate-100 text-slate-500 shrink-0"
+                                  onClick={() => toggleDay(true)}
+                                >
+                                  <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                                  </svg>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="flex items-center justify-end gap-3 pt-4 border-t shrink-0">
+              <Button
+                variant="ghost"
+                className="text-xs font-semibold hover:bg-slate-100 text-slate-600 px-4 py-2 rounded-full"
+                onClick={() => setIsConfiguring(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="bg-[#1a73e8] hover:bg-[#1557b0] text-white font-medium rounded-full px-6 py-2 text-xs shadow-sm"
+                onClick={async () => {
+                  await handleSaveConfig();
+                  setIsConfiguring(false);
+                }}
+                disabled={isConfigSaving}
+              >
+                {isConfigSaving ? "Saving..." : "Save"}
+              </Button>
+            </div>
+
+          </div>
+        ) : (
+          <div className="w-[260px] shrink-0 border-r border-border flex flex-col bg-gray-50/50">
+            {/* Mini Calendar */}
+            <div className="p-3 border-b border-border">
+              <div className="flex items-center justify-between mb-2 px-1">
+                <h2 className="text-sm font-semibold text-foreground">
+                  {dayjs(calendarMonth).format("MMMM YYYY")}
+                </h2>
+                <div className="flex items-center gap-0.5">
+                  <button
+                    onClick={() => setCalendarMonth(dayjs(calendarMonth).subtract(1, 'month').toDate())}
+                    className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-gray-200 transition-colors text-muted-foreground"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setCalendarMonth(dayjs(calendarMonth).add(1, 'month').toDate())}
+                    className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-gray-200 transition-colors text-muted-foreground"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+              <DayPicker
+                mode="single"
+                selected={currentDate.toDate()}
+                onSelect={handleDayClick}
+                month={calendarMonth}
+                onMonthChange={setCalendarMonth}
+                showOutsideDays
+                classNames={{
+                  root: "w-full [--cell-size:28px]",
+                  months: "w-full",
+                  month: "w-full",
+                  month_caption: "hidden",
+                  nav: "hidden",
+                  table: "w-full border-collapse",
+                  weekdays: "flex w-full",
+                  weekday: "flex-1 text-center text-[10px] font-medium text-muted-foreground uppercase py-1 select-none",
+                  week: "flex w-full mt-0.5",
+                  day: "flex-1 flex items-center justify-center p-0 text-xs [&_button]:w-7 [&_button]:h-7 [&_button]:rounded-full [&_button]:flex [&_button]:items-center [&_button]:justify-center [&_button]:cursor-pointer [&_button]:hover:bg-gray-200 [&_button]:transition-colors [&_button]:font-medium [&_button]:border-0 [&_button]:bg-transparent [&_button]:text-foreground",
+                  selected: "[&_button]:!bg-brand-teal [&_button]:!text-white [&_button]:hover:!bg-brand-teal",
+                  today: "[&_button]:bg-brand-teal/10 [&_button]:text-brand-teal [&_button]:font-bold",
+                  outside: "[&_button]:text-muted-foreground/40",
+                }}
+              />
+            </div>
+
+            {/* Booking pages */}
+            {/* Booking pages Section */}
+            <div className="p-3 border-b border-border bg-white shrink-0 relative flex flex-col">
+              <div className="flex items-center justify-between mb-2 px-1">
+                <h3 className="text-xs font-semibold text-slate-800 tracking-wider">
+                  Booking pages
+                </h3>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => {
+                      const empId = user?.id || user?.employeeId || "";
+                      if (!appConfig.active) {
+                        setAppConfig({
+                          employeeId: empId,
+                          title: "",
+                          duration: 60,
+                          availability: {
+                            Monday: [{ start: "09:00", end: "17:00" }],
+                            Tuesday: [{ start: "09:00", end: "17:00" }],
+                            Wednesday: [{ start: "09:00", end: "17:00" }],
+                            Thursday: [{ start: "09:00", end: "17:00" }],
+                            Friday: [{ start: "09:00", end: "17:00" }],
+                            Saturday: [],
+                            Sunday: []
+                          },
+                          timezone: "Asia/Kolkata",
+                          active: true
+                        });
+                      }
+                      setIsConfiguring(true);
+                      setViewMode("week");
+                    }} 
+                    className="text-slate-500 hover:text-slate-800 p-0.5 rounded hover:bg-slate-100 transition-colors"
+                    title="Edit Booking Page"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setBookingPagesExpanded(!bookingPagesExpanded)}
+                    className="text-slate-500 hover:text-slate-800 p-0.5 rounded hover:bg-slate-100 transition-colors"
+                  >
+                    {bookingPagesExpanded ? (
+                      <ChevronUp className="w-3.5 h-3.5" />
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </div>
+              </div>
+              
+              {/* Booking Page List Item */}
+              {/* Booking Page List Items */}
+              {bookingPagesExpanded && allConfigs.filter(cfg => cfg.active).map((cfg) => {
+                const ownerName = employees.find(e => String(e.id) === String(cfg.employeeId) || String(e.employeeId) === String(cfg.employeeId))?.name || "Employee";
+                const displayTitle = cfg.title || `${ownerName}'s Schedule`;
+                const link = `${window.location.origin}/f/book/${cfg.employeeId}`;
 
                 return (
-                  <label
-                    key={emp.id}
-                    className="flex items-center gap-2.5 px-2 py-1.5 rounded-md cursor-pointer hover:bg-gray-100 transition-colors group"
+                  <div 
+                    key={`sidebar-booking-page-${cfg.employeeId}`}
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-slate-100 cursor-pointer group transition-all relative"
+                    onClick={() => {
+                      setAppConfig(cfg);
+                      setShowDetailsCard(true);
+                    }}
                   >
-                    <div className="relative flex items-center justify-center">
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => toggleEmployee(String(emp.id))}
-                        className="sr-only"
-                      />
-                      <div
-                        className="w-4 h-4 rounded-sm border-2 flex items-center justify-center transition-all"
-                        style={{
-                          backgroundColor: isChecked ? color.bg : "transparent",
-                          borderColor: isChecked ? color.bg : "#d1d5db",
-                        }}
-                      >
-                        {isChecked && (
-                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                            <path d="M2 5L4 7L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        )}
-                      </div>
-                    </div>
-                    <span className="text-sm text-foreground truncate flex-1">
-                      {emp.name}
-                      {isCurrentUser && <span className="text-muted-foreground text-xs ml-1">(You)</span>}
+                    <svg className="w-4 h-4 text-blue-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    
+                    <span className="text-xs font-medium text-slate-700 truncate flex-1">
+                      {displayTitle}
                     </span>
-                  </label>
+
+                    {/* Actions (visible on hover) */}
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      <button
+                        type="button"
+                        className="p-1 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-800"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigator.clipboard.writeText(link);
+                          toast.success("Link copied!");
+                        }}
+                        title="Copy link"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                        </svg>
+                      </button>
+                      
+                      <button
+                        type="button"
+                        className="p-1 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-800"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMenuConfig(cfg);
+                          setShowSidebarMenu(true);
+                        }}
+                        title="Options"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    {/* Dropdown Menu (Popup) for this specific booking page */}
+                    {showSidebarMenu && menuConfig?.employeeId === cfg.employeeId && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setShowSidebarMenu(false); }} />
+                        <div className="absolute right-2 top-8 bg-white border border-slate-200 rounded-lg shadow-xl py-1 w-44 z-50 text-left">
+                          <button
+                            className="w-full px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowSidebarMenu(false);
+                              const link = `${window.location.origin}/f/book/${menuConfig.employeeId}`;
+                              window.open(link, '_blank');
+                            }}
+                          >
+                            Preview
+                          </button>
+                          <button
+                            className="w-full px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowSidebarMenu(false);
+                              setAppConfig(menuConfig);
+                              setIsConfiguring(true);
+                              setViewMode("week");
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <div className="border-t border-slate-100 my-1" />
+                          <button
+                            className="w-full px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 flex items-center gap-2 font-medium"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              setShowSidebarMenu(false);
+                              const isConfirmed = await confirm({
+                                title: "Delete Booking Page",
+                                message: "Are you sure you want to delete this booking page?",
+                                confirmText: "Delete",
+                                destructive: true,
+                              });
+                              if (isConfirmed) {
+                                try {
+                                  const token = localStorage.getItem('token');
+                                  const res = await fetch(`${API_URL}/appointments/config`, {
+                                    method: "POST",
+                                    headers: { 
+                                      "Content-Type": "application/json",
+                                      ...(token ? { "Authorization": `Bearer ${token}` } : {})
+                                    },
+                                    body: JSON.stringify({
+                                      employeeId: menuConfig.employeeId,
+                                      duration: 30,
+                                      availability: { Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [], Sunday: [] },
+                                      active: false
+                                    })
+                                  });
+                                  if (res.ok) {
+                                    setShowDetailsCard(false);
+                                    toast.success("Booking page deleted");
+                                    fetchAllConfigs();
+                                  } else {
+                                    const errText = await res.text();
+                                    toast.error(`Failed to delete: ${res.status} ${errText}`);
+                                  }
+                                } catch (err: any) {
+                                  console.error(err);
+                                  toast.error(`Error: ${err.message || err}`);
+                                }
+                              }
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 );
               })}
             </div>
 
-            {/* Google Calendar Integration */}
-            <div className="p-4 border-t border-border bg-gray-50/80 shrink-0">
-              {user?.googleCalendarTokens ? (
-                <div className="flex flex-col items-center justify-center gap-2">
-                  <div className="w-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold px-3 py-2 rounded-lg flex items-center justify-center gap-2">
-                    <CalendarCheck className="h-4 w-4" />
-                    Google Calendar Connected
-                  </div>
-                  <Button 
-                    type="button"
-                    variant="outline"
-                    onClick={handleManualSync}
-                    disabled={isSyncing}
-                    className="w-full text-brand-teal border-brand-teal/30 hover:bg-brand-teal/5 hover:text-brand-teal h-8 text-xs font-medium"
-                  >
-                    <RefreshCcw className={`h-3.5 w-3.5 mr-1.5 ${isSyncing ? 'animate-spin' : ''}`} />
-                    {isSyncing ? 'Syncing...' : 'Sync Now'}
-                  </Button>
-                  <Button 
-                    type="button"
-                    variant="outline"
-                    onClick={handleDisconnectGoogle}
-                    className="w-full text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 h-8 text-xs font-medium"
-                  >
-                    Disconnect
-                  </Button>
+            {/* Employee List */}
+            <div className="flex-1 flex flex-col min-h-0">
+              <div className="px-4 pt-4 pb-2 border-b border-border/50">
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2.5">Employees</h3>
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="Search employees..."
+                    className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-brand-teal transition-all"
+                    value={employeeSearch}
+                    onChange={(e) => setEmployeeSearch(e.target.value)}
+                  />
                 </div>
-              ) : (
-                <Button 
-                  type="button"
-                  onClick={() => {
-                    if (user) {
-                      const isDesktop = typeof window !== 'undefined' && !!(window as any).electronAPI;
-                      const origin = typeof window !== 'undefined' ? window.location.origin : '';
-                      const baseApi = API_URL.startsWith('http') ? API_URL : `${origin}${API_URL}`;
-                      const authUrl = `${baseApi}/auth/google/url?employeeId=${user.id || user.employeeId}${isDesktop ? '&desktop=true' : ''}`;
-                      if (typeof window !== 'undefined' && (window as any).electronAPI?.openExternal) {
-                        (window as any).electronAPI.openExternal(authUrl);
-                      } else {
-                        window.open(authUrl, '_blank');
-                      }
-                    }
-                  }}
-                  className="w-full bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 hover:text-brand-teal font-semibold text-xs shadow-sm"
-                >
-                  <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">
-                    <path
-                      fill="currentColor"
-                      d="M21.35,11.1H12.18V13.83H18.69C18.36,17.64 15.19,19.27 12.19,19.27C8.36,19.27 5,16.25 5,12C5,7.9 8.2,4.73 12.2,4.73C15.29,4.73 17.1,6.7 17.1,6.7L19,4.72C19,4.72 16.56,2 12.1,2C6.42,2 2.03,6.8 2.03,12C2.03,17.05 6.36,22 12.22,22C17.74,22 21.5,18.33 21.5,12.91C21.5,11.76 21.35,11.1 21.35,11.1V11.1Z"
-                    />
-                  </svg>
-                  Connect Google Calendar
-                </Button>
-              )}
-            </div>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-1">
+                {employees.filter(emp => emp.name.toLowerCase().includes(employeeSearch.toLowerCase())).map((emp, idx) => {
+                  const color = EMPLOYEE_COLORS[idx % EMPLOYEE_COLORS.length];
+                  const isChecked = selectedEmployeeIds.includes(String(emp.id));
+                  const isCurrentUser = user && (String(emp.id) === String(user.id || user.employeeId) || String(emp.employeeId) === String(user.id || user.employeeId));
 
+                  return (
+                    <label
+                      key={emp.id}
+                      className="flex items-center gap-2.5 px-2 py-1.5 rounded-md cursor-pointer hover:bg-gray-100 transition-colors group"
+                    >
+                      <div className="relative flex items-center justify-center">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleEmployee(String(emp.id))}
+                          className="sr-only"
+                        />
+                        <div
+                          className="w-4 h-4 rounded-sm border-2 flex items-center justify-center transition-all"
+                          style={{
+                            backgroundColor: isChecked ? color.bg : "transparent",
+                            borderColor: isChecked ? color.bg : "#d1d5db",
+                          }}
+                        >
+                          {isChecked && (
+                            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                              <path d="M2 5L4 7L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          )}
+                        </div>
+                      </div>
+                      <span className="text-sm text-foreground truncate flex-1">
+                        {emp.name}
+                        {isCurrentUser && <span className="text-muted-foreground text-xs ml-1">(You)</span>}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+
+              {/* Google Calendar Integration */}
+              <div className="p-4 border-t border-border bg-gray-50/80 shrink-0">
+                {user?.googleCalendarTokens ? (
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <div className="w-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold px-3 py-2 rounded-lg flex items-center justify-center gap-2">
+                      <CalendarCheck className="h-4 w-4" />
+                      Google Calendar Connected
+                    </div>
+                    <Button 
+                      type="button"
+                      variant="outline"
+                      onClick={handleManualSync}
+                      disabled={isSyncing}
+                      className="w-full text-brand-teal border-brand-teal/30 hover:bg-brand-teal/5 hover:text-brand-teal h-8 text-xs font-medium"
+                    >
+                      <RefreshCcw className={`h-3.5 w-3.5 mr-1.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                      {isSyncing ? 'Syncing...' : 'Sync Now'}
+                    </Button>
+                    <Button 
+                      type="button"
+                      variant="outline"
+                      onClick={handleDisconnectGoogle}
+                      className="w-full text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 h-8 text-xs font-medium"
+                    >
+                      Disconnect
+                    </Button>
+                  </div>
+                ) : (
+                  <Button 
+                    type="button"
+                    onClick={() => {
+                      if (user) {
+                        const isDesktop = typeof window !== 'undefined' && !!(window as any).electronAPI;
+                        const origin = typeof window !== 'undefined' ? window.location.origin : '';
+                        const baseApi = API_URL.startsWith('http') ? API_URL : `${origin}${API_URL}`;
+                        const authUrl = `${baseApi}/auth/google/url?employeeId=${user.id || user.employeeId}${isDesktop ? '&desktop=true' : ''}`;
+                        if (typeof window !== 'undefined' && (window as any).electronAPI?.openExternal) {
+                          (window as any).electronAPI.openExternal(authUrl);
+                        } else {
+                          window.open(authUrl, '_blank');
+                        }
+                      }
+                    }}
+                    className="w-full bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 hover:text-brand-teal font-semibold text-xs shadow-sm"
+                  >
+                    <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">
+                      <path
+                        fill="currentColor"
+                        d="M21.35,11.1H12.18V13.83H18.69C18.36,17.64 15.19,19.27 12.19,19.27C8.36,19.27 5,16.25 5,12C5,7.9 8.2,4.73 12.2,4.73C15.29,4.73 17.1,6.7 17.1,6.7L19,4.72C19,4.72 16.56,2 12.1,2C6.42,2 2.03,6.8 2.03,12C2.03,17.05 6.36,22 12.22,22C17.74,22 21.5,18.33 21.5,12.91C21.5,11.76 21.35,11.1 21.35,11.1V11.1Z"
+                      />
+                    </svg>
+                    Connect Google Calendar
+                  </Button>
+                )}
+              </div>
+
+            </div>
           </div>
-        </div>
+        )}
 
         {/* ─── RIGHT PANEL ─── */}
         <div className="flex-1 flex flex-col min-w-0">
@@ -1230,6 +2089,69 @@ export default function SchedulePage() {
                   <div className="relative" style={{ height: "1440px" }}>
                     {renderHourGrid()}
                     {isToday && renderCurrentTimeLine("56px")}
+                    {((isConfiguring) || (appConfig.active && !hideAvailabilityFromCalendar)) && 
+                     (appConfig.recurrence === "none"
+                       ? (appConfig.specificDates?.[currentDate.format("YYYY-MM-DD")] || [])
+                       : (appConfig.availability[currentDate.format("dddd")] || [])
+                     ).flatMap((slot: any, idx: number) => {
+                      const sMin = timeToMinutes(slot.start);
+                      const eMin = timeToMinutes(slot.end);
+                      const duration = Number(appConfig.duration) || 30;
+                      
+                      const formatStartHourText = (mins: number) => {
+                        const h = Math.floor(mins / 60);
+                        const ap = h >= 12 ? 'pm' : 'am';
+                        const dh = h % 12 || 12;
+                        return `${dh}${ap}`;
+                      };
+
+                      const dateStr = currentDate.format("YYYY-MM-DD");
+
+                      if (isConfiguring) {
+                        const subSlots = [];
+                        for (let current = sMin; current + duration <= eMin; current += duration) {
+                          if (isSlotFree(current, current + duration, dateStr)) {
+                            subSlots.push({ start: current, end: current + duration });
+                          }
+                        }
+                        return subSlots.map((s, sIdx) => (
+                          <div
+                            key={`avail-day-grid-${idx}-${sIdx}`}
+                            className="absolute left-[60px] right-2 bg-[#e8f0fe] border border-[#1a73e8] rounded-md pointer-events-none z-5"
+                            style={{
+                              top: `${s.start + 2}px`,
+                              height: `${duration - 4}px`
+                            }}
+                          />
+                        ));
+                      } else {
+                        if (!isSlotFree(sMin, sMin + duration, dateStr)) {
+                          return null;
+                        }
+                        return (
+                          <div
+                            key={`avail-day-grid-single-${idx}`}
+                            className="absolute left-[60px] w-6 bg-[#e8f0fe]/70 border-l-2 border-[#1a73e8] pointer-events-none flex flex-col items-start overflow-visible"
+                            style={{
+                              top: `${sMin}px`,
+                              height: `${eMin - sMin}px`,
+                              zIndex: 5
+                            }}
+                          >
+                            <div className="flex items-center gap-1 mt-1 ml-1.5 overflow-visible">
+                              <div className="w-3.5 h-3.5 rounded bg-[#1a73e8] flex items-center justify-center text-white shrink-0 shadow-sm">
+                                <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24">
+                                  <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10H7v-2h10v2zm0-4H7V7h10v2z" />
+                                </svg>
+                              </div>
+                              <span className="text-[10px] font-semibold text-[#3c4043] whitespace-nowrap bg-white/80 px-1 rounded shadow-sm">
+                                {`${appConfig.title || "Appointment"}, ${formatStartHourText(sMin)}`}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      }
+                    })}
                     <div className="absolute top-0 bottom-0 right-0" style={{ left: "56px" }}>
                       {layoutEvents(filterByEmployee(schedules)).map(({ event, column, totalColumns }) =>
                         renderEventBlock(event, column, totalColumns)
@@ -1329,6 +2251,79 @@ export default function SchedulePage() {
                             </div>
                           )}
 
+                          {/* Availability Highlights */}
+                          {((isConfiguring) || (appConfig.active && !hideAvailabilityFromCalendar)) && 
+                           (appConfig.recurrence === "none"
+                             ? (appConfig.specificDates?.[dateStr] || [])
+                             : (appConfig.availability[day.format("dddd")] || [])
+                           ).flatMap((slot: any, idx: number) => {
+                            const sMin = timeToMinutes(slot.start);
+                            const eMin = timeToMinutes(slot.end);
+                            const duration = Number(appConfig.duration) || 30;
+
+                            const formatStartHourText = (mins: number) => {
+                              const h = Math.floor(mins / 60);
+                              const ap = h >= 12 ? 'pm' : 'am';
+                              const dh = h % 12 || 12;
+                              return `${dh}${ap}`;
+                            };
+
+                            if (isConfiguring) {
+                              const subSlots = [];
+                              for (let current = sMin; current + duration <= eMin; current += duration) {
+                                if (isSlotFree(current, current + duration, dateStr)) {
+                                  subSlots.push({ start: current, end: current + duration });
+                                }
+                              }
+                              return subSlots.map((s, sIdx) => (
+                                <div
+                                  key={`avail-grid-${dateStr}-${idx}-${sIdx}`}
+                                  className="absolute left-1 right-1 bg-[#e8f0fe] border border-[#1a73e8] rounded-md pointer-events-none p-1 flex items-center overflow-hidden"
+                                  style={{
+                                    top: `${s.start + 2}px`,
+                                    height: `${duration - 4}px`,
+                                    zIndex: 5
+                                  }}
+                                >
+                                  <div className="w-3.5 h-3.5 rounded bg-[#1a73e8] flex items-center justify-center text-white shrink-0">
+                                    <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24">
+                                      <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10H7v-2h10v2zm0-4H7V7h10v2z" />
+                                    </svg>
+                                  </div>
+                                  <span className="text-[9px] font-semibold text-[#1a73e8] ml-1 truncate">
+                                    {`${appConfig.title || "Appointment"}, ${formatStartHourText(s.start)}`}
+                                  </span>
+                                </div>
+                              ));
+                            } else {
+                              if (!isSlotFree(sMin, sMin + duration, dateStr)) {
+                                return null;
+                              }
+                              return (
+                                <div
+                                  key={`avail-grid-single-${dateStr}-${idx}`}
+                                  className="absolute left-1 w-5 bg-[#e8f0fe]/70 border-l-2 border-[#1a73e8] pointer-events-none flex flex-col items-start overflow-visible"
+                                  style={{
+                                    top: `${sMin}px`,
+                                    height: `${eMin - sMin}px`,
+                                    zIndex: 5
+                                  }}
+                                >
+                                  <div className="flex items-center gap-1 mt-1 ml-1 overflow-visible">
+                                    <div className="w-3.5 h-3.5 rounded bg-[#1a73e8] flex items-center justify-center text-white shrink-0 shadow-sm">
+                                      <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10H7v-2h10v2zm0-4H7V7h10v2z" />
+                                      </svg>
+                                    </div>
+                                    <span className="text-[10px] font-semibold text-[#3c4043] whitespace-nowrap bg-white/80 px-1 rounded shadow-sm">
+                                      {`${appConfig.title || "Appointment"}, ${formatStartHourText(sMin)}`}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            }
+                          })}
+
                           {/* Events */}
                           <div className="absolute inset-0">
                             {dayLayouts.map(({ event, column, totalColumns }) =>
@@ -1345,6 +2340,277 @@ export default function SchedulePage() {
           )}
         </div>
       </div>
+      {/* Google Calendar Styled Booking Page Details Card Dialog */}
+      <Dialog open={showDetailsCard} onOpenChange={setShowDetailsCard}>
+        <DialogContent className="sm:max-w-[460px] p-0 border-none bg-white rounded-2xl overflow-hidden shadow-2xl">
+          
+          {/* Top Actions Bar */}
+          <div className="flex items-center justify-between px-4 py-2 border-b border-slate-100 shrink-0 bg-slate-50/50">
+            <div className="flex items-center gap-1.5">
+              
+              {/* Edit button */}
+              <button
+                type="button"
+                className="p-1.5 rounded-full hover:bg-slate-200 text-slate-600 transition-colors"
+                onClick={() => {
+                  setShowDetailsCard(false);
+                  setIsConfiguring(true);
+                  setViewMode("week");
+                }}
+                title="Edit booking page"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+              </button>
+
+              {/* Delete button */}
+              <button
+                type="button"
+                className="p-1.5 rounded-full hover:bg-slate-200 text-slate-600 transition-colors"
+                onClick={async () => {
+                  const isConfirmed = await confirm({
+                    title: "Delete Booking Page",
+                    message: "Are you sure you want to delete this booking page?",
+                    confirmText: "Delete",
+                    destructive: true,
+                  });
+                  if (isConfirmed) {
+                    try {
+                      const token = localStorage.getItem('token');
+                      const res = await fetch(`${API_URL}/appointments/config`, {
+                        method: "POST",
+                        headers: { 
+                          "Content-Type": "application/json",
+                          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+                        },
+                        body: JSON.stringify({
+                          employeeId: appConfig.employeeId || user?.id || user?.employeeId || "",
+                          duration: 30,
+                          availability: { Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [], Sunday: [] },
+                          active: false
+                        })
+                      });
+                      if (res.ok) {
+                        setAppConfig({ 
+                          ...appConfig, 
+                          active: false,
+                          availability: { Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [], Sunday: [] } 
+                        });
+                        setShowDetailsCard(false);
+                        toast.success("Booking page deleted");
+                        fetchAllConfigs(); // Refresh configuration list!
+                      } else {
+                        const errText = await res.text();
+                        toast.error(`Failed to delete: ${res.status} ${errText}`);
+                      }
+                    } catch (err: any) {
+                      console.error(err);
+                      toast.error(`Error: ${err.message || err}`);
+                    }
+                  }
+                }}
+                title="Delete booking page"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+
+              {/* More options button (3-dots) */}
+              <button
+                type="button"
+                className="p-1.5 rounded-full hover:bg-slate-200 text-slate-600 transition-colors relative"
+                onClick={() => setShowSidebarMenu(!showSidebarMenu)}
+                title="Options"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                </svg>
+              </button>
+
+            </div>
+            
+            <button
+              type="button"
+              className="p-1.5 rounded-full hover:bg-slate-200 text-slate-600 transition-colors"
+              onClick={() => setShowDetailsCard(false)}
+            >
+              <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Details Body */}
+          <div className="p-6 space-y-5 text-slate-700">
+            
+            {/* Title Section */}
+            <div className="flex gap-4 items-start">
+              <div className="w-3.5 h-3.5 rounded bg-blue-600 mt-2.5 shrink-0" />
+              <div className="space-y-0.5">
+                <DialogTitle className="text-xl font-medium text-slate-900 leading-tight">
+                  {appConfig.title || "ABCD"}
+                </DialogTitle>
+                <DialogDescription className="sr-only">
+                  Booking page details
+                </DialogDescription>
+                <p className="text-xs text-slate-500 font-medium">
+                  {appConfig.duration} min bookable appointments
+                </p>
+                <p className="text-xs text-slate-500">
+                  Weekly on weekdays
+                </p>
+              </div>
+            </div>
+
+            {/* Booking Form Info */}
+            <div className="flex gap-4 items-start">
+              <div className="mt-1 shrink-0 text-slate-500">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </div>
+              <div className="space-y-0.5">
+                <h4 className="text-xs font-semibold text-slate-800 uppercase tracking-wide leading-tight">
+                  Booking form
+                </h4>
+                <p className="text-xs text-slate-500">
+                  First name · Surname · Email address
+                </p>
+              </div>
+            </div>
+
+            {/* Owner Info */}
+            <div className="flex gap-4 items-start">
+              <div className="mt-1 shrink-0 text-slate-500">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              </div>
+              <div className="space-y-0.5">
+                <h4 className="text-xs font-semibold text-slate-800 uppercase tracking-wide leading-tight">
+                  {employees.find(e => String(e.id) === String(appConfig.employeeId) || String(e.employeeId) === String(appConfig.employeeId))?.name || user?.name || "Employee"}
+                </h4>
+                <p className="text-xs text-slate-500">
+                  Busy times on this calendar are unavailable for booking
+                </p>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Bottom Toolbar */}
+          <div className="flex items-center justify-end gap-3 px-6 py-4 bg-slate-50 border-t border-slate-100 shrink-0">
+            <Button
+              variant="outline"
+              className="rounded-full px-5 py-2 h-9 text-xs text-blue-600 border-blue-200 hover:bg-blue-50 font-semibold gap-1.5 flex items-center"
+              onClick={() => {
+                const link = `${window.location.origin}/f/book/${appConfig.employeeId}`;
+                window.open(link, '_blank');
+              }}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+              Preview
+            </Button>
+            <Button
+              className="rounded-full px-5 py-2 h-9 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold gap-1.5 flex items-center shadow-sm"
+              onClick={() => {
+                const link = `${window.location.origin}/f/book/${appConfig.employeeId}`;
+                navigator.clipboard.writeText(link);
+                toast.success("Link copied!");
+              }}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+              </svg>
+              Copy link
+            </Button>
+          </div>
+
+        </DialogContent>
+      </Dialog>
+      {/* Custom Duration Dialog Modal */}
+      <Dialog open={customDurationModalOpen} onOpenChange={setCustomDurationModalOpen}>
+        <DialogContent className="sm:max-w-[320px] p-6 border-none bg-white rounded-2xl shadow-2xl">
+          <DialogTitle className="text-lg font-medium text-slate-900">
+            Custom duration
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            Set custom duration for appointments
+          </DialogDescription>
+          
+          <div className="flex items-center gap-3 py-4 justify-center">
+            {/* Number Input */}
+            <div className="relative flex items-center bg-slate-100 rounded-lg px-3 py-2 w-24">
+              <input
+                type="number"
+                min="1"
+                className="bg-transparent text-slate-800 text-sm font-semibold w-full outline-none text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                value={customDurationValue}
+                onChange={(e) => setCustomDurationValue(parseInt(e.target.value) || 1)}
+              />
+              <div className="flex flex-col ml-1 shrink-0 text-slate-500">
+                <button 
+                  type="button" 
+                  onClick={() => setCustomDurationValue(prev => prev + 1)}
+                  className="hover:text-slate-800 transition-colors p-0.5"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+                  </svg>
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => setCustomDurationValue(prev => Math.max(1, prev - 1))}
+                  className="hover:text-slate-800 transition-colors p-0.5"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Unit Dropdown */}
+            <Select 
+              value={customDurationUnit} 
+              onValueChange={(val: "minutes" | "hours") => setCustomDurationUnit(val)}
+            >
+              <SelectTrigger className="w-32 h-10 bg-slate-100 border-none text-slate-800 text-sm font-semibold rounded-lg focus:ring-0">
+                <SelectValue placeholder="Unit" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="minutes">minutes</SelectItem>
+                <SelectItem value="hours">hours</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Footer Actions */}
+          <div className="flex items-center justify-end gap-4 pt-2">
+            <button
+              type="button"
+              className="text-sm font-semibold text-blue-600 hover:text-blue-800 px-3 py-1.5 transition-colors"
+              onClick={() => setCustomDurationModalOpen(false)}
+            >
+              Cancel
+            </button>
+            <Button
+              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-full px-5 py-2 text-xs shadow-sm h-8"
+              onClick={() => {
+                const finalMins = customDurationUnit === "hours" ? customDurationValue * 60 : customDurationValue;
+                setAppConfig({ ...appConfig, duration: finalMins });
+                setCustomDurationModalOpen(false);
+              }}
+            >
+              Done
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

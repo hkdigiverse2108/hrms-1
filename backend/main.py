@@ -2617,6 +2617,111 @@ async def get_free_slots(request: dict, db=Depends(get_db)):
 
     return {"freeSlots": free_slots}
 
+
+# --- Appointment Scheduling APIs ---
+@app.get("/api/appointments/config")
+async def get_all_appointment_configs(db=Depends(get_db)):
+    cursor = db.appointment_configs.find({})
+    configs = await cursor.to_list(length=1000)
+    return [crud.fix_id(c) for c in configs]
+
+@app.get("/api/appointments/config/{employee_id}")
+async def get_appointment_config(employee_id: str, db=Depends(get_db)):
+    config = await crud.get_appointment_config(db, employee_id)
+    if not config:
+        return {
+            "employeeId": employee_id,
+            "duration": 30,
+            "availability": {
+                "Monday": [{"start": "09:00", "end": "17:00"}],
+                "Tuesday": [{"start": "09:00", "end": "17:00"}],
+                "Wednesday": [{"start": "09:00", "end": "17:00"}],
+                "Thursday": [{"start": "09:00", "end": "17:00"}],
+                "Friday": [{"start": "09:00", "end": "17:00"}],
+                "Saturday": [],
+                "Sunday": []
+            },
+            "timezone": "Asia/Kolkata",
+            "active": True
+        }
+    return config
+
+@app.post("/api/appointments/config")
+async def save_appointment_config(config: dict, db=Depends(get_db), _token=Depends(auth.require_auth)):
+    curr_user_id = str(_token.get("sub"))
+    target_emp_id = config.get("employeeId")
+    if not target_emp_id:
+        raise HTTPException(status_code=400, detail="employeeId is required")
+    
+    if curr_user_id != str(target_emp_id):
+        user_role = _token.get("role")
+        if user_role not in ["Admin", "HR"]:
+            raise HTTPException(status_code=403, detail="Not authorized to edit this configuration")
+            
+    return await crud.save_appointment_config(db, config)
+
+@app.get("/api/appointments/public/slots")
+async def get_public_slots(employeeId: str, date: str, db=Depends(get_db)):
+    if not employeeId or not date:
+        raise HTTPException(status_code=400, detail="employeeId and date are required")
+    slots = await crud.calculate_public_slots(db, employeeId, date)
+    return {"slots": slots}
+
+@app.post("/api/appointments/public/book")
+async def public_book_appointment(booking: dict, db=Depends(get_db)):
+    employee_id = booking.get("employeeId")
+    date_str = booking.get("date")
+    start_time = booking.get("startTime")
+    end_time = booking.get("endTime")
+    
+    if not all([employee_id, date_str, start_time, end_time]):
+        raise HTTPException(status_code=400, detail="Missing required booking details")
+        
+    all_schedules = await crud.get_schedules(db, date_str=date_str)
+    if all_schedules:
+        for existing in all_schedules:
+            if str(existing.get("employeeId")) != str(employee_id) and str(employee_id) not in [str(x) for x in existing.get("attendees", []) or []]:
+                continue
+            ex_start = existing.get("startTime")
+            ex_end = existing.get("endTime")
+            if ex_start and ex_end:
+                if max(start_time, ex_start) < min(end_time, ex_end):
+                    raise HTTPException(status_code=400, detail="Requested slot is no longer available.")
+
+    from bson import ObjectId
+    q = {"_id": ObjectId(employee_id)} if ObjectId.is_valid(employee_id) else {"_id": employee_id}
+    emp = await db.employees.find_one(q)
+    if not emp:
+        raise HTTPException(status_code=404, detail="Employee not found")
+        
+    client_name = booking.get("attendeeName", "Client")
+    client_email = booking.get("attendeeEmail", "")
+    reason = booking.get("description", "")
+
+    config = await db.appointment_configs.find_one({"employeeId": employee_id})
+    co_host_ids = []
+    if config and config.get("employeeIds"):
+        co_host_ids = [str(x) for x in config.get("employeeIds")]
+    
+    schedule_data = {
+        "title": booking.get("title", f"Appointment with {client_name}"),
+        "description": f"Client Name: {client_name}\nEmail: {client_email}\nNotes: {reason}",
+        "employeeId": employee_id,
+        "employeeName": emp.get("name", "Unknown"),
+        "startTime": start_time,
+        "endTime": end_time,
+        "type": "appointment",
+        "attendees": co_host_ids,
+        "createdBy": "public"
+    }
+    
+    from datetime import datetime
+    schedule_data["date"] = datetime.strptime(date_str, "%Y-%m-%d")
+    
+    created = await crud.create_schedule(db, schedule_data)
+    return created
+
+
 # --- Google Calendar Integration API ---
 from fastapi.responses import RedirectResponse
 

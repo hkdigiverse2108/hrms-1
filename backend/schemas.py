@@ -2230,6 +2230,27 @@ class Schedule(ScheduleBase):
         from_attributes = True
 
 
+class TimeSlot(BaseModel):
+    start: str
+    end: str
+
+class AppointmentConfigBase(BaseModel):
+    employeeId: str
+    duration: int
+    availability: Dict[str, List[TimeSlot]]
+    timezone: Optional[str] = "Asia/Kolkata"
+    active: Optional[bool] = True
+
+class AppointmentConfigCreate(AppointmentConfigBase):
+    pass
+
+class AppointmentConfig(AppointmentConfigBase):
+    id: str
+    class Config:
+        from_attributes = True
+
+
+
 # User Input Stats Schemas
 class UserInputStatsBase(BaseModel):
     employeeId: str
