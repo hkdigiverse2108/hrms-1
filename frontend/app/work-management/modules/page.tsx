@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Briefcase, Loader2, Plus, ArrowLeft, ChevronRight, User, Calendar, Filter, Pencil, Trash2, BookOpen, MessageSquare, Send, Eye, SlidersHorizontal, Key, Link2, History, Shuffle } from "lucide-react";
+import { Briefcase, Loader2, Plus, ArrowLeft, ChevronRight, User, Calendar, Filter, Pencil, Trash2, BookOpen, MessageSquare, Send, Eye, SlidersHorizontal, Key, Link2, History, Shuffle, GripVertical, CheckSquare } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -102,6 +102,15 @@ export default function ModulesPage() {
     estimatedHours: 0
   });
 
+  // Module Tasks State
+  const [newModuleTasks, setNewModuleTasks] = useState<{ title: string; description: string; estimatedHours: number }[]>([]);
+  const [newModuleTaskTitle, setNewModuleTaskTitle] = useState("");
+  const [moduleTasks, setModuleTasks] = useState<any[]>([]);
+  const [loadingModuleTasks, setLoadingModuleTasks] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskDesc, setNewTaskDesc] = useState("");
+  const [newTaskHours, setNewTaskHours] = useState(0);
+
   // Module Details / Edit State
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [selectedModule, setSelectedModule] = useState<any>(null);
@@ -126,6 +135,14 @@ export default function ModulesPage() {
   const [logsOpen, setLogsOpen] = useState(false);
   const [projectLogs, setProjectLogs] = useState<any[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+
+  // Drag-and-Drop State
+  const [draggedModule, setDraggedModule] = useState<{index: number, phaseName: string | null} | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<{index: number, phaseName: string | null} | null>(null);
+
+  // Auto-Distribute State
+  const [isDistributeModalOpen, setIsDistributeModalOpen] = useState(false);
+  const [memberCapacities, setMemberCapacities] = useState<Record<string, number>>({});
 
   // Filters State
   const [filterPhase, setFilterPhase] = useState<string>("all");
@@ -209,6 +226,87 @@ export default function ModulesPage() {
       toast.error("Error updating module");
     }
     setEditingCell(null);
+  };
+
+  // Drag-and-Drop Handlers
+  const handleDragStart = (e: React.DragEvent, index: number, phaseName: string | null) => {
+    setDraggedModule({ index, phaseName });
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", ""); // needed for Firefox
+    // Make the drag image slightly transparent
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = "0.4";
+    }
+  };
+
+  const handleDragEnd = (e: React.DragEvent) => {
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = "1";
+    }
+    setDraggedModule(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number, phaseName: string | null) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    // Only allow drop within the same phase
+    if (draggedModule && draggedModule.phaseName === phaseName) {
+      setDragOverIndex({ index, phaseName });
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent, dropIndex: number, phaseName: string | null) => {
+    e.preventDefault();
+    if (!draggedModule || !selectedProject) return;
+    if (draggedModule.phaseName !== phaseName) return;
+    if (draggedModule.index === dropIndex) {
+      setDraggedModule(null);
+      setDragOverIndex(null);
+      return;
+    }
+
+    const allModules = [...(selectedProject.modules || [])];
+    // Get modules for this specific phase in order
+    const phaseModules = allModules.filter((m: any) =>
+      phaseName === null ? !m.phaseName : m.phaseName === phaseName
+    );
+    // Get modules NOT in this phase (to preserve them)
+    const otherModules = allModules.filter((m: any) =>
+      phaseName === null ? !!m.phaseName : m.phaseName !== phaseName
+    );
+
+    // Reorder within this phase's modules
+    const [movedItem] = phaseModules.splice(draggedModule.index, 1);
+    phaseModules.splice(dropIndex, 0, movedItem);
+
+    // Recombine: put phase modules back in their original position relative to other modules
+    const reorderedModules = [...otherModules, ...phaseModules];
+
+    try {
+      const res = await fetch(`${API_URL}/projects/${selectedProject.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...selectedProject,
+          modules: reorderedModules,
+          performedBy: user?.id,
+          userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+        })
+      });
+      if (res.ok) {
+        toast.success("Module order updated");
+        fetchData();
+      } else {
+        toast.error("Failed to reorder modules");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error reordering modules");
+    }
+
+    setDraggedModule(null);
+    setDragOverIndex(null);
   };
 
   const [quickAddInputs, setQuickAddInputs] = useState<Record<string, any>>({});
@@ -405,7 +503,143 @@ export default function ModulesPage() {
     return employees.filter(e => ids.has(e.id));
   }, [selectedProject, employees]);
 
-  const handleAutoDistributeModules = async () => {
+  useEffect(() => {
+    if (projectTeamMembers.length > 0) {
+      const initialCaps: Record<string, number> = {};
+      projectTeamMembers.forEach(m => {
+        initialCaps[m.id] = 1.0; // default normal capacity
+      });
+      setMemberCapacities(initialCaps);
+    }
+  }, [projectTeamMembers]);
+
+  const fetchModuleTasks = async () => {
+    if (!selectedProjectId || !selectedModule) return;
+    setLoadingModuleTasks(true);
+    try {
+      const res = await fetch(`${API_URL}/wm-tasks`);
+      if (res.ok) {
+        const data = await res.json();
+        const filtered = data.filter((t: any) => 
+          t.projectId === selectedProjectId && 
+          t.moduleName === selectedModule.name &&
+          (t.phase === selectedModule.phaseName || (!t.phase && !selectedModule.phaseName))
+        );
+        setModuleTasks(filtered);
+      }
+    } catch (err) {
+      console.error("Error fetching module tasks:", err);
+    } finally {
+      setLoadingModuleTasks(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedModule) {
+      fetchModuleTasks();
+    }
+  }, [selectedModule, selectedProjectId]);
+
+  const handleAddModuleTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTaskTitle.trim() || !selectedModule || !selectedProjectId) return;
+
+    try {
+      const task_assignee_id = selectedModule.assignedToId || "";
+      const task_assignee_name = selectedModule.assignedToName || "Unassigned";
+      
+      const payload = {
+        title: newTaskTitle.trim(),
+        description: newTaskDesc.trim(),
+        projectId: selectedProjectId,
+        projectName: selectedProject?.title,
+        assignedToId: task_assignee_id,
+        assignedToName: task_assignee_name,
+        dueDate: selectedModule.dueDate || null,
+        moduleName: selectedModule.name,
+        moduleDeadline: selectedModule.dueDate || null,
+        status: "todo",
+        priority: selectedModule.priority || "medium",
+        estimatedHours: newTaskHours || 0,
+        phase: selectedModule.phaseName || null,
+        performedBy: user?.id || "Unknown",
+        userName: user?.name || "User"
+      };
+
+      const res = await fetch(`${API_URL}/wm-tasks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        toast.success("Task added to module successfully!");
+        setNewTaskTitle("");
+        setNewTaskDesc("");
+        setNewTaskHours(0);
+        fetchModuleTasks();
+      } else {
+        toast.error("Failed to add task to module");
+      }
+    } catch (err) {
+      console.error("Error adding task:", err);
+      toast.error("An error occurred");
+    }
+  };
+
+  const handleToggleTaskStatus = async (task: any) => {
+    try {
+      const newStatus = task.status === "completed" ? "todo" : "completed";
+      const res = await fetch(`${API_URL}/wm-tasks/${task.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...task,
+          status: newStatus,
+          performedBy: user?.id || "Unknown",
+          userName: user?.name || "User"
+        })
+      });
+
+      if (res.ok) {
+        toast.success("Task status updated!");
+        fetchModuleTasks();
+      } else {
+        toast.error("Failed to update task status");
+      }
+    } catch (err) {
+      console.error("Error toggling task:", err);
+      toast.error("An error occurred");
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    const isConfirmed = await confirm({
+      title: "Delete Task",
+      message: "Are you sure you want to delete this task? This action cannot be undone.",
+      destructive: true,
+      confirmText: "Delete"
+    });
+    if (!isConfirmed) return;
+
+    try {
+      const res = await fetch(`${API_URL}/wm-tasks/${taskId}`, {
+        method: "DELETE"
+      });
+
+      if (res.ok) {
+        toast.success("Task deleted successfully!");
+        fetchModuleTasks();
+      } else {
+        toast.error("Failed to delete task");
+      }
+    } catch (err) {
+      console.error("Error deleting task:", err);
+      toast.error("An error occurred");
+    }
+  };
+
+  const handleOpenDistributeModal = () => {
     if (!selectedProject || !selectedProject.modules || selectedProject.modules.length === 0) {
       toast.error("No modules to distribute");
       return;
@@ -414,9 +648,24 @@ export default function ModulesPage() {
       toast.error("No team members found for this project");
       return;
     }
+    setIsDistributeModalOpen(true);
+  };
+
+  const handleAutoDistributeModules = async () => {
+    if (!selectedProject || !selectedProject.modules || selectedProject.modules.length === 0) {
+      toast.error("No modules to distribute");
+      return;
+    }
+    
+    // Filter out team members excluded from distribution (capacity <= 0)
+    const activeTeam = projectTeamMembers.filter(member => (memberCapacities[member.id] || 1.0) > 0);
+    
+    if (activeTeam.length === 0) {
+      toast.error("Please select at least one active team member for distribution");
+      return;
+    }
 
     // Sort modules by estimatedHours descending (Longest Processing Time first)
-    // Use 1 as a fallback weight if hours are not entered
     const sortedModules = [...selectedProject.modules].sort((a, b) => {
       const aHrs = a.estimatedHours || 1;
       const bHrs = b.estimatedHours || 1;
@@ -424,20 +673,22 @@ export default function ModulesPage() {
     });
 
     // Initialize workload tracking
-    const team = projectTeamMembers;
     const workload: Record<string, number> = {};
-    team.forEach(member => {
+    activeTeam.forEach(member => {
       workload[member.id] = 0;
     });
 
-    // Greedy assignment
+    // Greedy assignment considering capacity multipliers:
+    // We allocate to the member whose current virtual workload (workload / capacity) is lowest.
     const updatedModules = sortedModules.map(m => {
-      let lowestMember = team[0];
-      let lowestHours = Infinity;
+      let lowestMember = activeTeam[0];
+      let lowestVirtualWorkload = Infinity;
       
-      team.forEach(member => {
-        if (workload[member.id] < lowestHours) {
-          lowestHours = workload[member.id];
+      activeTeam.forEach(member => {
+        const capacity = memberCapacities[member.id] || 1.0;
+        const virtualWorkload = workload[member.id] / capacity;
+        if (virtualWorkload < lowestVirtualWorkload) {
+          lowestVirtualWorkload = virtualWorkload;
           lowestMember = member;
         }
       });
@@ -464,7 +715,8 @@ export default function ModulesPage() {
       });
 
       if (res.ok) {
-        toast.success("Modules successfully distributed and balanced across the team!");
+        toast.success("Modules successfully distributed based on user priority!");
+        setIsDistributeModalOpen(false);
         fetchData();
       } else {
         toast.error("Failed to save distributed modules");
@@ -478,6 +730,8 @@ export default function ModulesPage() {
   const openAddModal = (phase: any = null) => {
     setActivePhase(phase);
     setFormData({ title: "", dueDate: "", assignedToId: user?.id || "", stage: "todo", priority: "medium", estimatedHours: 0 });
+    setNewModuleTasks([]);
+    setNewModuleTaskTitle("");
     setIsModalOpen(true);
   };
 
@@ -531,7 +785,8 @@ export default function ModulesPage() {
         priority: formData.priority,
         estimatedHours: formData.estimatedHours || 0,
         researchWork: "",
-        comments: []
+        comments: [],
+        tasks: newModuleTasks
       };
       
       const updatedModules = [...(project.modules || []), newModule];
@@ -915,7 +1170,7 @@ export default function ModulesPage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={handleAutoDistributeModules}
+                            onClick={handleOpenDistributeModal}
                             className="h-7 text-xs font-bold gap-1.5 border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700"
                           >
                             <Shuffle className="w-3.5 h-3.5 text-brand-teal" /> Auto-Distribute Modules
@@ -1018,9 +1273,9 @@ export default function ModulesPage() {
                             <Table>
                               <TableHeader className="bg-slate-50/30">
                                 <TableRow className="hover:bg-transparent">
+                                  {canManageModule && <TableHead className="font-bold text-slate-700 h-10 py-2 w-10"></TableHead>}
                                   <TableHead className="font-bold text-slate-700 h-10 py-2">Module Name</TableHead>
                                   <TableHead className="font-bold text-slate-700 h-10 py-2">Stage</TableHead>
-                                  <TableHead className="font-bold text-slate-700 h-10 py-2">Priority</TableHead>
                                   <TableHead className="font-bold text-slate-700 h-10 py-2">Hours</TableHead>
                                   <TableHead className="font-bold text-slate-700 h-10 py-2">Assigned To</TableHead>
                                   <TableHead className="font-bold text-slate-700 h-10 py-2">Due Date</TableHead>
@@ -1029,7 +1284,32 @@ export default function ModulesPage() {
                               </TableHeader>
                               <TableBody>
                                 {phaseModules.map((m: any, idx: number) => (
-                                  <TableRow key={idx} className="hover:bg-slate-50/50 transition-colors">
+                                  <TableRow 
+                                    key={idx} 
+                                    className={`hover:bg-slate-50/50 transition-colors ${
+                                      canManageModule ? 'cursor-default' : ''
+                                    } ${
+                                      dragOverIndex?.index === idx && dragOverIndex?.phaseName === phaseName && draggedModule?.index !== idx
+                                        ? 'border-t-2 !border-t-brand-teal' 
+                                        : ''
+                                    } ${
+                                      draggedModule?.index === idx && draggedModule?.phaseName === phaseName
+                                        ? 'opacity-40 bg-slate-100' 
+                                        : ''
+                                    }`}
+                                    draggable={canManageModule}
+                                    onDragStart={(e) => canManageModule && handleDragStart(e, idx, phaseName)}
+                                    onDragEnd={handleDragEnd}
+                                    onDragOver={(e) => canManageModule && handleDragOver(e, idx, phaseName)}
+                                    onDrop={(e) => canManageModule && handleDrop(e, idx, phaseName)}
+                                  >
+                                    {canManageModule && (
+                                      <TableCell className="py-3 w-10 pr-0">
+                                        <div className="flex items-center justify-center cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-600 transition-colors">
+                                          <GripVertical className="w-4 h-4" />
+                                        </div>
+                                      </TableCell>
+                                    )}
                                     <TableCell className="font-bold text-slate-800 py-3">
                                       {editingCell?.moduleName === m.name && editingCell?.phaseName === m.phaseName && editingCell?.field === "name" ? (
                                         <Input
@@ -1085,39 +1365,7 @@ export default function ModulesPage() {
                                       )}
                                     </TableCell>
 
-                                    <TableCell className="py-3">
-                                      {editingCell?.moduleName === m.name && editingCell?.phaseName === m.phaseName && editingCell?.field === "priority" ? (
-                                        <Select 
-                                          defaultValue={m.priority || "medium"} 
-                                          onValueChange={(val) => handleInlineUpdateModule(m, "priority", val)}
-                                        >
-                                          <SelectTrigger className="h-8 text-xs bg-white">
-                                            <SelectValue />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            <SelectItem value="low">Low</SelectItem>
-                                            <SelectItem value="medium">Medium</SelectItem>
-                                            <SelectItem value="high">High</SelectItem>
-                                            <SelectItem value="urgent">Urgent</SelectItem>
-                                          </SelectContent>
-                                        </Select>
-                                      ) : (
-                                        <span 
-                                          onClick={() => canManageModule && setEditingCell({ moduleName: m.name, phaseName: m.phaseName, field: "priority" })}
-                                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold capitalize ${
-                                            m.priority === "urgent"
-                                              ? "bg-red-100 text-red-800"
-                                              : m.priority === "high"
-                                              ? "bg-orange-100 text-orange-800"
-                                              : m.priority === "medium"
-                                              ? "bg-blue-100 text-blue-800"
-                                              : "bg-slate-100 text-slate-800"
-                                          } ${canManageModule ? "cursor-pointer hover:opacity-80" : ""}`}
-                                        >
-                                          {m.priority || "medium"}
-                                        </span>
-                                      )}
-                                    </TableCell>
+
 
                                     <TableCell className="py-3 font-semibold text-xs text-slate-600">
                                       {editingCell?.moduleName === m.name && editingCell?.phaseName === m.phaseName && editingCell?.field === "estimatedHours" ? (
@@ -1219,6 +1467,9 @@ export default function ModulesPage() {
                                 ))}
 
                                 {canManageModule && (
+                                  <TableCell className="py-2.5"></TableCell>
+                                )}
+                                {canManageModule && (
                                   <TableRow className="bg-slate-50/10 hover:bg-slate-50/20 border-t border-dashed border-slate-200">
                                     <TableCell className="py-2.5">
                                       <Input
@@ -1248,22 +1499,7 @@ export default function ModulesPage() {
                                       </Select>
                                     </TableCell>
 
-                                    <TableCell className="py-2.5">
-                                      <Select 
-                                        value={input.priority || "medium"} 
-                                        onValueChange={(val) => updateQuickAddInput(phaseKey, "priority", val)}
-                                      >
-                                        <SelectTrigger className="h-8 text-xs bg-white">
-                                          <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="low">Low</SelectItem>
-                                          <SelectItem value="medium">Medium</SelectItem>
-                                          <SelectItem value="high">High</SelectItem>
-                                          <SelectItem value="urgent">Urgent</SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                    </TableCell>
+
 
                                     <TableCell className="py-2.5">
                                       <Input
@@ -1517,6 +1753,67 @@ export default function ModulesPage() {
               )}
             </div>
 
+            <div className="space-y-3 p-3 bg-slate-50/50 rounded-xl border border-slate-200">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <CheckSquare className="w-3.5 h-3.5 text-brand-teal" /> Tasks within Module
+                </Label>
+                <span className="text-[10px] text-slate-500 font-medium">{newModuleTasks.length} tasks added</span>
+              </div>
+              
+              {newModuleTasks.length > 0 && (
+                <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                  {newModuleTasks.map((t, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-2 bg-white border border-slate-200 rounded-lg shadow-2xs text-xs">
+                      <div className="truncate pr-2">
+                        <span className="font-semibold text-slate-800">{t.title}</span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="w-5 h-5 text-slate-400 hover:text-red-500 rounded-md shrink-0"
+                        onClick={() => setNewModuleTasks(prev => prev.filter((_, i) => i !== idx))}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Task title..."
+                  className="text-xs h-8 bg-white"
+                  value={newModuleTaskTitle}
+                  onChange={(e) => setNewModuleTaskTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      if (newModuleTaskTitle.trim()) {
+                        setNewModuleTasks(prev => [...prev, { title: newModuleTaskTitle.trim(), description: "", estimatedHours: 0 }]);
+                        setNewModuleTaskTitle("");
+                      }
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  className="bg-brand-teal hover:bg-brand-teal/90 text-white h-8 text-xs font-bold shrink-0"
+                  onClick={() => {
+                    if (newModuleTaskTitle.trim()) {
+                      setNewModuleTasks(prev => [...prev, { title: newModuleTaskTitle.trim(), description: "", estimatedHours: 0 }]);
+                      setNewModuleTaskTitle("");
+                    }
+                  }}
+                >
+                  Add
+                </Button>
+              </div>
+            </div>
+
             <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
               <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
                 Cancel
@@ -1568,6 +1865,9 @@ export default function ModulesPage() {
               <TabsList className="bg-slate-100/80 p-1 rounded-xl border border-slate-200/60 h-10 inline-flex">
                 <TabsTrigger value="notebook" className="flex items-center gap-2 font-bold text-xs px-4 h-8 rounded-lg data-[state=active]:bg-brand-teal data-[state=active]:text-white data-[state=active]:shadow-sm transition-all cursor-pointer">
                   <BookOpen className="w-3.5 h-3.5" /> Research Notebook
+                </TabsTrigger>
+                <TabsTrigger value="tasks" className="flex items-center gap-2 font-bold text-xs px-4 h-8 rounded-lg data-[state=active]:bg-brand-teal data-[state=active]:text-white data-[state=active]:shadow-sm transition-all cursor-pointer">
+                  <CheckSquare className="w-3.5 h-3.5" /> Tasks ({moduleTasks.length})
                 </TabsTrigger>
                 {canManageModule && (
                   <TabsTrigger value="settings" className="flex items-center gap-2 font-bold text-xs px-4 h-8 rounded-lg data-[state=active]:bg-brand-teal data-[state=active]:text-white data-[state=active]:shadow-sm transition-all cursor-pointer">
@@ -1787,6 +2087,145 @@ export default function ModulesPage() {
                   </div>
                 );
               })()}
+            </TabsContent>
+
+            <TabsContent value="tasks" className="flex-1 min-h-0 p-6 m-0 overflow-y-auto custom-scrollbar focus-visible:outline-none focus-visible:ring-0">
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-6 h-full items-start">
+                
+                {/* Left: Add Task Form */}
+                <div className="md:col-span-2 bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
+                  <h3 className="font-bold text-sm text-slate-800 mb-4 pb-2 border-b border-slate-100 flex items-center gap-1.5">
+                    <Plus className="w-4 h-4 text-brand-teal" /> Create Task in Module
+                  </h3>
+                  
+                  <form onSubmit={handleAddModuleTask} className="space-y-4">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="task-title" className="text-xs font-bold text-slate-700">Task Title <span className="text-red-500">*</span></Label>
+                      <Input
+                        id="task-title"
+                        placeholder="e.g. Implement signup UI"
+                        value={newTaskTitle}
+                        onChange={(e) => setNewTaskTitle(e.target.value)}
+                        required
+                        className="text-xs h-9"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="task-desc" className="text-xs font-bold text-slate-700">Description</Label>
+                      <Input
+                        id="task-desc"
+                        placeholder="e.g. Needs responsive inputs and validation"
+                        value={newTaskDesc}
+                        onChange={(e) => setNewTaskDesc(e.target.value)}
+                        className="text-xs h-9"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="task-hours" className="text-xs font-bold text-slate-700 flex items-center gap-1">⏱️ Estimated Hours</Label>
+                      <Input
+                        id="task-hours"
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        placeholder="e.g. 4"
+                        value={newTaskHours || ""}
+                        onChange={(e) => setNewTaskHours(parseFloat(e.target.value) || 0)}
+                        className="text-xs h-9"
+                      />
+                    </div>
+
+                    <Button type="submit" className="w-full bg-brand-teal hover:bg-brand-teal/90 text-white font-bold text-xs h-9 shadow-xs" disabled={!newTaskTitle.trim()}>
+                      Add Task to Module
+                    </Button>
+                  </form>
+                </div>
+
+                {/* Right: Tasks List */}
+                <div className="md:col-span-3 bg-white border border-slate-200 rounded-2xl p-5 shadow-xs min-h-[300px]">
+                  <h3 className="font-bold text-sm text-slate-800 mb-4 pb-2 border-b border-slate-100 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <CheckSquare className="w-4 h-4 text-brand-teal" /> Module Tasks ({moduleTasks.length})
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-medium bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full capitalize">
+                      Assignee: {selectedModule?.assignedToName || "Unassigned"}
+                    </span>
+                  </h3>
+
+                  {loadingModuleTasks ? (
+                    <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                      <Loader2 className="w-8 h-8 animate-spin text-brand-teal mb-2" />
+                      <p className="text-xs font-medium">Loading tasks...</p>
+                    </div>
+                  ) : moduleTasks.length > 0 ? (
+                    <div className="space-y-3">
+                      {moduleTasks.map((task) => (
+                        <div key={task.id} className={`p-3 border rounded-xl flex items-start justify-between gap-3 transition-all ${
+                          task.status === "completed" 
+                            ? "bg-slate-50/50 border-slate-200/60 opacity-75" 
+                            : "bg-white border-slate-200 hover:border-slate-300 shadow-2xs"
+                        }`}>
+                          <div className="flex items-start gap-2.5 min-w-0">
+                            <button
+                              onClick={() => handleToggleTaskStatus(task)}
+                              className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center transition-all cursor-pointer ${
+                                task.status === "completed"
+                                  ? "bg-brand-teal border-brand-teal text-white"
+                                  : "border-slate-300 hover:border-brand-teal bg-white"
+                              }`}
+                            >
+                              {task.status === "completed" && (
+                                <svg className="w-3 h-3 fill-current" viewBox="0 0 20 20">
+                                  <path d="M0 11l2-2 5 5L18 3l2 2L7 18z" />
+                                </svg>
+                              )}
+                            </button>
+                            <div className="min-w-0">
+                              <p className={`text-xs font-bold text-slate-800 ${task.status === "completed" ? "line-through text-slate-400" : ""}`}>
+                                {task.title}
+                              </p>
+                              {task.description && (
+                                <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">
+                                  {task.description}
+                                </p>
+                              )}
+                              <div className="flex items-center gap-2 mt-2">
+                                {task.estimatedHours > 0 && (
+                                  <span className="text-[9px] font-bold bg-brand-teal/5 text-brand-teal border border-brand-teal/20 px-1.5 py-0.5 rounded">
+                                    ⏱️ {task.estimatedHours} hrs
+                                  </span>
+                                )}
+                                {task.assignedToName && (
+                                  <span className="text-[9px] font-bold bg-slate-100 text-slate-600 border border-slate-200 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                    <User className="w-2.5 h-2.5" /> {task.assignedToName}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="w-7 h-7 text-slate-400 hover:text-red-500 rounded-md shrink-0 cursor-pointer"
+                            onClick={() => handleDeleteTask(task.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-16 text-center text-slate-400">
+                      <CheckSquare className="w-12 h-12 stroke-1 mb-2 opacity-30 text-slate-300" />
+                      <p className="text-xs font-semibold text-slate-600">No tasks in this module</p>
+                      <p className="text-[11px] text-slate-400 mt-1 max-w-[200px]">Use the form on the left to add your first module task.</p>
+                    </div>
+                  )}
+                </div>
+
+              </div>
             </TabsContent>
 
             <TabsContent value="settings" className="flex-1 min-h-0 p-6 m-0 overflow-y-auto custom-scrollbar">
@@ -2077,6 +2516,65 @@ export default function ModulesPage() {
             <Button variant="outline" onClick={() => setLogsOpen(false)} className="font-bold text-xs h-9 px-4 cursor-pointer">
               Close History
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Auto Distribute Priorities Config Modal */}
+      <Dialog open={isDistributeModalOpen} onOpenChange={setIsDistributeModalOpen}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
+              <Shuffle className="w-5 h-5 text-brand-teal" />
+              Configure Workload Priorities
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              Set priority/capacity levels for team members. Distribution will assign workload proportionally (e.g. Low gets fewer hours, High gets more hours).
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-3">
+            <div className="max-h-[300px] overflow-y-auto pr-1 space-y-3 custom-scrollbar">
+              {projectTeamMembers.map((member) => (
+                <div key={member.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200/80">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-full bg-brand-teal/10 text-brand-teal flex items-center justify-center font-bold text-xs uppercase">
+                      {member.firstName ? member.firstName[0] : 'U'}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">{member.firstName} {member.lastName}</p>
+                      <p className="text-[11px] text-slate-500 font-medium capitalize">{member.role}</p>
+                    </div>
+                  </div>
+
+                  <Select
+                    value={String(memberCapacities[member.id] ?? 1.0)}
+                    onValueChange={(val) => setMemberCapacities(prev => ({ ...prev, [member.id]: parseFloat(val) }))}
+                  >
+                    <SelectTrigger className="w-[160px] h-9 text-xs bg-white border-slate-200">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="2.0">High (2.0x Load)</SelectItem>
+                      <SelectItem value="1.5">Above Normal (1.5x Load)</SelectItem>
+                      <SelectItem value="1.0">Normal (1.0x Load)</SelectItem>
+                      <SelectItem value="0.5">Low (0.5x Load)</SelectItem>
+                      <SelectItem value="0.25">Least (0.25x Load)</SelectItem>
+                      <SelectItem value="0.0">Exclude (No Load)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 mt-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setIsDistributeModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="button" size="sm" onClick={handleAutoDistributeModules} className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold">
+                Run Distribution
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
