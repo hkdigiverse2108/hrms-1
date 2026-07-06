@@ -171,8 +171,15 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       menuItems.push(getItem("Recruitment", "recruitment-sub", <Briefcase className="w-5 h-5" />, recruitmentChildren));
     }
 
+    const companyFinanceChildren: MenuItem[] = [];
     if (isAdmin || checkPermission('company-finance', 'canView')) {
-      menuItems.push(getItem(<Link href="/company-finance">Company Finance</Link>, "/company-finance", <Landmark className="w-5 h-5" />));
+      companyFinanceChildren.push(getItem(<Link href="/company-finance">Transactions</Link>, "/company-finance"));
+      companyFinanceChildren.push(getItem(<Link href="/company-finance/plan">Plan</Link>, "/company-finance/plan"));
+      companyFinanceChildren.push(getItem(<Link href="/company-finance/summary">Summary</Link>, "/company-finance/summary"));
+    }
+
+    if (isAdmin || companyFinanceChildren.length > 0) {
+      menuItems.push(getItem("Company Finance", "company-finance-sub", <Landmark className="w-5 h-5" />, companyFinanceChildren));
     }
 
     if (isAdmin || checkPermission('attendance', 'canView')) {
@@ -295,7 +302,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (pathname.startsWith("/payroll")) return [pathname];
     if (pathname.startsWith("/restrictions")) return ["/restrictions"];
     if (pathname.startsWith("/activity-logs")) return ["/activity-logs"];
-    if (pathname.startsWith("/company-finance")) return ["/company-finance"];
+    if (pathname.startsWith("/company-finance")) return [pathname];
     return [];
   };
 
@@ -307,6 +314,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (pathname.startsWith("/work-management")) return ["work-management"];
     if (pathname.startsWith("/recruitment")) return ["recruitment-sub"];
     if (pathname.startsWith("/payroll")) return ["payroll-sub"];
+    if (pathname.startsWith("/company-finance")) return ["company-finance-sub"];
     return [];
   };
  
