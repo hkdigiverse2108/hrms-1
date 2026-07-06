@@ -87,6 +87,7 @@ seed_v2.py
 
 # Frontend generated
 frontend/next-env.d.ts
+*.tsbuildinfo
 
 # Root level temp files
 test_script*.py

@@ -2619,12 +2619,14 @@ async def get_free_slots(request: dict, db=Depends(get_db)):
 
 
 # --- Appointment Scheduling APIs ---
+@app.get("/appointments/config")
 @app.get("/api/appointments/config")
 async def get_all_appointment_configs(db=Depends(get_db)):
     cursor = db.appointment_configs.find({})
     configs = await cursor.to_list(length=1000)
     return [crud.fix_id(c) for c in configs]
 
+@app.get("/appointments/config/{employee_id}")
 @app.get("/api/appointments/config/{employee_id}")
 async def get_appointment_config(employee_id: str, db=Depends(get_db)):
     config = await crud.get_appointment_config(db, employee_id)
@@ -2646,6 +2648,7 @@ async def get_appointment_config(employee_id: str, db=Depends(get_db)):
         }
     return config
 
+@app.post("/appointments/config")
 @app.post("/api/appointments/config")
 async def save_appointment_config(config: dict, db=Depends(get_db), _token=Depends(auth.require_auth)):
     curr_user_id = str(_token.get("sub"))
@@ -2660,6 +2663,7 @@ async def save_appointment_config(config: dict, db=Depends(get_db), _token=Depen
             
     return await crud.save_appointment_config(db, config)
 
+@app.get("/appointments/public/slots")
 @app.get("/api/appointments/public/slots")
 async def get_public_slots(employeeId: str, date: str, db=Depends(get_db)):
     if not employeeId or not date:
@@ -2667,6 +2671,7 @@ async def get_public_slots(employeeId: str, date: str, db=Depends(get_db)):
     slots = await crud.calculate_public_slots(db, employeeId, date)
     return {"slots": slots}
 
+@app.post("/appointments/public/book")
 @app.post("/api/appointments/public/book")
 async def public_book_appointment(booking: dict, db=Depends(get_db)):
     employee_id = booking.get("employeeId")
