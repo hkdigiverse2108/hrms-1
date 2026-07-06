@@ -2619,6 +2619,12 @@ async def get_free_slots(request: dict, db=Depends(get_db)):
 
 
 # --- Appointment Scheduling APIs ---
+@app.get("/api/appointments/config")
+async def get_all_appointment_configs(db=Depends(get_db)):
+    cursor = db.appointment_configs.find({})
+    configs = await cursor.to_list(length=1000)
+    return [crud.fix_id(c) for c in configs]
+
 @app.get("/api/appointments/config/{employee_id}")
 async def get_appointment_config(employee_id: str, db=Depends(get_db)):
     config = await crud.get_appointment_config(db, employee_id)
@@ -2691,6 +2697,11 @@ async def public_book_appointment(booking: dict, db=Depends(get_db)):
     client_name = booking.get("attendeeName", "Client")
     client_email = booking.get("attendeeEmail", "")
     reason = booking.get("description", "")
+
+    config = await db.appointment_configs.find_one({"employeeId": employee_id})
+    co_host_ids = []
+    if config and config.get("employeeIds"):
+        co_host_ids = [str(x) for x in config.get("employeeIds")]
     
     schedule_data = {
         "title": booking.get("title", f"Appointment with {client_name}"),
@@ -2700,7 +2711,7 @@ async def public_book_appointment(booking: dict, db=Depends(get_db)):
         "startTime": start_time,
         "endTime": end_time,
         "type": "appointment",
-        "attendees": [],
+        "attendees": co_host_ids,
         "createdBy": "public"
     }
     

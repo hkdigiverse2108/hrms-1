@@ -63,8 +63,10 @@ export default function SchedulePage() {
   const [customDurationModalOpen, setCustomDurationModalOpen] = useState(false);
   const [customDurationValue, setCustomDurationValue] = useState(1);
   const [customDurationUnit, setCustomDurationUnit] = useState<"minutes" | "hours">("hours");
+  const [memberSearchQuery, setMemberSearchQuery] = useState("");
   const [appConfig, setAppConfig] = useState<any>({
     employeeId: "",
+    employeeIds: [],
     title: "",
     duration: 60,
     availability: {
@@ -80,11 +82,14 @@ export default function SchedulePage() {
     active: true
   });
 
+  const [menuConfig, setMenuConfig] = useState<any>(null);
+  const [allConfigs, setAllConfigs] = useState<any[]>([]);
+
   const fetchConfig = async () => {
     const empId = user?.id || user?.employeeId;
     if (!empId) return;
     try {
-      const res = await fetch(`${API_URL}/api/appointments/config/${empId}`);
+      const res = await fetch(`${API_URL}/appointments/config/${empId}`, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         if (data && data.employeeId) {
@@ -94,6 +99,7 @@ export default function SchedulePage() {
               active: false,
               title: "",
               duration: 60,
+              employeeIds: data.employeeIds || [],
               availability: {
                 Monday: [{ start: "09:00", end: "17:00" }],
                 Tuesday: [{ start: "09:00", end: "17:00" }],
@@ -105,14 +111,32 @@ export default function SchedulePage() {
               }
             });
           } else {
-            setAppConfig(data);
+            setAppConfig({
+              ...data,
+              employeeIds: data.employeeIds || []
+            });
           }
         }
       }
     } catch (err) {
-      console.error("Error fetching appointment config:", err);
+      console.error("Error fetching config:", err);
     }
   };
+
+  const fetchAllConfigs = async () => {
+    try {
+      const res = await fetch(`${API_URL}/appointments/config`, { cache: "no-store" });
+      if (res.ok) {
+        setAllConfigs(await res.json());
+      }
+    } catch (err) {
+      console.error("Error fetching all configs:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchAllConfigs();
+  }, []);
 
   useEffect(() => {
     if ((user?.id || user?.employeeId) && !isConfiguring) {
@@ -135,9 +159,9 @@ export default function SchedulePage() {
   const handleSaveConfig = async () => {
     setIsConfigSaving(true);
     try {
-      const empId = user?.id || user?.employeeId;
+      const empId = appConfig.employeeId || user?.id || user?.employeeId;
       const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/api/appointments/config`, {
+      const res = await fetch(`${API_URL}/appointments/config`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -148,6 +172,7 @@ export default function SchedulePage() {
       if (res.ok) {
         toast.success("Appointment schedule configuration saved");
         setConfigModalOpen(false);
+        fetchAllConfigs(); // Refresh the list of all configurations!
       } else {
         toast.error("Failed to save configuration");
       }
@@ -615,18 +640,25 @@ export default function SchedulePage() {
 
   /* ───── filtered schedules ───── */
   /* ───── filtered schedules ───── */
+  const activeConfigEmployees = useMemo(() => {
+    if (!isConfiguring) return selectedEmployeeIds;
+    const hostId = appConfig.employeeId || user?.id || user?.employeeId || "";
+    return [String(hostId), ...(appConfig.employeeIds || []).map(String)];
+  }, [isConfiguring, selectedEmployeeIds, appConfig.employeeId, appConfig.employeeIds, user]);
+
   const filterByEmployee = (items: any[]) =>
     items.filter(s => {
-      if (selectedEmployeeIds.includes(String(s.employeeId))) return true;
-      if (selectedEmployeeIds.some(id => {
+      const targetIds = activeConfigEmployees;
+      if (targetIds.includes(String(s.employeeId))) return true;
+      if (targetIds.some(id => {
         const emp = employees.find(e => String(e.id) === id);
         return emp && (String(emp.employeeId) === String(s.employeeId));
       })) return true;
 
       if (s.attendees && Array.isArray(s.attendees)) {
         if (s.attendees.some((attId: string) => 
-          selectedEmployeeIds.includes(String(attId)) ||
-          selectedEmployeeIds.some(id => {
+          targetIds.includes(String(attId)) ||
+          targetIds.some(id => {
              const emp = employees.find(e => String(e.id) === id);
              return emp && (String(emp.employeeId) === String(attId));
           })
@@ -638,6 +670,32 @@ export default function SchedulePage() {
   const timeToMinutes = (timeStr: string) => {
     const parts = timeStr.split(':');
     return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+  };
+
+  const isSlotFree = (startMins: number, endMins: number, dateStr: string) => {
+    const hostId = appConfig.employeeId || user?.id || user?.employeeId || "";
+    const allMemberIds = [String(hostId), ...(appConfig.employeeIds || []).map(String)];
+    
+    // Find if any of these members is busy during this time on this date
+    const dateSchedules = schedules.filter(s => {
+      const sDate = typeof s.date === "string" ? s.date.split("T")[0] : dayjs(s.date).format("YYYY-MM-DD");
+      return sDate === dateStr;
+    });
+
+    for (const s of dateSchedules) {
+      const sStart = timeToMinutes(s.startTime);
+      const sEnd = timeToMinutes(s.endTime);
+      
+      const matchesMember = allMemberIds.includes(String(s.employeeId)) || 
+        (s.attendees || []).some((attId: any) => allMemberIds.includes(String(attId)));
+        
+      if (matchesMember) {
+        if (Math.max(startMins, sStart) < Math.min(endMins, sEnd)) {
+          return false; // Busy!
+        }
+      }
+    }
+    return true; // Free!
   };
 
   /* group overlapping events for side-by-side layout */
@@ -993,7 +1051,7 @@ export default function SchedulePage() {
                     <label className="text-sm font-medium">Date</label>
                     <DatePicker
                       className="w-full h-10"
-                      value={dayjs(form.date)}
+                      value={form.date && dayjs(form.date).isValid() ? dayjs(form.date) : undefined}
                       onChange={d => setForm({ ...form, date: d ? d.format("YYYY-MM-DD") : "" })}
                       format="YYYY-MM-DD"
                       getPopupContainer={(trigger) => trigger.parentNode as HTMLElement}
@@ -1177,6 +1235,80 @@ export default function SchedulePage() {
                 </div>
               </div>
 
+              {/* Select Members Section */}
+              <div className="flex gap-4">
+                <div className="mt-1">
+                  <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 005.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </div>
+                <div className="flex-1 space-y-2">
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-800 leading-tight">Co-hosts / Members</h4>
+                    <p className="text-[11px] text-slate-500 leading-tight">Select other employees who should attend</p>
+                  </div>
+                  
+                  <div className="border border-slate-200 rounded-lg p-2 max-h-40 overflow-y-auto bg-slate-50 space-y-1.5 custom-scrollbar">
+                    <input
+                      type="text"
+                      placeholder="Search member..."
+                      className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-[11px] outline-none mb-1 focus:border-brand-teal"
+                      onChange={(e) => setMemberSearchQuery(e.target.value)}
+                      value={memberSearchQuery}
+                    />
+                    
+                    {/* Render Main Host first (checked & disabled) */}
+                    {(() => {
+                      const hostId = appConfig.employeeId || user?.id || user?.employeeId || "";
+                      const hostEmp = employees.find(e => String(e.id) === String(hostId) || String(e.employeeId) === String(hostId));
+                      if (!hostEmp) return null;
+                      return (
+                        <label key={`host-${hostId}`} className="flex items-center gap-2 text-xs text-slate-700 font-semibold p-0.5 bg-slate-100 rounded cursor-not-allowed opacity-80">
+                          <input
+                            type="checkbox"
+                            checked={true}
+                            disabled={true}
+                            className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-3.5 h-3.5 cursor-not-allowed"
+                          />
+                          <span className="truncate">{hostEmp.name} (Host)</span>
+                        </label>
+                      );
+                    })()}
+
+                    {employees
+                      .filter(emp => {
+                        const hostId = appConfig.employeeId || user?.id || user?.employeeId || "";
+                        return String(emp.id) !== String(hostId) && String(emp.employeeId) !== String(hostId) && emp.name?.toLowerCase().includes((memberSearchQuery || "").toLowerCase());
+                      })
+                      .map((emp) => {
+                        const empId = String(emp.id);
+                        const isChecked = (appConfig.employeeIds || []).includes(empId);
+                        return (
+                          <label key={empId} className="flex items-center gap-2 text-xs text-slate-700 hover:text-slate-900 cursor-pointer p-0.5 hover:bg-slate-100 rounded">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                let newIds = [...(appConfig.employeeIds || [])];
+                                if (e.target.checked) {
+                                  newIds.push(empId);
+                                } else {
+                                  newIds = newIds.filter(id => id !== empId);
+                                }
+                                setAppConfig({ ...appConfig, employeeIds: newIds });
+                              }}
+                              className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-3.5 h-3.5"
+                            />
+                            <span className="truncate">{emp.name}</span>
+                          </label>
+                        );
+                      })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-slate-100" />
+
               {/* 1. Appointment Duration Section */}
               <div className="flex gap-4">
                 <div className="mt-1">
@@ -1243,132 +1375,259 @@ export default function SchedulePage() {
                     </p>
                   </div>
 
-                  <Select value="weekly">
+                  <Select
+                    value={appConfig.recurrence || "weekly"}
+                    onValueChange={(val) => {
+                      setAppConfig({
+                        ...appConfig,
+                        recurrence: val,
+                        specificDates: appConfig.specificDates || {}
+                      });
+                    }}
+                  >
                     <SelectTrigger className="w-36 h-8 bg-slate-50 border-slate-200 text-slate-700 text-xs font-medium">
                       <SelectValue placeholder="Repeat weekly" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="weekly">Repeat weekly</SelectItem>
+                      <SelectItem value="none">Does not repeat</SelectItem>
                     </SelectContent>
                   </Select>
 
-                  {/* Availability Grid */}
-                  <div className="space-y-3.5 pt-2">
-                    {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((day) => {
-                      const slots = appConfig.availability[day] || [];
-                      const isAvailable = slots.length > 0;
+                  {appConfig.recurrence === "none" ? (
+                    /* Specific Dates Editor UI */
+                    <div className="space-y-3 pt-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-semibold text-slate-700">Specific Dates</span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-[10px] text-blue-600 border-blue-200 hover:bg-blue-50 flex items-center gap-1 rounded-md px-2 py-0.5"
+                          onClick={() => {
+                            const todayStr = dayjs(getISTNow()).format("YYYY-MM-DD");
+                            const newSpecificDates = { ...(appConfig.specificDates || {}) };
+                            if (!newSpecificDates[todayStr]) {
+                              newSpecificDates[todayStr] = [{ start: "09:00", end: "17:00" }];
+                            } else {
+                              let offset = 1;
+                              while (newSpecificDates[dayjs(getISTNow()).add(offset, 'day').format("YYYY-MM-DD")]) {
+                                offset++;
+                              }
+                              const nextDateStr = dayjs(getISTNow()).add(offset, 'day').format("YYYY-MM-DD");
+                              newSpecificDates[nextDateStr] = [{ start: "09:00", end: "17:00" }];
+                            }
+                            setAppConfig({ ...appConfig, specificDates: newSpecificDates });
+                          }}
+                        >
+                          <Plus className="w-3.5 h-3.5 mr-0.5" /> Add Date
+                        </Button>
+                      </div>
 
-                      const toggleDay = (checked: boolean) => {
-                        const newAvail = { ...appConfig.availability };
-                        if (checked) {
-                          newAvail[day] = [{ start: "09:00", end: "17:00" }];
-                        } else {
-                          newAvail[day] = [];
-                        }
-                        setAppConfig({ ...appConfig, availability: newAvail });
-                      };
-
-                      const updateTime = (index: number, field: "start" | "end", val: string) => {
-                        const newAvail = { ...appConfig.availability };
-                        const newSlots = [...(newAvail[day] || [])];
-                        if (newSlots[index]) {
-                          newSlots[index] = { ...newSlots[index], [field]: val };
-                        }
-                        newAvail[day] = newSlots;
-                        setAppConfig({ ...appConfig, availability: newAvail });
-                      };
-
-                      return (
-                        <div key={day} className="flex items-center justify-between text-xs gap-3">
-                          <div className="w-10 shrink-0 font-medium text-slate-600">
-                            {day.substring(0, 3)}
-                          </div>
-
-                          {isAvailable ? (
-                            <div className="flex items-center gap-1.5 flex-1 justify-end">
-                              <select
-                                value={slots[0]?.start || "09:00"}
-                                onChange={(e) => updateTime(0, "start", e.target.value)}
-                                className="bg-[#f1f3f4] text-slate-700 hover:bg-[#e8eaed] transition-colors rounded px-2 py-1.5 text-xs text-center border-none outline-none w-[90px] cursor-pointer"
-                              >
-                                {TIME_OPTIONS.map(opt => (
-                                  <option key={`start-${opt.value}`} value={opt.value}>
-                                    {opt.label}
-                                  </option>
-                                ))}
-                              </select>
-                              <span className="text-slate-400 font-light">—</span>
-                              <select
-                                value={slots[0]?.end || "17:00"}
-                                onChange={(e) => updateTime(0, "end", e.target.value)}
-                                className="bg-[#f1f3f4] text-slate-700 hover:bg-[#e8eaed] transition-colors rounded px-2 py-1.5 text-xs text-center border-none outline-none w-[90px] cursor-pointer"
-                              >
-                                {TIME_OPTIONS.map(opt => (
-                                  <option key={`end-${opt.value}`} value={opt.value}>
-                                    {opt.label}
-                                  </option>
-                                ))}
-                              </select>
-                              
-                              {/* Make Unavailable (Block/Ban icon) */}
-                              <button
-                                type="button"
-                                title="Make unavailable"
-                                className="p-1 rounded-full hover:bg-slate-100 shrink-0 text-slate-500 transition-colors"
-                                onClick={() => toggleDay(false)}
-                              >
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636" />
-                                </svg>
-                              </button>
-
-                              {/* Add slot (Plus icon) */}
-                              <button
-                                type="button"
-                                title="Add slot"
-                                className="p-1 rounded-full hover:bg-slate-100 shrink-0 text-slate-500 transition-colors"
-                                onClick={() => {
-                                  toast.info("Split slots are currently configured for standard schedules.");
-                                }}
-                              >
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                                </svg>
-                              </button>
-
-                              {/* Copy to all (Copy icon) */}
-                              <button
-                                type="button"
-                                title="Copy to all days"
-                                className="p-1 rounded-full hover:bg-slate-100 shrink-0 text-slate-500 transition-colors"
-                                onClick={() => {
-                                  duplicateToAll(day);
-                                  toast.success(`Copied ${day}'s schedule to all weekdays`);
-                                }}
-                              >
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
-                                </svg>
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="flex items-center justify-between flex-1 pl-1">
-                              <span className="text-slate-400 italic">Unavailable</span>
-                              <button
-                                type="button"
-                                className="p-1 rounded-full hover:bg-slate-100 text-slate-500 shrink-0"
-                                onClick={() => toggleDay(true)}
-                              >
-                                <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                                </svg>
-                              </button>
-                            </div>
-                          )}
+                      {Object.keys(appConfig.specificDates || {}).length === 0 ? (
+                        <div className="text-center py-4 border border-dashed border-slate-200 rounded-lg text-slate-400 text-[10px]">
+                          No specific dates added yet. Click "+ Add Date".
                         </div>
-                      );
-                    })}
-                  </div>
+                      ) : (
+                        <div className="space-y-2 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
+                          {Object.entries(appConfig.specificDates || {}).map(([dateStr, slots]: [string, any]) => {
+                            return (
+                              <div key={dateStr} className="flex flex-col gap-1.5 p-2 bg-slate-50 border border-slate-200 rounded-lg">
+                                <div className="flex items-center justify-between gap-2">
+                                  <DatePicker
+                                    className="h-7 text-[11px] flex-1 bg-white border-slate-200"
+                                    value={dayjs(dateStr).isValid() ? dayjs(dateStr) : undefined}
+                                    onChange={(newD) => {
+                                      if (!newD) return;
+                                      const newDateStr = newD.format("YYYY-MM-DD");
+                                      if (newDateStr === dateStr) return;
+                                      const newSpecificDates = { ...(appConfig.specificDates || {}) };
+                                      newSpecificDates[newDateStr] = slots;
+                                      delete newSpecificDates[dateStr];
+                                      setAppConfig({ ...appConfig, specificDates: newSpecificDates });
+                                    }}
+                                    format="MMM D, YYYY"
+                                    allowClear={false}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="p-1 text-slate-400 hover:text-red-600 rounded hover:bg-slate-200"
+                                    onClick={() => {
+                                      const newSpecificDates = { ...(appConfig.specificDates || {}) };
+                                      delete newSpecificDates[dateStr];
+                                      setAppConfig({ ...appConfig, specificDates: newSpecificDates });
+                                    }}
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                  </button>
+                                </div>
+
+                                {slots.map((s: any, sIdx: number) => (
+                                  <div key={sIdx} className="flex items-center gap-1">
+                                    <select
+                                      value={s.start || "09:00"}
+                                      onChange={(e) => {
+                                        const newSpecificDates = { ...(appConfig.specificDates || {}) };
+                                        const updatedSlots = [...(newSpecificDates[dateStr] || [])];
+                                        updatedSlots[sIdx] = { ...updatedSlots[sIdx], start: e.target.value };
+                                        newSpecificDates[dateStr] = updatedSlots;
+                                        setAppConfig({ ...appConfig, specificDates: newSpecificDates });
+                                      }}
+                                      className="bg-white text-slate-700 border border-slate-200 rounded px-1.5 py-0.5 text-[10px] text-center w-[75px] cursor-pointer outline-none"
+                                    >
+                                      {TIME_OPTIONS.map(opt => (
+                                        <option key={`start-${opt.value}`} value={opt.value}>
+                                          {opt.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <span className="text-slate-400 text-[10px]">—</span>
+                                    <select
+                                      value={s.end || "17:00"}
+                                      onChange={(e) => {
+                                        const newSpecificDates = { ...(appConfig.specificDates || {}) };
+                                        const updatedSlots = [...(newSpecificDates[dateStr] || [])];
+                                        updatedSlots[sIdx] = { ...updatedSlots[sIdx], end: e.target.value };
+                                        newSpecificDates[dateStr] = updatedSlots;
+                                        setAppConfig({ ...appConfig, specificDates: newSpecificDates });
+                                      }}
+                                      className="bg-white text-slate-700 border border-slate-200 rounded px-1.5 py-0.5 text-[10px] text-center w-[75px] cursor-pointer outline-none"
+                                    >
+                                      {TIME_OPTIONS.map(opt => (
+                                        <option key={`end-${opt.value}`} value={opt.value}>
+                                          {opt.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    /* Weekly Availability Grid */
+                    <div className="space-y-3.5 pt-2">
+                      {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((day) => {
+                        const slots = appConfig.availability[day] || [];
+                        const isAvailable = slots.length > 0;
+
+                        const toggleDay = (checked: boolean) => {
+                          const newAvail = { ...appConfig.availability };
+                          if (checked) {
+                            newAvail[day] = [{ start: "09:00", end: "17:00" }];
+                          } else {
+                            newAvail[day] = [];
+                          }
+                          setAppConfig({ ...appConfig, availability: newAvail });
+                        };
+
+                        const updateTime = (index: number, field: "start" | "end", val: string) => {
+                          const newAvail = { ...appConfig.availability };
+                          const newSlots = [...(newAvail[day] || [])];
+                          if (newSlots[index]) {
+                            newSlots[index] = { ...newSlots[index], [field]: val };
+                          }
+                          newAvail[day] = newSlots;
+                          setAppConfig({ ...appConfig, availability: newAvail });
+                        };
+
+                        return (
+                          <div key={day} className="flex items-center justify-between text-xs gap-3">
+                            <div className="w-10 shrink-0 font-medium text-slate-600">
+                              {day.substring(0, 3)}
+                            </div>
+
+                            {isAvailable ? (
+                              <div className="flex items-center gap-1.5 flex-1 justify-end">
+                                <select
+                                  value={slots[0]?.start || "09:00"}
+                                  onChange={(e) => updateTime(0, "start", e.target.value)}
+                                  className="bg-[#f1f3f4] text-slate-700 hover:bg-[#e8eaed] transition-colors rounded px-2 py-1.5 text-xs text-center border-none outline-none w-[90px] cursor-pointer"
+                                >
+                                  {TIME_OPTIONS.map(opt => (
+                                    <option key={`start-${opt.value}`} value={opt.value}>
+                                      {opt.label}
+                                    </option>
+                                  ))}
+                                </select>
+                                <span className="text-slate-400 font-light">—</span>
+                                <select
+                                  value={slots[0]?.end || "17:00"}
+                                  onChange={(e) => updateTime(0, "end", e.target.value)}
+                                  className="bg-[#f1f3f4] text-slate-700 hover:bg-[#e8eaed] transition-colors rounded px-2 py-1.5 text-xs text-center border-none outline-none w-[90px] cursor-pointer"
+                                >
+                                  {TIME_OPTIONS.map(opt => (
+                                    <option key={`end-${opt.value}`} value={opt.value}>
+                                      {opt.label}
+                                    </option>
+                                  ))}
+                                </select>
+                                
+                                {/* Make Unavailable (Block/Ban icon) */}
+                                <button
+                                  type="button"
+                                  title="Make unavailable"
+                                  className="p-1 rounded-full hover:bg-slate-100 shrink-0 text-slate-500 transition-colors"
+                                  onClick={() => toggleDay(false)}
+                                >
+                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636" />
+                                  </svg>
+                                </button>
+
+                                {/* Add slot (Plus icon) */}
+                                <button
+                                  type="button"
+                                  title="Add slot"
+                                  className="p-1 rounded-full hover:bg-slate-100 shrink-0 text-slate-500 transition-colors"
+                                  onClick={() => {
+                                    toast.info("Split slots are currently configured for standard schedules.");
+                                  }}
+                                >
+                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                                  </svg>
+                                </button>
+
+                                {/* Copy to all (Copy icon) */}
+                                <button
+                                  type="button"
+                                  title="Copy to all days"
+                                  className="p-1 rounded-full hover:bg-slate-100 shrink-0 text-slate-500 transition-colors"
+                                  onClick={() => {
+                                    duplicateToAll(day);
+                                    toast.success(`Copied ${day}'s schedule to all weekdays`);
+                                  }}
+                                >
+                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                                  </svg>
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-between flex-1 pl-1">
+                                <span className="text-slate-400 italic">Unavailable</span>
+                                <button
+                                  type="button"
+                                  className="p-1 rounded-full hover:bg-slate-100 text-slate-500 shrink-0"
+                                  onClick={() => toggleDay(true)}
+                                >
+                                  <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                                  </svg>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1495,133 +1754,141 @@ export default function SchedulePage() {
               </div>
               
               {/* Booking Page List Item */}
-              {bookingPagesExpanded && appConfig.active && (
-                <div 
-                  className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-slate-100 cursor-pointer group transition-all relative"
-                  onClick={() => setShowDetailsCard(true)}
-                >
-                  <svg className="w-4 h-4 text-blue-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                  
-                  <span className="text-xs font-medium text-slate-700 truncate flex-1">
-                    {appConfig.title || "ABCD"}
-                  </span>
+              {/* Booking Page List Items */}
+              {bookingPagesExpanded && allConfigs.filter(cfg => cfg.active).map((cfg) => {
+                const ownerName = employees.find(e => String(e.id) === String(cfg.employeeId) || String(e.employeeId) === String(cfg.employeeId))?.name || "Employee";
+                const displayTitle = cfg.title || `${ownerName}'s Schedule`;
+                const link = `${window.location.origin}/f/book/${cfg.employeeId}`;
 
-                  {/* Actions (visible on hover) */}
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                    <button
-                      type="button"
-                      className="p-1 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-800"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const link = `${window.location.origin}/f/book/${user?.id || user?.employeeId}`;
-                        navigator.clipboard.writeText(link);
-                        toast.success("Link copied!");
-                      }}
-                      title="Copy link"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                      </svg>
-                    </button>
+                return (
+                  <div 
+                    key={`sidebar-booking-page-${cfg.employeeId}`}
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-slate-100 cursor-pointer group transition-all relative"
+                    onClick={() => {
+                      setAppConfig(cfg);
+                      setShowDetailsCard(true);
+                    }}
+                  >
+                    <svg className="w-4 h-4 text-blue-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
                     
-                    <button
-                      type="button"
-                      className="p-1 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-800"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowSidebarMenu(!showSidebarMenu);
-                      }}
-                      title="Options"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-                      </svg>
-                    </button>
-                  </div>
+                    <span className="text-xs font-medium text-slate-700 truncate flex-1">
+                      {displayTitle}
+                    </span>
 
-                  {/* Dropdown Menu (Popup) */}
-                  {showSidebarMenu && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setShowSidebarMenu(false); }} />
-                      <div className="absolute right-2 top-8 bg-white border border-slate-200 rounded-lg shadow-xl py-1 w-44 z-50 text-left">
-                        <button
-                          className="w-full px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setShowSidebarMenu(false);
-                            const link = `${window.location.origin}/f/book/${user?.id || user?.employeeId}`;
-                            window.open(link, '_blank');
-                          }}
-                        >
-                          Preview
-                        </button>
-                        <button
-                          className="w-full px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setShowSidebarMenu(false);
-                            setIsConfiguring(true);
-                            setViewMode("week");
-                          }}
-                        >
-                          Edit
-                        </button>
-                        <div className="border-t border-slate-100 my-1" />
-                        <button
-                          className="w-full px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 flex items-center gap-2 font-medium"
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            setShowSidebarMenu(false);
-                            const isConfirmed = await confirm({
-                              title: "Delete Booking Page",
-                              message: "Are you sure you want to delete this booking page?",
-                              confirmText: "Delete",
-                              destructive: true,
-                            });
-                            if (isConfirmed) {
-                              try {
-                                const token = localStorage.getItem('token');
-                                const res = await fetch(`${API_URL}/api/appointments/config`, {
-                                  method: "POST",
-                                  headers: { 
-                                    "Content-Type": "application/json",
-                                    ...(token ? { "Authorization": `Bearer ${token}` } : {})
-                                  },
-                                  body: JSON.stringify({
-                                    employeeId: user?.id || user?.employeeId || "",
-                                    duration: 30,
-                                    availability: { Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [], Sunday: [] },
-                                    active: false
-                                  })
-                                });
-                                if (res.ok) {
-                                  setAppConfig({ 
-                                    ...appConfig, 
-                                    active: false,
-                                    availability: { Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [], Sunday: [] } 
+                    {/* Actions (visible on hover) */}
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      <button
+                        type="button"
+                        className="p-1 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-800"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigator.clipboard.writeText(link);
+                          toast.success("Link copied!");
+                        }}
+                        title="Copy link"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                        </svg>
+                      </button>
+                      
+                      <button
+                        type="button"
+                        className="p-1 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-800"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMenuConfig(cfg);
+                          setShowSidebarMenu(true);
+                        }}
+                        title="Options"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    {/* Dropdown Menu (Popup) for this specific booking page */}
+                    {showSidebarMenu && menuConfig?.employeeId === cfg.employeeId && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setShowSidebarMenu(false); }} />
+                        <div className="absolute right-2 top-8 bg-white border border-slate-200 rounded-lg shadow-xl py-1 w-44 z-50 text-left">
+                          <button
+                            className="w-full px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowSidebarMenu(false);
+                              const link = `${window.location.origin}/f/book/${menuConfig.employeeId}`;
+                              window.open(link, '_blank');
+                            }}
+                          >
+                            Preview
+                          </button>
+                          <button
+                            className="w-full px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowSidebarMenu(false);
+                              setAppConfig(menuConfig);
+                              setIsConfiguring(true);
+                              setViewMode("week");
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <div className="border-t border-slate-100 my-1" />
+                          <button
+                            className="w-full px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 flex items-center gap-2 font-medium"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              setShowSidebarMenu(false);
+                              const isConfirmed = await confirm({
+                                title: "Delete Booking Page",
+                                message: "Are you sure you want to delete this booking page?",
+                                confirmText: "Delete",
+                                destructive: true,
+                              });
+                              if (isConfirmed) {
+                                try {
+                                  const token = localStorage.getItem('token');
+                                  const res = await fetch(`${API_URL}/appointments/config`, {
+                                    method: "POST",
+                                    headers: { 
+                                      "Content-Type": "application/json",
+                                      ...(token ? { "Authorization": `Bearer ${token}` } : {})
+                                    },
+                                    body: JSON.stringify({
+                                      employeeId: menuConfig.employeeId,
+                                      duration: 30,
+                                      availability: { Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [], Sunday: [] },
+                                      active: false
+                                    })
                                   });
-                                  setShowDetailsCard(false);
-                                  toast.success("Booking page deleted");
-                                } else {
-                                  const errText = await res.text();
-                                  toast.error(`Failed to delete: ${res.status} ${errText}`);
+                                  if (res.ok) {
+                                    setShowDetailsCard(false);
+                                    toast.success("Booking page deleted");
+                                    fetchAllConfigs();
+                                  } else {
+                                    const errText = await res.text();
+                                    toast.error(`Failed to delete: ${res.status} ${errText}`);
+                                  }
+                                } catch (err: any) {
+                                  console.error(err);
+                                  toast.error(`Error: ${err.message || err}`);
                                 }
-                              } catch (err: any) {
-                                console.error(err);
-                                toast.error(`Error: ${err.message || err}`);
                               }
-                            }
-                          }}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             {/* Employee List */}
@@ -1822,7 +2089,11 @@ export default function SchedulePage() {
                   <div className="relative" style={{ height: "1440px" }}>
                     {renderHourGrid()}
                     {isToday && renderCurrentTimeLine("56px")}
-                    {((isConfiguring) || (appConfig.active && !hideAvailabilityFromCalendar)) && (appConfig.availability[currentDate.format("dddd")] || []).flatMap((slot: any, idx: number) => {
+                    {((isConfiguring) || (appConfig.active && !hideAvailabilityFromCalendar)) && 
+                     (appConfig.recurrence === "none"
+                       ? (appConfig.specificDates?.[currentDate.format("YYYY-MM-DD")] || [])
+                       : (appConfig.availability[currentDate.format("dddd")] || [])
+                     ).flatMap((slot: any, idx: number) => {
                       const sMin = timeToMinutes(slot.start);
                       const eMin = timeToMinutes(slot.end);
                       const duration = Number(appConfig.duration) || 30;
@@ -1834,10 +2105,14 @@ export default function SchedulePage() {
                         return `${dh}${ap}`;
                       };
 
+                      const dateStr = currentDate.format("YYYY-MM-DD");
+
                       if (isConfiguring) {
                         const subSlots = [];
                         for (let current = sMin; current + duration <= eMin; current += duration) {
-                          subSlots.push({ start: current, end: current + duration });
+                          if (isSlotFree(current, current + duration, dateStr)) {
+                            subSlots.push({ start: current, end: current + duration });
+                          }
                         }
                         return subSlots.map((s, sIdx) => (
                           <div
@@ -1850,6 +2125,9 @@ export default function SchedulePage() {
                           />
                         ));
                       } else {
+                        if (!isSlotFree(sMin, sMin + duration, dateStr)) {
+                          return null;
+                        }
                         return (
                           <div
                             key={`avail-day-grid-single-${idx}`}
@@ -1974,7 +2252,11 @@ export default function SchedulePage() {
                           )}
 
                           {/* Availability Highlights */}
-                          {((isConfiguring) || (appConfig.active && !hideAvailabilityFromCalendar)) && (appConfig.availability[day.format("dddd")] || []).flatMap((slot: any, idx: number) => {
+                          {((isConfiguring) || (appConfig.active && !hideAvailabilityFromCalendar)) && 
+                           (appConfig.recurrence === "none"
+                             ? (appConfig.specificDates?.[dateStr] || [])
+                             : (appConfig.availability[day.format("dddd")] || [])
+                           ).flatMap((slot: any, idx: number) => {
                             const sMin = timeToMinutes(slot.start);
                             const eMin = timeToMinutes(slot.end);
                             const duration = Number(appConfig.duration) || 30;
@@ -1989,7 +2271,9 @@ export default function SchedulePage() {
                             if (isConfiguring) {
                               const subSlots = [];
                               for (let current = sMin; current + duration <= eMin; current += duration) {
-                                subSlots.push({ start: current, end: current + duration });
+                                if (isSlotFree(current, current + duration, dateStr)) {
+                                  subSlots.push({ start: current, end: current + duration });
+                                }
                               }
                               return subSlots.map((s, sIdx) => (
                                 <div
@@ -2002,7 +2286,7 @@ export default function SchedulePage() {
                                   }}
                                 >
                                   <div className="w-3.5 h-3.5 rounded bg-[#1a73e8] flex items-center justify-center text-white shrink-0">
-                                    <svg className="w-2 h-2" fill="currentColor" viewBox="0 0 24 24">
+                                    <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24">
                                       <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10H7v-2h10v2zm0-4H7V7h10v2z" />
                                     </svg>
                                   </div>
@@ -2012,6 +2296,9 @@ export default function SchedulePage() {
                                 </div>
                               ));
                             } else {
+                              if (!isSlotFree(sMin, sMin + duration, dateStr)) {
+                                return null;
+                              }
                               return (
                                 <div
                                   key={`avail-grid-single-${dateStr}-${idx}`}
@@ -2024,7 +2311,7 @@ export default function SchedulePage() {
                                 >
                                   <div className="flex items-center gap-1 mt-1 ml-1 overflow-visible">
                                     <div className="w-3.5 h-3.5 rounded bg-[#1a73e8] flex items-center justify-center text-white shrink-0 shadow-sm">
-                                      <svg className="w-2 h-2" fill="currentColor" viewBox="0 0 24 24">
+                                      <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24">
                                         <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10H7v-2h10v2zm0-4H7V7h10v2z" />
                                       </svg>
                                     </div>
@@ -2091,14 +2378,14 @@ export default function SchedulePage() {
                   if (isConfirmed) {
                     try {
                       const token = localStorage.getItem('token');
-                      const res = await fetch(`${API_URL}/api/appointments/config`, {
+                      const res = await fetch(`${API_URL}/appointments/config`, {
                         method: "POST",
                         headers: { 
                           "Content-Type": "application/json",
                           ...(token ? { "Authorization": `Bearer ${token}` } : {})
                         },
                         body: JSON.stringify({
-                          employeeId: user?.id || user?.employeeId || "",
+                          employeeId: appConfig.employeeId || user?.id || user?.employeeId || "",
                           duration: 30,
                           availability: { Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [], Sunday: [] },
                           active: false
@@ -2112,6 +2399,7 @@ export default function SchedulePage() {
                         });
                         setShowDetailsCard(false);
                         toast.success("Booking page deleted");
+                        fetchAllConfigs(); // Refresh configuration list!
                       } else {
                         const errText = await res.text();
                         toast.error(`Failed to delete: ${res.status} ${errText}`);
@@ -2202,7 +2490,7 @@ export default function SchedulePage() {
               </div>
               <div className="space-y-0.5">
                 <h4 className="text-xs font-semibold text-slate-800 uppercase tracking-wide leading-tight">
-                  {user?.name || `${user?.firstName} ${user?.lastName}`}
+                  {employees.find(e => String(e.id) === String(appConfig.employeeId) || String(e.employeeId) === String(appConfig.employeeId))?.name || user?.name || "Employee"}
                 </h4>
                 <p className="text-xs text-slate-500">
                   Busy times on this calendar are unavailable for booking
@@ -2218,7 +2506,7 @@ export default function SchedulePage() {
               variant="outline"
               className="rounded-full px-5 py-2 h-9 text-xs text-blue-600 border-blue-200 hover:bg-blue-50 font-semibold gap-1.5 flex items-center"
               onClick={() => {
-                const link = `${window.location.origin}/f/book/${user?.id || user?.employeeId}`;
+                const link = `${window.location.origin}/f/book/${appConfig.employeeId}`;
                 window.open(link, '_blank');
               }}
             >
@@ -2230,7 +2518,7 @@ export default function SchedulePage() {
             <Button
               className="rounded-full px-5 py-2 h-9 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold gap-1.5 flex items-center shadow-sm"
               onClick={() => {
-                const link = `${window.location.origin}/f/book/${user?.id || user?.employeeId}`;
+                const link = `${window.location.origin}/f/book/${appConfig.employeeId}`;
                 navigator.clipboard.writeText(link);
                 toast.success("Link copied!");
               }}

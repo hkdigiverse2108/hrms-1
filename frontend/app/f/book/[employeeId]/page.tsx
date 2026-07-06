@@ -63,7 +63,7 @@ export default function PublicBookingPage() {
       }
 
       // Fetch scheduling config
-      const configRes = await fetch(`${API_URL}/api/appointments/config/${employeeId}`);
+      const configRes = await fetch(`${API_URL}/appointments/config/${employeeId}`);
       if (configRes.ok) {
         const configData = await configRes.json();
         setConfig(configData);
@@ -81,7 +81,7 @@ export default function PublicBookingPage() {
     try {
       const promises = weekDays.map(async (day) => {
         const dateStr = day.format("YYYY-MM-DD");
-        const res = await fetch(`${API_URL}/api/appointments/public/slots?employeeId=${employeeId}&date=${dateStr}`);
+        const res = await fetch(`${API_URL}/appointments/public/slots?employeeId=${employeeId}&date=${dateStr}`);
         if (res.ok) {
           const data = await res.json();
           return { date: dateStr, slots: data.slots || [] };
@@ -123,7 +123,7 @@ export default function PublicBookingPage() {
         attendeeEmail: form.attendeeEmail
       };
 
-      const res = await fetch(`${API_URL}/api/appointments/public/book`, {
+      const res = await fetch(`${API_URL}/appointments/public/book`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
@@ -283,9 +283,12 @@ export default function PublicBookingPage() {
                 const isSelected = day.isSame(selectedDate, "day");
                 const isCurrentMonth = day.month() === currentMonth.month();
                 const isPast = day.isBefore(dayjs().startOf("day"));
+                const dateKey = day.format("YYYY-MM-DD");
                 const weekday = day.format("dddd");
-                const isAvailableWeekday = (config.availability[weekday] || []).length > 0;
-                const isDisabled = isPast || !isAvailableWeekday;
+                const isAvailable = config.recurrence === "none"
+                  ? (config.specificDates?.[dateKey] || []).length > 0
+                  : (config.availability[weekday] || []).length > 0;
+                const isDisabled = isPast || !isAvailable;
 
                 return (
                   <button

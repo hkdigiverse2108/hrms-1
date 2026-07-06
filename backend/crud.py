@@ -7736,15 +7736,25 @@ async def calculate_public_slots(db, employee_id: str, date_str: str):
     except Exception:
         return []
     
-    day_name = target_date.strftime("%A")
-    day_slots = availability.get(day_name, [])
+    recurrence = config.get("recurrence", "weekly")
+    if recurrence == "none":
+        day_slots = config.get("specificDates", {}).get(date_str, [])
+    else:
+        day_name = target_date.strftime("%A")
+        day_slots = availability.get(day_name, [])
+        
     if not day_slots:
         return []
     
+    all_member_ids = [employee_id]
+    if config.get("employeeIds"):
+        all_member_ids.extend([str(x) for x in config.get("employeeIds")])
+    all_member_ids = list(set(all_member_ids))
+
     query = {
         "$or": [
-            {"employeeId": employee_id},
-            {"attendees": employee_id}
+            {"employeeId": {"$in": all_member_ids}},
+            {"attendees": {"$in": all_member_ids}}
         ]
     }
     query["date"] = {"$in": [date_str, target_date]}
