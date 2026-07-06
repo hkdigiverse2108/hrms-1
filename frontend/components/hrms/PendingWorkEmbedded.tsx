@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, AlertCircle, CalendarIcon, ArrowRight, Filter, Search, ClipboardList, X, Check, Edit2, History, ArrowLeftRight, ArrowLeft } from 'lucide-react';
+import { Loader2, AlertCircle, CalendarIcon, ArrowRight, Filter, Search, ClipboardList, X, Check, Edit2, History, ArrowLeftRight, ArrowLeft, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { API_URL } from '@/lib/config';
 import { toast } from 'sonner';
+import { useConfirm } from "@/context/ConfirmContext";
 
 const isStageSubsequentOrEqual = (stageName: string, remarkStageName: string, postReel?: string) => {
   const reelStages = ['Script', 'Shoot', 'Editing', 'Approval', 'Posting'];
@@ -65,6 +66,7 @@ export function PendingWorkEmbedded({
   onRespond?: () => void
 }) {
   const router = useRouter();
+  const { confirm } = useConfirm();
   
   const [entries, setEntries] = useState<any[]>([]);
   const [otherWorkEntries, setOtherWorkEntries] = useState<any[]>([]);
@@ -166,6 +168,32 @@ export function PendingWorkEmbedded({
     } catch (err) {
       console.error(err);
       toast.error("Failed to update status");
+    }
+  };
+
+  const handleDeleteOtherWork = async (id: string) => {
+    const isConfirmed = await confirm({
+      title: "Delete Assigned Work",
+      message: "Are you sure you want to delete this task? It will be removed from all assigned user dashboards.",
+      confirmText: "Delete",
+      destructive: true,
+    });
+
+    if (!isConfirmed) return;
+
+    try {
+      const response = await fetch(`${API_URL}/other-work/${id}`, {
+        method: 'DELETE',
+      });
+      if (response.ok) {
+        setOtherWorkEntries(otherWorkEntries.filter(e => e.id !== id));
+        toast.success("Assigned task deleted successfully");
+      } else {
+        toast.error("Failed to delete assigned task");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("An error occurred");
     }
   };
 
@@ -1150,6 +1178,22 @@ export function PendingWorkEmbedded({
                             >
                               <History className="w-4 h-4" />
                             </Button>
+                            {(() => {
+                              const isAssigner = item.assignerId === currentUser?.id || item.assignerId === currentUser?._id;
+                              const isAdminOrTL = currentUser?.role === 'Team Leader' || currentUser?.designation?.toLowerCase() === 'team leader' || currentUser?.role?.toLowerCase() === 'admin' || currentUser?.name === 'Admin Admin' || currentUser?.role === 'HR';
+                              const canDelete = isAssigner || isAdminOrTL;
+                              return canDelete && (
+                                <Button
+                                  onClick={() => handleDeleteOtherWork(item.id)}
+                                  variant="ghost"
+                                  size="icon"
+                                  title="Delete Task"
+                                  className="h-8 w-8 text-red-500 hover:bg-red-50 hover:text-red-700"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              );
+                            })()}
                           </>
                         ) : (
                           <>
