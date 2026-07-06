@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { DatePicker, TimePicker, Popconfirm, Tooltip as AntTooltip, Select as AntSelect } from "antd";
 import dayjs from "dayjs";
-import { Plus, Loader2, ChevronLeft, ChevronRight, X, Search, CalendarCheck, RefreshCcw } from "lucide-react";
+import { Plus, Loader2, ChevronLeft, ChevronRight, X, Search, CalendarCheck, RefreshCcw, Copy, Link, Calendar } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import { useUserContext } from "@/context/UserContext";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -49,6 +49,87 @@ export default function SchedulePage() {
   const [currentDate, setCurrentDate] = useState(dayjs(getISTNow()));
   const [calendarMonth, setCalendarMonth] = useState<Date>(dayjs(getISTNow()).toDate());
   const [schedules, setSchedules] = useState<any[]>([]);
+
+  const [configModalOpen, setConfigModalOpen] = useState(false);
+  const [isConfiguring, setIsConfiguring] = useState(false);
+  const [isConfigSaving, setIsConfigSaving] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [showCustomDuration, setShowCustomDuration] = useState(false);
+  const [appConfig, setAppConfig] = useState<any>({
+    employeeId: "",
+    title: "ABCD",
+    duration: 30,
+    availability: {
+      Monday: [{ start: "09:00", end: "17:00" }],
+      Tuesday: [{ start: "09:00", end: "17:00" }],
+      Wednesday: [{ start: "09:00", end: "17:00" }],
+      Thursday: [{ start: "09:00", end: "17:00" }],
+      Friday: [{ start: "09:00", end: "17:00" }],
+      Saturday: [],
+      Sunday: []
+    },
+    timezone: "Asia/Kolkata",
+    active: true
+  });
+
+  const fetchConfig = async () => {
+    const empId = user?.id || user?.employeeId;
+    if (!empId) return;
+    try {
+      const res = await fetch(`${API_URL}/api/appointments/config/${empId}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.employeeId) {
+          setAppConfig(data);
+          if (![15, 30, 45, 60].includes(data.duration)) {
+            setShowCustomDuration(true);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching appointment config:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (user?.id || user?.employeeId) {
+      fetchConfig();
+    }
+  }, [user]);
+
+  const duplicateToAll = (sourceDay: string) => {
+    const sourceSlots = appConfig.availability[sourceDay] || [];
+    const newAvailability = { ...appConfig.availability };
+    Object.keys(newAvailability).forEach(day => {
+      if (day !== "Saturday" && day !== "Sunday") {
+        newAvailability[day] = JSON.parse(JSON.stringify(sourceSlots));
+      }
+    });
+    setAppConfig({ ...appConfig, availability: newAvailability });
+    toast.success(`Copied ${sourceDay}'s schedule to Monday - Friday`);
+  };
+
+  const handleSaveConfig = async () => {
+    setIsConfigSaving(true);
+    try {
+      const empId = user?.id || user?.employeeId;
+      const res = await fetch(`${API_URL}/api/appointments/config`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...appConfig, employeeId: empId })
+      });
+      if (res.ok) {
+        toast.success("Appointment schedule configuration saved");
+        setConfigModalOpen(false);
+      } else {
+        toast.error("Failed to save configuration");
+      }
+    } catch (err) {
+      toast.error("Error saving configuration");
+    } finally {
+      setIsConfigSaving(false);
+    }
+  };
 
   // Sync user profile from server to detect Google Calendar tokens
   const syncUserProfile = React.useCallback(async () => {
@@ -979,174 +1060,470 @@ export default function SchedulePage() {
             </DialogContent>
           </Dialog>
         )}
+
+        {canAdd && (
+          <Button
+            variant="outline"
+            className="border-brand-teal text-brand-teal hover:bg-brand-teal/5 font-medium shadow-sm ml-2"
+            onClick={() => {
+              setIsConfiguring(true);
+              setViewMode("week");
+            }}
+          >
+            <Calendar className="w-4 h-4 mr-2" />
+            Appointment Setup
+          </Button>
+        )}
       </PageHeader>
 
       {/* ═══════ MAIN LAYOUT ═══════ */}
       <div className="flex gap-0 bg-white rounded-xl shadow-sm border border-border overflow-hidden" style={{ height: "calc(100vh - 180px)" }}>
 
         {/* ─── LEFT SIDEBAR ─── */}
-        <div className="w-[260px] shrink-0 border-r border-border flex flex-col bg-gray-50/50">
-
-          {/* Mini Calendar */}
-          <div className="p-3 border-b border-border">
-            <div className="flex items-center justify-between mb-2 px-1">
-              <h2 className="text-sm font-semibold text-foreground">
-                {dayjs(calendarMonth).format("MMMM YYYY")}
-              </h2>
-              <div className="flex items-center gap-0.5">
-                <button
-                  onClick={() => setCalendarMonth(dayjs(calendarMonth).subtract(1, 'month').toDate())}
-                  className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-gray-200 transition-colors text-muted-foreground"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setCalendarMonth(dayjs(calendarMonth).add(1, 'month').toDate())}
-                  className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-gray-200 transition-colors text-muted-foreground"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-            <DayPicker
-              mode="single"
-              selected={currentDate.toDate()}
-              onSelect={handleDayClick}
-              month={calendarMonth}
-              onMonthChange={setCalendarMonth}
-              showOutsideDays
-              classNames={{
-                root: "w-full [--cell-size:28px]",
-                months: "w-full",
-                month: "w-full",
-                month_caption: "hidden",
-                nav: "hidden",
-                table: "w-full border-collapse",
-                weekdays: "flex w-full",
-                weekday: "flex-1 text-center text-[10px] font-medium text-muted-foreground uppercase py-1 select-none",
-                week: "flex w-full mt-0.5",
-                day: "flex-1 flex items-center justify-center p-0 text-xs [&_button]:w-7 [&_button]:h-7 [&_button]:rounded-full [&_button]:flex [&_button]:items-center [&_button]:justify-center [&_button]:cursor-pointer [&_button]:hover:bg-gray-200 [&_button]:transition-colors [&_button]:font-medium [&_button]:border-0 [&_button]:bg-transparent [&_button]:text-foreground",
-                selected: "[&_button]:!bg-brand-teal [&_button]:!text-white [&_button]:hover:!bg-brand-teal",
-                today: "[&_button]:bg-brand-teal/10 [&_button]:text-brand-teal [&_button]:font-bold",
-                outside: "[&_button]:text-muted-foreground/40",
-              }}
-            />
-          </div>
-
-          {/* Employee List */}
-          <div className="flex-1 flex flex-col min-h-0">
-            <div className="px-4 pt-4 pb-2 border-b border-border/50">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2.5">Employees</h3>
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        {isConfiguring ? (
+          <div className="w-[360px] shrink-0 border-r border-border flex flex-col bg-white overflow-hidden p-6 space-y-6">
+            
+            {/* Header: Title and Close button */}
+            <div className="flex items-start justify-between shrink-0">
+              <div className="flex-1 mr-4">
+                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                  Bookable Appointment Schedule
+                </div>
                 <input
                   type="text"
-                  placeholder="Search employees..."
-                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-brand-teal transition-all"
-                  value={employeeSearch}
-                  onChange={(e) => setEmployeeSearch(e.target.value)}
+                  value={appConfig.title || ""}
+                  onChange={(e) => setAppConfig({ ...appConfig, title: e.target.value })}
+                  className="w-full text-xl font-medium border-b-2 border-slate-300 focus:border-blue-600 outline-none pb-1 mt-2 transition-colors"
+                  placeholder="ABCD"
                 />
               </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 rounded-full hover:bg-slate-100"
+                onClick={() => setIsConfiguring(false)}
+              >
+                <X className="w-5 h-5 text-slate-600" />
+              </Button>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-1">
-              {employees.filter(emp => emp.name.toLowerCase().includes(employeeSearch.toLowerCase())).map((emp, idx) => {
-                const color = EMPLOYEE_COLORS[idx % EMPLOYEE_COLORS.length];
-                const isChecked = selectedEmployeeIds.includes(String(emp.id));
-                const isCurrentUser = user && (String(emp.id) === String(user.id || user.employeeId) || String(emp.employeeId) === String(user.id || user.employeeId));
 
-                return (
-                  <label
-                    key={emp.id}
-                    className="flex items-center gap-2.5 px-2 py-1.5 rounded-md cursor-pointer hover:bg-gray-100 transition-colors group"
+            {/* Content body wrapper (scrollable) */}
+            <div className="flex-1 overflow-y-auto pr-1 space-y-6 select-none custom-scrollbar">
+              
+              {/* Active Toggle & Booking Link */}
+              <div className="space-y-3 bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-semibold text-xs text-slate-800">Active Booking Link</div>
+                    <div className="text-[10px] text-slate-500 leading-tight">Enable or disable booking appointments</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    className="w-9 h-5 bg-gray-200 checked:bg-blue-600 rounded-full cursor-pointer"
+                    checked={appConfig.active}
+                    onChange={(e) => setAppConfig({ ...appConfig, active: e.target.checked })}
+                  />
+                </div>
+
+                {appConfig.active && (
+                  <div className="flex items-center gap-1.5 p-2 bg-white border border-slate-200 rounded-lg">
+                    <Link className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <input
+                      type="text"
+                      readOnly
+                      value={typeof window !== 'undefined' ? `${window.location.origin}/f/book/${user?.id || user?.employeeId}` : ""}
+                      className="bg-transparent text-[10px] w-full outline-none select-all text-slate-600 font-mono"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 p-0 rounded-full hover:bg-slate-100 shrink-0"
+                      onClick={() => {
+                        const link = `${window.location.origin}/f/book/${user?.id || user?.employeeId}`;
+                        navigator.clipboard.writeText(link);
+                        setCopiedLink(true);
+                        toast.success("Link copied!");
+                        setTimeout(() => setCopiedLink(false), 2000);
+                      }}
+                    >
+                      <Copy className="w-3.5 h-3.5 text-slate-500" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {/* 1. Appointment Duration Section */}
+              <div className="flex gap-4">
+                <div className="mt-1">
+                  <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div className="flex-1 space-y-2">
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-800 leading-tight">Appointment duration</h4>
+                    <p className="text-[11px] text-slate-500 leading-tight">How long should each appointment last?</p>
+                  </div>
+                  
+                  <Select
+                    value={showCustomDuration ? "custom" : String(appConfig.duration)}
+                    onValueChange={(val) => {
+                      if (val === "custom") {
+                        setShowCustomDuration(true);
+                      } else {
+                        setShowCustomDuration(false);
+                        setAppConfig({ ...appConfig, duration: parseInt(val) });
+                      }
+                    }}
                   >
-                    <div className="relative flex items-center justify-center">
+                    <SelectTrigger className="w-full h-9 bg-slate-50 border-slate-200 text-slate-700 text-xs">
+                      <SelectValue placeholder="Select duration" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="15">15 minutes</SelectItem>
+                      <SelectItem value="30">30 minutes</SelectItem>
+                      <SelectItem value="45">45 minutes</SelectItem>
+                      <SelectItem value="60">1 hour</SelectItem>
+                      <SelectItem value="custom">Custom...</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {showCustomDuration && (
+                    <div className="flex items-center gap-2 mt-2">
                       <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => toggleEmployee(String(emp.id))}
-                        className="sr-only"
+                        type="number"
+                        min="1"
+                        placeholder="Minutes"
+                        className="p-1.5 border border-slate-200 rounded text-xs w-20 text-center outline-none focus:border-blue-500 bg-slate-50 text-slate-700"
+                        value={appConfig.duration || ""}
+                        onChange={(e) => setAppConfig({ ...appConfig, duration: parseInt(e.target.value) || 0 })}
                       />
-                      <div
-                        className="w-4 h-4 rounded-sm border-2 flex items-center justify-center transition-all"
-                        style={{
-                          backgroundColor: isChecked ? color.bg : "transparent",
-                          borderColor: isChecked ? color.bg : "#d1d5db",
+                      <span className="text-[11px] text-slate-500">minutes</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-[10px] text-blue-600 p-0 h-auto hover:bg-transparent"
+                        onClick={() => {
+                          setShowCustomDuration(false);
+                          setAppConfig({ ...appConfig, duration: 60 });
                         }}
                       >
-                        {isChecked && (
-                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                            <path d="M2 5L4 7L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        )}
-                      </div>
+                        Preset
+                      </Button>
                     </div>
-                    <span className="text-sm text-foreground truncate flex-1">
-                      {emp.name}
-                      {isCurrentUser && <span className="text-muted-foreground text-xs ml-1">(You)</span>}
-                    </span>
-                  </label>
-                );
-              })}
+                  )}
+                </div>
+              </div>
+
+              <div className="border-t border-slate-100" />
+
+              {/* 2. General Availability Section */}
+              <div className="flex gap-4">
+                <div className="mt-1">
+                  <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <div className="flex-1 space-y-3">
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-800 leading-tight">General availability</h4>
+                    <p className="text-[11px] text-slate-500 leading-tight">
+                      Set when you're regularly available for appointments.
+                    </p>
+                  </div>
+
+                  <Select value="weekly">
+                    <SelectTrigger className="w-36 h-8 bg-slate-50 border-slate-200 text-slate-700 text-xs font-medium">
+                      <SelectValue placeholder="Repeat weekly" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="weekly">Repeat weekly</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {/* Availability Grid */}
+                  <div className="space-y-3.5 pt-2">
+                    {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((day) => {
+                      const slots = appConfig.availability[day] || [];
+                      const isAvailable = slots.length > 0;
+
+                      const toggleDay = (checked: boolean) => {
+                        const newAvail = { ...appConfig.availability };
+                        if (checked) {
+                          newAvail[day] = [{ start: "09:00", end: "17:00" }];
+                        } else {
+                          newAvail[day] = [];
+                        }
+                        setAppConfig({ ...appConfig, availability: newAvail });
+                      };
+
+                      const updateTime = (index: number, field: "start" | "end", val: string) => {
+                        const newAvail = { ...appConfig.availability };
+                        const newSlots = [...(newAvail[day] || [])];
+                        if (newSlots[index]) {
+                          newSlots[index] = { ...newSlots[index], [field]: val };
+                        }
+                        newAvail[day] = newSlots;
+                        setAppConfig({ ...appConfig, availability: newAvail });
+                      };
+
+                      return (
+                        <div key={day} className="flex items-center justify-between text-xs gap-3">
+                          <div className="w-10 shrink-0 font-medium text-slate-600">
+                            {day.substring(0, 3)}
+                          </div>
+
+                          {isAvailable ? (
+                            <div className="flex items-center gap-1.5 flex-1 justify-end">
+                              <input
+                                type="time"
+                                value={slots[0]?.start || "09:00"}
+                                onChange={(e) => updateTime(0, "start", e.target.value)}
+                                className="bg-[#f1f3f4] text-slate-700 hover:bg-[#e8eaed] transition-colors rounded px-2 py-1.5 text-xs text-center border-none outline-none w-20"
+                              />
+                              <span className="text-slate-400 font-light">—</span>
+                              <input
+                                type="time"
+                                value={slots[0]?.end || "17:00"}
+                                onChange={(e) => updateTime(0, "end", e.target.value)}
+                                className="bg-[#f1f3f4] text-slate-700 hover:bg-[#e8eaed] transition-colors rounded px-2 py-1.5 text-xs text-center border-none outline-none w-20"
+                              />
+                              
+                              {/* Make Unavailable (Block icon) */}
+                              <button
+                                type="button"
+                                className="p-1 rounded-full hover:bg-slate-100 shrink-0 text-slate-500"
+                                onClick={() => toggleDay(false)}
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636" />
+                                </svg>
+                              </button>
+
+                              {/* Duplicate to Mon-Fri (Copy icon, only on Mon) */}
+                              {day === "Monday" && (
+                                <button
+                                  type="button"
+                                  title="Copy Mon-Fri"
+                                  className="p-1 rounded-full hover:bg-slate-100 shrink-0 text-slate-500"
+                                  onClick={() => duplicateToAll("Monday")}
+                                >
+                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                                  </svg>
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-between flex-1 pl-1">
+                              <span className="text-slate-400 italic">Unavailable</span>
+                              <button
+                                type="button"
+                                className="p-1 rounded-full hover:bg-slate-100 text-slate-500 shrink-0"
+                                onClick={() => toggleDay(true)}
+                              >
+                                <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                                </svg>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
             </div>
 
-            {/* Google Calendar Integration */}
-            <div className="p-4 border-t border-border bg-gray-50/80 shrink-0">
-              {user?.googleCalendarTokens ? (
-                <div className="flex flex-col items-center justify-center gap-2">
-                  <div className="w-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold px-3 py-2 rounded-lg flex items-center justify-center gap-2">
-                    <CalendarCheck className="h-4 w-4" />
-                    Google Calendar Connected
-                  </div>
-                  <Button 
-                    type="button"
-                    variant="outline"
-                    onClick={handleManualSync}
-                    disabled={isSyncing}
-                    className="w-full text-brand-teal border-brand-teal/30 hover:bg-brand-teal/5 hover:text-brand-teal h-8 text-xs font-medium"
-                  >
-                    <RefreshCcw className={`h-3.5 w-3.5 mr-1.5 ${isSyncing ? 'animate-spin' : ''}`} />
-                    {isSyncing ? 'Syncing...' : 'Sync Now'}
-                  </Button>
-                  <Button 
-                    type="button"
-                    variant="outline"
-                    onClick={handleDisconnectGoogle}
-                    className="w-full text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 h-8 text-xs font-medium"
-                  >
-                    Disconnect
-                  </Button>
-                </div>
-              ) : (
-                <Button 
-                  type="button"
-                  onClick={() => {
-                    if (user) {
-                      const isDesktop = typeof window !== 'undefined' && !!(window as any).electronAPI;
-                      const origin = typeof window !== 'undefined' ? window.location.origin : '';
-                      const baseApi = API_URL.startsWith('http') ? API_URL : `${origin}${API_URL}`;
-                      const authUrl = `${baseApi}/auth/google/url?employeeId=${user.id || user.employeeId}${isDesktop ? '&desktop=true' : ''}`;
-                      if (typeof window !== 'undefined' && (window as any).electronAPI?.openExternal) {
-                        (window as any).electronAPI.openExternal(authUrl);
-                      } else {
-                        window.open(authUrl, '_blank');
-                      }
-                    }
-                  }}
-                  className="w-full bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 hover:text-brand-teal font-semibold text-xs shadow-sm"
-                >
-                  <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">
-                    <path
-                      fill="currentColor"
-                      d="M21.35,11.1H12.18V13.83H18.69C18.36,17.64 15.19,19.27 12.19,19.27C8.36,19.27 5,16.25 5,12C5,7.9 8.2,4.73 12.2,4.73C15.29,4.73 17.1,6.7 17.1,6.7L19,4.72C19,4.72 16.56,2 12.1,2C6.42,2 2.03,6.8 2.03,12C2.03,17.05 6.36,22 12.22,22C17.74,22 21.5,18.33 21.5,12.91C21.5,11.76 21.35,11.1 21.35,11.1V11.1Z"
-                    />
-                  </svg>
-                  Connect Google Calendar
-                </Button>
-              )}
+            {/* Footer Buttons */}
+            <div className="flex items-center justify-end gap-3 pt-4 border-t shrink-0">
+              <Button
+                variant="ghost"
+                className="text-xs font-semibold hover:bg-slate-100 text-slate-600 px-4 py-2 rounded-full"
+                onClick={() => setIsConfiguring(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="bg-[#1a73e8] hover:bg-[#1557b0] text-white font-medium rounded-full px-6 py-2 text-xs shadow-sm"
+                onClick={async () => {
+                  await handleSaveConfig();
+                  setIsConfiguring(false);
+                }}
+                disabled={isConfigSaving}
+              >
+                {isConfigSaving ? "Saving..." : "Next"}
+              </Button>
             </div>
 
           </div>
-        </div>
+        ) : (
+          <div className="w-[260px] shrink-0 border-r border-border flex flex-col bg-gray-50/50">
+            {/* Mini Calendar */}
+            <div className="p-3 border-b border-border">
+              <div className="flex items-center justify-between mb-2 px-1">
+                <h2 className="text-sm font-semibold text-foreground">
+                  {dayjs(calendarMonth).format("MMMM YYYY")}
+                </h2>
+                <div className="flex items-center gap-0.5">
+                  <button
+                    onClick={() => setCalendarMonth(dayjs(calendarMonth).subtract(1, 'month').toDate())}
+                    className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-gray-200 transition-colors text-muted-foreground"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setCalendarMonth(dayjs(calendarMonth).add(1, 'month').toDate())}
+                    className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-gray-200 transition-colors text-muted-foreground"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+              <DayPicker
+                mode="single"
+                selected={currentDate.toDate()}
+                onSelect={handleDayClick}
+                month={calendarMonth}
+                onMonthChange={setCalendarMonth}
+                showOutsideDays
+                classNames={{
+                  root: "w-full [--cell-size:28px]",
+                  months: "w-full",
+                  month: "w-full",
+                  month_caption: "hidden",
+                  nav: "hidden",
+                  table: "w-full border-collapse",
+                  weekdays: "flex w-full",
+                  weekday: "flex-1 text-center text-[10px] font-medium text-muted-foreground uppercase py-1 select-none",
+                  week: "flex w-full mt-0.5",
+                  day: "flex-1 flex items-center justify-center p-0 text-xs [&_button]:w-7 [&_button]:h-7 [&_button]:rounded-full [&_button]:flex [&_button]:items-center [&_button]:justify-center [&_button]:cursor-pointer [&_button]:hover:bg-gray-200 [&_button]:transition-colors [&_button]:font-medium [&_button]:border-0 [&_button]:bg-transparent [&_button]:text-foreground",
+                  selected: "[&_button]:!bg-brand-teal [&_button]:!text-white [&_button]:hover:!bg-brand-teal",
+                  today: "[&_button]:bg-brand-teal/10 [&_button]:text-brand-teal [&_button]:font-bold",
+                  outside: "[&_button]:text-muted-foreground/40",
+                }}
+              />
+            </div>
+
+            {/* Employee List */}
+            <div className="flex-1 flex flex-col min-h-0">
+              <div className="px-4 pt-4 pb-2 border-b border-border/50">
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2.5">Employees</h3>
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="Search employees..."
+                    className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-brand-teal transition-all"
+                    value={employeeSearch}
+                    onChange={(e) => setEmployeeSearch(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-1">
+                {employees.filter(emp => emp.name.toLowerCase().includes(employeeSearch.toLowerCase())).map((emp, idx) => {
+                  const color = EMPLOYEE_COLORS[idx % EMPLOYEE_COLORS.length];
+                  const isChecked = selectedEmployeeIds.includes(String(emp.id));
+                  const isCurrentUser = user && (String(emp.id) === String(user.id || user.employeeId) || String(emp.employeeId) === String(user.id || user.employeeId));
+
+                  return (
+                    <label
+                      key={emp.id}
+                      className="flex items-center gap-2.5 px-2 py-1.5 rounded-md cursor-pointer hover:bg-gray-100 transition-colors group"
+                    >
+                      <div className="relative flex items-center justify-center">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleEmployee(String(emp.id))}
+                          className="sr-only"
+                        />
+                        <div
+                          className="w-4 h-4 rounded-sm border-2 flex items-center justify-center transition-all"
+                          style={{
+                            backgroundColor: isChecked ? color.bg : "transparent",
+                            borderColor: isChecked ? color.bg : "#d1d5db",
+                          }}
+                        >
+                          {isChecked && (
+                            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                              <path d="M2 5L4 7L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          )}
+                        </div>
+                      </div>
+                      <span className="text-sm text-foreground truncate flex-1">
+                        {emp.name}
+                        {isCurrentUser && <span className="text-muted-foreground text-xs ml-1">(You)</span>}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+
+              {/* Google Calendar Integration */}
+              <div className="p-4 border-t border-border bg-gray-50/80 shrink-0">
+                {user?.googleCalendarTokens ? (
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <div className="w-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold px-3 py-2 rounded-lg flex items-center justify-center gap-2">
+                      <CalendarCheck className="h-4 w-4" />
+                      Google Calendar Connected
+                    </div>
+                    <Button 
+                      type="button"
+                      variant="outline"
+                      onClick={handleManualSync}
+                      disabled={isSyncing}
+                      className="w-full text-brand-teal border-brand-teal/30 hover:bg-brand-teal/5 hover:text-brand-teal h-8 text-xs font-medium"
+                    >
+                      <RefreshCcw className={`h-3.5 w-3.5 mr-1.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                      {isSyncing ? 'Syncing...' : 'Sync Now'}
+                    </Button>
+                    <Button 
+                      type="button"
+                      variant="outline"
+                      onClick={handleDisconnectGoogle}
+                      className="w-full text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 h-8 text-xs font-medium"
+                    >
+                      Disconnect
+                    </Button>
+                  </div>
+                ) : (
+                  <Button 
+                    type="button"
+                    onClick={() => {
+                      if (user) {
+                        const isDesktop = typeof window !== 'undefined' && !!(window as any).electronAPI;
+                        const origin = typeof window !== 'undefined' ? window.location.origin : '';
+                        const baseApi = API_URL.startsWith('http') ? API_URL : `${origin}${API_URL}`;
+                        const authUrl = `${baseApi}/auth/google/url?employeeId=${user.id || user.employeeId}${isDesktop ? '&desktop=true' : ''}`;
+                        if (typeof window !== 'undefined' && (window as any).electronAPI?.openExternal) {
+                          (window as any).electronAPI.openExternal(authUrl);
+                        } else {
+                          window.open(authUrl, '_blank');
+                        }
+                      }
+                    }}
+                    className="w-full bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 hover:text-brand-teal font-semibold text-xs shadow-sm"
+                  >
+                    <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">
+                      <path
+                        fill="currentColor"
+                        d="M21.35,11.1H12.18V13.83H18.69C18.36,17.64 15.19,19.27 12.19,19.27C8.36,19.27 5,16.25 5,12C5,7.9 8.2,4.73 12.2,4.73C15.29,4.73 17.1,6.7 17.1,6.7L19,4.72C19,4.72 16.56,2 12.1,2C6.42,2 2.03,6.8 2.03,12C2.03,17.05 6.36,22 12.22,22C17.74,22 21.5,18.33 21.5,12.91C21.5,11.76 21.35,11.1 21.35,11.1V11.1Z"
+                      />
+                    </svg>
+                    Connect Google Calendar
+                  </Button>
+                )}
+              </div>
+
+            </div>
+          </div>
+        )}
 
         {/* ─── RIGHT PANEL ─── */}
         <div className="flex-1 flex flex-col min-w-0">
@@ -1230,6 +1607,23 @@ export default function SchedulePage() {
                   <div className="relative" style={{ height: "1440px" }}>
                     {renderHourGrid()}
                     {isToday && renderCurrentTimeLine("56px")}
+                    {isConfiguring && (appConfig.availability[currentDate.format("dddd")] || []).map((slot: any, idx: number) => {
+                      const sMin = timeToMinutes(slot.start);
+                      const eMin = timeToMinutes(slot.end);
+                      return (
+                        <div
+                          key={`avail-day-grid-${idx}`}
+                          className="absolute bg-brand-teal/15 border-l-4 border-brand-teal pointer-events-none"
+                          style={{
+                            left: "56px",
+                            right: 0,
+                            top: `${sMin}px`,
+                            height: `${eMin - sMin}px`,
+                            zIndex: 5
+                          }}
+                        />
+                      );
+                    })}
                     <div className="absolute top-0 bottom-0 right-0" style={{ left: "56px" }}>
                       {layoutEvents(filterByEmployee(schedules)).map(({ event, column, totalColumns }) =>
                         renderEventBlock(event, column, totalColumns)
@@ -1328,6 +1722,23 @@ export default function SchedulePage() {
                               </div>
                             </div>
                           )}
+
+                          {/* Availability Highlights when configuring */}
+                          {isConfiguring && (appConfig.availability[day.format("dddd")] || []).map((slot: any, idx: number) => {
+                            const sMin = timeToMinutes(slot.start);
+                            const eMin = timeToMinutes(slot.end);
+                            return (
+                              <div
+                                key={`avail-grid-${dateStr}-${idx}`}
+                                className="absolute left-0 right-0 bg-brand-teal/15 border-l-4 border-brand-teal pointer-events-none"
+                                style={{
+                                  top: `${sMin}px`,
+                                  height: `${eMin - sMin}px`,
+                                  zIndex: 5
+                                }}
+                              />
+                            );
+                          })}
 
                           {/* Events */}
                           <div className="absolute inset-0">
