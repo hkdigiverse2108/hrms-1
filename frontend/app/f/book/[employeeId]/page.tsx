@@ -174,13 +174,37 @@ export default function PublicBookingPage() {
 
   if (!config || !config.active || !employee) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-xl shadow-lg border border-border p-8 text-center space-y-4">
-          <AlertCircle className="w-12 h-12 text-amber-500 mx-auto" />
-          <h2 className="text-xl font-bold text-slate-800">Booking Link Inactive</h2>
-          <p className="text-slate-500 text-sm">
-            This employee is currently not accepting external appointment bookings. Please contact them directly.
-          </p>
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6 text-center select-none font-sans">
+        <div className="max-w-xl w-full space-y-8">
+          {/* Header */}
+          <div className="space-y-3">
+            <h1 className="text-[28px] font-normal text-slate-900 tracking-tight">
+              Appointment not found
+            </h1>
+            <p className="text-[14px] text-slate-600 font-normal leading-relaxed">
+              The appointment may have been deleted or the link may be incorrect
+            </p>
+          </div>
+
+          {/* Marketing Card */}
+          <div className="bg-white border border-slate-200 rounded-lg p-8 space-y-5 text-center shadow-sm">
+            <h2 className="text-[18px] font-normal text-slate-800">
+              Online appointment scheduling by Google Calendar
+            </h2>
+            <p className="text-[14px] text-slate-600 font-normal leading-relaxed max-w-md mx-auto">
+              Take the pain out of scheduling appointments by integrating your own dedicated booking page with Google Calendar.
+            </p>
+            <div className="pt-2">
+              <a 
+                href="https://support.google.com/calendar/answer/10729749" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-[14px] text-blue-600 hover:text-blue-800 font-medium underline transition-colors"
+              >
+                Learn more about Google Calendar appointment scheduling
+              </a>
+            </div>
+          </div>
         </div>
       </div>
     );

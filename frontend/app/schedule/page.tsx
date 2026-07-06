@@ -3,16 +3,17 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { DatePicker, TimePicker, Popconfirm, Tooltip as AntTooltip, Select as AntSelect } from "antd";
 import dayjs from "dayjs";
-import { Plus, Loader2, ChevronLeft, ChevronRight, X, Search, CalendarCheck, RefreshCcw, Copy, Link, Calendar } from "lucide-react";
+import { Plus, Loader2, ChevronLeft, ChevronRight, X, Search, CalendarCheck, RefreshCcw, Copy, Link, Calendar, ChevronUp, ChevronDown } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import { useUserContext } from "@/context/UserContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { toast } from "sonner";
 import { DayPicker } from "react-day-picker";
+import { useConfirm } from "@/context/ConfirmContext";
 
 /* ───── color palette for employees ───── */
 const EMPLOYEE_COLORS = [
@@ -43,6 +44,7 @@ type ViewMode = "day" | "week";
 export default function SchedulePage() {
   const { user, getISTNow, updateUser } = useUserContext();
   const { checkPermission, isAdmin } = usePermissions();
+  const { confirm } = useConfirm();
   const [isSyncing, setIsSyncing] = useState(false);
   const canAdd = isAdmin || checkPermission('schedule', 'canAdd');
   const canDeletePerm = isAdmin || checkPermission('schedule', 'canDelete');
@@ -54,11 +56,17 @@ export default function SchedulePage() {
   const [isConfiguring, setIsConfiguring] = useState(false);
   const [isConfigSaving, setIsConfigSaving] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
-  const [showCustomDuration, setShowCustomDuration] = useState(false);
+  const [showDetailsCard, setShowDetailsCard] = useState(false);
+  const [hideAvailabilityFromCalendar, setHideAvailabilityFromCalendar] = useState(false);
+  const [showSidebarMenu, setShowSidebarMenu] = useState(false);
+  const [bookingPagesExpanded, setBookingPagesExpanded] = useState(true);
+  const [customDurationModalOpen, setCustomDurationModalOpen] = useState(false);
+  const [customDurationValue, setCustomDurationValue] = useState(1);
+  const [customDurationUnit, setCustomDurationUnit] = useState<"minutes" | "hours">("hours");
   const [appConfig, setAppConfig] = useState<any>({
     employeeId: "",
-    title: "ABCD",
-    duration: 30,
+    title: "",
+    duration: 60,
     availability: {
       Monday: [{ start: "09:00", end: "17:00" }],
       Tuesday: [{ start: "09:00", end: "17:00" }],
@@ -80,9 +88,24 @@ export default function SchedulePage() {
       if (res.ok) {
         const data = await res.json();
         if (data && data.employeeId) {
-          setAppConfig(data);
-          if (![15, 30, 45, 60].includes(data.duration)) {
-            setShowCustomDuration(true);
+          if (!data.active) {
+            setAppConfig({
+              ...data,
+              active: false,
+              title: "",
+              duration: 60,
+              availability: {
+                Monday: [{ start: "09:00", end: "17:00" }],
+                Tuesday: [{ start: "09:00", end: "17:00" }],
+                Wednesday: [{ start: "09:00", end: "17:00" }],
+                Thursday: [{ start: "09:00", end: "17:00" }],
+                Friday: [{ start: "09:00", end: "17:00" }],
+                Saturday: [],
+                Sunday: []
+              }
+            });
+          } else {
+            setAppConfig(data);
           }
         }
       }
@@ -92,10 +115,10 @@ export default function SchedulePage() {
   };
 
   useEffect(() => {
-    if (user?.id || user?.employeeId) {
+    if ((user?.id || user?.employeeId) && !isConfiguring) {
       fetchConfig();
     }
-  }, [user]);
+  }, [user, isConfiguring]);
 
   const duplicateToAll = (sourceDay: string) => {
     const sourceSlots = appConfig.availability[sourceDay] || [];
@@ -113,9 +136,13 @@ export default function SchedulePage() {
     setIsConfigSaving(true);
     try {
       const empId = user?.id || user?.employeeId;
+      const token = localStorage.getItem('token');
       const res = await fetch(`${API_URL}/api/appointments/config`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({ ...appConfig, employeeId: empId })
       });
       if (res.ok) {
@@ -1066,6 +1093,25 @@ export default function SchedulePage() {
             variant="outline"
             className="border-brand-teal text-brand-teal hover:bg-brand-teal/5 font-medium shadow-sm ml-2"
             onClick={() => {
+              const empId = user?.id || user?.employeeId || "";
+              if (!appConfig.active) {
+                setAppConfig({
+                  employeeId: empId,
+                  title: "",
+                  duration: 60,
+                  availability: {
+                    Monday: [{ start: "09:00", end: "17:00" }],
+                    Tuesday: [{ start: "09:00", end: "17:00" }],
+                    Wednesday: [{ start: "09:00", end: "17:00" }],
+                    Thursday: [{ start: "09:00", end: "17:00" }],
+                    Friday: [{ start: "09:00", end: "17:00" }],
+                    Saturday: [],
+                    Sunday: []
+                  },
+                  timezone: "Asia/Kolkata",
+                  active: true
+                });
+              }
               setIsConfiguring(true);
               setViewMode("week");
             }}
@@ -1094,7 +1140,6 @@ export default function SchedulePage() {
                   value={appConfig.title || ""}
                   onChange={(e) => setAppConfig({ ...appConfig, title: e.target.value })}
                   className="w-full text-xl font-medium border-b-2 border-slate-300 focus:border-blue-600 outline-none pb-1 mt-2 transition-colors"
-                  placeholder="ABCD"
                 />
               </div>
               <Button
@@ -1108,7 +1153,7 @@ export default function SchedulePage() {
             </div>
 
             {/* Content body wrapper (scrollable) */}
-            <div className="flex-1 overflow-y-auto pr-1 space-y-6 select-none custom-scrollbar">
+             <div className="flex-1 overflow-y-auto pr-1 space-y-6 custom-scrollbar">
               
               {/* Active Toggle & Booking Link */}
               <div className="space-y-3 bg-slate-50 p-3.5 rounded-xl border border-slate-100">
@@ -1124,33 +1169,6 @@ export default function SchedulePage() {
                     onChange={(e) => setAppConfig({ ...appConfig, active: e.target.checked })}
                   />
                 </div>
-
-                {appConfig.active && (
-                  <div className="flex items-center gap-1.5 p-2 bg-white border border-slate-200 rounded-lg">
-                    <Link className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <input
-                      type="text"
-                      readOnly
-                      value={typeof window !== 'undefined' ? `${window.location.origin}/f/book/${user?.id || user?.employeeId}` : ""}
-                      className="bg-transparent text-[10px] w-full outline-none select-all text-slate-600 font-mono"
-                    />
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 w-7 p-0 rounded-full hover:bg-slate-100 shrink-0"
-                      onClick={() => {
-                        const link = `${window.location.origin}/f/book/${user?.id || user?.employeeId}`;
-                        navigator.clipboard.writeText(link);
-                        setCopiedLink(true);
-                        toast.success("Link copied!");
-                        setTimeout(() => setCopiedLink(false), 2000);
-                      }}
-                    >
-                      <Copy className="w-3.5 h-3.5 text-slate-500" />
-                    </Button>
-                  </div>
-                )}
               </div>
 
               {/* 1. Appointment Duration Section */}
@@ -1167,12 +1185,14 @@ export default function SchedulePage() {
                   </div>
                   
                   <Select
-                    value={showCustomDuration ? "custom" : String(appConfig.duration)}
+                    value={[15, 30, 45, 60, 90, 120].includes(appConfig.duration) ? String(appConfig.duration) : String(appConfig.duration)}
                     onValueChange={(val) => {
                       if (val === "custom") {
-                        setShowCustomDuration(true);
+                        const isHours = appConfig.duration >= 60;
+                        setCustomDurationValue(isHours ? Math.round(appConfig.duration / 60) : appConfig.duration);
+                        setCustomDurationUnit(isHours ? "hours" : "minutes");
+                        setCustomDurationModalOpen(true);
                       } else {
-                        setShowCustomDuration(false);
                         setAppConfig({ ...appConfig, duration: parseInt(val) });
                       }
                     }}
@@ -1185,35 +1205,18 @@ export default function SchedulePage() {
                       <SelectItem value="30">30 minutes</SelectItem>
                       <SelectItem value="45">45 minutes</SelectItem>
                       <SelectItem value="60">1 hour</SelectItem>
+                      <SelectItem value="90">1.5 hours</SelectItem>
+                      <SelectItem value="120">2 hours</SelectItem>
+                      {![15, 30, 45, 60, 90, 120].includes(appConfig.duration) && (
+                        <SelectItem value={String(appConfig.duration)}>
+                          {appConfig.duration % 60 === 0 
+                            ? `${appConfig.duration / 60} ${appConfig.duration / 60 === 1 ? 'hour' : 'hours'}` 
+                            : `${appConfig.duration} minutes`}
+                        </SelectItem>
+                      )}
                       <SelectItem value="custom">Custom...</SelectItem>
                     </SelectContent>
                   </Select>
-
-                  {showCustomDuration && (
-                    <div className="flex items-center gap-2 mt-2">
-                      <input
-                        type="number"
-                        min="1"
-                        placeholder="Minutes"
-                        className="p-1.5 border border-slate-200 rounded text-xs w-20 text-center outline-none focus:border-blue-500 bg-slate-50 text-slate-700"
-                        value={appConfig.duration || ""}
-                        onChange={(e) => setAppConfig({ ...appConfig, duration: parseInt(e.target.value) || 0 })}
-                      />
-                      <span className="text-[11px] text-slate-500">minutes</span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="text-[10px] text-blue-600 p-0 h-auto hover:bg-transparent"
-                        onClick={() => {
-                          setShowCustomDuration(false);
-                          setAppConfig({ ...appConfig, duration: 60 });
-                        }}
-                      >
-                        Preset
-                      </Button>
-                    </div>
-                  )}
                 </div>
               </div>
 
@@ -1277,24 +1280,35 @@ export default function SchedulePage() {
 
                           {isAvailable ? (
                             <div className="flex items-center gap-1.5 flex-1 justify-end">
-                              <input
-                                type="time"
+                              <select
                                 value={slots[0]?.start || "09:00"}
                                 onChange={(e) => updateTime(0, "start", e.target.value)}
-                                className="bg-[#f1f3f4] text-slate-700 hover:bg-[#e8eaed] transition-colors rounded px-2 py-1.5 text-xs text-center border-none outline-none w-20"
-                              />
+                                className="bg-[#f1f3f4] text-slate-700 hover:bg-[#e8eaed] transition-colors rounded px-2 py-1.5 text-xs text-center border-none outline-none w-[90px] cursor-pointer"
+                              >
+                                {TIME_OPTIONS.map(opt => (
+                                  <option key={`start-${opt.value}`} value={opt.value}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </select>
                               <span className="text-slate-400 font-light">—</span>
-                              <input
-                                type="time"
+                              <select
                                 value={slots[0]?.end || "17:00"}
                                 onChange={(e) => updateTime(0, "end", e.target.value)}
-                                className="bg-[#f1f3f4] text-slate-700 hover:bg-[#e8eaed] transition-colors rounded px-2 py-1.5 text-xs text-center border-none outline-none w-20"
-                              />
+                                className="bg-[#f1f3f4] text-slate-700 hover:bg-[#e8eaed] transition-colors rounded px-2 py-1.5 text-xs text-center border-none outline-none w-[90px] cursor-pointer"
+                              >
+                                {TIME_OPTIONS.map(opt => (
+                                  <option key={`end-${opt.value}`} value={opt.value}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </select>
                               
-                              {/* Make Unavailable (Block icon) */}
+                              {/* Make Unavailable (Block/Ban icon) */}
                               <button
                                 type="button"
-                                className="p-1 rounded-full hover:bg-slate-100 shrink-0 text-slate-500"
+                                title="Make unavailable"
+                                className="p-1 rounded-full hover:bg-slate-100 shrink-0 text-slate-500 transition-colors"
                                 onClick={() => toggleDay(false)}
                               >
                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -1302,19 +1316,34 @@ export default function SchedulePage() {
                                 </svg>
                               </button>
 
-                              {/* Duplicate to Mon-Fri (Copy icon, only on Mon) */}
-                              {day === "Monday" && (
-                                <button
-                                  type="button"
-                                  title="Copy Mon-Fri"
-                                  className="p-1 rounded-full hover:bg-slate-100 shrink-0 text-slate-500"
-                                  onClick={() => duplicateToAll("Monday")}
-                                >
-                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
-                                  </svg>
-                                </button>
-                              )}
+                              {/* Add slot (Plus icon) */}
+                              <button
+                                type="button"
+                                title="Add slot"
+                                className="p-1 rounded-full hover:bg-slate-100 shrink-0 text-slate-500 transition-colors"
+                                onClick={() => {
+                                  toast.info("Split slots are currently configured for standard schedules.");
+                                }}
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                                </svg>
+                              </button>
+
+                              {/* Copy to all (Copy icon) */}
+                              <button
+                                type="button"
+                                title="Copy to all days"
+                                className="p-1 rounded-full hover:bg-slate-100 shrink-0 text-slate-500 transition-colors"
+                                onClick={() => {
+                                  duplicateToAll(day);
+                                  toast.success(`Copied ${day}'s schedule to all weekdays`);
+                                }}
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                                </svg>
+                              </button>
                             </div>
                           ) : (
                             <div className="flex items-center justify-between flex-1 pl-1">
@@ -1356,7 +1385,7 @@ export default function SchedulePage() {
                 }}
                 disabled={isConfigSaving}
               >
-                {isConfigSaving ? "Saving..." : "Next"}
+                {isConfigSaving ? "Saving..." : "Save"}
               </Button>
             </div>
 
@@ -1407,6 +1436,186 @@ export default function SchedulePage() {
                   outside: "[&_button]:text-muted-foreground/40",
                 }}
               />
+            </div>
+
+            {/* Booking pages */}
+            {/* Booking pages Section */}
+            <div className="p-3 border-b border-border bg-white shrink-0 relative flex flex-col">
+              <div className="flex items-center justify-between mb-2 px-1">
+                <h3 className="text-xs font-semibold text-slate-800 tracking-wider">
+                  Booking pages
+                </h3>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => {
+                      const empId = user?.id || user?.employeeId || "";
+                      if (!appConfig.active) {
+                        setAppConfig({
+                          employeeId: empId,
+                          title: "",
+                          duration: 60,
+                          availability: {
+                            Monday: [{ start: "09:00", end: "17:00" }],
+                            Tuesday: [{ start: "09:00", end: "17:00" }],
+                            Wednesday: [{ start: "09:00", end: "17:00" }],
+                            Thursday: [{ start: "09:00", end: "17:00" }],
+                            Friday: [{ start: "09:00", end: "17:00" }],
+                            Saturday: [],
+                            Sunday: []
+                          },
+                          timezone: "Asia/Kolkata",
+                          active: true
+                        });
+                      }
+                      setIsConfiguring(true);
+                      setViewMode("week");
+                    }} 
+                    className="text-slate-500 hover:text-slate-800 p-0.5 rounded hover:bg-slate-100 transition-colors"
+                    title="Edit Booking Page"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setBookingPagesExpanded(!bookingPagesExpanded)}
+                    className="text-slate-500 hover:text-slate-800 p-0.5 rounded hover:bg-slate-100 transition-colors"
+                  >
+                    {bookingPagesExpanded ? (
+                      <ChevronUp className="w-3.5 h-3.5" />
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </div>
+              </div>
+              
+              {/* Booking Page List Item */}
+              {bookingPagesExpanded && appConfig.active && (
+                <div 
+                  className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-slate-100 cursor-pointer group transition-all relative"
+                  onClick={() => setShowDetailsCard(true)}
+                >
+                  <svg className="w-4 h-4 text-blue-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  
+                  <span className="text-xs font-medium text-slate-700 truncate flex-1">
+                    {appConfig.title || "ABCD"}
+                  </span>
+
+                  {/* Actions (visible on hover) */}
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                    <button
+                      type="button"
+                      className="p-1 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-800"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const link = `${window.location.origin}/f/book/${user?.id || user?.employeeId}`;
+                        navigator.clipboard.writeText(link);
+                        toast.success("Link copied!");
+                      }}
+                      title="Copy link"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                      </svg>
+                    </button>
+                    
+                    <button
+                      type="button"
+                      className="p-1 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-800"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowSidebarMenu(!showSidebarMenu);
+                      }}
+                      title="Options"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  {/* Dropdown Menu (Popup) */}
+                  {showSidebarMenu && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setShowSidebarMenu(false); }} />
+                      <div className="absolute right-2 top-8 bg-white border border-slate-200 rounded-lg shadow-xl py-1 w-44 z-50 text-left">
+                        <button
+                          className="w-full px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowSidebarMenu(false);
+                            const link = `${window.location.origin}/f/book/${user?.id || user?.employeeId}`;
+                            window.open(link, '_blank');
+                          }}
+                        >
+                          Preview
+                        </button>
+                        <button
+                          className="w-full px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowSidebarMenu(false);
+                            setIsConfiguring(true);
+                            setViewMode("week");
+                          }}
+                        >
+                          Edit
+                        </button>
+                        <div className="border-t border-slate-100 my-1" />
+                        <button
+                          className="w-full px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 flex items-center gap-2 font-medium"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            setShowSidebarMenu(false);
+                            const isConfirmed = await confirm({
+                              title: "Delete Booking Page",
+                              message: "Are you sure you want to delete this booking page?",
+                              confirmText: "Delete",
+                              destructive: true,
+                            });
+                            if (isConfirmed) {
+                              try {
+                                const token = localStorage.getItem('token');
+                                const res = await fetch(`${API_URL}/api/appointments/config`, {
+                                  method: "POST",
+                                  headers: { 
+                                    "Content-Type": "application/json",
+                                    ...(token ? { "Authorization": `Bearer ${token}` } : {})
+                                  },
+                                  body: JSON.stringify({
+                                    employeeId: user?.id || user?.employeeId || "",
+                                    duration: 30,
+                                    availability: { Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [], Sunday: [] },
+                                    active: false
+                                  })
+                                });
+                                if (res.ok) {
+                                  setAppConfig({ 
+                                    ...appConfig, 
+                                    active: false,
+                                    availability: { Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [], Sunday: [] } 
+                                  });
+                                  setShowDetailsCard(false);
+                                  toast.success("Booking page deleted");
+                                } else {
+                                  const errText = await res.text();
+                                  toast.error(`Failed to delete: ${res.status} ${errText}`);
+                                }
+                              } catch (err: any) {
+                                console.error(err);
+                                toast.error(`Error: ${err.message || err}`);
+                              }
+                            }
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Employee List */}
@@ -1607,22 +1816,31 @@ export default function SchedulePage() {
                   <div className="relative" style={{ height: "1440px" }}>
                     {renderHourGrid()}
                     {isToday && renderCurrentTimeLine("56px")}
-                    {isConfiguring && (appConfig.availability[currentDate.format("dddd")] || []).map((slot: any, idx: number) => {
+                    {((isConfiguring) || (appConfig.active && !hideAvailabilityFromCalendar)) && (appConfig.availability[currentDate.format("dddd")] || []).flatMap((slot: any, idx: number) => {
                       const sMin = timeToMinutes(slot.start);
                       const eMin = timeToMinutes(slot.end);
-                      return (
+                      const duration = Number(appConfig.duration) || 30;
+                      const subSlots = [];
+                      for (let current = sMin; current + duration <= eMin; current += duration) {
+                        subSlots.push({ start: current, end: current + duration });
+                      }
+                      return subSlots.map((s, sIdx) => (
                         <div
-                          key={`avail-day-grid-${idx}`}
-                          className="absolute bg-brand-teal/15 border-l-4 border-brand-teal pointer-events-none"
+                          key={`avail-day-grid-${idx}-${sIdx}`}
+                          className="absolute left-[60px] right-2 bg-[#e8f0fe] border border-[#1a73e8] rounded-md pointer-events-none p-1.5 flex items-start overflow-hidden"
                           style={{
-                            left: "56px",
-                            right: 0,
-                            top: `${sMin}px`,
-                            height: `${eMin - sMin}px`,
+                            top: `${s.start + 2}px`,
+                            height: `${duration - 4}px`,
                             zIndex: 5
                           }}
-                        />
-                      );
+                        >
+                          <div className="w-3.5 h-3.5 rounded bg-[#1a73e8] flex items-center justify-center text-white shrink-0">
+                            <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10H7v-2h10v2zm0-4H7V7h10v2z" />
+                            </svg>
+                          </div>
+                        </div>
+                      ));
                     })}
                     <div className="absolute top-0 bottom-0 right-0" style={{ left: "56px" }}>
                       {layoutEvents(filterByEmployee(schedules)).map(({ event, column, totalColumns }) =>
@@ -1723,21 +1941,32 @@ export default function SchedulePage() {
                             </div>
                           )}
 
-                          {/* Availability Highlights when configuring */}
-                          {isConfiguring && (appConfig.availability[day.format("dddd")] || []).map((slot: any, idx: number) => {
+                          {/* Availability Highlights */}
+                          {((isConfiguring) || (appConfig.active && !hideAvailabilityFromCalendar)) && (appConfig.availability[day.format("dddd")] || []).flatMap((slot: any, idx: number) => {
                             const sMin = timeToMinutes(slot.start);
                             const eMin = timeToMinutes(slot.end);
-                            return (
+                            const duration = Number(appConfig.duration) || 30;
+                            const subSlots = [];
+                            for (let current = sMin; current + duration <= eMin; current += duration) {
+                              subSlots.push({ start: current, end: current + duration });
+                            }
+                            return subSlots.map((s, sIdx) => (
                               <div
-                                key={`avail-grid-${dateStr}-${idx}`}
-                                className="absolute left-0 right-0 bg-brand-teal/15 border-l-4 border-brand-teal pointer-events-none"
+                                key={`avail-grid-${dateStr}-${idx}-${sIdx}`}
+                                className="absolute left-1 right-1 bg-[#e8f0fe] border border-[#1a73e8] rounded-md pointer-events-none p-1 flex items-start overflow-hidden"
                                 style={{
-                                  top: `${sMin}px`,
-                                  height: `${eMin - sMin}px`,
+                                  top: `${s.start + 2}px`,
+                                  height: `${duration - 4}px`,
                                   zIndex: 5
                                 }}
-                              />
-                            );
+                              >
+                                <div className="w-3.5 h-3.5 rounded bg-[#1a73e8] flex items-center justify-center text-white shrink-0">
+                                  <svg className="w-2 h-2" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10H7v-2h10v2zm0-4H7V7h10v2z" />
+                                  </svg>
+                                </div>
+                              </div>
+                            ));
                           })}
 
                           {/* Events */}
@@ -1756,6 +1985,276 @@ export default function SchedulePage() {
           )}
         </div>
       </div>
+      {/* Google Calendar Styled Booking Page Details Card Dialog */}
+      <Dialog open={showDetailsCard} onOpenChange={setShowDetailsCard}>
+        <DialogContent className="sm:max-w-[460px] p-0 border-none bg-white rounded-2xl overflow-hidden shadow-2xl">
+          
+          {/* Top Actions Bar */}
+          <div className="flex items-center justify-between px-4 py-2 border-b border-slate-100 shrink-0 bg-slate-50/50">
+            <div className="flex items-center gap-1.5">
+              
+              {/* Edit button */}
+              <button
+                type="button"
+                className="p-1.5 rounded-full hover:bg-slate-200 text-slate-600 transition-colors"
+                onClick={() => {
+                  setShowDetailsCard(false);
+                  setIsConfiguring(true);
+                  setViewMode("week");
+                }}
+                title="Edit booking page"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+              </button>
+
+              {/* Delete button */}
+              <button
+                type="button"
+                className="p-1.5 rounded-full hover:bg-slate-200 text-slate-600 transition-colors"
+                onClick={async () => {
+                  const isConfirmed = await confirm({
+                    title: "Delete Booking Page",
+                    message: "Are you sure you want to delete this booking page?",
+                    confirmText: "Delete",
+                    destructive: true,
+                  });
+                  if (isConfirmed) {
+                    try {
+                      const token = localStorage.getItem('token');
+                      const res = await fetch(`${API_URL}/api/appointments/config`, {
+                        method: "POST",
+                        headers: { 
+                          "Content-Type": "application/json",
+                          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+                        },
+                        body: JSON.stringify({
+                          employeeId: user?.id || user?.employeeId || "",
+                          duration: 30,
+                          availability: { Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [], Sunday: [] },
+                          active: false
+                        })
+                      });
+                      if (res.ok) {
+                        setAppConfig({ 
+                          ...appConfig, 
+                          active: false,
+                          availability: { Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [], Sunday: [] } 
+                        });
+                        setShowDetailsCard(false);
+                        toast.success("Booking page deleted");
+                      } else {
+                        const errText = await res.text();
+                        toast.error(`Failed to delete: ${res.status} ${errText}`);
+                      }
+                    } catch (err: any) {
+                      console.error(err);
+                      toast.error(`Error: ${err.message || err}`);
+                    }
+                  }
+                }}
+                title="Delete booking page"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+
+              {/* More options button (3-dots) */}
+              <button
+                type="button"
+                className="p-1.5 rounded-full hover:bg-slate-200 text-slate-600 transition-colors relative"
+                onClick={() => setShowSidebarMenu(!showSidebarMenu)}
+                title="Options"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                </svg>
+              </button>
+
+            </div>
+            
+            <button
+              type="button"
+              className="p-1.5 rounded-full hover:bg-slate-200 text-slate-600 transition-colors"
+              onClick={() => setShowDetailsCard(false)}
+            >
+              <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Details Body */}
+          <div className="p-6 space-y-5 text-slate-700">
+            
+            {/* Title Section */}
+            <div className="flex gap-4 items-start">
+              <div className="w-3.5 h-3.5 rounded bg-blue-600 mt-2.5 shrink-0" />
+              <div className="space-y-0.5">
+                <DialogTitle className="text-xl font-medium text-slate-900 leading-tight">
+                  {appConfig.title || "ABCD"}
+                </DialogTitle>
+                <DialogDescription className="sr-only">
+                  Booking page details
+                </DialogDescription>
+                <p className="text-xs text-slate-500 font-medium">
+                  {appConfig.duration} min bookable appointments
+                </p>
+                <p className="text-xs text-slate-500">
+                  Weekly on weekdays
+                </p>
+              </div>
+            </div>
+
+            {/* Booking Form Info */}
+            <div className="flex gap-4 items-start">
+              <div className="mt-1 shrink-0 text-slate-500">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </div>
+              <div className="space-y-0.5">
+                <h4 className="text-xs font-semibold text-slate-800 uppercase tracking-wide leading-tight">
+                  Booking form
+                </h4>
+                <p className="text-xs text-slate-500">
+                  First name · Surname · Email address
+                </p>
+              </div>
+            </div>
+
+            {/* Owner Info */}
+            <div className="flex gap-4 items-start">
+              <div className="mt-1 shrink-0 text-slate-500">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              </div>
+              <div className="space-y-0.5">
+                <h4 className="text-xs font-semibold text-slate-800 uppercase tracking-wide leading-tight">
+                  {user?.name || `${user?.firstName} ${user?.lastName}`}
+                </h4>
+                <p className="text-xs text-slate-500">
+                  Busy times on this calendar are unavailable for booking
+                </p>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Bottom Toolbar */}
+          <div className="flex items-center justify-end gap-3 px-6 py-4 bg-slate-50 border-t border-slate-100 shrink-0">
+            <Button
+              variant="outline"
+              className="rounded-full px-5 py-2 h-9 text-xs text-blue-600 border-blue-200 hover:bg-blue-50 font-semibold gap-1.5 flex items-center"
+              onClick={() => {
+                const link = `${window.location.origin}/f/book/${user?.id || user?.employeeId}`;
+                window.open(link, '_blank');
+              }}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+              Preview
+            </Button>
+            <Button
+              className="rounded-full px-5 py-2 h-9 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold gap-1.5 flex items-center shadow-sm"
+              onClick={() => {
+                const link = `${window.location.origin}/f/book/${user?.id || user?.employeeId}`;
+                navigator.clipboard.writeText(link);
+                toast.success("Link copied!");
+              }}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+              </svg>
+              Copy link
+            </Button>
+          </div>
+
+        </DialogContent>
+      </Dialog>
+      {/* Custom Duration Dialog Modal */}
+      <Dialog open={customDurationModalOpen} onOpenChange={setCustomDurationModalOpen}>
+        <DialogContent className="sm:max-w-[320px] p-6 border-none bg-white rounded-2xl shadow-2xl">
+          <DialogTitle className="text-lg font-medium text-slate-900">
+            Custom duration
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            Set custom duration for appointments
+          </DialogDescription>
+          
+          <div className="flex items-center gap-3 py-4 justify-center">
+            {/* Number Input */}
+            <div className="relative flex items-center bg-slate-100 rounded-lg px-3 py-2 w-24">
+              <input
+                type="number"
+                min="1"
+                className="bg-transparent text-slate-800 text-sm font-semibold w-full outline-none text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                value={customDurationValue}
+                onChange={(e) => setCustomDurationValue(parseInt(e.target.value) || 1)}
+              />
+              <div className="flex flex-col ml-1 shrink-0 text-slate-500">
+                <button 
+                  type="button" 
+                  onClick={() => setCustomDurationValue(prev => prev + 1)}
+                  className="hover:text-slate-800 transition-colors p-0.5"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+                  </svg>
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => setCustomDurationValue(prev => Math.max(1, prev - 1))}
+                  className="hover:text-slate-800 transition-colors p-0.5"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Unit Dropdown */}
+            <Select 
+              value={customDurationUnit} 
+              onValueChange={(val: "minutes" | "hours") => setCustomDurationUnit(val)}
+            >
+              <SelectTrigger className="w-32 h-10 bg-slate-100 border-none text-slate-800 text-sm font-semibold rounded-lg focus:ring-0">
+                <SelectValue placeholder="Unit" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="minutes">minutes</SelectItem>
+                <SelectItem value="hours">hours</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Footer Actions */}
+          <div className="flex items-center justify-end gap-4 pt-2">
+            <button
+              type="button"
+              className="text-sm font-semibold text-blue-600 hover:text-blue-800 px-3 py-1.5 transition-colors"
+              onClick={() => setCustomDurationModalOpen(false)}
+            >
+              Cancel
+            </button>
+            <Button
+              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-full px-5 py-2 text-xs shadow-sm h-8"
+              onClick={() => {
+                const finalMins = customDurationUnit === "hours" ? customDurationValue * 60 : customDurationValue;
+                setAppConfig({ ...appConfig, duration: finalMins });
+                setCustomDurationModalOpen(false);
+              }}
+            >
+              Done
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
