@@ -3398,6 +3398,7 @@ async def update_project(db, project_id: str, project_update: schemas.ProjectUpd
             deleted_modules = [m for m in old_modules if not any(nm.get("name") == m.get("name") and nm.get("phaseName") == m.get("phaseName") for nm in new_modules)]
             # Check for updates
             for nm in new_modules:
+                nm_tasks = nm.pop("tasks", None)
                 for om in old_modules:
                     if nm.get("name") == om.get("name") and nm.get("phaseName") == om.get("phaseName"):
                         changes = []
@@ -3411,9 +3412,82 @@ async def update_project(db, project_id: str, project_update: schemas.ProjectUpd
                                 changes.append(f"{field.replace('Id', '')}: '{old_val}' -> '{new_val}'")
                         if changes:
                             await log_activity(db, "Module Updated", performedBy, userName, f"Updated module '{nm.get('name')}' in project '{old_project.get('title')}': {', '.join(changes)}", projectId=project_id)
+                        
+                        # Handle auto-assignment of tasks within the module if assignedToId changed
+                        if nm.get("assignedToId") != om.get("assignedToId"):
+                            new_assignee_id = nm.get("assignedToId")
+                            new_assignee_name = nm.get("assignedToName")
+                            new_dept = None
+                            if new_assignee_id:
+                                try:
+                                    emp = await db.employees.find_one({"_id": ObjectId(new_assignee_id)})
+                                    if emp:
+                                        new_assignee_name = f"{emp.get('firstName')} {emp.get('lastName')}"
+                                        new_dept = emp.get("department")
+                                except Exception:
+                                    pass
+                            
+                            update_fields = {
+                                "assignedToId": new_assignee_id or "",
+                                "assignedToName": new_assignee_name or "Unassigned"
+                            }
+                            if new_dept:
+                                update_fields["department"] = new_dept
+                            
+                            await db.wm_tasks.update_many(
+                                {"projectId": project_id, "moduleName": nm.get("name"), "phase": nm.get("phaseName")},
+                                {"$set": update_fields}
+                            )
             
             for am in added_modules:
+                tasks_to_add = am.pop("tasks", None)
+                if tasks_to_add and isinstance(tasks_to_add, list):
+                    for t in tasks_to_add:
+                        if not t.get("title"):
+                            continue
+                        
+                        task_assignee_id = am.get("assignedToId") or ""
+                        task_assignee_name = am.get("assignedToName") or "Unassigned"
+                        task_dept = None
+                        if task_assignee_id:
+                            try:
+                                emp = await db.employees.find_one({"_id": ObjectId(task_assignee_id)})
+                                if emp:
+                                    task_assignee_name = f"{emp.get('firstName')} {emp.get('lastName')}"
+                                    task_dept = emp.get("department")
+                            except Exception:
+                                pass
+                                
+                        new_task = {
+                            "title": t.get("title"),
+                            "description": t.get("description") or "",
+                            "projectId": project_id,
+                            "projectName": old_project.get("title"),
+                            "assignedToId": task_assignee_id,
+                            "assignedToName": task_assignee_name,
+                            "dueDate": t.get("dueDate") or am.get("dueDate") or None,
+                            "moduleName": am.get("name"),
+                            "moduleDeadline": am.get("dueDate") or None,
+                            "status": t.get("status") or "todo",
+                            "priority": t.get("priority") or am.get("priority") or "medium",
+                            "estimatedHours": float(t.get("estimatedHours") or 0),
+                            "createdBy": performedBy,
+                            "performedBy": performedBy,
+                            "userName": userName,
+                            "phase": am.get("phaseName") or None,
+                            "subtasks": [],
+                            "isApproved": False,
+                            "createdDate": get_now().strftime("%Y-%m-%d")
+                        }
+                        if task_dept:
+                            new_task["department"] = task_dept
+                            
+                        result = await db.wm_tasks.insert_one(new_task)
+                        taskId = str(result.inserted_id)
+                        await log_task_activity(db, taskId, "Created", performedBy, userName, f"Task '{new_task['title']}' was created automatically under module '{am.get('name')}'")
+
                 await log_activity(db, "Module Created", performedBy, userName, f"Added module '{am.get('name')}' to project '{old_project.get('title')}'", projectId=project_id)
+            
             for dm in deleted_modules:
                 await log_activity(db, "Module Deleted", performedBy, userName, f"Deleted module '{dm.get('name')}' from project '{old_project.get('title')}'", projectId=project_id)
         
