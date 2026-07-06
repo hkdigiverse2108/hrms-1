@@ -787,7 +787,13 @@ export default function SchedulePage() {
       <div className="text-xs max-w-[200px]">
         <div className="font-bold mb-1">{displayTitle}</div>
         {canSeeDetails && event.createdBy && (
-          <div><strong>Created By:</strong> {employees.find(e => String(e.id) === String(event.createdBy) || String(e.employeeId) === String(event.createdBy))?.name || "Unknown"}</div>
+          <div>
+            <strong>Created By:</strong> {
+              String(event.createdBy) === "public"
+                ? (event.title ? event.title.split(" ")[0] : "Public")
+                : (employees.find(e => String(e.id) === String(event.createdBy) || String(e.employeeId) === String(event.createdBy))?.name?.split(" ")[0] || "Unknown")
+            }
+          </div>
         )}
         {canSeeDetails && event.attendees && event.attendees.length > 0 && (
           <div className="mt-1">
@@ -1820,27 +1826,53 @@ export default function SchedulePage() {
                       const sMin = timeToMinutes(slot.start);
                       const eMin = timeToMinutes(slot.end);
                       const duration = Number(appConfig.duration) || 30;
-                      const subSlots = [];
-                      for (let current = sMin; current + duration <= eMin; current += duration) {
-                        subSlots.push({ start: current, end: current + duration });
-                      }
-                      return subSlots.map((s, sIdx) => (
-                        <div
-                          key={`avail-day-grid-${idx}-${sIdx}`}
-                          className="absolute left-[60px] right-2 bg-[#e8f0fe] border border-[#1a73e8] rounded-md pointer-events-none p-1.5 flex items-start overflow-hidden"
-                          style={{
-                            top: `${s.start + 2}px`,
-                            height: `${duration - 4}px`,
-                            zIndex: 5
-                          }}
-                        >
-                          <div className="w-3.5 h-3.5 rounded bg-[#1a73e8] flex items-center justify-center text-white shrink-0">
-                            <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10H7v-2h10v2zm0-4H7V7h10v2z" />
-                            </svg>
+                      
+                      const formatStartHourText = (mins: number) => {
+                        const h = Math.floor(mins / 60);
+                        const ap = h >= 12 ? 'pm' : 'am';
+                        const dh = h % 12 || 12;
+                        return `${dh}${ap}`;
+                      };
+
+                      if (isConfiguring) {
+                        const subSlots = [];
+                        for (let current = sMin; current + duration <= eMin; current += duration) {
+                          subSlots.push({ start: current, end: current + duration });
+                        }
+                        return subSlots.map((s, sIdx) => (
+                          <div
+                            key={`avail-day-grid-${idx}-${sIdx}`}
+                            className="absolute left-[60px] right-2 bg-[#e8f0fe] border border-[#1a73e8] rounded-md pointer-events-none z-5"
+                            style={{
+                              top: `${s.start + 2}px`,
+                              height: `${duration - 4}px`
+                            }}
+                          />
+                        ));
+                      } else {
+                        return (
+                          <div
+                            key={`avail-day-grid-single-${idx}`}
+                            className="absolute left-[60px] w-6 bg-[#e8f0fe]/70 border-l-2 border-[#1a73e8] pointer-events-none flex flex-col items-start overflow-visible"
+                            style={{
+                              top: `${sMin}px`,
+                              height: `${eMin - sMin}px`,
+                              zIndex: 5
+                            }}
+                          >
+                            <div className="flex items-center gap-1 mt-1 ml-1.5 overflow-visible">
+                              <div className="w-3.5 h-3.5 rounded bg-[#1a73e8] flex items-center justify-center text-white shrink-0 shadow-sm">
+                                <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24">
+                                  <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10H7v-2h10v2zm0-4H7V7h10v2z" />
+                                </svg>
+                              </div>
+                              <span className="text-[10px] font-semibold text-[#3c4043] whitespace-nowrap bg-white/80 px-1 rounded shadow-sm">
+                                {`${appConfig.title || "Appointment"}, ${formatStartHourText(sMin)}`}
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      ));
+                        );
+                      }
                     })}
                     <div className="absolute top-0 bottom-0 right-0" style={{ left: "56px" }}>
                       {layoutEvents(filterByEmployee(schedules)).map(({ event, column, totalColumns }) =>
@@ -1946,27 +1978,63 @@ export default function SchedulePage() {
                             const sMin = timeToMinutes(slot.start);
                             const eMin = timeToMinutes(slot.end);
                             const duration = Number(appConfig.duration) || 30;
-                            const subSlots = [];
-                            for (let current = sMin; current + duration <= eMin; current += duration) {
-                              subSlots.push({ start: current, end: current + duration });
-                            }
-                            return subSlots.map((s, sIdx) => (
-                              <div
-                                key={`avail-grid-${dateStr}-${idx}-${sIdx}`}
-                                className="absolute left-1 right-1 bg-[#e8f0fe] border border-[#1a73e8] rounded-md pointer-events-none p-1 flex items-start overflow-hidden"
-                                style={{
-                                  top: `${s.start + 2}px`,
-                                  height: `${duration - 4}px`,
-                                  zIndex: 5
-                                }}
-                              >
-                                <div className="w-3.5 h-3.5 rounded bg-[#1a73e8] flex items-center justify-center text-white shrink-0">
-                                  <svg className="w-2 h-2" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10H7v-2h10v2zm0-4H7V7h10v2z" />
-                                  </svg>
+
+                            const formatStartHourText = (mins: number) => {
+                              const h = Math.floor(mins / 60);
+                              const ap = h >= 12 ? 'pm' : 'am';
+                              const dh = h % 12 || 12;
+                              return `${dh}${ap}`;
+                            };
+
+                            if (isConfiguring) {
+                              const subSlots = [];
+                              for (let current = sMin; current + duration <= eMin; current += duration) {
+                                subSlots.push({ start: current, end: current + duration });
+                              }
+                              return subSlots.map((s, sIdx) => (
+                                <div
+                                  key={`avail-grid-${dateStr}-${idx}-${sIdx}`}
+                                  className="absolute left-1 right-1 bg-[#e8f0fe] border border-[#1a73e8] rounded-md pointer-events-none p-1 flex items-center overflow-hidden"
+                                  style={{
+                                    top: `${s.start + 2}px`,
+                                    height: `${duration - 4}px`,
+                                    zIndex: 5
+                                  }}
+                                >
+                                  <div className="w-3.5 h-3.5 rounded bg-[#1a73e8] flex items-center justify-center text-white shrink-0">
+                                    <svg className="w-2 h-2" fill="currentColor" viewBox="0 0 24 24">
+                                      <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10H7v-2h10v2zm0-4H7V7h10v2z" />
+                                    </svg>
+                                  </div>
+                                  <span className="text-[9px] font-semibold text-[#1a73e8] ml-1 truncate">
+                                    {`${appConfig.title || "Appointment"}, ${formatStartHourText(s.start)}`}
+                                  </span>
                                 </div>
-                              </div>
-                            ));
+                              ));
+                            } else {
+                              return (
+                                <div
+                                  key={`avail-grid-single-${dateStr}-${idx}`}
+                                  className="absolute left-1 w-5 bg-[#e8f0fe]/70 border-l-2 border-[#1a73e8] pointer-events-none flex flex-col items-start overflow-visible"
+                                  style={{
+                                    top: `${sMin}px`,
+                                    height: `${eMin - sMin}px`,
+                                    zIndex: 5
+                                  }}
+                                >
+                                  <div className="flex items-center gap-1 mt-1 ml-1 overflow-visible">
+                                    <div className="w-3.5 h-3.5 rounded bg-[#1a73e8] flex items-center justify-center text-white shrink-0 shadow-sm">
+                                      <svg className="w-2 h-2" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10H7v-2h10v2zm0-4H7V7h10v2z" />
+                                      </svg>
+                                    </div>
+                                    <span className="text-[10px] font-semibold text-[#3c4043] whitespace-nowrap bg-white/80 px-1 rounded shadow-sm">
+                                      {`${appConfig.title || "Appointment"}, ${formatStartHourText(sMin)}`}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            }
                           })}
 
                           {/* Events */}

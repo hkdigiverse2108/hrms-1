@@ -73,7 +73,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { user, isLoading, logout } = useUserContext();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
-  const isPublicPage = pathname.startsWith("/login") || pathname.startsWith("/register") || pathname.startsWith("/feedback/");
+  const isPublicPage = pathname.startsWith("/login") || pathname.startsWith("/register") || pathname.startsWith("/feedback/") || pathname.startsWith("/f/");
 
   // Inactivity auto-punch-out and recovery states
   const [showRecoveryModal, setShowRecoveryModal] = useState(false);
