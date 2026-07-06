@@ -1467,9 +1467,6 @@ export default function ModulesPage() {
                                 ))}
 
                                 {canManageModule && (
-                                  <TableCell className="py-2.5"></TableCell>
-                                )}
-                                {canManageModule && (
                                   <TableRow className="bg-slate-50/10 hover:bg-slate-50/20 border-t border-dashed border-slate-200">
                                     <TableCell className="py-2.5">
                                       <Input
@@ -1586,10 +1583,12 @@ export default function ModulesPage() {
                     return (
                       <div className="pb-8 space-y-2">
                         {/* Render table for each phase */}
-                        {phases.map((p: any) => renderPhaseTable(p.name, p.name))}
+                        {phases
+                          .filter((p: any) => filterPhase === "all" || p.name === filterPhase)
+                          .map((p: any) => renderPhaseTable(p.name, p.name))}
                         
                         {/* Render General/Unassigned modules slab */}
-                        {((modules.some((m: any) => !m.phaseName) || phases.length === 0)) && 
+                        {filterPhase === "all" && ((modules.some((m: any) => !m.phaseName) || phases.length === 0)) && 
                           renderPhaseTable(null, "General / Unassigned Modules")
                         }
                       </div>
@@ -2548,7 +2547,7 @@ export default function ModulesPage() {
                   </div>
 
                   <Select
-                    value={String(memberCapacities[member.id] ?? 1.0)}
+                    value={String(memberCapacities[member.id] === 0.25 ? "0.25" : Number(memberCapacities[member.id] ?? 1.0).toFixed(1))}
                     onValueChange={(val) => setMemberCapacities(prev => ({ ...prev, [member.id]: parseFloat(val) }))}
                   >
                     <SelectTrigger className="w-[160px] h-9 text-xs bg-white border-slate-200">
