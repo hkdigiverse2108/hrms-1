@@ -72,18 +72,20 @@ export default function TasksPage() {
   const [editingCell, setEditingCell] = useState<{id: string, field: string} | null>(null);
   const [dateFilter, setDateFilter] = useState<string>(new Date().toISOString().split('T')[0]);
   const [taskScope, setTaskScope] = useState<"my" | "all">("all");
-  const [showOnlyToday, setShowOnlyToday] = useState(false);
+  const [taskTimeFilter, setTaskTimeFilter] = useState<"all" | "pending" | "today" | "upcoming">("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const [pendingReasonOpen, setPendingReasonOpen] = useState(false);
   const [pendingReasonText, setPendingReasonText] = useState("");
+  const [pendingStatusType, setPendingStatusType] = useState<"pending" | "onhold">("pending");
   const [pendingReasonCallback, setPendingReasonCallback] = useState<{
     resolve: (reason: string | null) => void;
   } | null>(null);
 
-  const getPendingReason = () => {
+  const getPendingReason = (statusType: "pending" | "onhold" = "pending") => {
     return new Promise<string | null>((resolve) => {
+      setPendingStatusType(statusType);
       setPendingReasonText("");
       setPendingReasonCallback({ resolve });
       setPendingReasonOpen(true);
@@ -106,7 +108,7 @@ export default function TasksPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedDepartment, selectedEmployeeId, selectedProjectId, dateFilter, taskScope, showOnlyToday]);
+  }, [searchTerm, selectedDepartment, selectedEmployeeId, selectedProjectId, dateFilter, taskScope, taskTimeFilter]);
 
   useEffect(() => {
     if (permissionsLoading) return;
@@ -517,13 +519,13 @@ export default function TasksPage() {
     const assigneeId = draggedTask?.assignedToId;
     
     let reason = "";
-    if (newStatus === "pending") {
-      const inputReason = await getPendingReason();
+    if (newStatus === "pending" || newStatus === "onhold") {
+      const inputReason = await getPendingReason(newStatus as "pending" | "onhold");
       if (inputReason === null) {
         return; // User cancelled
       }
       if (!inputReason.trim()) {
-        toast.error("A reason is required to mark a task as Pending.");
+        toast.error(`A reason is required to mark a task as ${newStatus === 'onhold' ? 'On Hold' : 'Pending'}.`);
         return;
       }
       reason = inputReason.trim();
@@ -576,14 +578,14 @@ export default function TasksPage() {
         userName: user?.name || `${user?.firstName} ${user?.lastName}`,
       };
 
-      if (field === 'status' && value === 'pending') {
-        const inputReason = await getPendingReason();
+      if (field === 'status' && (value === 'pending' || value === 'onhold')) {
+        const inputReason = await getPendingReason(value as "pending" | "onhold");
         if (inputReason === null) {
           setEditingCell(null);
           return; // User cancelled
         }
         if (!inputReason.trim()) {
-          toast.error("A reason is required to mark a task as Pending.");
+          toast.error(`A reason is required to mark a task as ${value === 'onhold' ? 'On Hold' : 'Pending'}.`);
           setEditingCell(null);
           return;
         }
@@ -725,10 +727,18 @@ export default function TasksPage() {
       if (t.assignedToId !== user.id && t.performedBy !== user.id) return false;
     }
 
-    // Date Filtering
-    if (showOnlyToday) {
-      const taskDate = showTableView ? t.postingDate : t.dueDate;
-      if (taskDate !== dateFilter && !isDueTask(t)) return false;
+    // Date/Time Filtering
+    const todayStr = new Date().toISOString().split('T')[0];
+    const taskDate = showTableView ? t.postingDate : t.dueDate;
+    if (taskTimeFilter === "today") {
+      if (taskDate !== todayStr) return false;
+    } else if (taskTimeFilter === "pending") {
+      const isOverdue = t.dueDate && t.dueDate < todayStr && t.status !== "completed";
+      const isPendingStatus = t.status === "pending" || t.status === "onhold";
+      if (!isPendingStatus && !isOverdue) return false;
+    } else if (taskTimeFilter === "upcoming") {
+      const isUpcoming = t.dueDate && t.dueDate > todayStr && t.status !== "completed";
+      if (!isUpcoming) return false;
     }
 
     return true;
@@ -834,17 +844,17 @@ export default function TasksPage() {
           }}>
             <DialogContent className="sm:max-w-[425px]">
               <DialogHeader>
-                <DialogTitle className="text-lg font-bold">Reason for Pending</DialogTitle>
+                <DialogTitle className="text-lg font-bold">Reason for {pendingStatusType === "onhold" ? "On Hold" : "Pending"}</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 py-2">
                 <div className="space-y-2">
                   <Label htmlFor="customReasonForPending" className="text-sm font-semibold text-slate-700">
-                    Please provide a reason why this task is pending (Client Side):
+                    Please provide a reason why this task is {pendingStatusType === "onhold" ? "on hold" : "pending"}:
                   </Label>
                   <textarea
                     id="customReasonForPending"
                     className="flex min-h-[100px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    placeholder="e.g. Waiting for client response on design feedback"
+                    placeholder={pendingStatusType === "onhold" ? "e.g. Client requested to pause development until next week" : "e.g. Waiting for client response on design feedback"}
                     value={pendingReasonText}
                     onChange={(e) => setPendingReasonText(e.target.value)}
                   />
@@ -1275,13 +1285,20 @@ export default function TasksPage() {
             </div>
           )}
 
-          <button 
-            type="button"
-            className={`h-9 px-4 text-xs font-extrabold rounded-lg border transition-all ${showOnlyToday ? 'bg-brand-teal text-white border-brand-teal shadow-sm' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
-            onClick={() => setShowOnlyToday(!showOnlyToday)}
+          <Select
+            value={taskTimeFilter}
+            onValueChange={(val: any) => setTaskTimeFilter(val)}
           >
-            📅 Today
-          </button>
+            <SelectTrigger className="w-44 h-9 bg-white border-slate-200 text-slate-700 text-xs font-semibold rounded-lg shadow-2xs hover:bg-slate-50 transition-colors">
+              <SelectValue placeholder="Filter by Time" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="text-xs cursor-pointer">All Tasks</SelectItem>
+              <SelectItem value="pending" className="text-xs cursor-pointer">⏳ Pending Work</SelectItem>
+              <SelectItem value="today" className="text-xs cursor-pointer">📅 Today's Work</SelectItem>
+              <SelectItem value="upcoming" className="text-xs cursor-pointer">🚀 Upcoming Work</SelectItem>
+            </SelectContent>
+          </Select>
 
           <div className="flex items-center bg-slate-100 border border-slate-200 rounded-lg p-1 gap-1">
             <button 
