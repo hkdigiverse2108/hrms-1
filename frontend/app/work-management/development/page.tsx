@@ -688,10 +688,9 @@ export default function TasksPage() {
     }
 
     let isVisible = false;
-    if (isAdmin) {
+    const isHR = user?.role === 'HR' || user?.role?.toLowerCase() === 'hr';
+    if (isAdmin || isHR || isTeamLeader) {
       isVisible = true;
-    } else if (isTeamLeader) {
-      isVisible = isProjectTL || t.assignedToId === user?.id || t.performedBy === user?.id;
     } else {
       isVisible = t.assignedToId === user?.id || t.performedBy === user?.id;
     }
@@ -1308,54 +1307,21 @@ export default function TasksPage() {
         {showTableView ? (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm h-full flex flex-col overflow-hidden">
             <div className="overflow-x-auto overflow-y-auto flex-1 custom-scrollbar">
-              <table className="w-full text-left border-collapse min-w-[2000px]">
+              <table className="w-full text-left border-collapse min-w-full">
                 <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 z-10">
                   <tr className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                     <th className="px-4 py-3 w-16 text-center">S.No.</th>
                     <th className="px-4 py-3 min-w-[200px]">Task Title</th>
                     <th className="px-4 py-3 min-w-[150px]">Project</th>
-                    <th className="px-4 py-3 min-w-[120px]">Phase</th>
                     <th className="px-4 py-3 min-w-[120px]">Assignee</th>
-                    <th className="px-4 py-3 min-w-[80px]">Hours</th>
-                    <th className="px-4 py-3 min-w-[120px]">Department</th>
                     <th className="px-4 py-3 min-w-[120px]">Stage</th>
-                    <th className="px-4 py-3 min-w-[125px]">Created Date</th>
-                    <th className="px-4 py-3">Posting Date</th>
-                    <th className="px-4 py-3">Posting Day</th>
-                    <th className="px-4 py-3">Reel/Post</th>
-                    <th className="px-4 py-3">Concept</th>
-                    <th className="px-4 py-3">Reference</th>
-                    <th className="px-4 py-3">Script Link</th>
-                    <th className="px-4 py-3">Script Date</th>
-                    <th className="px-4 py-3">Shooting Link</th>
-                    <th className="px-4 py-3">Shoot Date</th>
-                    <th className="px-4 py-3">Editing Link</th>
-                    <th className="px-4 py-3">Edit Date</th>
-                    <th className="px-4 py-3">Review By TL</th>
-                    <th className="px-4 py-3">Final Link</th>
-                    <th className="px-4 py-3 min-w-[200px]">Remarks</th>
-                    <th className="px-4 py-3">Posted</th>
+                    <th className="px-4 py-3 min-w-[120px]">Due Date</th>
                     <th className="px-4 py-3 w-24 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="text-[12px] divide-y divide-slate-100">
-                  {(() => {
-                    let currentGroup = "";
-                    return paginatedTasks.map((task, index) => {
-                      const groupKey = `${task.projectName || "Unknown Project"} ${task.phase ? `- ${task.phase}` : ''}`;
-                      const showHeader = groupKey !== currentGroup;
-                      if (showHeader) currentGroup = groupKey;
-
-                      return (
-                        <React.Fragment key={task.id}>
-                          {showHeader && (
-                            <tr className="bg-brand-teal/5">
-                              <td colSpan={24} className="px-4 py-2 font-bold text-brand-teal border-y border-brand-teal/10">
-                                {groupKey}
-                              </td>
-                            </tr>
-                          )}
-                          <tr 
+                  {paginatedTasks.map((task, index) => (
+                    <tr 
                       key={task.id} 
                       className={`hover:bg-slate-50/50 transition-colors group ${isDueTask(task) ? 'bg-rose-50/40 border-l-4 border-l-rose-500' : ''}`}
                     >
@@ -1365,27 +1331,9 @@ export default function TasksPage() {
                       {[
                         { key: 'title', type: 'text', minWidth: '200px' },
                         { key: 'projectId', labelKey: 'projectName', type: 'select', options: projects.filter(p => p.department?.toLowerCase() === 'development').map(p => ({ value: p.id, label: p.title })), minWidth: '150px' },
-                        { key: 'phase', type: 'text', minWidth: '120px' },
                         { key: 'assignedToId', labelKey: 'assignedToName', type: 'select', options: employees.filter(e => e.department?.toLowerCase() === 'development').map(e => ({ value: e.id, label: `${e.firstName} ${e.lastName}` })), minWidth: '150px' },
-                        { key: 'estimatedHours', type: 'number', minWidth: '80px' },
-                        { key: 'department', type: 'select', options: ['Development'].map(d => ({ value: d, label: d })), minWidth: '120px' },
                         { key: 'status', type: 'select', options: STAGES.map(s => ({ value: s.id, label: s.label })), minWidth: '120px' },
-                        { key: 'createdDate', type: 'readonly', minWidth: '125px' },
-                        { key: 'postingDate', type: 'date' },
-                        { key: 'postingDay', type: 'readonly' },
-                        { key: 'reelPost', type: 'select', options: ['Post', 'Reel', 'Video'].map(v => ({ value: v, label: v })) },
-                        { key: 'concept', type: 'text' },
-                        { key: 'reference', type: 'text' },
-                        { key: 'scriptLink', type: 'text' },
-                        { key: 'scriptDate', type: 'date' },
-                        { key: 'shootingLink', type: 'text' },
-                        { key: 'shootDate', type: 'date' },
-                        { key: 'editingLink', type: 'text' },
-                        { key: 'editingDate', type: 'date' },
-                        { key: 'reviewByTL', type: 'text' },
-                        { key: 'finalLink', type: 'text' },
-                        { key: 'remarks', type: 'text', minWidth: '200px' },
-                        { key: 'postingStatus', type: 'select', options: ['Yes', 'No'].map(v => ({ value: v, label: v })) },
+                        { key: 'dueDate', type: 'date', minWidth: '120px' },
                       ].map((col) => (
                         <td 
                           key={col.key} 
@@ -1491,13 +1439,10 @@ export default function TasksPage() {
                               </div>
                             </td>
                           </tr>
-                        </React.Fragment>
-                      );
-                    });
-                  })()}
+                        ))}
                   {filteredTasks.length === 0 && (
                     <tr>
-                      <td colSpan={24} className="px-4 py-20 text-center text-slate-400 italic">No creative tasks found.</td>
+                      <td colSpan={7} className="px-4 py-20 text-center text-slate-400 italic">No creative tasks found.</td>
                     </tr>
                   )}
                 </tbody>
