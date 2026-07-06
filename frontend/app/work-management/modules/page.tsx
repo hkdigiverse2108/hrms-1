@@ -1467,10 +1467,8 @@ export default function ModulesPage() {
                                 ))}
 
                                 {canManageModule && (
-                                  <TableCell className="py-2.5"></TableCell>
-                                )}
-                                {canManageModule && (
                                   <TableRow className="bg-slate-50/10 hover:bg-slate-50/20 border-t border-dashed border-slate-200">
+                                    <TableCell className="py-2.5"></TableCell>
                                     <TableCell className="py-2.5">
                                       <Input
                                         placeholder="Add module..."
