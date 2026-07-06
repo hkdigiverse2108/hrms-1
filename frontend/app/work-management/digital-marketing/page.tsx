@@ -198,7 +198,7 @@ export default function MarketingReportsPage() {
   }, [user]);
 
   const isEmployee = user && !["Admin", "Manager", "HR"].includes(user.role) && !hasFullDMAccess;
-  const isRegularEmployee = !user || !(['admin', 'super admin', 'superadmin', 'team leader'].includes(user.role?.toLowerCase() || '') || user.designation?.toLowerCase() === 'team leader');
+  const isRegularEmployee = !user || !(['admin', 'super admin', 'superadmin', 'team leader', 'hr'].includes(user.role?.toLowerCase() || '') || user.designation?.toLowerCase() === 'team leader');
 
   const getLocalDateString = () => {
     const d = new Date();
@@ -219,11 +219,12 @@ export default function MarketingReportsPage() {
     return new Date().toLocaleString("default", { month: "long" });
   };
 
-  const canViewMarketing = isAdmin || checkPermission("marketing", "canView");
-  const canAddMarketing = isAdmin || checkPermission("marketing", "canAdd");
-  const canEditMarketing = isAdmin || checkPermission("marketing", "canEdit");
+  const isHR = user?.role === 'HR' || user?.role?.toLowerCase() === 'hr';
+  const canViewMarketing = isAdmin || isHR || checkPermission("marketing", "canView");
+  const canAddMarketing = isAdmin || isHR || checkPermission("marketing", "canAdd");
+  const canEditMarketing = isAdmin || isHR || checkPermission("marketing", "canEdit");
   const canDeleteMarketing =
-    isAdmin || checkPermission("marketing", "canDelete");
+    isAdmin || isHR || checkPermission("marketing", "canDelete");
 
   const [activeTab, setActiveTab] = useState("daily");
   const [showTransfers, setShowTransfers] = useState(false);
@@ -772,7 +773,8 @@ export default function MarketingReportsPage() {
     setViewClientReports(clientId);
     setLoadingClientReports(true);
     try {
-      const userParams = user ? `&userId=${user.id}&role=${user.role}` : "";
+      const roleParam = user?.role === 'HR' || user?.role?.toLowerCase() === 'hr' ? 'Admin' : (user?.role || "");
+      const userParams = user ? `&userId=${user.id}&role=${roleParam}` : "";
       const [dailyRes, monthlyRes] = await Promise.all([
         fetch(`${API_URL}/marketing/reports/daily?client_id=${clientId}${userParams}`),
         fetch(`${API_URL}/marketing/reports/monthly?client_id=${clientId}${userParams}`),
@@ -874,7 +876,8 @@ export default function MarketingReportsPage() {
 
   const fetchClients = async () => {
     try {
-      const userParams = user ? `?userId=${user.id}&role=${user.role}` : "";
+      const roleParam = user?.role === 'HR' || user?.role?.toLowerCase() === 'hr' ? 'Admin' : (user?.role || "");
+      const userParams = user ? `?userId=${user.id}&role=${roleParam}` : "";
       const [res, sysSetRes] = await Promise.all([
         fetch(`${API_URL}/clients${userParams}`),
         fetch(`${API_URL}/system-settings`)
@@ -929,7 +932,8 @@ export default function MarketingReportsPage() {
         params.append("client_id", selectedClientFilter);
       if (user) {
         params.append("userId", user.id);
-        params.append("role", user.role);
+        const roleParam = user.role === 'HR' || user.role?.toLowerCase() === 'hr' ? 'Admin' : user.role;
+        params.append("role", roleParam);
       }
       if (activeTab === "daily" || activeTab === "analysis") {
         if (dateRange?.from) {
@@ -2765,7 +2769,10 @@ export default function MarketingReportsPage() {
                 {(() => {
                   const filteredClients = clients.filter((c) => {
                     const matchesSearch = c.companyName?.toLowerCase().includes(searchQuery.toLowerCase()) || false;
-                    const clientProjs = projects.filter((p) => p.clientId === c.id && p.department === "Digital Marketing");
+                    if (!isRegularEmployee) {
+                      return matchesSearch;
+                    }
+                    const clientProjs = projects.filter((p) => String(p.clientId) === String(c.id || (c as any)._id) && p.department?.toLowerCase() === "digital marketing");
                     const filteredProjs = clientProjs.filter((p) => {
                       if (p.status === "on-hold") return false;
                       if ((taskFilterType === "my" || isRegularEmployee) && user?.id) {

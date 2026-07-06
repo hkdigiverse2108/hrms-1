@@ -2915,7 +2915,7 @@ async def user_has_full_entity_access(db, user_id: str, role: str, target_module
     if not role and not user_id:
         return False
     role_lower = str(role or "").lower().strip()
-    full_roles = {"admin", "manager", "social media manager", "smm", "director", "head", "super admin", "digital marketer", "digital marketing"}
+    full_roles = {"admin", "manager", "social media manager", "smm", "director", "head", "super admin", "digital marketer", "digital marketing", "hr"}
     if role_lower in full_roles or "social media" in role_lower or "digital marketing" in role_lower:
         return True
         
