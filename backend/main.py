@@ -3598,6 +3598,72 @@ async def delete_gallery_entry(gallery_id: str, db=Depends(get_db)):
         raise HTTPException(status_code=404, detail="Gallery entry not found")
     return {"status": "success"}
 
+# --- Company Finance Endpoints ---
+@app.get("/company-finance/transactions", response_model=dict)
+async def get_finance_transactions_endpoint(
+    paymentMethod: Optional[str] = None,
+    payment_method: Optional[str] = None,
+    type: Optional[str] = None,
+    search: Optional[str] = None,
+    db=Depends(get_db)
+):
+    actual_pm = paymentMethod or payment_method
+    txs = await crud.get_finance_transactions(db, payment_method=actual_pm, type_filter=type, search=search)
+    return {"transactions": txs}
+
+@app.post("/company-finance/transactions", response_model=schemas.FinanceTransaction)
+async def create_finance_transaction_endpoint(tx: schemas.FinanceTransactionCreate, db=Depends(get_db)):
+    return await crud.create_finance_transaction(db, tx.model_dump())
+
+@app.put("/company-finance/transactions/{tx_id}", response_model=schemas.FinanceTransaction)
+async def update_finance_transaction_endpoint(tx_id: str, tx_update: schemas.FinanceTransactionUpdate, db=Depends(get_db)):
+    updated = await crud.update_finance_transaction(db, tx_id, tx_update.model_dump(exclude_unset=True))
+    if not updated:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    return updated
+
+@app.delete("/company-finance/transactions/{tx_id}")
+async def delete_finance_transaction_endpoint(tx_id: str, db=Depends(get_db)):
+    success = await crud.delete_finance_transaction(db, tx_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    return {"message": "Transaction deleted successfully"}
+
+@app.get("/company-finance/balances", response_model=schemas.FinanceBalance)
+async def get_finance_balances_endpoint(db=Depends(get_db)):
+    return await crud.get_finance_balances(db)
+
+@app.put("/company-finance/balances", response_model=schemas.FinanceBalance)
+async def update_finance_balances_endpoint(payload: dict, db=Depends(get_db)):
+    return await crud.update_finance_balances(db, payload)
+
+@app.get("/company-finance/plans", response_model=dict)
+async def get_finance_plans_endpoint(db=Depends(get_db)):
+    plans = await crud.get_finance_plans(db)
+    return {"plans": plans}
+
+@app.post("/company-finance/plans", response_model=schemas.FinancePlan)
+async def create_finance_plan_endpoint(plan: schemas.FinancePlanCreate, db=Depends(get_db)):
+    return await crud.create_finance_plan(db, plan.model_dump())
+
+@app.put("/company-finance/plans/{plan_id}", response_model=schemas.FinancePlan)
+async def update_finance_plan_endpoint(plan_id: str, plan_update: schemas.FinancePlanUpdate, db=Depends(get_db)):
+    updated = await crud.update_finance_plan(db, plan_id, plan_update.model_dump(exclude_unset=True))
+    if not updated:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    return updated
+
+@app.delete("/company-finance/plans/{plan_id}")
+async def delete_finance_plan_endpoint(plan_id: str, db=Depends(get_db)):
+    success = await crud.delete_finance_plan(db, plan_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    return {"message": "Plan deleted successfully"}
+
+@app.get("/company-finance/summary", response_model=schemas.FinanceSummary)
+async def get_finance_summary_endpoint(db=Depends(get_db)):
+    return await crud.get_finance_summary(db)
+
 if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", os.environ.get("PORT", 8000)))
     print(f"Starting HRMS Backend on http://127.0.0.1:{port}")

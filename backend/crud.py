@@ -8391,3 +8391,287 @@ async def update_gallery(db, gallery_id: str, update: dict):
 
 async def delete_gallery(db, gallery_id: str):
     return await delete_item(db, "gallery", gallery_id)
+
+# --- Company Finance CRUD ---
+async def get_next_expense_number(db):
+    try:
+        now = datetime.now(pytz.timezone('Asia/Kolkata'))
+        prefix = now.strftime("%y%m")  # e.g., "2509" or "2607"
+        
+        # Find highest expenseNo starting with this prefix
+        cursor = db.company_finance_transactions.find({"expenseNo": {"$regex": f"^{prefix}"}})
+        max_seq = 0
+        async for doc in cursor:
+            exp_no = str(doc.get("expenseNo", ""))
+            if exp_no.startswith(prefix) and len(exp_no) >= len(prefix) + 1:
+                try:
+                    seq = int(exp_no[len(prefix):])
+                    if seq > max_seq:
+                        max_seq = seq
+                except ValueError:
+                    pass
+        
+        next_seq = max_seq + 1
+        return f"{prefix}{next_seq:03d}"
+    except Exception as e:
+        print(f"Error generating expense number: {e}")
+        import random
+        return f"EXP-{random.randint(10000, 99999)}"
+
+async def get_finance_transactions(db, payment_method: str = None, type_filter: str = None, search: str = None):
+    transactions = []
+    
+    # 1. Fetch manual transactions from company_finance_transactions
+    query = {}
+    if payment_method:
+        query["paymentMethod"] = payment_method.lower()
+    if type_filter:
+        query["type"] = type_filter.lower()
+        
+    cursor = db.company_finance_transactions.find(query)
+    async for doc in cursor:
+        tx = fix_id(doc)
+        transactions.append(tx)
+        
+    # 2. Auto-sync Invoices into Credit Transactions (if type_filter is None or 'credit')
+    if not type_filter or type_filter.lower() == "credit":
+        try:
+            inv_cursor = db.invoices.find({})
+            async for inv in inv_cursor:
+                # Skip Proforma invoices
+                if inv.get("invoiceType") == "Proforma Invoice":
+                    continue
+                    
+                inv_id = str(inv.get("_id") or inv.get("id", ""))
+                if not inv_id:
+                    continue
+                    
+                # Determine payment method
+                pm_str = str(inv.get("paymentMode", "")).lower()
+                inv_payment_method = "cash" if "cash" in pm_str else "bank"
+                
+                if payment_method and inv_payment_method != payment_method.lower():
+                    continue
+                    
+                # Extract descriptions & services from line items
+                line_items = inv.get("lineItems", [])
+                descs = [li.get("description", "") for li in line_items if li.get("description")]
+                descriptions = ", ".join(descs) if descs else inv.get("clientName", "Invoice")
+                
+                srvs = [li.get("subDescription", "") or li.get("description", "") for li in line_items if li.get("subDescription") or li.get("description")]
+                services = ", ".join(srvs) if srvs else "Services"
+                
+                synced_tx = {
+                    "id": f"inv_{inv_id}",
+                    "_id": f"inv_{inv_id}",
+                    "description": descriptions,
+                    "descriptions": descriptions,
+                    "amount": float(inv.get("total", 0.0) or 0.0),
+                    "type": "credit",
+                    "category": inv.get("clientName", "General"),
+                    "paymentMethod": inv_payment_method,
+                    "date": inv.get("issueDate", "") or inv.get("timestamp", ""),
+                    "invoiceNumber": inv.get("invoiceNumber", f"INV-{inv_id[:6]}"),
+                    "services": services,
+                    "remarks": inv.get("notes", "") or inv.get("remarks", "") or f"Status: {inv.get('status', 'Pending')}",
+                    "isSyncedInvoice": True,
+                    "invoiceId": inv_id
+                }
+                transactions.append(synced_tx)
+        except Exception as e:
+            print(f"Error syncing invoices into finance transactions: {e}")
+            
+    # 3. Apply search filter in memory if provided
+    if search:
+        s_lower = search.lower()
+        filtered = []
+        for tx in transactions:
+            if (
+                s_lower in str(tx.get("description", "")).lower() or
+                s_lower in str(tx.get("descriptions", "")).lower() or
+                s_lower in str(tx.get("category", "")).lower() or
+                s_lower in str(tx.get("invoiceNumber", "")).lower() or
+                s_lower in str(tx.get("expenseNo", "")).lower() or
+                s_lower in str(tx.get("things", "")).lower() or
+                s_lower in str(tx.get("narrative", "")).lower() or
+                s_lower in str(tx.get("remarks", "")).lower()
+            ):
+                filtered.append(tx)
+        transactions = filtered
+        
+    # Sort by date / id (newest first)
+    transactions.sort(key=lambda x: str(x.get("date") or x.get("id") or ""), reverse=True)
+    return transactions
+
+async def create_finance_transaction(db, tx_data: dict):
+    if tx_data.get("type") == "debit" and not tx_data.get("expenseNo"):
+        tx_data["expenseNo"] = await get_next_expense_number(db)
+        
+    if not tx_data.get("date"):
+        now = datetime.now(pytz.timezone('Asia/Kolkata'))
+        tx_data["date"] = now.strftime("%Y-%m-%d")
+        
+    result = await db.company_finance_transactions.insert_one(tx_data)
+    created = await db.company_finance_transactions.find_one({"_id": result.inserted_id})
+    return fix_id(created)
+
+async def update_finance_transaction(db, tx_id: str, update_data: dict):
+    # Remove None values
+    clean_update = {k: v for k, v in update_data.items() if v is not None}
+    if not clean_update:
+        return await get_finance_transaction_by_id(db, tx_id)
+        
+    if tx_id.startswith("inv_"):
+        # If updating a synced invoice, update the underlying invoice notes/remarks/clientName
+        inv_id = tx_id[4:]
+        inv_update = {}
+        if "category" in clean_update:
+            inv_update["clientName"] = clean_update["category"]
+        if "remarks" in clean_update:
+            inv_update["notes"] = clean_update["remarks"]
+        if "amount" in clean_update:
+            inv_update["total"] = float(clean_update["amount"])
+            
+        if inv_update:
+            try:
+                await db.invoices.update_one({"_id": ObjectId(inv_id)}, {"$set": inv_update})
+            except Exception as e:
+                print(f"Error updating synced invoice: {e}")
+        return await get_finance_transaction_by_id(db, tx_id)
+    else:
+        try:
+            await db.company_finance_transactions.update_one({"_id": ObjectId(tx_id)}, {"$set": clean_update})
+            updated = await db.company_finance_transactions.find_one({"_id": ObjectId(tx_id)})
+            return fix_id(updated)
+        except Exception as e:
+            print(f"Error updating transaction {tx_id}: {e}")
+            return None
+
+async def get_finance_transaction_by_id(db, tx_id: str):
+    if tx_id.startswith("inv_"):
+        inv_id = tx_id[4:]
+        try:
+            inv = await db.invoices.find_one({"_id": ObjectId(inv_id)})
+            if inv:
+                line_items = inv.get("lineItems", [])
+                descs = [li.get("description", "") for li in line_items if li.get("description")]
+                descriptions = ", ".join(descs) if descs else inv.get("clientName", "Invoice")
+                srvs = [li.get("subDescription", "") or li.get("description", "") for li in line_items if li.get("subDescription") or li.get("description")]
+                services = ", ".join(srvs) if srvs else "Services"
+                return {
+                    "id": tx_id,
+                    "_id": tx_id,
+                    "description": descriptions,
+                    "descriptions": descriptions,
+                    "amount": float(inv.get("total", 0.0) or 0.0),
+                    "type": "credit",
+                    "category": inv.get("clientName", "General"),
+                    "paymentMethod": "cash" if "cash" in str(inv.get("paymentMode", "")).lower() else "bank",
+                    "date": inv.get("issueDate", "") or inv.get("timestamp", ""),
+                    "invoiceNumber": inv.get("invoiceNumber", f"INV-{inv_id[:6]}"),
+                    "services": services,
+                    "remarks": inv.get("notes", "") or inv.get("remarks", "") or f"Status: {inv.get('status', 'Pending')}",
+                    "isSyncedInvoice": True,
+                    "invoiceId": inv_id
+                }
+        except Exception as e:
+            print(f"Error fetching synced invoice by id: {e}")
+        return None
+    else:
+        try:
+            doc = await db.company_finance_transactions.find_one({"_id": ObjectId(tx_id)})
+            return fix_id(doc) if doc else None
+        except Exception:
+            return None
+
+async def delete_finance_transaction(db, tx_id: str):
+    if tx_id.startswith("inv_"):
+        inv_id = tx_id[4:]
+        try:
+            res = await db.invoices.delete_one({"_id": ObjectId(inv_id)})
+            return res.deleted_count > 0
+        except Exception as e:
+            print(f"Error deleting synced invoice: {e}")
+            return False
+    else:
+        try:
+            res = await db.company_finance_transactions.delete_one({"_id": ObjectId(tx_id)})
+            return res.deleted_count > 0
+        except Exception:
+            return False
+
+async def get_finance_balances(db):
+    doc = await db.company_finance_balances.find_one({"year": "Global"})
+    if not doc:
+        default_bal = {"bankOpeningBalance": 0.0, "cashOpeningBalance": 0.0, "year": "Global"}
+        await db.company_finance_balances.insert_one(default_bal)
+        doc = await db.company_finance_balances.find_one({"year": "Global"})
+    return fix_id(doc)
+
+async def update_finance_balances(db, balance_data: dict):
+    clean_data = {k: float(v) if k in ["bankOpeningBalance", "cashOpeningBalance"] else v for k, v in balance_data.items() if v is not None}
+    await db.company_finance_balances.update_one(
+        {"year": "Global"},
+        {"$set": clean_data},
+        upsert=True
+    )
+    doc = await db.company_finance_balances.find_one({"year": "Global"})
+    return fix_id(doc)
+
+async def get_finance_plans(db):
+    return await get_items(db, "company_finance_plans", 0, 1000)
+
+async def create_finance_plan(db, plan_data: dict):
+    return await create_item(db, "company_finance_plans", plan_data)
+
+async def update_finance_plan(db, plan_id: str, update_data: dict):
+    return await update_item(db, "company_finance_plans", plan_id, update_data)
+
+async def delete_finance_plan(db, plan_id: str):
+    return await delete_item(db, "company_finance_plans", plan_id)
+
+async def get_finance_summary(db):
+    all_txs = await get_finance_transactions(db)
+    balances = await get_finance_balances(db)
+    
+    total_income = sum(float(tx.get("amount", 0.0) or 0.0) for tx in all_txs if tx.get("type") == "credit")
+    total_expenses = sum(float(tx.get("amount", 0.0) or 0.0) for tx in all_txs if tx.get("type") == "debit")
+    net_balance = total_income - total_expenses
+    
+    bank_opening = float(balances.get("bankOpeningBalance", 0.0) or 0.0)
+    cash_opening = float(balances.get("cashOpeningBalance", 0.0) or 0.0)
+    
+    bank_txs = [tx for tx in all_txs if tx.get("paymentMethod", "").lower() == "bank"]
+    cash_txs = [tx for tx in all_txs if tx.get("paymentMethod", "").lower() == "cash"]
+    
+    bank_credit = sum(float(tx.get("amount", 0.0) or 0.0) for tx in bank_txs if tx.get("type") == "credit")
+    bank_debit = sum(float(tx.get("amount", 0.0) or 0.0) for tx in bank_txs if tx.get("type") == "debit")
+    bank_closing = bank_opening + bank_credit - bank_debit
+    
+    cash_credit = sum(float(tx.get("amount", 0.0) or 0.0) for tx in cash_txs if tx.get("type") == "credit")
+    cash_debit = sum(float(tx.get("amount", 0.0) or 0.0) for tx in cash_txs if tx.get("type") == "debit")
+    cash_in_hand = cash_opening + cash_credit - cash_debit
+    
+    # Calculate pending payments from invoices
+    pending_payments = 0.0
+    try:
+        inv_cursor = db.invoices.find({"status": {"$in": ["Pending", "Overdue"]}})
+        async for inv in inv_cursor:
+            if inv.get("invoiceType") != "Proforma Invoice":
+                pending_payments += float(inv.get("total", 0.0) or 0.0)
+    except Exception as e:
+        print(f"Error calculating pending payments: {e}")
+        
+    return {
+        "totalIncome": total_income,
+        "totalExpenses": total_expenses,
+        "netBalance": net_balance,
+        "pendingPayments": pending_payments,
+        "bankOpeningBalance": bank_opening,
+        "bankClosingBalance": bank_closing,
+        "cashOpeningBalance": cash_opening,
+        "cashInHand": cash_in_hand,
+        "incomeTrend": 12.5,
+        "expenseTrend": -4.2
+    }
+

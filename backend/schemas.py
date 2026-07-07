@@ -2461,3 +2461,100 @@ class Gallery(GalleryBase):
     id: str
     class Config:
         from_attributes = True
+
+# --- Company Finance ---
+class FinanceTransactionBase(BaseModel):
+    description: Optional[str] = None
+    descriptions: Optional[str] = None
+    amount: float = 0.0
+    type: str = "credit"  # "credit" or "debit"
+    category: Optional[str] = None
+    paymentMethod: str = "bank"  # "bank" or "cash"
+    date: Optional[str] = None
+    invoiceNumber: Optional[str] = None
+    services: Optional[str] = None
+    remarks: Optional[str] = None
+    expenseNo: Optional[str] = None
+    things: Optional[str] = None
+    narrative: Optional[str] = None
+    billAttachment: Optional[str] = None
+    isSyncedInvoice: Optional[bool] = False
+    invoiceId: Optional[str] = None
+
+class FinanceTransactionCreate(FinanceTransactionBase):
+    pass
+
+class FinanceTransactionUpdate(BaseModel):
+    description: Optional[str] = None
+    descriptions: Optional[str] = None
+    amount: Optional[float] = None
+    type: Optional[str] = None
+    category: Optional[str] = None
+    paymentMethod: Optional[str] = None
+    date: Optional[str] = None
+    invoiceNumber: Optional[str] = None
+    services: Optional[str] = None
+    remarks: Optional[str] = None
+    expenseNo: Optional[str] = None
+    things: Optional[str] = None
+    narrative: Optional[str] = None
+    billAttachment: Optional[str] = None
+    isSyncedInvoice: Optional[bool] = None
+    invoiceId: Optional[str] = None
+
+class FinanceTransaction(FinanceTransactionBase):
+    id: str
+    class Config:
+        from_attributes = True
+
+class FinanceBalanceBase(BaseModel):
+    bankOpeningBalance: float = 0.0
+    cashOpeningBalance: float = 0.0
+    year: Optional[str] = "Global"
+
+class FinanceBalanceCreate(FinanceBalanceBase):
+    pass
+
+class FinanceBalance(FinanceBalanceBase):
+    id: str
+    class Config:
+        from_attributes = True
+
+class FinancePlanBase(BaseModel):
+    title: str
+    description: Optional[str] = None
+    startDate: Optional[str] = None
+    endDate: Optional[str] = None
+    budget: float = 0.0
+    category: Optional[str] = None
+    status: str = "Active"
+
+class FinancePlanCreate(FinancePlanBase):
+    pass
+
+class FinancePlanUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    startDate: Optional[str] = None
+    endDate: Optional[str] = None
+    budget: Optional[float] = None
+    category: Optional[str] = None
+    status: Optional[str] = None
+
+class FinancePlan(FinancePlanBase):
+    id: str
+    class Config:
+        from_attributes = True
+
+class FinanceSummary(BaseModel):
+    totalIncome: float = 0.0
+    totalExpenses: float = 0.0
+    netBalance: float = 0.0
+    pendingPayments: float = 0.0
+    bankOpeningBalance: float = 0.0
+    bankClosingBalance: float = 0.0
+    cashOpeningBalance: float = 0.0
+    cashInHand: float = 0.0
+    incomeTrend: Optional[float] = 0.0
+    expenseTrend: Optional[float] = 0.0
+
