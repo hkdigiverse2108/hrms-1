@@ -27,6 +27,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { TaskPresetsView } from "@/components/work-management/TaskPresetsView";
+import EmployeeAnalytics from "@/components/work-management/EmployeeAnalytics";
 import { usePermissions } from "@/hooks/usePermissions";
 import { TablePagination } from "@/components/common/TablePagination";
 import { toast } from "sonner";
@@ -761,7 +762,6 @@ export default function TasksPage() {
   }).sort((a, b) => {
     const aInProgress = (a.status === "in_progress" || a.status === "in-progress") ? 1 : 0;
     const bInProgress = (b.status === "in_progress" || b.status === "in-progress") ? 1 : 0;
-    
     if (aInProgress !== bInProgress) {
       return bInProgress - aInProgress;
     }
@@ -829,17 +829,25 @@ export default function TasksPage() {
             Project Modules
           </Button>
 
+          {isRealAdmin && activeTab === "tasks" && (
+            <Button onClick={() => setActiveTab("analytics")} variant="outline" className="gap-2 border-brand-teal text-brand-teal hover:bg-brand-teal/10 font-bold">
+              <User className="w-4 h-4" />
+              Employee Analysis
+            </Button>
+          )}
+
+          {(isRealAdmin || isTeamLeader) && activeTab === "tasks" && (
+            <Button onClick={() => setActiveTab("presets")} variant="outline" className="border-brand-teal text-brand-teal hover:bg-brand-teal/10 font-bold">
+              <Plus className="w-4 h-4 mr-2" />
+              Manage Presets
+            </Button>
+          )}
+
           {canAddTask && activeTab === "tasks" && (
-            <>
-              <Button onClick={() => setActiveTab("presets")} variant="outline" className="border-brand-teal text-brand-teal hover:bg-brand-teal/10 font-bold">
-                <Plus className="w-4 h-4 mr-2" />
-                Manage Presets
-              </Button>
-              <Button onClick={() => { setEditingTask(null); setModalOpen(true); }} className="bg-brand-teal text-white hover:bg-brand-teal-light font-bold">
-                <Plus className="w-4 h-4 mr-2" />
-                Assign Task
-              </Button>
-            </>
+            <Button onClick={() => { setEditingTask(null); setModalOpen(true); }} className="bg-brand-teal text-white hover:bg-brand-teal-light font-bold">
+              <Plus className="w-4 h-4 mr-2" />
+              Assign Task
+            </Button>
           )}
 
           <Dialog open={modalOpen} onOpenChange={(open) => {
@@ -935,7 +943,13 @@ export default function TasksPage() {
         isLoading={isLoadingLogs}
       />
       
-      {activeTab === "presets" ? (
+      {activeTab === "analytics" ? (
+        <EmployeeAnalytics 
+          employees={employees} 
+          tasks={tasks} 
+          onBack={() => setActiveTab('tasks')} 
+        />
+      ) : activeTab === "presets" ? (
         <div className="space-y-4 flex-1 flex flex-col">
           <TaskPresetsView onBack={() => setActiveTab('tasks')} />
         </div>
