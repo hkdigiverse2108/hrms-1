@@ -1687,11 +1687,7 @@ export default function TasksPage() {
                                           {task.isApproved ? "Disapprove" : "Approve"}
                                         </Button>
                                       )}
-                                      {task.estimatedHours > 0 && (
-                                        <span className="shrink-0 text-[10px] font-black text-brand-teal bg-brand-teal/10 px-2 py-0.5 rounded-md border border-brand-teal/20 flex items-center gap-1">
-                                          ⏱️ {task.estimatedHours} hrs
-                                        </span>
-                                      )}
+
                                     </div>
                                   </div>
                                 </div>

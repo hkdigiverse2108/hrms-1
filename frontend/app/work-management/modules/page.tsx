@@ -1619,18 +1619,7 @@ export default function ModulesPage() {
 
 
 
-                                    <TableCell className="py-2.5">
-                                      <Input
-                                        type="number"
-                                        placeholder="Hrs"
-                                        value={input.estimatedHours === undefined ? "" : input.estimatedHours}
-                                        onChange={(e) => updateQuickAddInput(phaseKey, "estimatedHours", parseFloat(e.target.value) || 0)}
-                                        onKeyDown={(e) => {
-                                          if (e.key === "Enter") handleQuickAddModule(phaseName);
-                                        }}
-                                        className="h-8 text-xs font-semibold bg-white w-20"
-                                      />
-                                    </TableCell>
+
 
                                     <TableCell className="py-2.5">
                                       <Select 
@@ -1840,22 +1829,6 @@ export default function ModulesPage() {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="estimatedHours" className="text-brand-teal font-extrabold flex items-center gap-1">
-                ⏱️ Estimated Hours
-              </Label>
-              <Input
-                id="estimatedHours"
-                type="number"
-                min="0"
-                step="0.5"
-                placeholder="e.g. 8"
-                value={formData.estimatedHours || ""}
-                onChange={(e) => setFormData(prev => ({ ...prev, estimatedHours: parseFloat(e.target.value) || 0 }))}
-                className="font-bold text-brand-teal bg-brand-teal/5 border-brand-teal/30"
-              />
             </div>
 
             <div className="space-y-2">
@@ -2342,18 +2315,7 @@ export default function ModulesPage() {
                       />
                     </div>
 
-                    <div className="w-[110px]">
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.5"
-                        placeholder="⏱️ Hrs"
-                        value={newTaskHours || ""}
-                        onChange={(e) => setNewTaskHours(parseFloat(e.target.value) || 0)}
-                        className="h-8 text-xs bg-white border-slate-200 shadow-2xs"
-                        title="Estimated Hours"
-                      />
-                    </div>
+
 
                     <div className="w-[140px]">
                       <Input
@@ -2783,22 +2745,7 @@ export default function ModulesPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="edit-task-hours" className="text-xs font-bold text-slate-700 flex items-center gap-1">⏱️ Est. Hours</Label>
-                <Input
-                  id="edit-task-hours"
-                  type="number"
-                  min="0"
-                  step="0.5"
-                  placeholder="e.g. 4"
-                  value={editTaskHours || ""}
-                  onChange={(e) => setEditTaskHours(parseFloat(e.target.value) || 0)}
-                  className="text-xs h-9"
-                />
-              </div>
-
-              <div className="space-y-1.5">
+            <div className="grid grid-cols-1 gap-3">              <div className="space-y-1.5">
                 <Label htmlFor="edit-task-due-date" className="text-xs font-bold text-slate-700 flex items-center gap-1">📅 Due Date</Label>
                 <Input
                   id="edit-task-due-date"

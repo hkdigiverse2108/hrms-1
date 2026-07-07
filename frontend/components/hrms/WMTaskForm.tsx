@@ -484,26 +484,6 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
         </div>
       </div>
 
-      {formData.department?.toLowerCase() === "development" && (
-        <div className="space-y-4 pt-2">
-          <div className="space-y-2">
-            <Label htmlFor="estimatedHours" className="text-brand-teal font-extrabold flex items-center gap-1.5 text-xs uppercase">
-              ⏱️ Number of Hours (Total / Estimated)
-            </Label>
-            <Input
-              id="estimatedHours"
-              type="number"
-              min="0"
-              step="0.5"
-              placeholder="e.g. 12"
-              value={formData.estimatedHours || ""}
-              onChange={(e) => setFormData(prev => ({ ...prev, estimatedHours: parseFloat(e.target.value) || 0 }))}
-              className="font-extrabold border-brand-teal/40 bg-brand-teal/5 text-brand-teal h-9 text-xs max-w-[200px]"
-            />
-          </div>
-        </div>
-      )}
-
       {formData.status === "pending" && (
         <div className="space-y-2">
           <Label htmlFor="reasonForPending" className="after:content-['_*'] after:text-red-500">Reason for Pending</Label>
