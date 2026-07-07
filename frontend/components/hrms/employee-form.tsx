@@ -237,8 +237,9 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
             sanitizedData[k] = String(value) as any
           }
         } else {
-          const defVal = (defaultFormData as any)[k]
-          sanitizedData[k] = defVal !== undefined ? defVal : ''
+          const defVal = (defaultFormData as any)[k];
+          const target: any = sanitizedData;
+          target[k] = defVal !== undefined ? defVal : '';
         }
       })
       
