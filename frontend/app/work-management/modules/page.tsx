@@ -2211,73 +2211,8 @@ export default function ModulesPage() {
             </TabsContent>
 
             <TabsContent value="tasks" className="flex-1 min-h-0 p-6 m-0 overflow-y-auto custom-scrollbar focus-visible:outline-none focus-visible:ring-0">
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-6 h-full items-start">
-                
-                {/* Left: Add Task Form */}
-                <div className="md:col-span-2 bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
-                  <h3 className="font-bold text-sm text-slate-800 mb-4 pb-2 border-b border-slate-100 flex items-center gap-1.5">
-                    <Plus className="w-4 h-4 text-brand-teal" /> Create Task in Module
-                  </h3>
-                  
-                  <form onSubmit={handleAddModuleTask} className="space-y-4">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="task-title" className="text-xs font-bold text-slate-700">Task Title <span className="text-red-500">*</span></Label>
-                      <Input
-                        id="task-title"
-                        placeholder="e.g. Implement signup UI"
-                        value={newTaskTitle}
-                        onChange={(e) => setNewTaskTitle(e.target.value)}
-                        required
-                        className="text-xs h-9"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <Label htmlFor="task-desc" className="text-xs font-bold text-slate-700">Description</Label>
-                      <Textarea
-                        id="task-desc"
-                        placeholder="e.g. Needs responsive inputs and validation"
-                        value={newTaskDesc}
-                        onChange={(e) => setNewTaskDesc(e.target.value)}
-                        className="text-xs min-h-[60px] resize-y"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <Label htmlFor="task-hours" className="text-xs font-bold text-slate-700 flex items-center gap-1">⏱️ Est. Hours</Label>
-                        <Input
-                          id="task-hours"
-                          type="number"
-                          min="0"
-                          step="0.5"
-                          placeholder="e.g. 4"
-                          value={newTaskHours || ""}
-                          onChange={(e) => setNewTaskHours(parseFloat(e.target.value) || 0)}
-                          className="text-xs h-9"
-                        />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <Label htmlFor="task-due-date" className="text-xs font-bold text-slate-700 flex items-center gap-1">📅 Due Date</Label>
-                        <Input
-                          id="task-due-date"
-                          type="date"
-                          value={newTaskDueDate}
-                          onChange={(e) => setNewTaskDueDate(e.target.value)}
-                          className="text-xs h-9"
-                        />
-                      </div>
-                    </div>
-
-                    <Button type="submit" className="w-full bg-brand-teal hover:bg-brand-teal/90 text-white font-bold text-xs h-9 shadow-xs" disabled={!newTaskTitle.trim()}>
-                      Add Task to Module
-                    </Button>
-                  </form>
-                </div>
-
-                {/* Right: Tasks List */}
-                <div className="md:col-span-3 bg-white border border-slate-200 rounded-2xl p-5 shadow-xs min-h-[300px]">
+              <div className="w-full bg-white border border-slate-200 rounded-2xl p-5 shadow-xs min-h-[300px] flex flex-col justify-between">
+                <div>
                   <h3 className="font-bold text-sm text-slate-800 mb-4 pb-2 border-b border-slate-100 flex items-center justify-between">
                     <span className="flex items-center gap-1.5">
                       <CheckSquare className="w-4 h-4 text-brand-teal" /> Module Tasks ({moduleTasks.length})
@@ -2376,7 +2311,7 @@ export default function ModulesPage() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="w-7 h-7 text-slate-400 hover:text-red-500 rounded-md shrink-0 cursor-pointer"
+                              className="w-7 h-7 text-red-500 hover:bg-red-50 rounded-md shrink-0 cursor-pointer"
                               onClick={() => handleDeleteTask(task.id)}
                               title="Delete Task"
                             >
@@ -2387,14 +2322,58 @@ export default function ModulesPage() {
                       ))}
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center justify-center py-16 text-center text-slate-400">
+                    <div className="flex flex-col items-center justify-center py-12 text-center text-slate-400">
                       <CheckSquare className="w-12 h-12 stroke-1 mb-2 opacity-30 text-slate-300" />
                       <p className="text-xs font-semibold text-slate-600">No tasks in this module</p>
-                      <p className="text-[11px] text-slate-400 mt-1 max-w-[200px]">Use the form on the left to add your first module task.</p>
+                      <p className="text-[11px] text-slate-400 mt-1 max-w-[250px]">Use the inline add bar below to add your first module task.</p>
                     </div>
                   )}
                 </div>
 
+                {/* Inline Add Task Row (like Modules table quick-add) */}
+                <div className="mt-6 pt-4 border-t border-slate-100">
+                  <form onSubmit={handleAddModuleTask} className="flex flex-wrap items-center gap-2.5 bg-slate-50/80 p-3 rounded-xl border border-dashed border-slate-300 hover:border-slate-400 transition-all">
+                    <div className="flex-1 min-w-[220px]">
+                      <Input
+                        placeholder="+ Add new task title... (Press Enter to save)"
+                        value={newTaskTitle}
+                        onChange={(e) => setNewTaskTitle(e.target.value)}
+                        className="h-8 text-xs font-semibold bg-white border-slate-200 focus:border-brand-teal shadow-2xs"
+                      />
+                    </div>
+
+                    <div className="w-[110px]">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        placeholder="⏱️ Hrs"
+                        value={newTaskHours || ""}
+                        onChange={(e) => setNewTaskHours(parseFloat(e.target.value) || 0)}
+                        className="h-8 text-xs bg-white border-slate-200 shadow-2xs"
+                        title="Estimated Hours"
+                      />
+                    </div>
+
+                    <div className="w-[140px]">
+                      <Input
+                        type="date"
+                        value={newTaskDueDate}
+                        onChange={(e) => setNewTaskDueDate(e.target.value)}
+                        className="h-8 text-xs bg-white border-slate-200 shadow-2xs"
+                        title="Due Date (Defaults to module deadline)"
+                      />
+                    </div>
+
+                    <Button 
+                      type="submit" 
+                      disabled={!newTaskTitle.trim()}
+                      className="h-8 px-4 bg-brand-teal hover:bg-brand-teal-light text-white font-bold text-xs shadow-2xs cursor-pointer shrink-0 flex items-center gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add Task
+                    </Button>
+                  </form>
+                </div>
               </div>
             </TabsContent>
 
