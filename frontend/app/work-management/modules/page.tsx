@@ -580,11 +580,15 @@ export default function ModulesPage() {
 
   useEffect(() => {
     if (projectTeamMembers.length > 0) {
-      const initialCaps: Record<string, number> = {};
-      projectTeamMembers.forEach(m => {
-        initialCaps[m.id] = 1.0; // default normal capacity
+      setMemberCapacities(prev => {
+        const initialCaps: Record<string, number> = { ...prev };
+        projectTeamMembers.forEach(m => {
+          if (initialCaps[m.id] === undefined) {
+            initialCaps[m.id] = 1.0; // default normal capacity
+          }
+        });
+        return initialCaps;
       });
-      setMemberCapacities(initialCaps);
     }
   }, [projectTeamMembers]);
 
