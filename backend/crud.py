@@ -8626,3 +8626,16 @@ async def update_gallery(db, gallery_id: str, update: dict):
 
 async def delete_gallery(db, gallery_id: str):
     return await delete_item(db, "gallery", gallery_id)
+
+# --- Task Presets CRUD ---
+async def get_task_presets(db, skip: int = 0, limit: int = 100):
+    return await get_items(db, "task_presets", skip, limit)
+
+async def create_task_preset(db, preset: schemas.TaskPresetCreate):
+    return await create_item(db, "task_presets", preset.dict())
+
+async def update_task_preset(db, preset_id: str, update: dict):
+    return await update_item(db, "task_presets", preset_id, update)
+
+async def delete_task_preset(db, preset_id: str):
+    return await delete_item(db, "task_presets", preset_id)

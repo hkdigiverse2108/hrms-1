@@ -118,6 +118,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       workManagementChildren.push(getItem(<Link href="/work-management/smm">Social Media Management</Link>, "/work-management/smm"));
     }
 
+
     const employeeChildren: MenuItem[] = [];
     if (isAdmin || checkPermission('employee-list', 'canView')) {
       employeeChildren.push(getItem(<Link href="/employees">Employee List</Link>, "/employees"));

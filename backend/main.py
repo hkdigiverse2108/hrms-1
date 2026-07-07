@@ -2367,6 +2367,13 @@ async def update_permission_preset(preset_id: str, preset: schemas.PermissionPre
         raise HTTPException(status_code=404, detail="Preset not found")
     return updated
 
+@app.delete("/task-presets/{preset_id}")
+async def delete_task_preset_entry(preset_id: str, db=Depends(get_db)):
+    success = await crud.delete_task_preset(db, preset_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Preset not found")
+    return {"status": "success"}
+
 @app.delete("/permission-presets/{preset_id}")
 async def delete_permission_preset(preset_id: str, db=Depends(get_db)):
     deleted = await crud.delete_permission_preset(db, preset_id)
@@ -3597,6 +3604,78 @@ async def delete_gallery_entry(gallery_id: str, db=Depends(get_db)):
     if not success:
         raise HTTPException(status_code=404, detail="Gallery entry not found")
     return {"status": "success"}
+
+# --- Task Preset Endpoints ---
+@app.get("/task-presets", response_model=List[schemas.TaskPreset])
+async def read_task_presets(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+    return await crud.get_task_presets(db, skip, limit)
+
+@app.post("/task-presets", response_model=schemas.TaskPreset)
+async def create_task_preset_entry(preset: schemas.TaskPresetCreate, db=Depends(get_db)):
+    return await crud.create_task_preset(db, preset)
+
+@app.put("/task-presets/{preset_id}", response_model=schemas.TaskPreset)
+async def update_task_preset_entry(preset_id: str, payload: dict, db=Depends(get_db)):
+    updated = await crud.update_task_preset(db, preset_id, payload)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Preset not found")
+    return updated
+
+    if not success:
+        raise HTTPException(status_code=404, detail="Preset not found")
+    return {"status": "success"}
+
+@app.post("/task-presets/{preset_id}/assign")
+async def assign_task_preset(preset_id: str, payload: dict, db=Depends(get_db)):
+    from bson import ObjectId
+    import datetime
+    
+    assignee_ids = payload.get("assignedToIds", [])
+    if not assignee_ids and payload.get("assignedToId"):
+        assignee_ids = [payload.get("assignedToId")]
+        
+    performer_id = payload.get("performedBy", "Unknown")
+    user_name = payload.get("userName", "Unknown")
+    
+    if not assignee_ids:
+        raise HTTPException(status_code=400, detail="assignee_ids is required")
+        
+    presets = await crud.get_task_presets(db, 0, 1000)
+    target_preset = next((p for p in presets if str(p.get("_id")) == preset_id or str(p.get("id")) == preset_id), None)
+    
+    if not target_preset:
+        raise HTTPException(status_code=404, detail="Preset not found")
+        
+    tasks = target_preset.get("tasks", [])
+    created_tasks = []
+    
+    for assignee_id in assignee_ids:
+        emp = await db.employees.find_one({"_id": ObjectId(assignee_id)})
+        assignee_name = f"{emp.get('firstName', '')} {emp.get('lastName', '')}".strip() if emp else "Unknown"
+        
+        for pt in tasks:
+            new_task = schemas.WMTaskCreate(
+                title=pt.get("title"),
+                description=pt.get("description", ""),
+                projectId=pt.get("projectId"),
+                projectName=pt.get("projectName"),
+                department=pt.get("department", "development"),
+                assignedToId=assignee_id,
+                assignedToName=assignee_name,
+                status="todo",
+                priority="medium",
+                estimatedHours=0,
+                createdBy=performer_id,
+                performedBy=performer_id,
+                userName=user_name,
+                postingDate=datetime.datetime.now().strftime("%Y-%m-%d"),
+                dueDate=datetime.datetime.now().strftime("%Y-%m-%d")
+            )
+            created = await crud.create_wm_task(db, new_task)
+            created_tasks.append(created)
+            
+    return {"message": "Success", "tasks_created": len(created_tasks), "tasks": created_tasks}
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", os.environ.get("PORT", 8000)))

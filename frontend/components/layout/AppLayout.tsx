@@ -734,7 +734,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <Layout className="site-layout h-screen overflow-y-auto relative custom-scrollbar">
         <Header />
         <Content 
-          className="px-4 sm:px-6 lg:px-8 mx-auto w-full max-w-[1600px]"
+          className="px-4 sm:px-6 lg:px-8 w-full"
           style={{ paddingBottom: '24px' }}
         >
           {hasAccess ? children : <AccessDenied />}

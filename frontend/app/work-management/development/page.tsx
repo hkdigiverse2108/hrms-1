@@ -26,6 +26,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
+import { TaskPresetsView } from "@/components/work-management/TaskPresetsView";
 import { usePermissions } from "@/hooks/usePermissions";
 import { TablePagination } from "@/components/common/TablePagination";
 import { toast } from "sonner";
@@ -111,7 +112,7 @@ export default function TasksPage() {
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferringTask, setTransferringTask] = useState<any>(null);
   const [selectedReceiverId, setSelectedReceiverId] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<"tasks" | "progress">("tasks");
+  const [activeTab, setActiveTab] = useState<"tasks" | "progress" | "presets">("tasks");
   const isRealAdmin = user?.role?.toLowerCase() === "admin";
 
   useEffect(() => {
@@ -822,10 +823,16 @@ export default function TasksPage() {
           </Button>
 
           {canAddTask && activeTab === "tasks" && (
-            <Button onClick={() => { setEditingTask(null); setModalOpen(true); }} className="bg-brand-teal text-white hover:bg-brand-teal-light font-bold">
-              <Plus className="w-4 h-4 mr-2" />
-              Assign Task
-            </Button>
+            <>
+              <Button onClick={() => setActiveTab("presets")} variant="outline" className="border-brand-teal text-brand-teal hover:bg-brand-teal/10 font-bold">
+                <Plus className="w-4 h-4 mr-2" />
+                Manage Presets
+              </Button>
+              <Button onClick={() => { setEditingTask(null); setModalOpen(true); }} className="bg-brand-teal text-white hover:bg-brand-teal-light font-bold">
+                <Plus className="w-4 h-4 mr-2" />
+                Assign Task
+              </Button>
+            </>
           )}
 
           <Dialog open={modalOpen} onOpenChange={(open) => {
@@ -921,7 +928,11 @@ export default function TasksPage() {
         isLoading={isLoadingLogs}
       />
       
-      {activeTab === "progress" ? (
+      {activeTab === "presets" ? (
+        <div className="space-y-4 flex-1 flex flex-col">
+          <TaskPresetsView onBack={() => setActiveTab('tasks')} />
+        </div>
+      ) : activeTab === "progress" ? (
         <div className="space-y-4 flex-1 flex flex-col">
           <div className="flex items-center">
             <Button 
