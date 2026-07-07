@@ -80,7 +80,7 @@ export default function TasksPage() {
   const [editingCell, setEditingCell] = useState<{id: string, field: string} | null>(null);
   const [dateFilter, setDateFilter] = useState<string>(new Date().toISOString().split('T')[0]);
   const [taskScope, setTaskScope] = useState<"my" | "all">("all");
-  const [taskTimeFilter, setTaskTimeFilter] = useState<"all" | "pending" | "today" | "upcoming">("all");
+  const [taskTimeFilter, setTaskTimeFilter] = useState<"all" | "pending" | "today" | "upcoming">("today");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
@@ -747,12 +747,12 @@ export default function TasksPage() {
       // Only show tasks where due date is exactly today
       if (taskDate !== todayStr) return false;
     } else if (taskTimeFilter === "pending") {
-      const isOverdue = t.dueDate && t.dueDate < todayStr && t.status !== "completed";
+      const isOverdue = taskDate && taskDate < todayStr && t.status !== "completed";
       const isPendingStatus = t.status === "pending" || t.status === "onhold";
       if (!isPendingStatus && !isOverdue) return false;
     } else if (taskTimeFilter === "upcoming") {
-      // Show all non-completed tasks with a future due date (to-do tasks)
-      const isUpcoming = t.dueDate && t.dueDate > todayStr && t.status !== "completed";
+      // Show all non-completed tasks with a future date, OR "todo" tasks without any date
+      const isUpcoming = (taskDate && taskDate > todayStr && t.status !== "completed") || (!taskDate && t.status === "todo");
       if (!isUpcoming) return false;
     }
 
@@ -786,7 +786,7 @@ export default function TasksPage() {
   }
 
   return (
-    <div className="space-y-4 flex flex-col h-[calc(100vh-140px)]">
+    <div className="space-y-4 flex flex-col h-[calc(100vh-90px)]">
       <PageHeader
         title="Development Board"
         description="Manage software & web development sprints. Click any card to update details."
