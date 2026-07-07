@@ -1287,6 +1287,30 @@ class Task(TaskBase):
     class Config:
         from_attributes = True
 
+# Task Preset Schemas
+class PresetTask(BaseModel):
+    title: str
+    description: Optional[str] = None
+    projectId: str
+    projectName: Optional[str] = None
+    department: Optional[str] = None
+
+class TaskPresetBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    presetType: Optional[str] = "intern"
+    tasks: Optional[List[PresetTask]] = []
+    modules: Optional[List[dict]] = []
+
+class TaskPresetCreate(TaskPresetBase):
+    pass
+
+class TaskPreset(TaskPresetBase):
+    id: str
+
+    class Config:
+        from_attributes = True
+
 # Work Management Task Schemas
 class WMTaskBase(BaseModel):
     title: str

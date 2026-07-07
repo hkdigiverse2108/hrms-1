@@ -4,8 +4,9 @@ import React, { useState, useEffect } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Briefcase, Loader2, Plus, ArrowLeft, ChevronRight, User, Calendar, Filter, Pencil, Trash2, BookOpen, MessageSquare, Send, Eye, SlidersHorizontal, Key, Link2, History, Shuffle } from "lucide-react";
+import { Briefcase, Loader2, Plus, ArrowLeft, ChevronRight, User, Calendar, Filter, Pencil, Trash2, BookOpen, MessageSquare, Send, Eye, SlidersHorizontal, Key, Link2, History, Shuffle, GripVertical, CheckSquare } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -89,6 +90,9 @@ export default function ModulesPage() {
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [presetModalOpen, setPresetModalOpen] = useState(false);
+  const [availablePresets, setAvailablePresets] = useState<any[]>([]);
+  const [isApplyingPreset, setIsApplyingPreset] = useState(false);
   const [activePhase, setActivePhase] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
@@ -101,6 +105,25 @@ export default function ModulesPage() {
     priority: "medium",
     estimatedHours: 0
   });
+
+  // Module Tasks State
+  const [newModuleTasks, setNewModuleTasks] = useState<{ title: string; description: string; estimatedHours: number }[]>([]);
+  const [newModuleTaskTitle, setNewModuleTaskTitle] = useState("");
+  const [newModuleTaskHours, setNewModuleTaskHours] = useState<number>(0);
+  const [moduleTasks, setModuleTasks] = useState<any[]>([]);
+  const [allTasks, setAllTasks] = useState<any[]>([]);
+  const [loadingModuleTasks, setLoadingModuleTasks] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskDesc, setNewTaskDesc] = useState("");
+  const [newTaskHours, setNewTaskHours] = useState(0);
+  const [newTaskDueDate, setNewTaskDueDate] = useState("");
+  const [editingTask, setEditingTask] = useState<any | null>(null);
+  const [editTaskTitle, setEditTaskTitle] = useState("");
+  const [editTaskDesc, setEditTaskDesc] = useState("");
+  const [editTaskHours, setEditTaskHours] = useState(0);
+  const [editTaskDueDate, setEditTaskDueDate] = useState("");
+  const [editTaskAssignee, setEditTaskAssignee] = useState("unassigned");
+  const [isEditTaskModalOpen, setIsEditTaskModalOpen] = useState(false);
 
   // Module Details / Edit State
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
@@ -126,6 +149,14 @@ export default function ModulesPage() {
   const [logsOpen, setLogsOpen] = useState(false);
   const [projectLogs, setProjectLogs] = useState<any[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+
+  // Drag-and-Drop State
+  const [draggedModule, setDraggedModule] = useState<{index: number, phaseName: string | null} | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<{index: number, phaseName: string | null} | null>(null);
+
+  // Auto-Distribute State
+  const [isDistributeModalOpen, setIsDistributeModalOpen] = useState(false);
+  const [memberCapacities, setMemberCapacities] = useState<Record<string, number>>({});
 
   // Filters State
   const [filterPhase, setFilterPhase] = useState<string>("all");
@@ -209,6 +240,87 @@ export default function ModulesPage() {
       toast.error("Error updating module");
     }
     setEditingCell(null);
+  };
+
+  // Drag-and-Drop Handlers
+  const handleDragStart = (e: React.DragEvent, index: number, phaseName: string | null) => {
+    setDraggedModule({ index, phaseName });
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", ""); // needed for Firefox
+    // Make the drag image slightly transparent
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = "0.4";
+    }
+  };
+
+  const handleDragEnd = (e: React.DragEvent) => {
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = "1";
+    }
+    setDraggedModule(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number, phaseName: string | null) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    // Only allow drop within the same phase
+    if (draggedModule && draggedModule.phaseName === phaseName) {
+      setDragOverIndex({ index, phaseName });
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent, dropIndex: number, phaseName: string | null) => {
+    e.preventDefault();
+    if (!draggedModule || !selectedProject) return;
+    if (draggedModule.phaseName !== phaseName) return;
+    if (draggedModule.index === dropIndex) {
+      setDraggedModule(null);
+      setDragOverIndex(null);
+      return;
+    }
+
+    const allModules = [...(selectedProject.modules || [])];
+    // Get modules for this specific phase in order
+    const phaseModules = allModules.filter((m: any) =>
+      phaseName === null ? !m.phaseName : m.phaseName === phaseName
+    );
+    // Get modules NOT in this phase (to preserve them)
+    const otherModules = allModules.filter((m: any) =>
+      phaseName === null ? !!m.phaseName : m.phaseName !== phaseName
+    );
+
+    // Reorder within this phase's modules
+    const [movedItem] = phaseModules.splice(draggedModule.index, 1);
+    phaseModules.splice(dropIndex, 0, movedItem);
+
+    // Recombine: put phase modules back in their original position relative to other modules
+    const reorderedModules = [...otherModules, ...phaseModules];
+
+    try {
+      const res = await fetch(`${API_URL}/projects/${selectedProject.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...selectedProject,
+          modules: reorderedModules,
+          performedBy: user?.id,
+          userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+        })
+      });
+      if (res.ok) {
+        toast.success("Module order updated");
+        fetchData();
+      } else {
+        toast.error("Failed to reorder modules");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error reordering modules");
+    }
+
+    setDraggedModule(null);
+    setDragOverIndex(null);
   };
 
   const [quickAddInputs, setQuickAddInputs] = useState<Record<string, any>>({});
@@ -304,6 +416,61 @@ export default function ModulesPage() {
     }
   };
 
+  const handleOpenPresetModal = async () => {
+    try {
+      const res = await fetch(`${API_URL}/task-presets`);
+      if (res.ok) {
+        const data = await res.json();
+        setAvailablePresets(data.filter((p: any) => p.presetType === "normal"));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    setPresetModalOpen(true);
+  };
+
+  const handleApplyPreset = async (preset: any) => {
+    if (!selectedProject || !preset.modules?.length) return;
+    setIsApplyingPreset(true);
+    try {
+      // Deep clone to avoid reference issues
+      const modulesToAdd = JSON.parse(JSON.stringify(preset.modules));
+      
+      // Assign Phase if available
+      if (activePhase) {
+        modulesToAdd.forEach((m: any) => {
+          if (!m.phaseName) m.phaseName = activePhase.name;
+        });
+      }
+
+      const updatedModules = [...(selectedProject.modules || []), ...modulesToAdd];
+      
+      const res = await fetch(`${API_URL}/projects/${selectedProject.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...selectedProject,
+          modules: updatedModules,
+          performedBy: user?.id,
+          userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+        })
+      });
+      
+      if (res.ok) {
+        toast.success("Preset applied successfully!");
+        setPresetModalOpen(false);
+        fetchData(); 
+      } else {
+        toast.error("Failed to apply preset");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error applying preset");
+    } finally {
+      setIsApplyingPreset(false);
+    }
+  };
+
   // Credentials & Links State
   const [credModalOpen, setCredModalOpen] = useState(false);
   const [credFrontendLink, setCredFrontendLink] = useState("");
@@ -353,9 +520,10 @@ export default function ModulesPage() {
 
   const fetchData = async () => {
     try {
-      const [pRes, eRes] = await Promise.all([
+      const [pRes, eRes, tRes] = await Promise.all([
         fetch(`${API_URL}/projects?department=Development`),
-        fetch(`${API_URL}/employees`)
+        fetch(`${API_URL}/employees`),
+        fetch(`${API_URL}/wm-tasks`)
       ]);
       
       if (pRes.ok) {
@@ -370,6 +538,11 @@ export default function ModulesPage() {
       if (eRes.ok) {
         const emps = await eRes.json();
         setEmployees(emps.filter((e: any) => e.department === "Development"));
+      }
+
+      if (tRes.ok) {
+        const tData = await tRes.json();
+        setAllTasks(tData);
       }
     } catch (err) {
       console.error("Error fetching data:", err);
@@ -405,7 +578,220 @@ export default function ModulesPage() {
     return employees.filter(e => ids.has(e.id));
   }, [selectedProject, employees]);
 
-  const handleAutoDistributeModules = async () => {
+  useEffect(() => {
+    if (projectTeamMembers.length > 0) {
+      setMemberCapacities(prev => {
+        const initialCaps: Record<string, number> = { ...prev };
+        projectTeamMembers.forEach(m => {
+          if (initialCaps[m.id] === undefined) {
+            initialCaps[m.id] = 1.0; // default normal capacity
+          }
+        });
+        return initialCaps;
+      });
+    }
+  }, [projectTeamMembers]);
+
+  const fetchModuleTasks = async () => {
+    if (!selectedProjectId || !selectedModule) return;
+    setLoadingModuleTasks(true);
+    try {
+      const res = await fetch(`${API_URL}/wm-tasks`);
+      if (res.ok) {
+        const data = await res.json();
+        const filtered = data.filter((t: any) => 
+          t.projectId === selectedProjectId && 
+          t.moduleName === selectedModule.name &&
+          (t.phase === selectedModule.phaseName || (!t.phase && !selectedModule.phaseName))
+        );
+        setModuleTasks(filtered);
+      }
+    } catch (err) {
+      console.error("Error fetching module tasks:", err);
+    } finally {
+      setLoadingModuleTasks(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedModule) {
+      fetchModuleTasks();
+    }
+  }, [selectedModule, selectedProjectId]);
+
+  const handleAddModuleTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTaskTitle.trim() || !selectedModule || !selectedProjectId) return;
+
+    if (newTaskDueDate) {
+      const taskDate = new Date(newTaskDueDate);
+      const refDeadlineStr = selectedModule.dueDate || selectedProject?.endDate;
+      if (refDeadlineStr) {
+        if (taskDate > new Date(refDeadlineStr)) {
+          toast.error(`Task due date cannot exceed ${selectedModule.dueDate ? "Module" : "Project"} deadline (${refDeadlineStr})`);
+          return;
+        }
+      }
+    }
+
+    try {
+      const task_assignee_id = selectedModule.assignedToId || "";
+      const task_assignee_name = selectedModule.assignedToName || "Unassigned";
+      
+      const payload = {
+        title: newTaskTitle.trim(),
+        description: newTaskDesc.trim(),
+        projectId: selectedProjectId,
+        projectName: selectedProject?.title,
+        assignedToId: task_assignee_id,
+        assignedToName: task_assignee_name,
+        dueDate: newTaskDueDate || selectedModule.dueDate || null,
+        moduleName: selectedModule.name,
+        moduleDeadline: selectedModule.dueDate || null,
+        status: "todo",
+        priority: selectedModule.priority || "medium",
+        estimatedHours: newTaskHours || 0,
+        phase: selectedModule.phaseName || null,
+        performedBy: user?.id || "Unknown",
+        userName: user?.name || "User"
+      };
+
+      const res = await fetch(`${API_URL}/wm-tasks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        toast.success("Task added to module successfully!");
+        setNewTaskTitle("");
+        setNewTaskDesc("");
+        setNewTaskHours(0);
+        setNewTaskDueDate("");
+        fetchModuleTasks();
+        fetchData();
+      } else {
+        toast.error("Failed to add task to module");
+      }
+    } catch (err) {
+      console.error("Error adding task:", err);
+      toast.error("An error occurred");
+    }
+  };
+
+  const handleUpdateTaskStatus = async (task: any, newStatus: string) => {
+    try {
+      const res = await fetch(`${API_URL}/wm-tasks/${task.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...task,
+          status: newStatus,
+          performedBy: user?.id || "Unknown",
+          userName: user?.name || "User"
+        })
+      });
+
+      if (res.ok) {
+        toast.success("Task status updated!");
+        fetchModuleTasks();
+        fetchData();
+      } else {
+        toast.error("Failed to update task status");
+      }
+    } catch (err) {
+      console.error("Error updating task status:", err);
+      toast.error("An error occurred");
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    const isConfirmed = await confirm({
+      title: "Delete Task",
+      message: "Are you sure you want to delete this task? This action cannot be undone.",
+      destructive: true,
+      confirmText: "Delete"
+    });
+    if (!isConfirmed) return;
+
+    try {
+      const res = await fetch(`${API_URL}/wm-tasks/${taskId}`, {
+        method: "DELETE"
+      });
+
+      if (res.ok) {
+        toast.success("Task deleted successfully!");
+        fetchModuleTasks();
+        fetchData();
+      } else {
+        toast.error("Failed to delete task");
+      }
+    } catch (err) {
+      console.error("Error deleting task:", err);
+      toast.error("An error occurred");
+    }
+  };
+
+  const openEditTaskModal = (task: any) => {
+    setEditingTask(task);
+    setEditTaskTitle(task.title || "");
+    setEditTaskDesc(task.description || "");
+    setEditTaskHours(task.estimatedHours || 0);
+    setEditTaskDueDate(task.dueDate || task.moduleDeadline || "");
+    setEditTaskAssignee(task.assignedToId || "unassigned");
+    setIsEditTaskModalOpen(true);
+  };
+
+  const handleSaveEditTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTask || !editTaskTitle.trim()) return;
+
+    if (editTaskDueDate) {
+      const taskDate = new Date(editTaskDueDate);
+      const refDeadlineStr = selectedModule?.dueDate || selectedProject?.endDate;
+      if (refDeadlineStr) {
+        if (taskDate > new Date(refDeadlineStr)) {
+          toast.error(`Task due date cannot exceed ${selectedModule?.dueDate ? "Module" : "Project"} deadline (${refDeadlineStr})`);
+          return;
+        }
+      }
+    }
+
+    try {
+      const finalAssigneeId = editTaskAssignee === "unassigned" ? "" : editTaskAssignee;
+      const assigneeEmp = employees.find(emp => emp.id === finalAssigneeId);
+      const res = await fetch(`${API_URL}/wm-tasks/${editingTask.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...editingTask,
+          title: editTaskTitle.trim(),
+          description: editTaskDesc.trim(),
+          estimatedHours: Number(editTaskHours) || 0,
+          dueDate: editTaskDueDate || selectedModule?.dueDate || null,
+          assignedToId: finalAssigneeId,
+          assignedToName: assigneeEmp ? `${assigneeEmp.firstName} ${assigneeEmp.lastName}`.trim() : (finalAssigneeId ? "Assigned" : ""),
+          performedBy: user?.id || "Unknown",
+          userName: user?.name || "User"
+        })
+      });
+
+      if (res.ok) {
+        toast.success("Task updated successfully!");
+        setIsEditTaskModalOpen(false);
+        setEditingTask(null);
+        fetchModuleTasks();
+        fetchData();
+      } else {
+        toast.error("Failed to update task");
+      }
+    } catch (err) {
+      console.error("Error updating task:", err);
+      toast.error("An error occurred while updating task");
+    }
+  };
+
+  const handleOpenDistributeModal = () => {
     if (!selectedProject || !selectedProject.modules || selectedProject.modules.length === 0) {
       toast.error("No modules to distribute");
       return;
@@ -414,9 +800,24 @@ export default function ModulesPage() {
       toast.error("No team members found for this project");
       return;
     }
+    setIsDistributeModalOpen(true);
+  };
+
+  const handleAutoDistributeModules = async () => {
+    if (!selectedProject || !selectedProject.modules || selectedProject.modules.length === 0) {
+      toast.error("No modules to distribute");
+      return;
+    }
+    
+    // Filter out team members excluded from distribution (capacity <= 0)
+    const activeTeam = projectTeamMembers.filter(member => (memberCapacities[member.id] || 1.0) > 0);
+    
+    if (activeTeam.length === 0) {
+      toast.error("Please select at least one active team member for distribution");
+      return;
+    }
 
     // Sort modules by estimatedHours descending (Longest Processing Time first)
-    // Use 1 as a fallback weight if hours are not entered
     const sortedModules = [...selectedProject.modules].sort((a, b) => {
       const aHrs = a.estimatedHours || 1;
       const bHrs = b.estimatedHours || 1;
@@ -424,20 +825,22 @@ export default function ModulesPage() {
     });
 
     // Initialize workload tracking
-    const team = projectTeamMembers;
     const workload: Record<string, number> = {};
-    team.forEach(member => {
+    activeTeam.forEach(member => {
       workload[member.id] = 0;
     });
 
-    // Greedy assignment
+    // Greedy assignment considering capacity multipliers:
+    // We allocate to the member whose current virtual workload (workload / capacity) is lowest.
     const updatedModules = sortedModules.map(m => {
-      let lowestMember = team[0];
-      let lowestHours = Infinity;
+      let lowestMember = activeTeam[0];
+      let lowestVirtualWorkload = Infinity;
       
-      team.forEach(member => {
-        if (workload[member.id] < lowestHours) {
-          lowestHours = workload[member.id];
+      activeTeam.forEach(member => {
+        const capacity = memberCapacities[member.id] || 1.0;
+        const virtualWorkload = workload[member.id] / capacity;
+        if (virtualWorkload < lowestVirtualWorkload) {
+          lowestVirtualWorkload = virtualWorkload;
           lowestMember = member;
         }
       });
@@ -464,7 +867,8 @@ export default function ModulesPage() {
       });
 
       if (res.ok) {
-        toast.success("Modules successfully distributed and balanced across the team!");
+        toast.success("Modules successfully distributed based on user priority!");
+        setIsDistributeModalOpen(false);
         fetchData();
       } else {
         toast.error("Failed to save distributed modules");
@@ -478,6 +882,8 @@ export default function ModulesPage() {
   const openAddModal = (phase: any = null) => {
     setActivePhase(phase);
     setFormData({ title: "", dueDate: "", assignedToId: user?.id || "", stage: "todo", priority: "medium", estimatedHours: 0 });
+    setNewModuleTasks([]);
+    setNewModuleTaskTitle("");
     setIsModalOpen(true);
   };
 
@@ -531,7 +937,8 @@ export default function ModulesPage() {
         priority: formData.priority,
         estimatedHours: formData.estimatedHours || 0,
         researchWork: "",
-        comments: []
+        comments: [],
+        tasks: newModuleTasks
       };
       
       const updatedModules = [...(project.modules || []), newModule];
@@ -570,6 +977,7 @@ export default function ModulesPage() {
     setNotebookContent(module.researchWork || "");
     setIsEditingNotebook(false);
     setNewCommentText("");
+    setNewTaskDueDate("");
     setIsEditMode(true);
     setIsDetailsOpen(true);
   };
@@ -915,7 +1323,7 @@ export default function ModulesPage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={handleAutoDistributeModules}
+                            onClick={handleOpenDistributeModal}
                             className="h-7 text-xs font-bold gap-1.5 border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700"
                           >
                             <Shuffle className="w-3.5 h-3.5 text-brand-teal" /> Auto-Distribute Modules
@@ -962,17 +1370,31 @@ export default function ModulesPage() {
 
                     <div className="h-6 w-px bg-slate-200 mx-1 hidden sm:block"></div>
 
+                    <div className="flex gap-2 items-center">
                     {canManageModule && (
-                      <Button 
-                        onClick={() => openAddModal(null)}
-                        className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-9"
-                      >
-                        <Plus className="w-4 h-4 mr-1.5" />
-                        Add Module
-                      </Button>
+                      <>
+                        <Button 
+                          onClick={handleOpenPresetModal}
+                          variant="outline"
+                          className="font-bold h-9 border-brand-teal/30 text-brand-teal hover:bg-brand-teal/5"
+                        >
+                          <Briefcase className="w-4 h-4 mr-1.5" />
+                          Apply Presets
+                        </Button>
+                        <Button 
+                          onClick={() => openAddModal(null)}
+                          className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-9"
+                        >
+                          <Plus className="w-4 h-4 mr-1.5" />
+                          Add Module
+                        </Button>
+                      </>
                     )}
                   </div>
-                </div>                <div className="flex-1 bg-slate-50/30 overflow-y-auto min-h-0 custom-scrollbar">
+                </div>
+              </div>
+
+                <div className="flex-1 bg-slate-50/30 overflow-y-auto min-h-0 custom-scrollbar">
                   {(() => {
                     const phases = selectedProject.phases || [];
                     const modules = selectedProject.modules || [];
@@ -1018,9 +1440,9 @@ export default function ModulesPage() {
                             <Table>
                               <TableHeader className="bg-slate-50/30">
                                 <TableRow className="hover:bg-transparent">
+                                  {canManageModule && <TableHead className="font-bold text-slate-700 h-10 py-2 w-10"></TableHead>}
                                   <TableHead className="font-bold text-slate-700 h-10 py-2">Module Name</TableHead>
                                   <TableHead className="font-bold text-slate-700 h-10 py-2">Stage</TableHead>
-                                  <TableHead className="font-bold text-slate-700 h-10 py-2">Priority</TableHead>
                                   <TableHead className="font-bold text-slate-700 h-10 py-2">Hours</TableHead>
                                   <TableHead className="font-bold text-slate-700 h-10 py-2">Assigned To</TableHead>
                                   <TableHead className="font-bold text-slate-700 h-10 py-2">Due Date</TableHead>
@@ -1029,7 +1451,32 @@ export default function ModulesPage() {
                               </TableHeader>
                               <TableBody>
                                 {phaseModules.map((m: any, idx: number) => (
-                                  <TableRow key={idx} className="hover:bg-slate-50/50 transition-colors">
+                                  <TableRow 
+                                    key={idx} 
+                                    className={`hover:bg-slate-50/50 transition-colors ${
+                                      canManageModule ? 'cursor-default' : ''
+                                    } ${
+                                      dragOverIndex?.index === idx && dragOverIndex?.phaseName === phaseName && draggedModule?.index !== idx
+                                        ? 'border-t-2 !border-t-brand-teal' 
+                                        : ''
+                                    } ${
+                                      draggedModule?.index === idx && draggedModule?.phaseName === phaseName
+                                        ? 'opacity-40 bg-slate-100' 
+                                        : ''
+                                    }`}
+                                    draggable={canManageModule}
+                                    onDragStart={(e) => canManageModule && handleDragStart(e, idx, phaseName)}
+                                    onDragEnd={handleDragEnd}
+                                    onDragOver={(e) => canManageModule && handleDragOver(e, idx, phaseName)}
+                                    onDrop={(e) => canManageModule && handleDrop(e, idx, phaseName)}
+                                  >
+                                    {canManageModule && (
+                                      <TableCell className="py-3 w-10 pr-0">
+                                        <div className="flex items-center justify-center cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-600 transition-colors">
+                                          <GripVertical className="w-4 h-4" />
+                                        </div>
+                                      </TableCell>
+                                    )}
                                     <TableCell className="font-bold text-slate-800 py-3">
                                       {editingCell?.moduleName === m.name && editingCell?.phaseName === m.phaseName && editingCell?.field === "name" ? (
                                         <Input
@@ -1066,58 +1513,53 @@ export default function ModulesPage() {
                                           <SelectContent>
                                             <SelectItem value="todo">To Do</SelectItem>
                                             <SelectItem value="in_progress">In Progress</SelectItem>
+                                            <SelectItem value="review">Review</SelectItem>
+                                            <SelectItem value="bugs">Bugs</SelectItem>
+                                            <SelectItem value="onhold">On Hold</SelectItem>
                                             <SelectItem value="completed">Completed</SelectItem>
                                           </SelectContent>
                                         </Select>
                                       ) : (
-                                        <span 
-                                          onClick={() => canManageModule && setEditingCell({ moduleName: m.name, phaseName: m.phaseName, field: "stage" })}
-                                          className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold capitalize ${
-                                            m.stage === "completed" 
-                                              ? "bg-green-100 text-green-800" 
-                                              : m.stage === "in_progress" 
-                                              ? "bg-blue-100 text-blue-800" 
-                                              : "bg-slate-100 text-slate-800"
-                                          } ${canManageModule ? "cursor-pointer hover:opacity-80" : ""}`}
-                                        >
-                                          {(m.stage || "todo").replace("_", " ")}
-                                        </span>
+                                        <div className="flex flex-col gap-1 items-start">
+                                          <span 
+                                            onClick={() => canManageModule && setEditingCell({ moduleName: m.name, phaseName: m.phaseName, field: "stage" })}
+                                            className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold capitalize ${
+                                              m.stage === "completed" 
+                                                ? "bg-green-100 text-green-800 border border-green-200" 
+                                                : m.stage === "in_progress" || m.stage === "in-progress"
+                                                ? "bg-blue-100 text-blue-800 border border-blue-200" 
+                                                : m.stage === "review" || m.stage === "ready for review"
+                                                ? "bg-amber-100 text-amber-800 border border-amber-200"
+                                                : m.stage === "bugs"
+                                                ? "bg-red-100 text-red-800 border border-red-200"
+                                                : m.stage === "onhold"
+                                                ? "bg-purple-100 text-purple-800 border border-purple-200"
+                                                : "bg-slate-100 text-slate-800 border border-slate-200"
+                                            } ${canManageModule ? "cursor-pointer hover:opacity-80" : ""}`}
+                                          >
+                                            {(m.stage || "todo").replace("_", " ")}
+                                          </span>
+                                          {(() => {
+                                            const modTasks = allTasks.filter(t => t.projectId === selectedProjectId && t.moduleName === m.name && (t.phase === m.phaseName || (!t.phase && !m.phaseName)));
+                                            if (modTasks.length === 0) return null;
+                                            const approvedCount = modTasks.filter(t => t.status === "completed" && t.isApproved).length;
+                                            const completedCount = modTasks.filter(t => t.status === "completed").length;
+                                            const totalCount = modTasks.length;
+                                            return (
+                                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                                                approvedCount === totalCount ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
+                                                completedCount === totalCount ? "bg-amber-50 text-amber-700 border border-amber-200" :
+                                                "bg-slate-50 text-slate-600 border border-slate-200"
+                                              }`}>
+                                                {approvedCount === totalCount ? `✓ ${approvedCount}/${totalCount} Approved` : `${completedCount}/${totalCount} Done`}
+                                              </span>
+                                            );
+                                          })()}
+                                        </div>
                                       )}
                                     </TableCell>
 
-                                    <TableCell className="py-3">
-                                      {editingCell?.moduleName === m.name && editingCell?.phaseName === m.phaseName && editingCell?.field === "priority" ? (
-                                        <Select 
-                                          defaultValue={m.priority || "medium"} 
-                                          onValueChange={(val) => handleInlineUpdateModule(m, "priority", val)}
-                                        >
-                                          <SelectTrigger className="h-8 text-xs bg-white">
-                                            <SelectValue />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            <SelectItem value="low">Low</SelectItem>
-                                            <SelectItem value="medium">Medium</SelectItem>
-                                            <SelectItem value="high">High</SelectItem>
-                                            <SelectItem value="urgent">Urgent</SelectItem>
-                                          </SelectContent>
-                                        </Select>
-                                      ) : (
-                                        <span 
-                                          onClick={() => canManageModule && setEditingCell({ moduleName: m.name, phaseName: m.phaseName, field: "priority" })}
-                                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold capitalize ${
-                                            m.priority === "urgent"
-                                              ? "bg-red-100 text-red-800"
-                                              : m.priority === "high"
-                                              ? "bg-orange-100 text-orange-800"
-                                              : m.priority === "medium"
-                                              ? "bg-blue-100 text-blue-800"
-                                              : "bg-slate-100 text-slate-800"
-                                          } ${canManageModule ? "cursor-pointer hover:opacity-80" : ""}`}
-                                        >
-                                          {m.priority || "medium"}
-                                        </span>
-                                      )}
-                                    </TableCell>
+
 
                                     <TableCell className="py-3 font-semibold text-xs text-slate-600">
                                       {editingCell?.moduleName === m.name && editingCell?.phaseName === m.phaseName && editingCell?.field === "estimatedHours" ? (
@@ -1220,6 +1662,7 @@ export default function ModulesPage() {
 
                                 {canManageModule && (
                                   <TableRow className="bg-slate-50/10 hover:bg-slate-50/20 border-t border-dashed border-slate-200">
+                                    <TableCell className="py-2.5"></TableCell>
                                     <TableCell className="py-2.5">
                                       <Input
                                         placeholder="Add module..."
@@ -1243,24 +1686,10 @@ export default function ModulesPage() {
                                         <SelectContent>
                                           <SelectItem value="todo">To Do</SelectItem>
                                           <SelectItem value="in_progress">In Progress</SelectItem>
+                                          <SelectItem value="review">Review</SelectItem>
+                                          <SelectItem value="bugs">Bugs</SelectItem>
+                                          <SelectItem value="onhold">On Hold</SelectItem>
                                           <SelectItem value="completed">Completed</SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                    </TableCell>
-
-                                    <TableCell className="py-2.5">
-                                      <Select 
-                                        value={input.priority || "medium"} 
-                                        onValueChange={(val) => updateQuickAddInput(phaseKey, "priority", val)}
-                                      >
-                                        <SelectTrigger className="h-8 text-xs bg-white">
-                                          <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="low">Low</SelectItem>
-                                          <SelectItem value="medium">Medium</SelectItem>
-                                          <SelectItem value="high">High</SelectItem>
-                                          <SelectItem value="urgent">Urgent</SelectItem>
                                         </SelectContent>
                                       </Select>
                                     </TableCell>
@@ -1269,12 +1698,12 @@ export default function ModulesPage() {
                                       <Input
                                         type="number"
                                         placeholder="Hrs"
-                                        value={input.estimatedHours === undefined ? "" : input.estimatedHours}
+                                        value={input.estimatedHours || ""}
                                         onChange={(e) => updateQuickAddInput(phaseKey, "estimatedHours", parseFloat(e.target.value) || 0)}
                                         onKeyDown={(e) => {
                                           if (e.key === "Enter") handleQuickAddModule(phaseName);
                                         }}
-                                        className="h-8 text-xs font-semibold bg-white w-20"
+                                        className="h-8 text-xs font-medium bg-white w-16"
                                       />
                                     </TableCell>
 
@@ -1350,10 +1779,12 @@ export default function ModulesPage() {
                     return (
                       <div className="pb-8 space-y-2">
                         {/* Render table for each phase */}
-                        {phases.map((p: any) => renderPhaseTable(p.name, p.name))}
+                        {phases
+                          .filter((p: any) => filterPhase === "all" || p.name === filterPhase)
+                          .map((p: any) => renderPhaseTable(p.name, p.name))}
                         
                         {/* Render General/Unassigned modules slab */}
-                        {((modules.some((m: any) => !m.phaseName) || phases.length === 0)) && 
+                        {filterPhase === "all" && ((modules.some((m: any) => !m.phaseName) || phases.length === 0)) && 
                           renderPhaseTable(null, "General / Unassigned Modules")
                         }
                       </div>
@@ -1458,7 +1889,8 @@ export default function ModulesPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="todo">To Do</SelectItem>
-                    <SelectItem value="in-progress">In Progress</SelectItem>
+                    <SelectItem value="in_progress">In Progress</SelectItem>
+                    <SelectItem value="review">Review</SelectItem>
                     <SelectItem value="bugs">Bugs</SelectItem>
                     <SelectItem value="onhold">On Hold</SelectItem>
                     <SelectItem value="completed">Completed</SelectItem>
@@ -1517,6 +1949,81 @@ export default function ModulesPage() {
               )}
             </div>
 
+            <div className="space-y-3 p-3 bg-slate-50/50 rounded-xl border border-slate-200">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <CheckSquare className="w-3.5 h-3.5 text-brand-teal" /> Tasks within Module
+                </Label>
+                <span className="text-[10px] text-slate-500 font-medium">{newModuleTasks.length} tasks added</span>
+              </div>
+              
+              {newModuleTasks.length > 0 && (
+                <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                  {newModuleTasks.map((t, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-2 bg-white border border-slate-200 rounded-lg shadow-2xs text-xs">
+                      <div className="truncate pr-2">
+                        <span className="font-semibold text-slate-800">{t.title}</span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="w-5 h-5 text-slate-400 hover:text-red-500 rounded-md shrink-0"
+                        onClick={() => setNewModuleTasks(prev => prev.filter((_, i) => i !== idx))}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Task title..."
+                  className="text-xs h-8 bg-white"
+                  value={newModuleTaskTitle}
+                  onChange={(e) => setNewModuleTaskTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      if (newModuleTaskTitle.trim()) {
+                        setNewModuleTasks(prev => [...prev, { title: newModuleTaskTitle.trim(), description: "", estimatedHours: newModuleTaskHours || 0 }]);
+                        setNewModuleTaskTitle("");
+                        setNewModuleTaskHours(0);
+                      }
+                    }
+                  }}
+                />
+                <div className="w-[100px] shrink-0">
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    placeholder="⏱️ Hrs"
+                    value={newModuleTaskHours || ""}
+                    onChange={(e) => setNewModuleTaskHours(parseFloat(e.target.value) || 0)}
+                    className="text-xs h-8 bg-white"
+                    title="Estimated Hours"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="bg-brand-teal hover:bg-brand-teal/90 text-white h-8 text-xs font-bold shrink-0"
+                  onClick={() => {
+                    if (newModuleTaskTitle.trim()) {
+                      setNewModuleTasks(prev => [...prev, { title: newModuleTaskTitle.trim(), description: "", estimatedHours: newModuleTaskHours || 0 }]);
+                      setNewModuleTaskTitle("");
+                      setNewModuleTaskHours(0);
+                    }
+                  }}
+                >
+                  Add
+                </Button>
+              </div>
+            </div>
+
             <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
               <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
                 Cancel
@@ -1547,7 +2054,7 @@ export default function ModulesPage() {
                 </DialogDescription>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0 pr-8 sm:pr-10">
                 <span className="text-xs font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-700 capitalize border border-slate-200 shadow-2xs">
                   {selectedModule?.stage || "todo"}
                 </span>
@@ -1568,6 +2075,9 @@ export default function ModulesPage() {
               <TabsList className="bg-slate-100/80 p-1 rounded-xl border border-slate-200/60 h-10 inline-flex">
                 <TabsTrigger value="notebook" className="flex items-center gap-2 font-bold text-xs px-4 h-8 rounded-lg data-[state=active]:bg-brand-teal data-[state=active]:text-white data-[state=active]:shadow-sm transition-all cursor-pointer">
                   <BookOpen className="w-3.5 h-3.5" /> Research Notebook
+                </TabsTrigger>
+                <TabsTrigger value="tasks" className="flex items-center gap-2 font-bold text-xs px-4 h-8 rounded-lg data-[state=active]:bg-brand-teal data-[state=active]:text-white data-[state=active]:shadow-sm transition-all cursor-pointer">
+                  <CheckSquare className="w-3.5 h-3.5" /> Tasks ({moduleTasks.length})
                 </TabsTrigger>
                 {canManageModule && (
                   <TabsTrigger value="settings" className="flex items-center gap-2 font-bold text-xs px-4 h-8 rounded-lg data-[state=active]:bg-brand-teal data-[state=active]:text-white data-[state=active]:shadow-sm transition-all cursor-pointer">
@@ -1789,6 +2299,162 @@ export default function ModulesPage() {
               })()}
             </TabsContent>
 
+            <TabsContent value="tasks" className="flex-1 min-h-0 p-6 m-0 overflow-y-auto custom-scrollbar focus-visible:outline-none focus-visible:ring-0">
+              <div className="w-full bg-white border border-slate-200 rounded-2xl p-5 shadow-xs min-h-[300px] flex flex-col justify-between">
+                <div>
+                  <h3 className="font-bold text-sm text-slate-800 mb-4 pb-2 border-b border-slate-100 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <CheckSquare className="w-4 h-4 text-brand-teal" /> Module Tasks ({moduleTasks.length})
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-medium bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full capitalize">
+                      Assignee: {selectedModule?.assignedToName || "Unassigned"}
+                    </span>
+                  </h3>
+
+                  {loadingModuleTasks ? (
+                    <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                      <Loader2 className="w-8 h-8 animate-spin text-brand-teal mb-2" />
+                      <p className="text-xs font-medium">Loading tasks...</p>
+                    </div>
+                  ) : moduleTasks.length > 0 ? (
+                    <div className="space-y-3">
+                      {moduleTasks.map((task) => (
+                        <div key={task.id} className={`p-3 border rounded-xl flex items-start justify-between gap-3 transition-all ${
+                          task.status === "completed" 
+                            ? "bg-slate-50/50 border-slate-200/60 opacity-75" 
+                            : "bg-white border-slate-200 hover:border-slate-300 shadow-2xs"
+                        }`}>
+                          <div className="flex items-start min-w-0">
+                            <div className="min-w-0 flex-1">
+                              <p className={`text-xs font-bold text-slate-800 ${task.status === "completed" ? "line-through text-slate-400" : ""}`}>
+                                {task.title}
+                              </p>
+                              {task.description && (
+                                <p className="text-xs text-slate-600 mt-1.5 whitespace-pre-wrap break-words leading-relaxed font-medium bg-slate-50/80 p-2.5 rounded-lg border border-slate-100">
+                                  {task.description}
+                                </p>
+                              )}
+                              <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+                                <Select 
+                                  value={task.status || "todo"} 
+                                  onValueChange={(val) => handleUpdateTaskStatus(task, val)}
+                                >
+                                  <SelectTrigger className={`h-6 text-[10px] font-extrabold px-2.5 py-0.5 rounded uppercase tracking-wider border shadow-2xs w-auto gap-1 cursor-pointer ${
+                                    task.status === "completed" 
+                                      ? "bg-green-100 text-green-800 border-green-200" 
+                                      : task.status === "in_progress" || task.status === "in-progress"
+                                      ? "bg-blue-100 text-blue-800 border-blue-200" 
+                                      : task.status === "review" || task.status === "ready for review"
+                                      ? "bg-amber-100 text-amber-800 border-amber-200"
+                                      : task.status === "bugs"
+                                      ? "bg-red-100 text-red-800 border-red-200"
+                                      : task.status === "onhold"
+                                      ? "bg-purple-100 text-purple-800 border-purple-200"
+                                      : "bg-slate-100 text-slate-700 border-slate-200"
+                                  }`}>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="todo">To Do</SelectItem>
+                                    <SelectItem value="in_progress">In Progress</SelectItem>
+                                    <SelectItem value="review">Review</SelectItem>
+                                    <SelectItem value="bugs">Bugs</SelectItem>
+                                    <SelectItem value="onhold">On Hold</SelectItem>
+                                    <SelectItem value="completed">Completed</SelectItem>
+                                  </SelectContent>
+                                </Select>
+
+                                {task.estimatedHours > 0 && (
+                                  <span className="text-[10px] font-bold bg-brand-teal/5 text-brand-teal border border-brand-teal/20 px-2 py-0.5 rounded">
+                                    ⏱️ {task.estimatedHours} hrs
+                                  </span>
+                                )}
+                                {task.assignedToName && (
+                                  <span className="text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200 px-2 py-0.5 rounded flex items-center gap-1">
+                                    <User className="w-3 h-3" /> {task.assignedToName}
+                                  </span>
+                                )}
+                                {task.dueDate && (
+                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1 border ${
+                                    new Date(task.dueDate) < new Date() && task.status !== "completed"
+                                      ? "bg-red-50 text-red-600 border-red-200"
+                                      : "bg-slate-100 text-slate-600 border-slate-200"
+                                  }`}>
+                                    📅 {task.dueDate}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="w-7 h-7 text-blue-500 hover:text-blue-600 hover:bg-blue-50 rounded-md shrink-0 cursor-pointer"
+                              onClick={() => openEditTaskModal(task)}
+                              title="Edit Task"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="w-7 h-7 text-red-500 hover:bg-red-50 rounded-md shrink-0 cursor-pointer"
+                              onClick={() => handleDeleteTask(task.id)}
+                              title="Delete Task"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-12 text-center text-slate-400">
+                      <CheckSquare className="w-12 h-12 stroke-1 mb-2 opacity-30 text-slate-300" />
+                      <p className="text-xs font-semibold text-slate-600">No tasks in this module</p>
+                      <p className="text-[11px] text-slate-400 mt-1 max-w-[250px]">Use the inline add bar below to add your first module task.</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Inline Add Task Row (like Modules table quick-add) */}
+                <div className="mt-6 pt-4 border-t border-slate-100">
+                  <form onSubmit={handleAddModuleTask} className="flex flex-wrap items-center gap-2.5 bg-slate-50/80 p-3 rounded-xl border border-dashed border-slate-300 hover:border-slate-400 transition-all">
+                    <div className="flex-1 min-w-[220px]">
+                      <Input
+                        placeholder="+ Add new task title... (Press Enter to save)"
+                        value={newTaskTitle}
+                        onChange={(e) => setNewTaskTitle(e.target.value)}
+                        className="h-8 text-xs font-semibold bg-white border-slate-200 focus:border-brand-teal shadow-2xs"
+                      />
+                    </div>
+
+
+
+                    <div className="w-[140px]">
+                      <Input
+                        type="date"
+                        value={newTaskDueDate}
+                        onChange={(e) => setNewTaskDueDate(e.target.value)}
+                        className="h-8 text-xs bg-white border-slate-200 shadow-2xs"
+                        title="Due Date (Defaults to module deadline)"
+                      />
+                    </div>
+
+                    <Button 
+                      type="submit" 
+                      disabled={!newTaskTitle.trim()}
+                      className="h-8 px-4 bg-brand-teal hover:bg-brand-teal-light text-white font-bold text-xs shadow-2xs cursor-pointer shrink-0 flex items-center gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add Task
+                    </Button>
+                  </form>
+                </div>
+              </div>
+            </TabsContent>
+
             <TabsContent value="settings" className="flex-1 min-h-0 p-6 m-0 overflow-y-auto custom-scrollbar">
               <div className="max-w-xl mx-auto bg-white p-6 rounded-2xl border border-slate-200 shadow-2xs">
                 <h3 className="font-bold text-base text-slate-800 mb-4 pb-3 border-b border-slate-100">Module Stage & Assignments</h3>
@@ -1838,7 +2504,8 @@ export default function ModulesPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="todo" className="text-xs">To Do</SelectItem>
-                            <SelectItem value="in-progress" className="text-xs">In Progress</SelectItem>
+                            <SelectItem value="in_progress" className="text-xs">In Progress</SelectItem>
+                            <SelectItem value="review" className="text-xs">Review</SelectItem>
                             <SelectItem value="bugs" className="text-xs">Bugs</SelectItem>
                             <SelectItem value="onhold" className="text-xs">On Hold</SelectItem>
                             <SelectItem value="completed" className="text-xs">Completed</SelectItem>
@@ -2077,6 +2744,202 @@ export default function ModulesPage() {
             <Button variant="outline" onClick={() => setLogsOpen(false)} className="font-bold text-xs h-9 px-4 cursor-pointer">
               Close History
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Auto Distribute Priorities Config Modal */}
+      <Dialog open={isDistributeModalOpen} onOpenChange={setIsDistributeModalOpen}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
+              <Shuffle className="w-5 h-5 text-brand-teal" />
+              Configure Workload Priorities
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              Set priority/capacity levels for team members. Distribution will assign workload proportionally (e.g. Low gets fewer hours, High gets more hours).
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-3">
+            <div className="max-h-[300px] overflow-y-auto pr-1 space-y-3 custom-scrollbar">
+              {projectTeamMembers.map((member) => (
+                <div key={member.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200/80">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-full bg-brand-teal/10 text-brand-teal flex items-center justify-center font-bold text-xs uppercase">
+                      {member.firstName ? member.firstName[0] : 'U'}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">{member.firstName} {member.lastName}</p>
+                      <p className="text-[11px] text-slate-500 font-medium capitalize">{member.role}</p>
+                    </div>
+                  </div>
+
+                  <Select
+                    value={String(memberCapacities[member.id] === 0.25 ? "0.25" : Number(memberCapacities[member.id] ?? 1.0).toFixed(1))}
+                    onValueChange={(val) => setMemberCapacities(prev => ({ ...prev, [member.id]: parseFloat(val) }))}
+                  >
+                    <SelectTrigger className="w-[160px] h-9 text-xs bg-white border-slate-200">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="2.0">High (2.0x Load)</SelectItem>
+                      <SelectItem value="1.5">Above Normal (1.5x Load)</SelectItem>
+                      <SelectItem value="1.0">Normal (1.0x Load)</SelectItem>
+                      <SelectItem value="0.5">Low (0.5x Load)</SelectItem>
+                      <SelectItem value="0.25">Least (0.25x Load)</SelectItem>
+                      <SelectItem value="0.0">Exclude (No Load)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 mt-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setIsDistributeModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="button" size="sm" onClick={handleAutoDistributeModules} className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold">
+                Run Distribution
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Task Modal */}
+      <Dialog open={isEditTaskModalOpen} onOpenChange={setIsEditTaskModalOpen}>
+        <DialogContent className="sm:max-w-[450px]">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
+              <Pencil className="w-4 h-4 text-brand-teal" />
+              Edit Module Task
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              Update task details, description, hours, and assignee.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSaveEditTask} className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-task-title" className="text-xs font-bold text-slate-700">Task Title *</Label>
+              <Input
+                id="edit-task-title"
+                placeholder="e.g. Implement UI components"
+                value={editTaskTitle}
+                onChange={(e) => setEditTaskTitle(e.target.value)}
+                className="text-xs h-9"
+                required
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-task-assignee" className="text-xs font-bold text-slate-700">Assign To</Label>
+              <Select value={editTaskAssignee} onValueChange={setEditTaskAssignee}>
+                <SelectTrigger id="edit-task-assignee" className="text-xs h-9">
+                  <SelectValue placeholder="Select team member..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unassigned">Unassigned</SelectItem>
+                  {employees.map((emp) => (
+                    <SelectItem key={emp.id} value={emp.id}>
+                      {emp.firstName} {emp.lastName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-task-desc" className="text-xs font-bold text-slate-700">Description</Label>
+              <Textarea
+                id="edit-task-desc"
+                placeholder="e.g. Needs responsive inputs and validation"
+                value={editTaskDesc}
+                onChange={(e) => setEditTaskDesc(e.target.value)}
+                className="text-xs min-h-[80px] resize-y"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-3">              <div className="space-y-1.5">
+                <Label htmlFor="edit-task-due-date" className="text-xs font-bold text-slate-700 flex items-center gap-1">📅 Due Date</Label>
+                <Input
+                  id="edit-task-due-date"
+                  type="date"
+                  value={editTaskDueDate}
+                  onChange={(e) => setEditTaskDueDate(e.target.value)}
+                  className="text-xs h-9"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsEditTaskModalOpen(false)}
+                className="text-xs h-9 px-4"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                className="bg-brand-teal hover:bg-brand-teal/90 text-white font-bold text-xs h-9 px-5 shadow-xs"
+                disabled={!editTaskTitle.trim()}
+              >
+                Save Changes
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Apply Preset Modal */}
+      <Dialog open={presetModalOpen} onOpenChange={setPresetModalOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2 text-slate-800">
+              <Briefcase className="w-5 h-5 text-brand-teal" />
+              Apply Module Preset
+            </DialogTitle>
+          </DialogHeader>
+
+          {activePhase && (
+            <div className="mb-2 p-3 bg-slate-50 rounded-lg border border-slate-200 text-sm">
+              <p><span className="font-semibold text-slate-700">Project:</span> {selectedProject?.title}</p>
+              <p><span className="font-semibold text-slate-700">Phase:</span> {activePhase.name} <span className="text-slate-500">({activePhase.startDate} to {activePhase.endDate})</span></p>
+            </div>
+          )}
+
+          <div className="space-y-3 py-4 max-h-[60vh] overflow-y-auto">
+            {availablePresets.length === 0 ? (
+              <div className="text-center p-6 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+                <p className="text-slate-500 font-medium">No Normal Presets found.</p>
+                <p className="text-sm text-slate-400 mt-1">Create one in the Work Management section first.</p>
+              </div>
+            ) : (
+              availablePresets.map((preset) => (
+                <div key={preset._id || preset.id} className="flex justify-between items-center p-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-brand-teal/50 transition-colors">
+                  <div>
+                    <h3 className="font-bold text-slate-800">{preset.name}</h3>
+                    <p className="text-xs text-slate-500 mt-1">{preset.description || "No description"}</p>
+                    <div className="mt-2 flex gap-2">
+                      <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                        {preset.modules?.length || 0} Modules
+                      </span>
+                    </div>
+                  </div>
+                  <Button 
+                    onClick={() => handleApplyPreset(preset)}
+                    disabled={isApplyingPreset}
+                    size="sm"
+                    className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold"
+                  >
+                    {isApplyingPreset ? <Loader2 className="w-4 h-4 animate-spin" /> : "Apply"}
+                  </Button>
+                </div>
+              ))
+            )}
           </div>
         </DialogContent>
       </Dialog>

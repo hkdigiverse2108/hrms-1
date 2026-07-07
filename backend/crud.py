@@ -3398,6 +3398,7 @@ async def update_project(db, project_id: str, project_update: schemas.ProjectUpd
             deleted_modules = [m for m in old_modules if not any(nm.get("name") == m.get("name") and nm.get("phaseName") == m.get("phaseName") for nm in new_modules)]
             # Check for updates
             for nm in new_modules:
+                nm_tasks = nm.pop("tasks", None)
                 for om in old_modules:
                     if nm.get("name") == om.get("name") and nm.get("phaseName") == om.get("phaseName"):
                         changes = []
@@ -3411,9 +3412,82 @@ async def update_project(db, project_id: str, project_update: schemas.ProjectUpd
                                 changes.append(f"{field.replace('Id', '')}: '{old_val}' -> '{new_val}'")
                         if changes:
                             await log_activity(db, "Module Updated", performedBy, userName, f"Updated module '{nm.get('name')}' in project '{old_project.get('title')}': {', '.join(changes)}", projectId=project_id)
+                        
+                        # Handle auto-assignment of tasks within the module to the module's assignee
+                        if "assignedToId" in nm:
+                            new_assignee_id = nm.get("assignedToId")
+                            new_assignee_name = nm.get("assignedToName")
+                            new_dept = None
+                            if new_assignee_id and new_assignee_id != "unassigned":
+                                try:
+                                    emp = await db.employees.find_one({"_id": ObjectId(new_assignee_id)})
+                                    if emp:
+                                        new_assignee_name = f"{emp.get('firstName')} {emp.get('lastName')}"
+                                        new_dept = emp.get("department")
+                                except Exception:
+                                    pass
+                            
+                            update_fields = {
+                                "assignedToId": (new_assignee_id if new_assignee_id != "unassigned" else "") or "",
+                                "assignedToName": new_assignee_name or "Unassigned"
+                            }
+                            if new_dept:
+                                update_fields["department"] = new_dept
+                            
+                            await db.wm_tasks.update_many(
+                                {"projectId": project_id, "moduleName": nm.get("name")},
+                                {"$set": update_fields}
+                            )
             
             for am in added_modules:
+                tasks_to_add = am.pop("tasks", None)
+                if tasks_to_add and isinstance(tasks_to_add, list):
+                    for t in tasks_to_add:
+                        if not t.get("title"):
+                            continue
+                        
+                        task_assignee_id = am.get("assignedToId") or ""
+                        task_assignee_name = am.get("assignedToName") or "Unassigned"
+                        task_dept = None
+                        if task_assignee_id:
+                            try:
+                                emp = await db.employees.find_one({"_id": ObjectId(task_assignee_id)})
+                                if emp:
+                                    task_assignee_name = f"{emp.get('firstName')} {emp.get('lastName')}"
+                                    task_dept = emp.get("department")
+                            except Exception:
+                                pass
+                                
+                        new_task = {
+                            "title": t.get("title"),
+                            "description": t.get("description") or "",
+                            "projectId": project_id,
+                            "projectName": old_project.get("title"),
+                            "assignedToId": task_assignee_id,
+                            "assignedToName": task_assignee_name,
+                            "dueDate": t.get("dueDate") or am.get("dueDate") or None,
+                            "moduleName": am.get("name"),
+                            "moduleDeadline": am.get("dueDate") or None,
+                            "status": t.get("status") or "todo",
+                            "priority": t.get("priority") or am.get("priority") or "medium",
+                            "estimatedHours": float(t.get("estimatedHours") or 0),
+                            "createdBy": performedBy,
+                            "performedBy": performedBy,
+                            "userName": userName,
+                            "phase": am.get("phaseName") or None,
+                            "subtasks": [],
+                            "isApproved": False,
+                            "createdDate": get_now().strftime("%Y-%m-%d")
+                        }
+                        if task_dept:
+                            new_task["department"] = task_dept
+                            
+                        result = await db.wm_tasks.insert_one(new_task)
+                        taskId = str(result.inserted_id)
+                        await log_task_activity(db, taskId, "Created", performedBy, userName, f"Task '{new_task['title']}' was created automatically under module '{am.get('name')}'")
+
                 await log_activity(db, "Module Created", performedBy, userName, f"Added module '{am.get('name')}' to project '{old_project.get('title')}'", projectId=project_id)
+            
             for dm in deleted_modules:
                 await log_activity(db, "Module Deleted", performedBy, userName, f"Deleted module '{dm.get('name')}' from project '{old_project.get('title')}'", projectId=project_id)
         
@@ -3703,7 +3777,24 @@ async def create_wm_task(db, task: schemas.WMTaskCreate):
         if project:
             task_dict["projectName"] = project.get("title")
     
-    if not task_dict.get("assignedToId"):
+    if task_dict.get("moduleName") and task_dict.get("projectId"):
+        try:
+            project_obj = await db.projects.find_one({"_id": ObjectId(task_dict["projectId"])})
+            if project_obj and project_obj.get("modules"):
+                for m in project_obj.get("modules", []):
+                    if m.get("name") == task_dict["moduleName"]:
+                        mod_assignee = m.get("assignedToId")
+                        if mod_assignee and mod_assignee != "unassigned":
+                            task_dict["assignedToId"] = mod_assignee
+                            task_dict["assignedToName"] = m.get("assignedToName") or "Unassigned"
+                        else:
+                            task_dict["assignedToId"] = ""
+                            task_dict["assignedToName"] = "Unassigned"
+                        break
+        except Exception as e_mod_sync:
+            print(f"Error syncing module assignee on task creation: {e_mod_sync}")
+
+    if not task_dict.get("assignedToId") and not task_dict.get("moduleName"):
         fallback_id = performedBy if performedBy and performedBy != "Unknown" else task_dict.get("createdBy")
         if fallback_id and fallback_id != "Unknown":
             task_dict["assignedToId"] = fallback_id
@@ -3753,7 +3844,129 @@ async def create_wm_task(db, task: schemas.WMTaskCreate):
         print(f"Error notifying assignee on task create: {e_notif}")
 
     doc = await db.wm_tasks.find_one({"_id": result.inserted_id})
+    if doc:
+        await sync_module_and_phase_stages(db, doc.get("projectId"), doc.get("moduleName"), doc.get("phase"), performedBy, userName)
     return fix_id(doc)
+
+async def sync_module_and_phase_stages(db, project_id: str, module_name: str, phase_name: str = None, performed_by: str = "System", user_name: str = "System"):
+    if not project_id or not module_name:
+        return
+    try:
+        project = await db.projects.find_one({"_id": ObjectId(project_id)})
+        if not project or not project.get("modules"):
+            return
+            
+        modules = project.get("modules", [])
+        target_mod_index = -1
+        for idx, m in enumerate(modules):
+            if m.get("name") == module_name:
+                if phase_name and m.get("phaseName") and m.get("phaseName") != phase_name:
+                    continue
+                target_mod_index = idx
+                break
+                
+        if target_mod_index == -1:
+            return
+            
+        current_mod = modules[target_mod_index]
+        current_stage = str(current_mod.get("stage") or "todo").strip().lower()
+        
+        query = {"projectId": project_id, "moduleName": module_name}
+        if phase_name:
+            query["phase"] = phase_name
+        tasks = await db.wm_tasks.find(query).to_list(length=1000)
+        
+        if not tasks:
+            return
+            
+        all_completed_and_approved = all(
+            str(t.get("status") or "").strip().lower() == "completed" and t.get("isApproved") is True 
+            for t in tasks
+        )
+        all_completed_or_review = all(
+            str(t.get("status") or "").strip().lower() in ["completed", "review", "ready for review"] 
+            for t in tasks
+        ) and not all_completed_and_approved
+        any_bugs = any(str(t.get("status") or "").strip().lower() == "bugs" for t in tasks)
+        any_in_progress = any(
+            str(t.get("status") or "").strip().lower() in ["in-progress", "in_progress", "review", "ready for review"] 
+            for t in tasks
+        )
+        all_todo = all(str(t.get("status") or "").strip().lower() == "todo" for t in tasks)
+        
+        target_stage = current_stage
+        if all_completed_and_approved:
+            target_stage = "completed"
+        elif any_bugs:
+            target_stage = "bugs"
+        elif all_completed_or_review:
+            target_stage = "review"
+        elif any_in_progress:
+            target_stage = "in_progress"
+        elif all_todo:
+            target_stage = "todo"
+        else:
+            target_stage = "in_progress"
+            
+        if current_stage in ["onhold", "bugs"] and not all_completed_and_approved and not any_bugs:
+            target_stage = current_stage
+            
+        mod_changed = False
+        if target_stage != current_stage:
+            modules[target_mod_index]["stage"] = target_stage
+            mod_changed = True
+            await db.projects.update_one(
+                {"_id": ObjectId(project_id)},
+                {"$set": {"modules": modules}}
+            )
+            await log_activity(
+                db, "Module Stage Updated", performed_by, user_name,
+                f"Module '{module_name}' stage automatically updated to '{target_stage}' based on task progress.",
+                projectId=project_id
+            )
+            
+        phase_changed = False
+        target_phase_name = phase_name or current_mod.get("phaseName")
+        if target_phase_name and project.get("phases"):
+            phases = project.get("phases", [])
+            for p_idx, p in enumerate(phases):
+                if p.get("name") == target_phase_name:
+                    current_p_status = str(p.get("status") or "todo").strip().lower()
+                    phase_modules = [m for m in modules if m.get("phaseName") == target_phase_name]
+                    if phase_modules:
+                        all_mods_completed = all(str(m.get("stage") or "").strip().lower() == "completed" for m in phase_modules)
+                        any_mods_active = any(str(m.get("stage") or "").strip().lower() in ["in_progress", "in-progress", "review", "bugs", "completed"] for m in phase_modules)
+                        
+                        target_p_status = current_p_status
+                        if all_mods_completed:
+                            target_p_status = "completed"
+                        elif any_mods_active:
+                            target_p_status = "in-progress"
+                        else:
+                            target_p_status = "todo"
+                            
+                        if target_p_status != current_p_status:
+                            phases[p_idx]["status"] = target_p_status
+                            phase_changed = True
+                            await db.projects.update_one(
+                                {"_id": ObjectId(project_id)},
+                                {"$set": {"phases": phases}}
+                            )
+                            await log_activity(
+                                db, "Phase Status Updated", performed_by, user_name,
+                                f"Phase '{target_phase_name}' status automatically updated to '{target_p_status}'.",
+                                projectId=project_id
+                            )
+                    break
+                    
+        if mod_changed or phase_changed:
+            try:
+                await ws_manager.broadcast_all("data_refresh", {"entity": "projects"})
+                await ws_manager.broadcast_all("data_refresh", {"entity": "wm_tasks"})
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"Error syncing module and phase stages: {e}")
 
 async def update_wm_task(db, task_id: str, task_update: schemas.WMTaskUpdate):
     update_data = task_update.dict(exclude_unset=True)
@@ -3769,6 +3982,25 @@ async def update_wm_task(db, task_id: str, task_update: schemas.WMTaskUpdate):
             if project:
                 update_data["projectName"] = project.get("title")
         
+        if update_data.get("moduleName") and update_data.get("moduleName") != (old_task.get("moduleName") if old_task else None):
+            p_id = update_data.get("projectId") or (old_task.get("projectId") if old_task else None)
+            if p_id:
+                try:
+                    project_obj = await db.projects.find_one({"_id": ObjectId(p_id)})
+                    if project_obj and project_obj.get("modules"):
+                        for m in project_obj.get("modules", []):
+                            if m.get("name") == update_data["moduleName"]:
+                                mod_assignee = m.get("assignedToId")
+                                if mod_assignee and mod_assignee != "unassigned":
+                                    update_data["assignedToId"] = mod_assignee
+                                    update_data["assignedToName"] = m.get("assignedToName") or "Unassigned"
+                                else:
+                                    update_data["assignedToId"] = ""
+                                    update_data["assignedToName"] = "Unassigned"
+                                break
+                except Exception as e_mod_update_sync:
+                    print(f"Error syncing module assignee on task update: {e_mod_update_sync}")
+
         if update_data.get("assignedToId"):
             employee = await db.employees.find_one({"_id": ObjectId(update_data["assignedToId"])})
             if employee:
@@ -3824,6 +4056,8 @@ async def update_wm_task(db, task_id: str, task_update: schemas.WMTaskUpdate):
             print(f"Error notifying reviewer on task stage update: {e_notif}")
     
     doc = await db.wm_tasks.find_one({"_id": ObjectId(task_id)})
+    if doc:
+        await sync_module_and_phase_stages(db, doc.get("projectId"), doc.get("moduleName"), doc.get("phase"), performedBy, userName)
     return fix_id(doc)
 
 async def delete_wm_task(db, task_id: str):
@@ -3833,6 +4067,7 @@ async def delete_wm_task(db, task_id: str):
     
     if result.deleted_count > 0 and task:
         await log_task_activity(db, task_id, "Deleted", "Admin/User", "N/A", f"Task '{task.get('title')}' was deleted.")
+        await sync_module_and_phase_stages(db, task.get("projectId"), task.get("moduleName"), task.get("phase"), "Admin/User", "Admin/User")
         
     return result.deleted_count > 0
 
@@ -8391,3 +8626,16 @@ async def update_gallery(db, gallery_id: str, update: dict):
 
 async def delete_gallery(db, gallery_id: str):
     return await delete_item(db, "gallery", gallery_id)
+
+# --- Task Presets CRUD ---
+async def get_task_presets(db, skip: int = 0, limit: int = 100):
+    return await get_items(db, "task_presets", skip, limit)
+
+async def create_task_preset(db, preset: schemas.TaskPresetCreate):
+    return await create_item(db, "task_presets", preset.dict())
+
+async def update_task_preset(db, preset_id: str, update: dict):
+    return await update_item(db, "task_presets", preset_id, update)
+
+async def delete_task_preset(db, preset_id: str):
+    return await delete_item(db, "task_presets", preset_id)
