@@ -845,7 +845,7 @@ export default function ProjectsPage() {
       <Dialog open={testingModalOpen} onOpenChange={setTestingModalOpen}>
         <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
           <DialogHeader>
-            <DialogTitle className="flex items-center justify-between text-lg font-black text-indigo-700 pr-4">
+            <DialogTitle className="flex items-center justify-between text-lg font-black text-indigo-700 pr-8 sm:pr-10">
               <span>🐞 Testing & Bug Board: {testingModalProject?.title}</span>
               {(isAdmin || user?.role?.toLowerCase() === 'cto') ? (
                 <Button

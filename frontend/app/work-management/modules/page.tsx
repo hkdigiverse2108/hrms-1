@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Briefcase, Loader2, Plus, ArrowLeft, ChevronRight, User, Calendar, Filter, Pencil, Trash2, BookOpen, MessageSquare, Send, Eye, SlidersHorizontal, Key, Link2, History, Shuffle, GripVertical, CheckSquare } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -106,10 +107,19 @@ export default function ModulesPage() {
   const [newModuleTasks, setNewModuleTasks] = useState<{ title: string; description: string; estimatedHours: number }[]>([]);
   const [newModuleTaskTitle, setNewModuleTaskTitle] = useState("");
   const [moduleTasks, setModuleTasks] = useState<any[]>([]);
+  const [allTasks, setAllTasks] = useState<any[]>([]);
   const [loadingModuleTasks, setLoadingModuleTasks] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDesc, setNewTaskDesc] = useState("");
   const [newTaskHours, setNewTaskHours] = useState(0);
+  const [newTaskDueDate, setNewTaskDueDate] = useState("");
+  const [editingTask, setEditingTask] = useState<any | null>(null);
+  const [editTaskTitle, setEditTaskTitle] = useState("");
+  const [editTaskDesc, setEditTaskDesc] = useState("");
+  const [editTaskHours, setEditTaskHours] = useState(0);
+  const [editTaskDueDate, setEditTaskDueDate] = useState("");
+  const [editTaskAssignee, setEditTaskAssignee] = useState("unassigned");
+  const [isEditTaskModalOpen, setIsEditTaskModalOpen] = useState(false);
 
   // Module Details / Edit State
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
@@ -451,9 +461,10 @@ export default function ModulesPage() {
 
   const fetchData = async () => {
     try {
-      const [pRes, eRes] = await Promise.all([
+      const [pRes, eRes, tRes] = await Promise.all([
         fetch(`${API_URL}/projects?department=Development`),
-        fetch(`${API_URL}/employees`)
+        fetch(`${API_URL}/employees`),
+        fetch(`${API_URL}/wm-tasks`)
       ]);
       
       if (pRes.ok) {
@@ -468,6 +479,11 @@ export default function ModulesPage() {
       if (eRes.ok) {
         const emps = await eRes.json();
         setEmployees(emps.filter((e: any) => e.department === "Development"));
+      }
+
+      if (tRes.ok) {
+        const tData = await tRes.json();
+        setAllTasks(tData);
       }
     } catch (err) {
       console.error("Error fetching data:", err);
@@ -544,6 +560,17 @@ export default function ModulesPage() {
     e.preventDefault();
     if (!newTaskTitle.trim() || !selectedModule || !selectedProjectId) return;
 
+    if (newTaskDueDate) {
+      const taskDate = new Date(newTaskDueDate);
+      const refDeadlineStr = selectedModule.dueDate || selectedProject?.endDate;
+      if (refDeadlineStr) {
+        if (taskDate > new Date(refDeadlineStr)) {
+          toast.error(`Task due date cannot exceed ${selectedModule.dueDate ? "Module" : "Project"} deadline (${refDeadlineStr})`);
+          return;
+        }
+      }
+    }
+
     try {
       const task_assignee_id = selectedModule.assignedToId || "";
       const task_assignee_name = selectedModule.assignedToName || "Unassigned";
@@ -555,7 +582,7 @@ export default function ModulesPage() {
         projectName: selectedProject?.title,
         assignedToId: task_assignee_id,
         assignedToName: task_assignee_name,
-        dueDate: selectedModule.dueDate || null,
+        dueDate: newTaskDueDate || selectedModule.dueDate || null,
         moduleName: selectedModule.name,
         moduleDeadline: selectedModule.dueDate || null,
         status: "todo",
@@ -577,7 +604,9 @@ export default function ModulesPage() {
         setNewTaskTitle("");
         setNewTaskDesc("");
         setNewTaskHours(0);
+        setNewTaskDueDate("");
         fetchModuleTasks();
+        fetchData();
       } else {
         toast.error("Failed to add task to module");
       }
@@ -587,9 +616,8 @@ export default function ModulesPage() {
     }
   };
 
-  const handleToggleTaskStatus = async (task: any) => {
+  const handleUpdateTaskStatus = async (task: any, newStatus: string) => {
     try {
-      const newStatus = task.status === "completed" ? "todo" : "completed";
       const res = await fetch(`${API_URL}/wm-tasks/${task.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -604,11 +632,12 @@ export default function ModulesPage() {
       if (res.ok) {
         toast.success("Task status updated!");
         fetchModuleTasks();
+        fetchData();
       } else {
         toast.error("Failed to update task status");
       }
     } catch (err) {
-      console.error("Error toggling task:", err);
+      console.error("Error updating task status:", err);
       toast.error("An error occurred");
     }
   };
@@ -630,12 +659,72 @@ export default function ModulesPage() {
       if (res.ok) {
         toast.success("Task deleted successfully!");
         fetchModuleTasks();
+        fetchData();
       } else {
         toast.error("Failed to delete task");
       }
     } catch (err) {
       console.error("Error deleting task:", err);
       toast.error("An error occurred");
+    }
+  };
+
+  const openEditTaskModal = (task: any) => {
+    setEditingTask(task);
+    setEditTaskTitle(task.title || "");
+    setEditTaskDesc(task.description || "");
+    setEditTaskHours(task.estimatedHours || 0);
+    setEditTaskDueDate(task.dueDate || task.moduleDeadline || "");
+    setEditTaskAssignee(task.assignedToId || "unassigned");
+    setIsEditTaskModalOpen(true);
+  };
+
+  const handleSaveEditTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTask || !editTaskTitle.trim()) return;
+
+    if (editTaskDueDate) {
+      const taskDate = new Date(editTaskDueDate);
+      const refDeadlineStr = selectedModule?.dueDate || selectedProject?.endDate;
+      if (refDeadlineStr) {
+        if (taskDate > new Date(refDeadlineStr)) {
+          toast.error(`Task due date cannot exceed ${selectedModule?.dueDate ? "Module" : "Project"} deadline (${refDeadlineStr})`);
+          return;
+        }
+      }
+    }
+
+    try {
+      const finalAssigneeId = editTaskAssignee === "unassigned" ? "" : editTaskAssignee;
+      const assigneeEmp = employees.find(emp => emp.id === finalAssigneeId);
+      const res = await fetch(`${API_URL}/wm-tasks/${editingTask.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...editingTask,
+          title: editTaskTitle.trim(),
+          description: editTaskDesc.trim(),
+          estimatedHours: Number(editTaskHours) || 0,
+          dueDate: editTaskDueDate || selectedModule?.dueDate || null,
+          assignedToId: finalAssigneeId,
+          assignedToName: assigneeEmp ? `${assigneeEmp.firstName} ${assigneeEmp.lastName}`.trim() : (finalAssigneeId ? "Assigned" : ""),
+          performedBy: user?.id || "Unknown",
+          userName: user?.name || "User"
+        })
+      });
+
+      if (res.ok) {
+        toast.success("Task updated successfully!");
+        setIsEditTaskModalOpen(false);
+        setEditingTask(null);
+        fetchModuleTasks();
+        fetchData();
+      } else {
+        toast.error("Failed to update task");
+      }
+    } catch (err) {
+      console.error("Error updating task:", err);
+      toast.error("An error occurred while updating task");
     }
   };
 
@@ -825,6 +914,7 @@ export default function ModulesPage() {
     setNotebookContent(module.researchWork || "");
     setIsEditingNotebook(false);
     setNewCommentText("");
+    setNewTaskDueDate("");
     setIsEditMode(true);
     setIsDetailsOpen(true);
   };
@@ -1346,22 +1436,49 @@ export default function ModulesPage() {
                                           <SelectContent>
                                             <SelectItem value="todo">To Do</SelectItem>
                                             <SelectItem value="in_progress">In Progress</SelectItem>
+                                            <SelectItem value="review">Review</SelectItem>
+                                            <SelectItem value="bugs">Bugs</SelectItem>
+                                            <SelectItem value="onhold">On Hold</SelectItem>
                                             <SelectItem value="completed">Completed</SelectItem>
                                           </SelectContent>
                                         </Select>
                                       ) : (
-                                        <span 
-                                          onClick={() => canManageModule && setEditingCell({ moduleName: m.name, phaseName: m.phaseName, field: "stage" })}
-                                          className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold capitalize ${
-                                            m.stage === "completed" 
-                                              ? "bg-green-100 text-green-800" 
-                                              : m.stage === "in_progress" 
-                                              ? "bg-blue-100 text-blue-800" 
-                                              : "bg-slate-100 text-slate-800"
-                                          } ${canManageModule ? "cursor-pointer hover:opacity-80" : ""}`}
-                                        >
-                                          {(m.stage || "todo").replace("_", " ")}
-                                        </span>
+                                        <div className="flex flex-col gap-1 items-start">
+                                          <span 
+                                            onClick={() => canManageModule && setEditingCell({ moduleName: m.name, phaseName: m.phaseName, field: "stage" })}
+                                            className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold capitalize ${
+                                              m.stage === "completed" 
+                                                ? "bg-green-100 text-green-800 border border-green-200" 
+                                                : m.stage === "in_progress" || m.stage === "in-progress"
+                                                ? "bg-blue-100 text-blue-800 border border-blue-200" 
+                                                : m.stage === "review" || m.stage === "ready for review"
+                                                ? "bg-amber-100 text-amber-800 border border-amber-200"
+                                                : m.stage === "bugs"
+                                                ? "bg-red-100 text-red-800 border border-red-200"
+                                                : m.stage === "onhold"
+                                                ? "bg-purple-100 text-purple-800 border border-purple-200"
+                                                : "bg-slate-100 text-slate-800 border border-slate-200"
+                                            } ${canManageModule ? "cursor-pointer hover:opacity-80" : ""}`}
+                                          >
+                                            {(m.stage || "todo").replace("_", " ")}
+                                          </span>
+                                          {(() => {
+                                            const modTasks = allTasks.filter(t => t.projectId === selectedProjectId && t.moduleName === m.name && (t.phase === m.phaseName || (!t.phase && !m.phaseName)));
+                                            if (modTasks.length === 0) return null;
+                                            const approvedCount = modTasks.filter(t => t.status === "completed" && t.isApproved).length;
+                                            const completedCount = modTasks.filter(t => t.status === "completed").length;
+                                            const totalCount = modTasks.length;
+                                            return (
+                                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                                                approvedCount === totalCount ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
+                                                completedCount === totalCount ? "bg-amber-50 text-amber-700 border border-amber-200" :
+                                                "bg-slate-50 text-slate-600 border border-slate-200"
+                                              }`}>
+                                                {approvedCount === totalCount ? `✓ ${approvedCount}/${totalCount} Approved` : `${completedCount}/${totalCount} Done`}
+                                              </span>
+                                            );
+                                          })()}
+                                        </div>
                                       )}
                                     </TableCell>
 
@@ -1468,6 +1585,7 @@ export default function ModulesPage() {
 
                                 {canManageModule && (
                                   <TableRow className="bg-slate-50/10 hover:bg-slate-50/20 border-t border-dashed border-slate-200">
+                                    <TableCell className="py-2.5"></TableCell>
                                     <TableCell className="py-2.5">
                                       <Input
                                         placeholder="Add module..."
@@ -1491,6 +1609,9 @@ export default function ModulesPage() {
                                         <SelectContent>
                                           <SelectItem value="todo">To Do</SelectItem>
                                           <SelectItem value="in_progress">In Progress</SelectItem>
+                                          <SelectItem value="review">Review</SelectItem>
+                                          <SelectItem value="bugs">Bugs</SelectItem>
+                                          <SelectItem value="onhold">On Hold</SelectItem>
                                           <SelectItem value="completed">Completed</SelectItem>
                                         </SelectContent>
                                       </Select>
@@ -1693,7 +1814,8 @@ export default function ModulesPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="todo">To Do</SelectItem>
-                    <SelectItem value="in-progress">In Progress</SelectItem>
+                    <SelectItem value="in_progress">In Progress</SelectItem>
+                    <SelectItem value="review">Review</SelectItem>
                     <SelectItem value="bugs">Bugs</SelectItem>
                     <SelectItem value="onhold">On Hold</SelectItem>
                     <SelectItem value="completed">Completed</SelectItem>
@@ -1843,7 +1965,7 @@ export default function ModulesPage() {
                 </DialogDescription>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0 pr-8 sm:pr-10">
                 <span className="text-xs font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-700 capitalize border border-slate-200 shadow-2xs">
                   {selectedModule?.stage || "todo"}
                 </span>
@@ -2112,27 +2234,40 @@ export default function ModulesPage() {
 
                     <div className="space-y-1.5">
                       <Label htmlFor="task-desc" className="text-xs font-bold text-slate-700">Description</Label>
-                      <Input
+                      <Textarea
                         id="task-desc"
                         placeholder="e.g. Needs responsive inputs and validation"
                         value={newTaskDesc}
                         onChange={(e) => setNewTaskDesc(e.target.value)}
-                        className="text-xs h-9"
+                        className="text-xs min-h-[60px] resize-y"
                       />
                     </div>
 
-                    <div className="space-y-1.5">
-                      <Label htmlFor="task-hours" className="text-xs font-bold text-slate-700 flex items-center gap-1">⏱️ Estimated Hours</Label>
-                      <Input
-                        id="task-hours"
-                        type="number"
-                        min="0"
-                        step="0.5"
-                        placeholder="e.g. 4"
-                        value={newTaskHours || ""}
-                        onChange={(e) => setNewTaskHours(parseFloat(e.target.value) || 0)}
-                        className="text-xs h-9"
-                      />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="task-hours" className="text-xs font-bold text-slate-700 flex items-center gap-1">⏱️ Est. Hours</Label>
+                        <Input
+                          id="task-hours"
+                          type="number"
+                          min="0"
+                          step="0.5"
+                          placeholder="e.g. 4"
+                          value={newTaskHours || ""}
+                          onChange={(e) => setNewTaskHours(parseFloat(e.target.value) || 0)}
+                          className="text-xs h-9"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="task-due-date" className="text-xs font-bold text-slate-700 flex items-center gap-1">📅 Due Date</Label>
+                        <Input
+                          id="task-due-date"
+                          type="date"
+                          value={newTaskDueDate}
+                          onChange={(e) => setNewTaskDueDate(e.target.value)}
+                          className="text-xs h-9"
+                        />
+                      </div>
                     </div>
 
                     <Button type="submit" className="w-full bg-brand-teal hover:bg-brand-teal/90 text-white font-bold text-xs h-9 shadow-xs" disabled={!newTaskTitle.trim()}>
@@ -2165,53 +2300,89 @@ export default function ModulesPage() {
                             ? "bg-slate-50/50 border-slate-200/60 opacity-75" 
                             : "bg-white border-slate-200 hover:border-slate-300 shadow-2xs"
                         }`}>
-                          <div className="flex items-start gap-2.5 min-w-0">
-                            <button
-                              onClick={() => handleToggleTaskStatus(task)}
-                              className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center transition-all cursor-pointer ${
-                                task.status === "completed"
-                                  ? "bg-brand-teal border-brand-teal text-white"
-                                  : "border-slate-300 hover:border-brand-teal bg-white"
-                              }`}
-                            >
-                              {task.status === "completed" && (
-                                <svg className="w-3 h-3 fill-current" viewBox="0 0 20 20">
-                                  <path d="M0 11l2-2 5 5L18 3l2 2L7 18z" />
-                                </svg>
-                              )}
-                            </button>
-                            <div className="min-w-0">
+                          <div className="flex items-start min-w-0">
+                            <div className="min-w-0 flex-1">
                               <p className={`text-xs font-bold text-slate-800 ${task.status === "completed" ? "line-through text-slate-400" : ""}`}>
                                 {task.title}
                               </p>
                               {task.description && (
-                                <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">
+                                <p className="text-xs text-slate-600 mt-1.5 whitespace-pre-wrap break-words leading-relaxed font-medium bg-slate-50/80 p-2.5 rounded-lg border border-slate-100">
                                   {task.description}
                                 </p>
                               )}
-                              <div className="flex items-center gap-2 mt-2">
+                              <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+                                <Select 
+                                  value={task.status || "todo"} 
+                                  onValueChange={(val) => handleUpdateTaskStatus(task, val)}
+                                >
+                                  <SelectTrigger className={`h-6 text-[10px] font-extrabold px-2.5 py-0.5 rounded uppercase tracking-wider border shadow-2xs w-auto gap-1 cursor-pointer ${
+                                    task.status === "completed" 
+                                      ? "bg-green-100 text-green-800 border-green-200" 
+                                      : task.status === "in_progress" || task.status === "in-progress"
+                                      ? "bg-blue-100 text-blue-800 border-blue-200" 
+                                      : task.status === "review" || task.status === "ready for review"
+                                      ? "bg-amber-100 text-amber-800 border-amber-200"
+                                      : task.status === "bugs"
+                                      ? "bg-red-100 text-red-800 border-red-200"
+                                      : task.status === "onhold"
+                                      ? "bg-purple-100 text-purple-800 border-purple-200"
+                                      : "bg-slate-100 text-slate-700 border-slate-200"
+                                  }`}>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="todo">To Do</SelectItem>
+                                    <SelectItem value="in_progress">In Progress</SelectItem>
+                                    <SelectItem value="review">Review</SelectItem>
+                                    <SelectItem value="bugs">Bugs</SelectItem>
+                                    <SelectItem value="onhold">On Hold</SelectItem>
+                                    <SelectItem value="completed">Completed</SelectItem>
+                                  </SelectContent>
+                                </Select>
+
                                 {task.estimatedHours > 0 && (
-                                  <span className="text-[9px] font-bold bg-brand-teal/5 text-brand-teal border border-brand-teal/20 px-1.5 py-0.5 rounded">
+                                  <span className="text-[10px] font-bold bg-brand-teal/5 text-brand-teal border border-brand-teal/20 px-2 py-0.5 rounded">
                                     ⏱️ {task.estimatedHours} hrs
                                   </span>
                                 )}
                                 {task.assignedToName && (
-                                  <span className="text-[9px] font-bold bg-slate-100 text-slate-600 border border-slate-200 px-1.5 py-0.5 rounded flex items-center gap-1">
-                                    <User className="w-2.5 h-2.5" /> {task.assignedToName}
+                                  <span className="text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200 px-2 py-0.5 rounded flex items-center gap-1">
+                                    <User className="w-3 h-3" /> {task.assignedToName}
+                                  </span>
+                                )}
+                                {task.dueDate && (
+                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1 border ${
+                                    new Date(task.dueDate) < new Date() && task.status !== "completed"
+                                      ? "bg-red-50 text-red-600 border-red-200"
+                                      : "bg-slate-100 text-slate-600 border-slate-200"
+                                  }`}>
+                                    📅 {task.dueDate}
                                   </span>
                                 )}
                               </div>
                             </div>
                           </div>
 
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="w-7 h-7 text-slate-400 hover:text-red-500 rounded-md shrink-0 cursor-pointer"
-                            onClick={() => handleDeleteTask(task.id)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="w-7 h-7 text-blue-500 hover:text-blue-600 hover:bg-blue-50 rounded-md shrink-0 cursor-pointer"
+                              onClick={() => openEditTaskModal(task)}
+                              title="Edit Task"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="w-7 h-7 text-slate-400 hover:text-red-500 rounded-md shrink-0 cursor-pointer"
+                              onClick={() => handleDeleteTask(task.id)}
+                              title="Delete Task"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -2276,7 +2447,8 @@ export default function ModulesPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="todo" className="text-xs">To Do</SelectItem>
-                            <SelectItem value="in-progress" className="text-xs">In Progress</SelectItem>
+                            <SelectItem value="in_progress" className="text-xs">In Progress</SelectItem>
+                            <SelectItem value="review" className="text-xs">Review</SelectItem>
                             <SelectItem value="bugs" className="text-xs">Bugs</SelectItem>
                             <SelectItem value="onhold" className="text-xs">On Hold</SelectItem>
                             <SelectItem value="completed" className="text-xs">Completed</SelectItem>
@@ -2575,6 +2747,108 @@ export default function ModulesPage() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Task Modal */}
+      <Dialog open={isEditTaskModalOpen} onOpenChange={setIsEditTaskModalOpen}>
+        <DialogContent className="sm:max-w-[450px]">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
+              <Pencil className="w-4 h-4 text-brand-teal" />
+              Edit Module Task
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              Update task details, description, hours, and assignee.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSaveEditTask} className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-task-title" className="text-xs font-bold text-slate-700">Task Title *</Label>
+              <Input
+                id="edit-task-title"
+                placeholder="e.g. Implement UI components"
+                value={editTaskTitle}
+                onChange={(e) => setEditTaskTitle(e.target.value)}
+                className="text-xs h-9"
+                required
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-task-assignee" className="text-xs font-bold text-slate-700">Assign To</Label>
+              <Select value={editTaskAssignee} onValueChange={setEditTaskAssignee}>
+                <SelectTrigger id="edit-task-assignee" className="text-xs h-9">
+                  <SelectValue placeholder="Select team member..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unassigned">Unassigned</SelectItem>
+                  {employees.map((emp) => (
+                    <SelectItem key={emp.id} value={emp.id}>
+                      {emp.firstName} {emp.lastName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-task-desc" className="text-xs font-bold text-slate-700">Description</Label>
+              <Textarea
+                id="edit-task-desc"
+                placeholder="e.g. Needs responsive inputs and validation"
+                value={editTaskDesc}
+                onChange={(e) => setEditTaskDesc(e.target.value)}
+                className="text-xs min-h-[80px] resize-y"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-task-hours" className="text-xs font-bold text-slate-700 flex items-center gap-1">⏱️ Est. Hours</Label>
+                <Input
+                  id="edit-task-hours"
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  placeholder="e.g. 4"
+                  value={editTaskHours || ""}
+                  onChange={(e) => setEditTaskHours(parseFloat(e.target.value) || 0)}
+                  className="text-xs h-9"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-task-due-date" className="text-xs font-bold text-slate-700 flex items-center gap-1">📅 Due Date</Label>
+                <Input
+                  id="edit-task-due-date"
+                  type="date"
+                  value={editTaskDueDate}
+                  onChange={(e) => setEditTaskDueDate(e.target.value)}
+                  className="text-xs h-9"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsEditTaskModalOpen(false)}
+                className="text-xs h-9 px-4"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                className="bg-brand-teal hover:bg-brand-teal/90 text-white font-bold text-xs h-9 px-5 shadow-xs"
+                disabled={!editTaskTitle.trim()}
+              >
+                Save Changes
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

@@ -188,8 +188,18 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
         newData.moduleName = "";
       }
       
-      if (field === "moduleName" && value === "none") {
-        newData.moduleName = "";
+      if (field === "moduleName") {
+        if (value === "none" || !value) {
+          newData.moduleName = "";
+        } else {
+          newData.moduleName = value;
+          const currentProject = projects.find(p => p.id === prev.projectId);
+          const selectedMod = currentProject?.modules?.find((m: any) => m.name === value);
+          if (selectedMod) {
+            const modAssignee = selectedMod.assignedToId;
+            newData.assignedToId = (modAssignee && modAssignee !== "unassigned") ? modAssignee : "";
+          }
+        }
       }
       
       return newData;
