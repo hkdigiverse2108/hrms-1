@@ -40,6 +40,14 @@ const STAGES = [
   { id: "completed", label: "Completed", color: "text-green-700 bg-transparent", lineColor: "bg-emerald-500" },
 ];
 
+const formatDate = (dateStr?: string) => {
+  if (!dateStr) return '-';
+  const d = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+  const parts = d.split('-');
+  if (parts.length !== 3) return dateStr;
+  return `${parts[2]}-${parts[1]}-${parts[0]}`;
+};
+
 export default function TasksPage() {
   const { confirm } = useConfirm();
   const { user } = useUser();
@@ -131,7 +139,11 @@ export default function TasksPage() {
   }, [user]);
 
   const isAdmin = user?.role?.toLowerCase() === "admin" || user?.name === "Admin Admin" || hasFullTasksAccess;
-  const isRegularEmployee = !isAdmin && !isTeamLeader;
+  const isHR = user?.role === 'HR' || user?.role?.toLowerCase() === 'hr' || user?.department?.toLowerCase() === 'hr';
+  // Strict role check for board access — NOT permission-based (to avoid employees with view perms getting board)
+  const isBoardUser = user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin' || isTeamLeader || isHR;
+  // Only Team Leaders, HR, and Admins can see the Board view; regular employees see table only
+  const isRegularEmployee = !isBoardUser;
 
   useEffect(() => {
     if (user && !isAdmin && user.department) {
@@ -666,7 +678,8 @@ export default function TasksPage() {
   const departments = Array.from(new Set(employees.map(e => e.department).filter(Boolean)))
     .filter((d: any) => !["sales", "admin", "hr"].includes(d.toLowerCase()));
   const isCreativeDefault = selectedDepartment.toLowerCase() === "creative" || (selectedDepartment === "all" && user?.department?.toLowerCase() === "creative");
-  const showTableView = viewMode !== null ? viewMode === "table" : isCreativeDefault;
+  // Regular employees always see table view only
+  const showTableView = isRegularEmployee ? true : (viewMode !== null ? viewMode === "table" : isCreativeDefault);
 
   const isDueTask = (t: any) => {
     if (!t.assignedToId || t.status === "completed") return false;
@@ -731,12 +744,14 @@ export default function TasksPage() {
     const todayStr = new Date().toISOString().split('T')[0];
     const taskDate = showTableView ? t.postingDate : t.dueDate;
     if (taskTimeFilter === "today") {
+      // Only show tasks where due date is exactly today
       if (taskDate !== todayStr) return false;
     } else if (taskTimeFilter === "pending") {
       const isOverdue = t.dueDate && t.dueDate < todayStr && t.status !== "completed";
       const isPendingStatus = t.status === "pending" || t.status === "onhold";
       if (!isPendingStatus && !isOverdue) return false;
     } else if (taskTimeFilter === "upcoming") {
+      // Show all non-completed tasks with a future due date (to-do tasks)
       const isUpcoming = t.dueDate && t.dueDate > todayStr && t.status !== "completed";
       if (!isUpcoming) return false;
     }
@@ -1294,12 +1309,13 @@ export default function TasksPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all" className="text-xs cursor-pointer">All Tasks</SelectItem>
-              <SelectItem value="pending" className="text-xs cursor-pointer">⏳ Pending Work</SelectItem>
-              <SelectItem value="today" className="text-xs cursor-pointer">📅 Today's Work</SelectItem>
-              <SelectItem value="upcoming" className="text-xs cursor-pointer">🚀 Upcoming Work</SelectItem>
+              <SelectItem value="pending" className="text-xs cursor-pointer">Pending Work</SelectItem>
+              <SelectItem value="today" className="text-xs cursor-pointer">Today's Work</SelectItem>
+              <SelectItem value="upcoming" className="text-xs cursor-pointer">Upcoming Work</SelectItem>
             </SelectContent>
           </Select>
 
+          {!isRegularEmployee && (
           <div className="flex items-center bg-slate-100 border border-slate-200 rounded-lg p-1 gap-1">
             <button 
               type="button"
@@ -1316,6 +1332,7 @@ export default function TasksPage() {
               📋 Table
             </button>
           </div>
+          )}
 
         </div>
       </div>
@@ -1386,22 +1403,25 @@ export default function TasksPage() {
                           ) : (
                             <div className="flex items-center gap-2 min-h-[20px]">
                               {col.key === 'title' ? (
-                                <div className="flex items-center gap-1.5">
-                                  {isDueTask(task) && (
-                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black bg-rose-500 text-white uppercase tracking-wider shrink-0 shadow-sm">
-                                      Due
-                                    </span>
-                                  )}
-                                  <span className="font-bold text-slate-800">{task[col.key]}</span>
-                                  {getPendingTransferRequest(task) && (
-                                    <span className="text-[9px] text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap">
-                                      Pending Transfer to {getPendingTransferRequest(task)?.receiverName}
-                                    </span>
-                                  )}
-                                  {getAcceptedTransferRequest(task) && (
-                                    <span className="text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap">
-                                      Transferred from {getAcceptedTransferRequest(task)?.senderName}
-                                    </span>
+                                <div className="flex flex-col gap-1">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-bold text-slate-800">{task[col.key]}</span>
+                                    {getPendingTransferRequest(task) && (
+                                      <span className="text-[9px] text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap">
+                                        Pending Transfer to {getPendingTransferRequest(task)?.receiverName}
+                                      </span>
+                                    )}
+                                    {getAcceptedTransferRequest(task) && (
+                                      <span className="text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap">
+                                        Transferred from {getAcceptedTransferRequest(task)?.senderName}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {(task.status === 'onhold' || task.status === 'pending') && task.reasonForPending && (
+                                    <div className="flex items-start gap-1 bg-amber-50 border border-amber-200 rounded px-1.5 py-1 max-w-xs">
+                                      <AlertTriangle className="w-2.5 h-2.5 text-amber-500 shrink-0 mt-0.5" />
+                                      <span className="text-[9px] font-medium text-amber-700 break-words leading-tight">{task.reasonForPending}</span>
+                                    </div>
                                   )}
                                 </div>
                               ) : col.key === 'projectId' || col.key === 'assignedToId' ? (
@@ -1432,6 +1452,8 @@ export default function TasksPage() {
                                       <Badge className={task[col.key] === "Yes" ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"}>
                                         {task[col.key] || "No"}
                                       </Badge>
+                                    ) : col.key === 'dueDate' || col.key === 'postingDate' ? (
+                                      <span>{task[col.key] ? formatDate(task[col.key]) : "-"}</span>
                                     ) : (
                                       <span>{task[col.key] || "-"}</span>
                                     )}
@@ -1591,7 +1613,7 @@ export default function TasksPage() {
                                     )}
                                     {isDueTask(task) && (task.dueDate || task.postingDate) && (
                                       <span className="text-[10px] font-black text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">
-                                        Due: {task.dueDate || task.postingDate}
+                                        Due: {formatDate(task.dueDate || task.postingDate)}
                                       </span>
                                     )}
                                     {task.isApproved && (
@@ -1627,6 +1649,14 @@ export default function TasksPage() {
                                           {task.phase}
                                         </span>
                                       )}
+                                    </div>
+                                  )}
+                                  {(task.status === 'onhold' || task.status === 'pending') && task.reasonForPending && (
+                                    <div className="mt-2 flex items-start gap-1.5 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
+                                      <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0 mt-0.5" />
+                                      <span className="text-[10px] font-medium text-amber-700 break-words leading-snug">
+                                        {task.reasonForPending}
+                                      </span>
                                     </div>
                                   )}
                                   <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2 text-xs">
