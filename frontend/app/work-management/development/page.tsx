@@ -669,7 +669,7 @@ export default function TasksPage() {
   const isDueTask = (t: any) => {
     if (!t.assignedToId || t.status === "completed") return false;
     const todayStr = new Date().toISOString().split('T')[0];
-    const taskDate = showTableView ? t.postingDate : t.dueDate;
+    const taskDate = t.dueDate || t.postingDate;
     if (!taskDate) return false;
     if (taskDate <= todayStr || taskDate <= dateFilter) return true;
     return false;
@@ -728,7 +728,7 @@ export default function TasksPage() {
 
     // Date Filtering
     if (showOnlyToday) {
-      const taskDate = showTableView ? t.postingDate : t.dueDate;
+      const taskDate = t.dueDate || t.postingDate;
       if (taskDate !== dateFilter && !isDueTask(t)) return false;
     }
 
@@ -1627,9 +1627,13 @@ export default function TasksPage() {
                                         <AlertTriangle className="w-3 h-3" /> Due
                                       </span>
                                     )}
-                                    {isDueTask(task) && (task.dueDate || task.postingDate) && (
-                                      <span className="text-[10px] font-black text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">
-                                        Due: {task.dueDate || task.postingDate}
+                                    {(task.dueDate || task.postingDate) && (
+                                      <span className={`text-[10px] font-black px-1.5 py-0.5 rounded border ${
+                                        isDueTask(task)
+                                          ? "text-rose-600 bg-rose-50 border-rose-100"
+                                          : "text-slate-600 bg-slate-100 border-slate-200"
+                                      }`}>
+                                        📅 Due: {task.dueDate || task.postingDate}
                                       </span>
                                     )}
                                     {task.isApproved && (

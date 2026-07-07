@@ -117,6 +117,7 @@ export default function ModulesPage() {
   const [editTaskTitle, setEditTaskTitle] = useState("");
   const [editTaskDesc, setEditTaskDesc] = useState("");
   const [editTaskHours, setEditTaskHours] = useState(0);
+  const [editTaskDueDate, setEditTaskDueDate] = useState("");
   const [editTaskAssignee, setEditTaskAssignee] = useState("unassigned");
   const [isEditTaskModalOpen, setIsEditTaskModalOpen] = useState(false);
 
@@ -615,33 +616,6 @@ export default function ModulesPage() {
     }
   };
 
-  const handleToggleTaskStatus = async (task: any) => {
-    try {
-      const newStatus = task.status === "completed" ? "todo" : "completed";
-      const res = await fetch(`${API_URL}/wm-tasks/${task.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...task,
-          status: newStatus,
-          performedBy: user?.id || "Unknown",
-          userName: user?.name || "User"
-        })
-      });
-
-      if (res.ok) {
-        toast.success("Task status updated!");
-        fetchModuleTasks();
-        fetchData();
-      } else {
-        toast.error("Failed to update task status");
-      }
-    } catch (err) {
-      console.error("Error toggling task:", err);
-      toast.error("An error occurred");
-    }
-  };
-
   const handleUpdateTaskStatus = async (task: any, newStatus: string) => {
     try {
       const res = await fetch(`${API_URL}/wm-tasks/${task.id}`, {
@@ -700,6 +674,7 @@ export default function ModulesPage() {
     setEditTaskTitle(task.title || "");
     setEditTaskDesc(task.description || "");
     setEditTaskHours(task.estimatedHours || 0);
+    setEditTaskDueDate(task.dueDate || task.moduleDeadline || "");
     setEditTaskAssignee(task.assignedToId || "unassigned");
     setIsEditTaskModalOpen(true);
   };
@@ -707,6 +682,17 @@ export default function ModulesPage() {
   const handleSaveEditTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingTask || !editTaskTitle.trim()) return;
+
+    if (editTaskDueDate) {
+      const taskDate = new Date(editTaskDueDate);
+      const refDeadlineStr = selectedModule?.dueDate || selectedProject?.endDate;
+      if (refDeadlineStr) {
+        if (taskDate > new Date(refDeadlineStr)) {
+          toast.error(`Task due date cannot exceed ${selectedModule?.dueDate ? "Module" : "Project"} deadline (${refDeadlineStr})`);
+          return;
+        }
+      }
+    }
 
     try {
       const finalAssigneeId = editTaskAssignee === "unassigned" ? "" : editTaskAssignee;
@@ -719,6 +705,7 @@ export default function ModulesPage() {
           title: editTaskTitle.trim(),
           description: editTaskDesc.trim(),
           estimatedHours: Number(editTaskHours) || 0,
+          dueDate: editTaskDueDate || selectedModule?.dueDate || null,
           assignedToId: finalAssigneeId,
           assignedToName: assigneeEmp ? `${assigneeEmp.firstName} ${assigneeEmp.lastName}`.trim() : (finalAssigneeId ? "Assigned" : ""),
           performedBy: user?.id || "Unknown",
@@ -2311,21 +2298,7 @@ export default function ModulesPage() {
                             ? "bg-slate-50/50 border-slate-200/60 opacity-75" 
                             : "bg-white border-slate-200 hover:border-slate-300 shadow-2xs"
                         }`}>
-                          <div className="flex items-start gap-2.5 min-w-0">
-                            <button
-                              onClick={() => handleToggleTaskStatus(task)}
-                              className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center transition-all cursor-pointer ${
-                                task.status === "completed"
-                                  ? "bg-brand-teal border-brand-teal text-white"
-                                  : "border-slate-300 hover:border-brand-teal bg-white"
-                              }`}
-                            >
-                              {task.status === "completed" && (
-                                <svg className="w-3 h-3 fill-current" viewBox="0 0 20 20">
-                                  <path d="M0 11l2-2 5 5L18 3l2 2L7 18z" />
-                                </svg>
-                              )}
-                            </button>
+                          <div className="flex items-start min-w-0">
                             <div className="min-w-0 flex-1">
                               <p className={`text-xs font-bold text-slate-800 ${task.status === "completed" ? "line-through text-slate-400" : ""}`}>
                                 {task.title}
@@ -2373,6 +2346,15 @@ export default function ModulesPage() {
                                 {task.assignedToName && (
                                   <span className="text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200 px-2 py-0.5 rounded flex items-center gap-1">
                                     <User className="w-3 h-3" /> {task.assignedToName}
+                                  </span>
+                                )}
+                                {task.dueDate && (
+                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1 border ${
+                                    new Date(task.dueDate) < new Date() && task.status !== "completed"
+                                      ? "bg-red-50 text-red-600 border-red-200"
+                                      : "bg-slate-100 text-slate-600 border-slate-200"
+                                  }`}>
+                                    📅 {task.dueDate}
                                   </span>
                                 )}
                               </div>
@@ -2820,18 +2802,31 @@ export default function ModulesPage() {
               />
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-task-hours" className="text-xs font-bold text-slate-700 flex items-center gap-1">⏱️ Estimated Hours</Label>
-              <Input
-                id="edit-task-hours"
-                type="number"
-                min="0"
-                step="0.5"
-                placeholder="e.g. 4"
-                value={editTaskHours || ""}
-                onChange={(e) => setEditTaskHours(parseFloat(e.target.value) || 0)}
-                className="text-xs h-9"
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-task-hours" className="text-xs font-bold text-slate-700 flex items-center gap-1">⏱️ Est. Hours</Label>
+                <Input
+                  id="edit-task-hours"
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  placeholder="e.g. 4"
+                  value={editTaskHours || ""}
+                  onChange={(e) => setEditTaskHours(parseFloat(e.target.value) || 0)}
+                  className="text-xs h-9"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-task-due-date" className="text-xs font-bold text-slate-700 flex items-center gap-1">📅 Due Date</Label>
+                <Input
+                  id="edit-task-due-date"
+                  type="date"
+                  value={editTaskDueDate}
+                  onChange={(e) => setEditTaskDueDate(e.target.value)}
+                  className="text-xs h-9"
+                />
+              </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
