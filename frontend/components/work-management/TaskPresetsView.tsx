@@ -29,7 +29,8 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
   const [formData, setFormData] = useState({
     name: "",
     description: "",
-    tasks: [{ title: "", description: "", projectId: "", projectName: "", department: "development" }]
+    tasks: [{ title: "", description: "", projectId: "", projectName: "", department: "development" }],
+    modules: [{ name: "", tasks: [{ title: "", description: "", priority: "medium", estimatedHours: 0, status: "todo" }] }]
   });
 
   const [projects, setProjects] = useState<any[]>([]);
@@ -85,14 +86,16 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
       setFormData({
         name: preset.name,
         description: preset.description || "",
-        tasks: preset.tasks?.length ? preset.tasks : [{ title: "", description: "", projectId: "", projectName: "", department: "development" }]
+        tasks: preset.tasks?.length ? preset.tasks : [{ title: "", description: "", projectId: "", projectName: "", department: "development" }],
+        modules: preset.modules?.length ? preset.modules : [{ name: "", tasks: [{ title: "", description: "", priority: "medium", estimatedHours: 0, status: "todo" }] }]
       });
     } else {
       setEditingPreset(null);
       setFormData({
         name: "",
         description: "",
-        tasks: [{ title: "", description: "", projectId: "", projectName: "", department: "development" }]
+        tasks: [{ title: "", description: "", projectId: "", projectName: "", department: "development" }],
+        modules: [{ name: "", tasks: [{ title: "", description: "", priority: "medium", estimatedHours: 0, status: "todo" }] }]
       });
     }
     setViewState("form");
@@ -101,18 +104,28 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
   const savePreset = async () => {
     if (!formData.name.trim()) return toast.error("Preset name is required");
     
-    // Filter out empty tasks
-    const validTasks = formData.tasks.filter(t => t.title.trim() !== "");
-    if (validTasks.length === 0) return toast.error("At least one valid task is required");
+    let payload: any = {
+      name: formData.name,
+      description: formData.description,
+      presetType: activeTab,
+    };
+
+    if (activeTab === "intern") {
+      const validTasks = formData.tasks.filter(t => t.title.trim() !== "");
+      if (validTasks.length === 0) return toast.error("At least one valid task is required");
+      payload.tasks = validTasks;
+      payload.modules = [];
+    } else {
+      const validModules = formData.modules.filter(m => m.name.trim() !== "").map(m => ({
+        ...m,
+        tasks: []
+      }));
+      if (validModules.length === 0) return toast.error("At least one valid module is required");
+      payload.modules = validModules;
+      payload.tasks = [];
+    }
 
     try {
-      const payload = {
-        name: formData.name,
-        description: formData.description,
-        presetType: activeTab,
-        tasks: validTasks
-      };
-
       const url = editingPreset ? `${API_URL}/task-presets/${editingPreset._id || editingPreset.id}` : `${API_URL}/task-presets`;
       const method = editingPreset ? "PUT" : "POST";
 
@@ -211,14 +224,27 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
   const updateTask = (index: number, field: string, value: string) => {
     const newTasks = [...formData.tasks];
     newTasks[index] = { ...newTasks[index], [field]: value };
-    
-    // Auto fill projectName if projectId is selected
-    if (field === "projectId") {
-      const proj = projects.find(p => p._id === value || p.id === value);
-      if (proj) newTasks[index].projectName = proj.title;
-    }
-    
     setFormData({ ...formData, tasks: newTasks });
+  };
+
+  // Module helpers
+  const addModuleRow = () => {
+    setFormData({
+      ...formData,
+      modules: [...formData.modules, { name: "", tasks: [{ title: "", description: "", priority: "medium", estimatedHours: 0, status: "todo" }] }]
+    });
+  };
+
+  const removeModuleRow = (index: number) => {
+    const newModules = [...formData.modules];
+    newModules.splice(index, 1);
+    setFormData({ ...formData, modules: newModules });
+  };
+
+  const updateModule = (index: number, field: string, value: any) => {
+    const newModules = [...formData.modules];
+    newModules[index] = { ...newModules[index], [field]: value };
+    setFormData({ ...formData, modules: newModules });
   };
 
   return (
@@ -228,23 +254,25 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
         <div className="flex items-center gap-4">
           {onBack && (
             <Button 
-              variant="ghost" 
-              className="gap-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 font-bold"
+              variant="outline" 
+              size="icon"
+              className="text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full h-9 w-9 border-slate-200 shrink-0"
               onClick={onBack}
+              title="Back to Board"
             >
-              <ChevronLeft className="w-4 h-4" /> Back to Board
+              <ChevronLeft className="w-5 h-5" />
             </Button>
           )}
           <div className="bg-white rounded-full border border-slate-200 p-1 flex w-max shadow-sm">
             <button 
               onClick={() => setActiveTab("intern")}
-              className={`px-6 py-2 rounded-full text-sm font-bold flex items-center gap-2 transition-colors ${activeTab === "intern" ? "bg-brand-teal text-white" : "text-slate-600 hover:bg-slate-50"}`}
+              className={`px-4 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 transition-colors ${activeTab === "intern" ? "bg-brand-teal text-white" : "text-slate-600 hover:bg-slate-50"}`}
             >
               INTERN PRESETS
             </button>
             <button 
               onClick={() => setActiveTab("normal")}
-              className={`px-6 py-2 rounded-full text-sm font-bold flex items-center gap-2 transition-colors ${activeTab === "normal" ? "bg-brand-teal text-white" : "text-slate-600 hover:bg-slate-50"}`}
+              className={`px-4 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 transition-colors ${activeTab === "normal" ? "bg-brand-teal text-white" : "text-slate-600 hover:bg-slate-50"}`}
             >
               NORMAL PRESETS
             </button>
@@ -272,7 +300,7 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
                 <TableRow>
                   <TableHead className="font-bold">Preset Name</TableHead>
                   <TableHead className="font-bold">Description</TableHead>
-                  <TableHead className="font-bold text-center">Tasks</TableHead>
+                  <TableHead className="font-bold text-center">{activeTab === "normal" ? "Modules" : "Tasks"}</TableHead>
                   <TableHead className="text-right font-bold">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -290,7 +318,7 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
                       <TableCell className="text-slate-500">{preset.description || "-"}</TableCell>
                       <TableCell className="text-center">
                         <span className="bg-brand-teal/10 text-brand-teal px-2.5 py-1 rounded-full text-xs font-bold">
-                          {preset.tasks?.length || 0} tasks
+                          {activeTab === "normal" ? `${preset.modules?.length || 0} modules` : `${preset.tasks?.length || 0} tasks`}
                         </span>
                       </TableCell>
                       <TableCell className="text-right space-x-2">
@@ -340,54 +368,122 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
               </div>
             </div>
 
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Label className="text-base font-bold">Tasks in this Preset</Label>
-                <Button variant="outline" size="sm" onClick={addTaskRow} className="gap-1 font-bold text-brand-teal border-brand-teal/30 hover:bg-brand-teal/5">
-                  <PlusCircle className="w-4 h-4" /> Add Task
-                </Button>
+            {activeTab === "intern" ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label className="text-base font-bold">Tasks in this Preset</Label>
+                  <Button variant="outline" size="sm" onClick={addTaskRow} className="gap-1 font-bold text-brand-teal border-brand-teal/30 hover:bg-brand-teal/5">
+                    <PlusCircle className="w-4 h-4" /> Add Task
+                  </Button>
+                </div>
+                
+                <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                  {formData.tasks.map((task, index) => (
+                    <div key={index} className="flex gap-3 items-start bg-white p-3 rounded-lg border border-slate-200 shadow-sm relative group">
+                      <div className="flex-1">
+                        <div className="grid grid-cols-2 gap-3">
+                          <Input 
+                            placeholder="Task Title *"
+                            value={task.title}
+                            onChange={(e) => updateTask(index, "title", e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                addTaskRow();
+                              }
+                            }}
+                            className="task-title-input font-semibold"
+                          />
+                          <Input 
+                            placeholder="Task Description (Optional)"
+                            value={task.description}
+                            onChange={(e) => updateTask(index, "description", e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                addTaskRow();
+                              }
+                            }}
+                            className="text-xs bg-slate-50"
+                          />
+                        </div>
+                      </div>
+                      {formData.tasks.length > 1 && (
+                        <Button variant="ghost" size="icon" onClick={() => removeTaskRow(index)} className="shrink-0 text-slate-400 hover:text-red-500 mt-1">
+                          <X className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
-              
-              <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                {formData.tasks.map((task, index) => (
-                  <div key={index} className="flex gap-3 items-start bg-white p-3 rounded-lg border border-slate-200 shadow-sm relative group">
-                    <div className="flex-1">
-                      <div className="grid grid-cols-2 gap-3">
-                        <Input 
-                          placeholder="Task Title *"
-                          value={task.title}
-                          onChange={(e) => updateTask(index, "title", e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              addTaskRow();
-                            }
-                          }}
-                          className="task-title-input font-semibold"
-                        />
-                        <Input 
-                          placeholder="Task Description (Optional)"
-                          value={task.description}
-                          onChange={(e) => updateTask(index, "description", e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              addTaskRow();
-                            }
-                          }}
-                          className="text-xs bg-slate-50"
-                        />
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label className="text-base font-bold">Modules in this Preset</Label>
+                  <Button variant="outline" size="sm" onClick={addModuleRow} className="gap-1 font-bold text-brand-teal border-brand-teal/30 hover:bg-brand-teal/5">
+                    <PlusCircle className="w-4 h-4" /> Add Module
+                  </Button>
+                </div>
+
+                <div className="space-y-4">
+                  {formData.modules.map((module, mIndex) => (
+                    <div key={mIndex} className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
+                      <div className="flex gap-3 items-start relative group">
+                        <div className="flex-1 space-y-2">
+                          <Label className="text-xs font-semibold text-slate-500">Module Name *</Label>
+                          <Input 
+                            placeholder="e.g. Phase 1 Setup"
+                            value={module.name}
+                            onChange={(e) => updateModule(mIndex, "name", e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                addModuleRow();
+                                setTimeout(() => {
+                                  const inputs = document.querySelectorAll('input[placeholder="e.g. Phase 1 Setup"]');
+                                  if (inputs.length > 0) {
+                                    (inputs[inputs.length - 1] as HTMLInputElement).focus();
+                                  }
+                                }, 50);
+                              }
+                            }}
+                            className="font-bold border-slate-300"
+                          />
+                        </div>
+                        <div className="w-24 space-y-2">
+                          <Label className="text-xs font-semibold text-slate-500">Hours</Label>
+                          <Input 
+                            type="number"
+                            placeholder="0"
+                            value={module.estimatedHours || ""}
+                            onChange={(e) => updateModule(mIndex, "estimatedHours", parseFloat(e.target.value) || 0)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                addModuleRow();
+                                setTimeout(() => {
+                                  const inputs = document.querySelectorAll('input[placeholder="e.g. Phase 1 Setup"]');
+                                  if (inputs.length > 0) {
+                                    (inputs[inputs.length - 1] as HTMLInputElement).focus();
+                                  }
+                                }, 50);
+                              }
+                            }}
+                            className="font-bold border-slate-300"
+                          />
+                        </div>
+                        {formData.modules.length > 1 && (
+                          <Button variant="ghost" size="icon" onClick={() => removeModuleRow(mIndex)} className="shrink-0 text-slate-400 hover:text-red-500 mt-6">
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
                       </div>
                     </div>
-                    {formData.tasks.length > 1 && (
-                      <Button variant="ghost" size="icon" onClick={() => removeTaskRow(index)} className="shrink-0 text-slate-400 hover:text-red-500 mt-1">
-                        <X className="w-4 h-4" />
-                      </Button>
-                    )}
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           <div className="mt-8 flex justify-end gap-3">

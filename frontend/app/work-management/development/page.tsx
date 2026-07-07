@@ -759,6 +759,13 @@ export default function TasksPage() {
 
     return true;
   }).sort((a, b) => {
+    const aInProgress = (a.status === "in_progress" || a.status === "in-progress") ? 1 : 0;
+    const bInProgress = (b.status === "in_progress" || b.status === "in-progress") ? 1 : 0;
+    
+    if (aInProgress !== bInProgress) {
+      return bInProgress - aInProgress;
+    }
+
     const pA = a.projectName || "";
     const pB = b.projectName || "";
     if (pA !== pB) return pA.localeCompare(pB);

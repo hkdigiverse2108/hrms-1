@@ -90,6 +90,9 @@ export default function ModulesPage() {
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [presetModalOpen, setPresetModalOpen] = useState(false);
+  const [availablePresets, setAvailablePresets] = useState<any[]>([]);
+  const [isApplyingPreset, setIsApplyingPreset] = useState(false);
   const [activePhase, setActivePhase] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
@@ -410,6 +413,61 @@ export default function ModulesPage() {
     } catch (err) {
       console.error(err);
       toast.error("Error adding module");
+    }
+  };
+
+  const handleOpenPresetModal = async () => {
+    try {
+      const res = await fetch(`${API_URL}/task-presets`);
+      if (res.ok) {
+        const data = await res.json();
+        setAvailablePresets(data.filter((p: any) => p.presetType === "normal"));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    setPresetModalOpen(true);
+  };
+
+  const handleApplyPreset = async (preset: any) => {
+    if (!selectedProject || !preset.modules?.length) return;
+    setIsApplyingPreset(true);
+    try {
+      // Deep clone to avoid reference issues
+      const modulesToAdd = JSON.parse(JSON.stringify(preset.modules));
+      
+      // Assign Phase if available
+      if (activePhase) {
+        modulesToAdd.forEach((m: any) => {
+          if (!m.phaseName) m.phaseName = activePhase.name;
+        });
+      }
+
+      const updatedModules = [...(selectedProject.modules || []), ...modulesToAdd];
+      
+      const res = await fetch(`${API_URL}/projects/${selectedProject.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...selectedProject,
+          modules: updatedModules,
+          performedBy: user?.id,
+          userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+        })
+      });
+      
+      if (res.ok) {
+        toast.success("Preset applied successfully!");
+        setPresetModalOpen(false);
+        fetchData(); 
+      } else {
+        toast.error("Failed to apply preset");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error applying preset");
+    } finally {
+      setIsApplyingPreset(false);
     }
   };
 
@@ -1308,17 +1366,31 @@ export default function ModulesPage() {
 
                     <div className="h-6 w-px bg-slate-200 mx-1 hidden sm:block"></div>
 
+                    <div className="flex gap-2 items-center">
                     {canManageModule && (
-                      <Button 
-                        onClick={() => openAddModal(null)}
-                        className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-9"
-                      >
-                        <Plus className="w-4 h-4 mr-1.5" />
-                        Add Module
-                      </Button>
+                      <>
+                        <Button 
+                          onClick={handleOpenPresetModal}
+                          variant="outline"
+                          className="font-bold h-9 border-brand-teal/30 text-brand-teal hover:bg-brand-teal/5"
+                        >
+                          <Briefcase className="w-4 h-4 mr-1.5" />
+                          Apply Presets
+                        </Button>
+                        <Button 
+                          onClick={() => openAddModal(null)}
+                          className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-9"
+                        >
+                          <Plus className="w-4 h-4 mr-1.5" />
+                          Add Module
+                        </Button>
+                      </>
                     )}
                   </div>
-                </div>                <div className="flex-1 bg-slate-50/30 overflow-y-auto min-h-0 custom-scrollbar">
+                </div>
+              </div>
+
+                <div className="flex-1 bg-slate-50/30 overflow-y-auto min-h-0 custom-scrollbar">
                   {(() => {
                     const phases = selectedProject.phases || [];
                     const modules = selectedProject.modules || [];
@@ -1618,9 +1690,18 @@ export default function ModulesPage() {
                                       </Select>
                                     </TableCell>
 
-
-
-
+                                    <TableCell className="py-2.5">
+                                      <Input
+                                        type="number"
+                                        placeholder="Hrs"
+                                        value={input.estimatedHours || ""}
+                                        onChange={(e) => updateQuickAddInput(phaseKey, "estimatedHours", parseFloat(e.target.value) || 0)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") handleQuickAddModule(phaseName);
+                                        }}
+                                        className="h-8 text-xs font-medium bg-white w-16"
+                                      />
+                                    </TableCell>
 
                                     <TableCell className="py-2.5">
                                       <Select 
@@ -2806,6 +2887,56 @@ export default function ModulesPage() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Apply Preset Modal */}
+      <Dialog open={presetModalOpen} onOpenChange={setPresetModalOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2 text-slate-800">
+              <Briefcase className="w-5 h-5 text-brand-teal" />
+              Apply Module Preset
+            </DialogTitle>
+          </DialogHeader>
+
+          {activePhase && (
+            <div className="mb-2 p-3 bg-slate-50 rounded-lg border border-slate-200 text-sm">
+              <p><span className="font-semibold text-slate-700">Project:</span> {selectedProject?.title}</p>
+              <p><span className="font-semibold text-slate-700">Phase:</span> {activePhase.name} <span className="text-slate-500">({activePhase.startDate} to {activePhase.endDate})</span></p>
+            </div>
+          )}
+
+          <div className="space-y-3 py-4 max-h-[60vh] overflow-y-auto">
+            {availablePresets.length === 0 ? (
+              <div className="text-center p-6 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+                <p className="text-slate-500 font-medium">No Normal Presets found.</p>
+                <p className="text-sm text-slate-400 mt-1">Create one in the Work Management section first.</p>
+              </div>
+            ) : (
+              availablePresets.map((preset) => (
+                <div key={preset._id || preset.id} className="flex justify-between items-center p-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-brand-teal/50 transition-colors">
+                  <div>
+                    <h3 className="font-bold text-slate-800">{preset.name}</h3>
+                    <p className="text-xs text-slate-500 mt-1">{preset.description || "No description"}</p>
+                    <div className="mt-2 flex gap-2">
+                      <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                        {preset.modules?.length || 0} Modules
+                      </span>
+                    </div>
+                  </div>
+                  <Button 
+                    onClick={() => handleApplyPreset(preset)}
+                    disabled={isApplyingPreset}
+                    size="sm"
+                    className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold"
+                  >
+                    {isApplyingPreset ? <Loader2 className="w-4 h-4 animate-spin" /> : "Apply"}
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>
