@@ -55,22 +55,33 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
   const { user } = useUser();
   const { checkPermission, isAdmin, permissions } = usePermissions();
   const { totalUnreadCount: unreadChatCount } = useChatContext();
-  const [settings, setSettings] = useState<any>(null);
+  const [settings, setSettings] = useState<any>(() => {
+    // Read cached settings instantly from localStorage (no network wait)
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('system-settings-cache');
+        if (cached) return JSON.parse(cached);
+      } catch {}
+    }
+    return null;
+  });
 
   useEffect(() => {
-    fetchSettings();
-  }, []);
-
-  const fetchSettings = async () => {
-    try {
-      const res = await fetch(`${API_URL}/system-settings`);
-      if (res.ok) {
-        setSettings(await res.json());
+    // Refresh settings in background (deferred to avoid competing with critical calls)
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`${API_URL}/system-settings`);
+        if (res.ok) {
+          const data = await res.json();
+          setSettings(data);
+          localStorage.setItem('system-settings-cache', JSON.stringify(data));
+        }
+      } catch (err) {
+        console.error("Error fetching sidebar settings:", err);
       }
-    } catch (err) {
-      console.error("Error fetching sidebar settings:", err);
-    }
-  };
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
 
 
   const showClients = () => {

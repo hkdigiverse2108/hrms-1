@@ -2915,7 +2915,7 @@ async def user_has_full_entity_access(db, user_id: str, role: str, target_module
     if not role and not user_id:
         return False
     role_lower = str(role or "").lower().strip()
-    full_roles = {"admin", "manager", "social media manager", "smm", "director", "head", "super admin", "digital marketer", "digital marketing"}
+    full_roles = {"admin", "manager", "social media manager", "smm", "director", "head", "super admin", "digital marketer", "digital marketing", "hr"}
     if role_lower in full_roles or "social media" in role_lower or "digital marketing" in role_lower:
         return True
         
@@ -7698,6 +7698,145 @@ async def delete_schedule(db, schedule_id: str):
                     print(f"Error syncing deleted schedule to Google Calendar: {e}")
                     
     return res.deleted_count > 0
+
+# --- Appointment Configuration Operations ---
+async def get_appointment_config(db, employee_id: str):
+    config = None
+    if ObjectId.is_valid(employee_id) and len(str(employee_id)) == 24:
+        config = await db.appointment_configs.find_one({"_id": ObjectId(employee_id)})
+    if not config:
+        config = await db.appointment_configs.find_one({"employeeId": employee_id})
+    return fix_id(config) if config else None
+
+async def delete_appointment_config(db, config_id: str):
+    if not ObjectId.is_valid(config_id):
+        return False
+    res = await db.appointment_configs.delete_one({"_id": ObjectId(config_id)})
+    return res.deleted_count > 0
+
+async def save_appointment_config(db, config_data: dict):
+    employee_id = config_data.get("employeeId")
+    if not employee_id:
+        raise ValueError("employeeId is required")
+    
+    config_id = config_data.get("id") or config_data.get("_id")
+    data_to_save = {k: v for k, v in config_data.items() if k not in ["id", "_id"]}
+    
+    if config_id and ObjectId.is_valid(config_id) and len(str(config_id)) == 24:
+        existing = await db.appointment_configs.find_one({"_id": ObjectId(config_id)})
+        if existing:
+            data_to_save["updated_at"] = datetime.now()
+            await db.appointment_configs.update_one(
+                {"_id": ObjectId(config_id)},
+                {"$set": data_to_save}
+            )
+            updated = await db.appointment_configs.find_one({"_id": ObjectId(config_id)})
+            return fix_id(updated)
+            
+    data_to_save["created_at"] = datetime.now()
+    data_to_save["updated_at"] = datetime.now()
+    new_doc = await db.appointment_configs.insert_one(data_to_save)
+    created = await db.appointment_configs.find_one({"_id": new_doc.inserted_id})
+    return fix_id(created)
+
+async def calculate_public_slots(db, employee_id: str, date_str: str, config_id: str = None):
+    config = None
+    if config_id and ObjectId.is_valid(config_id) and len(str(config_id)) == 24:
+        config = await db.appointment_configs.find_one({"_id": ObjectId(config_id)})
+    if not config and ObjectId.is_valid(employee_id) and len(str(employee_id)) == 24:
+        config = await db.appointment_configs.find_one({"_id": ObjectId(employee_id)})
+    if not config:
+        config = await db.appointment_configs.find_one({"employeeId": employee_id})
+    if not config or not config.get("active", True):
+        return []
+    
+    duration = config.get("duration", 30)
+    availability = config.get("availability", {})
+    
+    try:
+        target_date = datetime.strptime(date_str, "%Y-%m-%d")
+    except Exception:
+        return []
+    
+    recurrence = config.get("recurrence", "weekly")
+    if recurrence == "none":
+        day_slots = config.get("specificDates", {}).get(date_str, [])
+    else:
+        day_name = target_date.strftime("%A")
+        day_slots = availability.get(day_name, [])
+        
+    if not day_slots:
+        return []
+    
+    real_emp_id = config.get("employeeId", employee_id)
+    all_member_ids = [str(real_emp_id)]
+    if config.get("employeeIds"):
+        all_member_ids.extend([str(x) for x in config.get("employeeIds")])
+    all_member_ids = list(set(all_member_ids))
+
+    query = {
+        "$or": [
+            {"employeeId": {"$in": all_member_ids}},
+            {"attendees": {"$in": all_member_ids}}
+        ]
+    }
+    query["date"] = {"$in": [date_str, target_date]}
+    
+    cursor = db.schedules.find(query)
+    existing_schedules = await cursor.to_list(length=1000)
+    
+    def time_str_to_mins(t_str: str):
+        try:
+            parts = t_str.split(":")
+            return int(parts[0]) * 60 + int(parts[1])
+        except Exception:
+            return 0
+            
+    existing_ranges = []
+    for s in existing_schedules:
+        s_start = s.get("startTime")
+        s_end = s.get("endTime")
+        if s_start and s_end:
+            existing_ranges.append((time_str_to_mins(s_start), time_str_to_mins(s_end)))
+            
+    candidate_slots = []
+    for window in day_slots:
+        w_start = time_str_to_mins(window.get("start", "09:00"))
+        w_end = time_str_to_mins(window.get("end", "17:00"))
+        
+        current = w_start
+        while current + duration <= w_end:
+            slot_end = current + duration
+            
+            overlap = False
+            for ex_start, ex_end in existing_ranges:
+                if max(current, ex_start) < min(slot_end, ex_end):
+                    overlap = True
+                    break
+            
+            if not overlap:
+                start_str = f"{current // 60:02d}:{current % 60:02d}"
+                end_str = f"{slot_end // 60:02d}:{slot_end % 60:02d}"
+                candidate_slots.append({"start": start_str, "end": end_str})
+                
+            current += duration
+            
+    try:
+        ist = pytz.timezone('Asia/Kolkata')
+        now_ist = datetime.now(ist)
+        today_ist_str = now_ist.strftime("%Y-%m-%d")
+        if date_str == today_ist_str:
+            now_mins = now_ist.hour * 60 + now_ist.minute
+            now_mins += 10
+            candidate_slots = [
+                slot for slot in candidate_slots
+                if time_str_to_mins(slot["start"]) > now_mins
+            ]
+    except Exception as e:
+        print(f"Error filtering past slots: {e}")
+        
+    return candidate_slots
+
 # --- User Activity Input Tracking Operations ---
 async def track_user_activity(db, employee_id: str, clicks: int, keystrokes: int, applications: Optional[dict] = None, domains: Optional[dict] = None):
     # Find the employee first to get their name
