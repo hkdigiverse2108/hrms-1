@@ -107,8 +107,20 @@ export function Header() {
     }
   };
 
-  useAppEvent("new_notification", () => {
+  useAppEvent("new_notification", (data) => {
     fetchNotifications();
+    if (data?.type === 'wm-task' || data?.type === 'task') {
+      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+        const notifUrl = data.type === 'wm-task' ? '/work-management/development' : '/tasks';
+        const notification = new Notification(data.title || "Task Assigned", {
+          body: data.message,
+        });
+        notification.onclick = () => {
+          window.focus();
+          router.push(notifUrl);
+        };
+      }
+    }
   });
 
   // Dynamically update the browser tab title with the unread chat badge count (like Email / WhatsApp) app-wide
@@ -266,6 +278,10 @@ export function Header() {
                                   router.push(user?.role === 'Employee' ? '/attendance' : '/employees/attendance');
                                 } else if (n.type === 'recruitment') {
                                   router.push('/recruitment');
+                                } else if (n.type === 'task') {
+                                  router.push('/tasks');
+                                } else if (n.type === 'wm-task') {
+                                  router.push('/work-management/development');
                                 }
                                 markAsRead(n.id);
                               }}
@@ -466,6 +482,10 @@ export function Header() {
                                     router.push(user?.role === 'Employee' ? '/attendance' : '/employees/attendance');
                                   } else if (n.type === 'recruitment') {
                                     router.push('/recruitment');
+                                  } else if (n.type === 'task') {
+                                    router.push('/tasks');
+                                  } else if (n.type === 'wm-task') {
+                                    router.push('/work-management/development');
                                   }
                                   markAsRead(n.id);
                                 }}
