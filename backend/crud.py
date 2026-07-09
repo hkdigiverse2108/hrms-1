@@ -3908,7 +3908,7 @@ async def sync_module_and_phase_stages(db, project_id: str, module_name: str, ph
         else:
             target_stage = "in_progress"
             
-        if current_stage in ["onhold", "bugs"] and not all_completed_and_approved and not any_bugs:
+        if current_stage == "onhold" and not all_completed_and_approved and not any_bugs:
             target_stage = current_stage
             
         mod_changed = False

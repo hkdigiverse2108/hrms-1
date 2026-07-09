@@ -1379,6 +1379,7 @@ export default function TasksPage() {
                     <th className="px-4 py-3 w-16 text-center">S.No.</th>
                     <th className="px-4 py-3 min-w-[200px]">Task Title</th>
                     <th className="px-4 py-3 min-w-[150px]">Project</th>
+                    <th className="px-4 py-3 min-w-[120px]">Module</th>
                     <th className="px-4 py-3 min-w-[120px]">Assignee</th>
                     <th className="px-4 py-3 min-w-[120px]">Stage</th>
                     <th className="px-4 py-3 min-w-[120px]">Due Date</th>
@@ -1397,6 +1398,7 @@ export default function TasksPage() {
                       {[
                         { key: 'title', type: 'text', minWidth: '200px' },
                         { key: 'projectId', labelKey: 'projectName', type: 'select', options: projects.filter(p => p.department?.toLowerCase() === 'development').map(p => ({ value: p.id, label: p.title })), minWidth: '150px' },
+                        { key: 'moduleName', type: 'readonly', minWidth: '120px' },
                         { key: 'assignedToId', labelKey: 'assignedToName', type: 'select', options: employees.filter(e => e.department?.toLowerCase() === 'development').map(e => ({ value: e.id, label: `${e.firstName} ${e.lastName}` })), minWidth: '150px' },
                         { key: 'status', type: 'select', options: STAGES.map(s => ({ value: s.id, label: s.label })), minWidth: '120px' },
                         { key: 'dueDate', type: 'date', minWidth: '120px' },
