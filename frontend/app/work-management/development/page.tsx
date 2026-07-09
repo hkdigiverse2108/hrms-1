@@ -746,13 +746,13 @@ export default function TasksPage() {
     const todayStr = new Date().toISOString().split('T')[0];
     const taskDate = t.dueDate || t.postingDate;
     if (taskTimeFilter === "today") {
-      if (t.status !== "todo" && t.status !== "bugs") return false;
+      if (t.status === "completed") return false;
       if (!taskDate || taskDate > todayStr) return false;
     } else if (taskTimeFilter === "pending") {
       const isPendingStatus = t.status === "pending" || t.status === "onhold";
       if (!isPendingStatus) return false;
     } else if (taskTimeFilter === "upcoming") {
-      if (t.status !== "todo") return false;
+      if (t.status === "completed") return false;
       if (taskDate && taskDate <= todayStr) return false;
     }
 
