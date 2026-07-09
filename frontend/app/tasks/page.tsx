@@ -500,12 +500,6 @@ export default function TaskManagementPage() {
       newStatuses = [...activeStatuses, val];
     }
     setActiveStatuses(newStatuses);
-    if (filterMode === 'all') {
-      setFilterMode('my_filter');
-      if (user?.id) {
-        localStorage.setItem(`task_filter_mode_${user.id}`, 'my_filter');
-      }
-    }
   };
 
   const toggleFilter = (state: string[], setState: React.Dispatch<React.SetStateAction<string[]>>, val: string) => {
