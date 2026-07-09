@@ -1294,6 +1294,8 @@ class PresetTask(BaseModel):
     projectId: str
     projectName: Optional[str] = None
     department: Optional[str] = None
+    estimatedHours: Optional[float] = 0
+    estimatedMinutes: Optional[float] = 0
 
 class TaskPresetBase(BaseModel):
     name: str

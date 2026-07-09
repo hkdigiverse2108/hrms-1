@@ -29,7 +29,7 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
   const [formData, setFormData] = useState({
     name: "",
     description: "",
-    tasks: [{ title: "", description: "", projectId: "", projectName: "", department: "development" }],
+    tasks: [{ title: "", description: "", projectId: "", projectName: "", department: "development", estimatedHours: 0, estimatedMinutes: 0 }],
     modules: [{ name: "", tasks: [{ title: "", description: "", priority: "medium", estimatedHours: 0, status: "todo" }] }]
   });
 
@@ -86,7 +86,7 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
       setFormData({
         name: preset.name,
         description: preset.description || "",
-        tasks: preset.tasks?.length ? preset.tasks : [{ title: "", description: "", projectId: "", projectName: "", department: "development" }],
+        tasks: preset.tasks?.length ? preset.tasks : [{ title: "", description: "", projectId: "", projectName: "", department: "development", estimatedHours: 0, estimatedMinutes: 0 }],
         modules: preset.modules?.length ? preset.modules : [{ name: "", tasks: [{ title: "", description: "", priority: "medium", estimatedHours: 0, status: "todo" }] }]
       });
     } else {
@@ -94,7 +94,7 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
       setFormData({
         name: "",
         description: "",
-        tasks: [{ title: "", description: "", projectId: "", projectName: "", department: "development" }],
+        tasks: [{ title: "", description: "", projectId: "", projectName: "", department: "development", estimatedHours: 0, estimatedMinutes: 0 }],
         modules: [{ name: "", tasks: [{ title: "", description: "", priority: "medium", estimatedHours: 0, status: "todo" }] }]
       });
     }
@@ -206,7 +206,7 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
   const addTaskRow = () => {
     setFormData({
       ...formData,
-      tasks: [...formData.tasks, { title: "", description: "", projectId: "", projectName: "", department: "development" }]
+      tasks: [...formData.tasks, { title: "", description: "", projectId: "", projectName: "", department: "development", estimatedHours: 0, estimatedMinutes: 0 }]
     });
     setTimeout(() => {
       const inputs = document.querySelectorAll('.task-title-input');
@@ -221,7 +221,7 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
     setFormData({ ...formData, tasks: newTasks });
   };
 
-  const updateTask = (index: number, field: string, value: string) => {
+  const updateTask = (index: number, field: string, value: any) => {
     const newTasks = [...formData.tasks];
     newTasks[index] = { ...newTasks[index], [field]: value };
     setFormData({ ...formData, tasks: newTasks });
@@ -301,13 +301,14 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
                   <TableHead className="font-bold">Preset Name</TableHead>
                   <TableHead className="font-bold">Description</TableHead>
                   <TableHead className="font-bold text-center">{activeTab === "normal" ? "Modules" : "Tasks"}</TableHead>
+                  <TableHead className="font-bold text-center">Total Duration</TableHead>
                   <TableHead className="text-right font-bold">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {presets.filter(p => (p.presetType || "intern") === activeTab).length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-8 text-slate-500">
+                    <TableCell colSpan={5} className="text-center py-8 text-slate-500">
                       No presets found. Create one to get started!
                     </TableCell>
                   </TableRow>
@@ -320,6 +321,31 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
                         <span className="bg-brand-teal/10 text-brand-teal px-2.5 py-1 rounded-full text-xs font-bold">
                           {activeTab === "normal" ? `${preset.modules?.length || 0} modules` : `${preset.tasks?.length || 0} tasks`}
                         </span>
+                      </TableCell>
+                      <TableCell className="text-center text-xs font-semibold text-slate-600">
+                        {(() => {
+                          let totalMinutes = 0;
+                          if (activeTab === "intern" && preset.tasks) {
+                            totalMinutes = preset.tasks.reduce((sum: number, t: any) => sum + (parseFloat(t.estimatedHours || 0) * 60) + parseFloat(t.estimatedMinutes || 0), 0);
+                          } else if (activeTab === "normal" && preset.modules) {
+                            preset.modules.forEach((mod: any) => {
+                              if (mod.tasks) {
+                                totalMinutes += mod.tasks.reduce((sum: number, t: any) => sum + (parseFloat(t.estimatedHours || 0) * 60) + parseFloat(t.estimatedMinutes || 0), 0);
+                              }
+                            });
+                          }
+                          
+                          if (totalMinutes > 0) {
+                            const h = Math.floor(totalMinutes / 60);
+                            const m = Math.floor(totalMinutes % 60);
+                            return (
+                              <span className="bg-amber-50 text-amber-600 border border-amber-200 px-2 py-0.5 rounded-md">
+                                {h > 0 ? `${h}h ` : ""}{m > 0 ? `${m}m` : ""}
+                              </span>
+                            );
+                          }
+                          return "-";
+                        })()}
                       </TableCell>
                       <TableCell className="text-right space-x-2">
                         <Button variant="outline" size="sm" onClick={() => openAssignModal(preset)} title="Assign Preset">
@@ -381,31 +407,57 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
                   {formData.tasks.map((task, index) => (
                     <div key={index} className="flex gap-3 items-start bg-white p-3 rounded-lg border border-slate-200 shadow-sm relative group">
                       <div className="flex-1">
-                        <div className="grid grid-cols-2 gap-3">
-                          <Input 
-                            placeholder="Task Title *"
-                            value={task.title}
-                            onChange={(e) => updateTask(index, "title", e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                addTaskRow();
-                              }
-                            }}
-                            className="task-title-input font-semibold"
-                          />
-                          <Input 
-                            placeholder="Task Description (Optional)"
-                            value={task.description}
-                            onChange={(e) => updateTask(index, "description", e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                addTaskRow();
-                              }
-                            }}
-                            className="text-xs bg-slate-50"
-                          />
+                        <div className="grid grid-cols-12 gap-3">
+                          <div className="col-span-5">
+                            <Input 
+                              placeholder="Task Title *"
+                              value={task.title}
+                              onChange={(e) => updateTask(index, "title", e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  addTaskRow();
+                                }
+                              }}
+                              className="task-title-input font-semibold"
+                            />
+                          </div>
+                          <div className="col-span-4">
+                            <Input 
+                              placeholder="Task Description (Optional)"
+                              value={task.description}
+                              onChange={(e) => updateTask(index, "description", e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  addTaskRow();
+                                }
+                              }}
+                              className="text-xs bg-slate-50"
+                            />
+                          </div>
+                          <div className="col-span-3 flex gap-2">
+                            <div className="flex-1 relative">
+                              <Input 
+                                type="number" 
+                                placeholder="0" 
+                                value={task.estimatedHours || ""} 
+                                onChange={(e) => updateTask(index, "estimatedHours", parseFloat(e.target.value) || 0)} 
+                                className="pr-5 text-xs font-semibold" 
+                              />
+                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">h</span>
+                            </div>
+                            <div className="flex-1 relative">
+                              <Input 
+                                type="number" 
+                                placeholder="0" 
+                                value={task.estimatedMinutes || ""} 
+                                onChange={(e) => updateTask(index, "estimatedMinutes", parseFloat(e.target.value) || 0)} 
+                                className="pr-5 text-xs font-semibold" 
+                              />
+                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">m</span>
+                            </div>
+                          </div>
                         </div>
                       </div>
                       {formData.tasks.length > 1 && (
