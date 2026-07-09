@@ -506,17 +506,16 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
                         <div className="flex-1 space-y-2">
                           <Label className="text-xs font-semibold text-slate-500">Module Name *</Label>
                           <Input 
-                            placeholder="e.g. Phase 1 Setup"
+                            placeholder="Module Title"
                             value={module.name}
                             onChange={(e) => updateModule(mIndex, "name", e.target.value)}
                             onKeyDown={(e) => {
                               if (e.key === "Enter") {
                                 e.preventDefault();
-                                addModuleRow();
                                 setTimeout(() => {
-                                  const inputs = document.querySelectorAll('input[placeholder="e.g. Phase 1 Setup"]');
-                                  if (inputs.length > 0) {
-                                    (inputs[inputs.length - 1] as HTMLInputElement).focus();
+                                  const taskInput = document.getElementById(`module-${mIndex}-task-0-title`);
+                                  if (taskInput) {
+                                    taskInput.focus();
                                   }
                                 }, 50);
                               }
@@ -534,11 +533,10 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
                             onKeyDown={(e) => {
                               if (e.key === "Enter") {
                                 e.preventDefault();
-                                addModuleRow();
                                 setTimeout(() => {
-                                  const inputs = document.querySelectorAll('input[placeholder="e.g. Phase 1 Setup"]');
-                                  if (inputs.length > 0) {
-                                    (inputs[inputs.length - 1] as HTMLInputElement).focus();
+                                  const taskInput = document.getElementById(`module-${mIndex}-task-0-title`);
+                                  if (taskInput) {
+                                    taskInput.focus();
                                   }
                                 }, 50);
                               }
@@ -565,9 +563,22 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
                           {module.tasks?.map((task: any, tIndex: number) => (
                             <div key={tIndex} className="flex gap-2 items-start bg-white p-2 rounded border border-slate-100 relative group">
                               <Input
+                                id={`module-${mIndex}-task-${tIndex}-title`}
                                 placeholder="Task Title *"
                                 value={task.title}
                                 onChange={(e) => updateModuleTask(mIndex, tIndex, "title", e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    addTaskToModule(mIndex);
+                                    setTimeout(() => {
+                                      const nextTaskInput = document.getElementById(`module-${mIndex}-task-${tIndex + 1}-title`);
+                                      if (nextTaskInput) {
+                                        nextTaskInput.focus();
+                                      }
+                                    }, 50);
+                                  }
+                                }}
                                 className="h-8 text-xs font-medium w-1/2"
                               />
                               <Input

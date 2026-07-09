@@ -1868,7 +1868,7 @@ export default function ModulesPage() {
               <Label htmlFor="title">Module Name <span className="text-red-500">*</span></Label>
               <Input
                 id="title"
-                placeholder="e.g. User Authentication"
+                placeholder="Module Title"
                 value={formData.title}
                 onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
                 required
@@ -2479,7 +2479,7 @@ export default function ModulesPage() {
                       <Label htmlFor="edit-title" className="text-xs font-bold text-slate-700">Module Name <span className="text-red-500">*</span></Label>
                       <Input
                         id="edit-title"
-                        placeholder="e.g. User Authentication"
+                        placeholder="Module Title"
                         value={editFormData.title}
                         onChange={(e) => setEditFormData(prev => ({ ...prev, title: e.target.value }))}
                         required
