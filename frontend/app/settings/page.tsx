@@ -50,6 +50,8 @@ export default function SettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
   const [deptInput, setDeptInput] = useState<string | null>(null);
+  const [activitiesInput, setActivitiesInput] = useState<string | null>(null);
+  const [meetingsInput, setMeetingsInput] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -238,6 +240,8 @@ export default function SettingsPage() {
           proformaInvoicePrefix: settings?.proformaInvoicePrefix || "PINV",
           noTaxInvoicePrefix: settings?.noTaxInvoicePrefix || "NINV",
           invoiceClientDepartments: deptInput !== null ? deptInput.split(",").map(s => s.trim()).filter(Boolean) : (settings?.invoiceClientDepartments || []),
+          otherActivities: activitiesInput !== null ? activitiesInput.split(",").map(s => s.trim()).filter(Boolean) : (settings?.otherActivities || []),
+          otherMeetings: meetingsInput !== null ? meetingsInput.split(",").map(s => s.trim()).filter(Boolean) : (settings?.otherMeetings || []),
           companyLetterheadUrl: settings?.companyLetterheadUrl || null,
           companySignatureUrl: settings?.companySignatureUrl || null,
           invoiceColor1: settings?.invoiceColor1 || "#08304b",
@@ -1006,8 +1010,41 @@ export default function SettingsPage() {
                       placeholder="e.g. Billing Department, Support, Sales"
                     />
                   </div>
-                </div>
                 
+                  <div className="space-y-1">
+                    <Label className="text-sm font-bold">Other Activities (Comma Separated)</Label>
+                    <p className="text-[10px] text-muted-foreground mb-1">These options will appear under 'Other -> Activity' when punching in.</p>
+                    <input 
+                      type="text" 
+                      className="w-full h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold"
+                      value={activitiesInput !== null ? activitiesInput : (settings?.otherActivities || []).join(", ")}
+                      onChange={(e) => setActivitiesInput(e.target.value)}
+                      onBlur={(e) => {
+                        setSettings({...settings, otherActivities: e.target.value.split(",").map(s => s.trim()).filter(Boolean)});
+                        setActivitiesInput(null);
+                      }}
+                      disabled={isUpdating || !canEditSettings}
+                      placeholder="e.g. Documentation, Training, Research"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-sm font-bold">Other Meetings (Comma Separated)</Label>
+                    <p className="text-[10px] text-muted-foreground mb-1">These options will appear under 'Other -> Meeting' when punching in.</p>
+                    <input 
+                      type="text" 
+                      className="w-full h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold"
+                      value={meetingsInput !== null ? meetingsInput : (settings?.otherMeetings || []).join(", ")}
+                      onChange={(e) => setMeetingsInput(e.target.value)}
+                      onBlur={(e) => {
+                        setSettings({...settings, otherMeetings: e.target.value.split(",").map(s => s.trim()).filter(Boolean)});
+                        setMeetingsInput(null);
+                      }}
+                      disabled={isUpdating || !canEditSettings}
+                      placeholder="e.g. Client Call, Internal Sync, HR Meeting"
+                    />
+                  </div>
+                </div>
                 <div className="col-span-1 md:col-span-2 border-t border-slate-100 pt-6 mt-4">
                   <Label className="text-sm font-bold text-foreground block mb-2">Invoice Theme Gradient</Label>
                   <p className="text-xs text-muted-foreground mb-4">Choose two colors to customize the gradient background of invoice badges, table headers, and total banners.</p>

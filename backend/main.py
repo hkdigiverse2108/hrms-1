@@ -954,7 +954,17 @@ async def get_attendance_status(employee_id: str, db=Depends(get_db)):
 async def punch_in(employee_id: str, request: Request, payload: Optional[schemas.PunchInRequest] = None, db=Depends(get_db)):
     punch_in_time = payload.punch_in_time if payload else None
     performed_by, user_name = await get_actor_from_request(request, db)
-    result = await crud.punch_in(db, employee_id, punch_in_time=punch_in_time, performed_by=performed_by, user_name=user_name)
+    result = await crud.punch_in(
+        db, 
+        employee_id, 
+        punch_in_time=punch_in_time, 
+        performed_by=performed_by, 
+        user_name=user_name,
+        punch_in_activity_type=payload.activityType if payload else None,
+        punch_in_activity_subtype=payload.activitySubtype if payload else None,
+        punch_in_activity_value=payload.activityValue if payload else None,
+        punch_in_task_id=payload.taskId if payload else None
+    )
     if not result:
         raise HTTPException(status_code=400, detail="Punch in failed")
     return result

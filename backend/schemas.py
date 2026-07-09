@@ -338,6 +338,10 @@ class Break(BaseModel):
 class PunchLog(BaseModel):
     punchIn: str
     punchOut: Optional[str] = None
+    activityType: Optional[str] = None
+    activitySubtype: Optional[str] = None
+    activityValue: Optional[str] = None
+    taskId: Optional[str] = None
  
 class AttendanceBase(BaseModel):
     employeeId: str
@@ -352,6 +356,10 @@ class AttendanceBase(BaseModel):
     punches: List[PunchLog] = []
     remarks: Optional[str] = None
     isLate: Optional[bool] = False
+    punchInActivityType: Optional[str] = None
+    punchInActivitySubtype: Optional[str] = None
+    punchInActivityValue: Optional[str] = None
+    punchInTaskId: Optional[str] = None
  
 class Attendance(AttendanceBase):
     id: str
@@ -377,6 +385,10 @@ class PunchRequest(BaseModel):
 
 class PunchInRequest(BaseModel):
     punch_in_time: Optional[str] = None
+    activityType: Optional[str] = None
+    activitySubtype: Optional[str] = None
+    activityValue: Optional[str] = None
+    taskId: Optional[str] = None
 
 class PunchOutRequest(BaseModel):
     punch_out_time: Optional[str] = None
@@ -1514,6 +1526,8 @@ class SystemSettingsBase(BaseModel):
     inactivityTimeoutMins: Optional[int] = 5
     allowedMonthlyPaidLeaves: Optional[int] = 1
     companyGstin: Optional[str] = "24AAXFN3372M1ZK"
+    otherActivities: Optional[List[str]] = Field(default_factory=list)
+    otherMeetings: Optional[List[str]] = Field(default_factory=list)
     companyAddress: Optional[str] = "FLAT-204, 2nd FLOOR, RS NO-67/1, WING-A, HARIKRUSHANA COMPLEX, OPP. BHAGAT NAGAR, VED, GURUKULROAD, KATARGAM, SURAT- 395004, GUJARAT, INDIA."
     companyPhone: Optional[str] = "+91 87805 64463"
     companyEmail: Optional[str] = "billing@hkdigiverse.com"

@@ -60,6 +60,7 @@ import { AddEventDialog } from "@/components/dashboard/AddEventDialog";
 import { ViewAllEventsDialog } from "@/components/dashboard/ViewAllEventsDialog";
 import { toast } from "sonner";
 import { useConfirm } from "@/context/ConfirmContext";
+import { PunchInModal } from "@/components/dashboard/PunchInModal";
  
 const formatToHhMm = (totalMinutes: number) => {
   const { confirm } = useConfirm();
@@ -104,6 +105,7 @@ export default function DashboardPage() {
   const [totalBreakTime, setTotalBreakTime] = useState("0h 0m");
   const [currentTime, setCurrentTime] = useState(getISTNow());
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
+  const [isPunchInModalOpen, setIsPunchInModalOpen] = useState(false);
   const [leaveRequests, setLeaveRequests] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [interns, setInterns] = useState<any[]>([]);
@@ -437,6 +439,11 @@ export default function DashboardPage() {
   };
  
   const handlePunch = async (type: 'punch-in' | 'punch-out' | 'break-in' | 'break-out') => {
+    if (type === 'punch-in') {
+      setIsPunchInModalOpen(true);
+      return;
+    }
+
     setIsPunching(true);
     try {
       const res = await fetch(`${API_URL}/attendance/${type}/${user?.id}`, {
@@ -456,6 +463,57 @@ export default function DashboardPage() {
     } catch (err) {
       console.error("Punch error:", err);
       toast.error("Failed to connect to the server. Please ensure the backend is running.");
+    } finally {
+      setIsPunching(false);
+    }
+  };
+
+  const handleConfirmPunchIn = async (data: { type: string; subtype?: string; value?: string; taskId?: string }) => {
+    setIsPunchInModalOpen(false);
+    setIsPunching(true);
+    try {
+      const payload: any = {};
+      if (data.type === "Work") {
+        payload.activityType = "Work";
+        payload.taskId = data.taskId;
+      } else if (data.type === "Research") {
+        payload.activityType = "Research";
+      } else if (data.type === "Other") {
+        payload.activityType = "Other";
+        payload.activitySubtype = data.subtype;
+        payload.activityValue = data.value;
+      }
+
+      const res = await fetch(`${API_URL}/attendance/punch-in/${user?.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      
+      if (res.ok) {
+        if (data.type === "Work" && data.taskId) {
+          // Update task status to in-progress via PUT /wm-tasks/{taskId}
+          try {
+            await fetch(`${API_URL}/wm-tasks/${data.taskId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: 'in-progress' })
+            });
+          } catch (taskErr) {
+            console.error("Failed to update task status:", taskErr);
+          }
+        }
+        await fetchStatus();
+        await fetchHistory();
+        window.dispatchEvent(new Event("attendance-update"));
+        toast.success("Successfully punched in!");
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        toast.error(`Punch in failed: ${errorData.detail || 'Server error'}`);
+      }
+    } catch (err) {
+      console.error("Punch error:", err);
+      toast.error("Failed to connect to the server.");
     } finally {
       setIsPunching(false);
     }
@@ -615,6 +673,12 @@ export default function DashboardPage() {
           setIsRequestDialogOpen(false);
           punchCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }}
+      />
+      <PunchInModal
+        open={isPunchInModalOpen}
+        onOpenChange={setIsPunchInModalOpen}
+        onConfirm={handleConfirmPunchIn}
+        userId={user?.id || ""}
       />
     </div>
   );

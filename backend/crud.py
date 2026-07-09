@@ -2316,11 +2316,22 @@ async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None, pe
             return fix_id(existing_record)
         
         # If logged out, resume this record instead of creating a new one
-        new_punch = {"punchIn": now_time_str, "punchOut": None}
+        new_punch = {
+            "punchIn": now_time_str, 
+            "punchOut": None,
+            "activityType": punch_in_activity_type,
+            "activitySubtype": punch_in_activity_subtype,
+            "activityValue": punch_in_activity_value,
+            "taskId": punch_in_task_id
+        }
         set_values = {
             "status": "Active",
             "checkOut": None,
-            "lastPunchIn": now_time_str
+            "lastPunchIn": now_time_str,
+            "punchInActivityType": punch_in_activity_type,
+            "punchInActivitySubtype": punch_in_activity_subtype,
+            "punchInActivityValue": punch_in_activity_value,
+            "punchInTaskId": punch_in_task_id
         }
         # If the existing checkIn is a placeholder or empty, set it to the actual first punch-in time!
         if existing_record.get("checkIn") in [None, "--", "--:--", "", "-"]:
@@ -2369,9 +2380,20 @@ async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None, pe
         "status": "Active",
         "workHours": None,
         "accumulatedWorkSeconds": 0,
-        "punches": [{"punchIn": now_time_str, "punchOut": None}],
+        "punches": [{
+            "punchIn": now_time_str, 
+            "punchOut": None,
+            "activityType": punch_in_activity_type,
+            "activitySubtype": punch_in_activity_subtype,
+            "activityValue": punch_in_activity_value,
+            "taskId": punch_in_task_id
+        }],
         "remarks": f"On Leave: {half_day_type}" if half_day_type else "-",
-        "isLate": is_late_punch
+        "isLate": is_late_punch,
+        "punchInActivityType": punch_in_activity_type,
+        "punchInActivitySubtype": punch_in_activity_subtype,
+        "punchInActivityValue": punch_in_activity_value,
+        "punchInTaskId": punch_in_task_id
     }
     
     # If late, insert the remark
