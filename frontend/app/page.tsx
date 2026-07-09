@@ -1000,7 +1000,8 @@ function EmployeeView({
       return `${h}h ${m}m`;
     }
     return "Not Started";
-  };  const punchCardSection = (
+  };
+  const punchCardSection = (
     <div ref={punchCardRef} className="bg-white border border-border rounded-2xl p-8 shadow-sm scroll-mt-20 relative overflow-hidden">
             <div className="flex justify-between items-start mb-8">
               <div className="flex flex-col gap-4">
@@ -1013,7 +1014,7 @@ function EmployeeView({
                      <Moon className="w-4 h-4 text-brand-teal" />
                    )}
                    <span className="text-[11px] font-bold text-brand-teal">
-                     {getISTNow().getHours() < 12 ? "Good morning" : getISTNow().getHours() < 17 ? "Good afternoon" : "Good evening"}, {firstName}
+                     {getISTNow().getHours() < 12 ? "Good Morning" : getISTNow().getHours() < 17 ? "Good Afternoon" : "Good Evening"}, {firstName}
                    </span>
                 </div>
                 <div className="flex items-center gap-4">

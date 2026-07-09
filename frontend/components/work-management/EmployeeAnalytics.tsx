@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { User, ChevronLeft, CheckCircle2, Clock, AlertCircle, Calendar, Briefcase, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +19,23 @@ export default function EmployeeAnalytics({
   onBack: () => void;
 }) {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
+  const [dateFilterType, setDateFilterType] = useState<string>("today"); // today, past2, past7, lastMonth, all, custom
   const [dateFilter, setDateFilter] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [dateFilterEnd, setDateFilterEnd] = useState<string>("");
+  const [attendanceData, setAttendanceData] = useState<any[]>([]);
+
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8002';
+
+  useEffect(() => {
+    if (selectedEmployeeId) {
+      fetch(`${API_URL}/attendance`)
+        .then(res => res.json())
+        .then(data => {
+          setAttendanceData(data.filter((a: any) => a.employeeId === selectedEmployeeId));
+        })
+        .catch(err => console.error("Error fetching attendance", err));
+    }
+  }, [selectedEmployeeId, API_URL]);
 
   const devEmployees = useMemo(() => {
     return employees.filter(e => e.department?.toLowerCase() === 'development');
@@ -33,19 +49,53 @@ export default function EmployeeAnalytics({
     if (!selectedEmployeeId) return [];
     let filtered = tasks.filter((t) => t.assignedToId === selectedEmployeeId || t.performedBy === selectedEmployeeId);
     
-    if (dateFilter) {
+    const todayStr = new Date().toISOString().split('T')[0];
+    
+    if (dateFilterType !== "all") {
       filtered = filtered.filter(t => {
         const taskDate = t.dueDate || t.postingDate || (t.createdDate ? t.createdDate.split('T')[0] : "");
-        return taskDate === dateFilter || (t.dueDate && t.dueDate.startsWith(dateFilter));
+        if (!taskDate) return false;
+        
+        if (dateFilterType === "today") {
+          return taskDate === todayStr || (t.dueDate && t.dueDate.startsWith(todayStr));
+        } else if (dateFilterType === "yesterday") {
+          const yesterday = new Date();
+          yesterday.setDate(yesterday.getDate() - 1);
+          const yesterdayStr = yesterday.toISOString().split('T')[0];
+          return taskDate === yesterdayStr || (t.dueDate && t.dueDate.startsWith(yesterdayStr));
+        } else if (dateFilterType === "past7") {
+          const sevenDaysAgo = new Date();
+          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+          const pastDateStr = sevenDaysAgo.toISOString().split('T')[0];
+          return taskDate >= pastDateStr && taskDate <= todayStr;
+        } else if (dateFilterType === "lastMonth") {
+          const startOfLastMonth = new Date();
+          startOfLastMonth.setDate(1);
+          startOfLastMonth.setMonth(startOfLastMonth.getMonth() - 1);
+          const endOfLastMonth = new Date(startOfLastMonth);
+          endOfLastMonth.setMonth(endOfLastMonth.getMonth() + 1);
+          endOfLastMonth.setDate(0);
+          
+          const startStr = startOfLastMonth.toISOString().split('T')[0];
+          const endStr = endOfLastMonth.toISOString().split('T')[0];
+          return taskDate >= startStr && taskDate <= endStr;
+        } else if (dateFilterType === "custom") {
+          if (dateFilter && dateFilterEnd) {
+            return taskDate >= dateFilter && taskDate <= dateFilterEnd;
+          } else if (dateFilter) {
+            return taskDate === dateFilter || (t.dueDate && t.dueDate.startsWith(dateFilter));
+          }
+        }
+        return true;
       });
     }
     
     return filtered;
-  }, [selectedEmployeeId, tasks, dateFilter]);
+  }, [selectedEmployeeId, tasks, dateFilterType, dateFilter, dateFilterEnd]);
 
   const stats = useMemo(() => {
-    if (!employeeTasks.length) {
-      return { total: 0, completed: 0, inProgress: 0, overdue: 0, totalHours: 0 };
+    if (!employeeTasks.length && !attendanceData.length) {
+      return { total: 0, completed: 0, inProgress: 0, overdue: 0, totalHours: 0, productionHours: 0 };
     }
 
     const todayStr = new Date().toISOString().split("T")[0];
@@ -68,14 +118,64 @@ export default function EmployeeAnalytics({
       }
     });
 
+    let totalSeconds = 0;
+    if (selectedEmployeeId) {
+      const filteredAttendance = attendanceData.filter(a => {
+        if (!a.date) return false;
+        const attDate = a.date.split('T')[0];
+        
+        if (dateFilterType === "today") return attDate === todayStr;
+        if (dateFilterType === "yesterday") {
+          const yesterday = new Date();
+          yesterday.setDate(yesterday.getDate() - 1);
+          const yesterdayStr = yesterday.toISOString().split('T')[0];
+          return attDate === yesterdayStr;
+        }
+        if (dateFilterType === "past7") {
+          const sevenDaysAgo = new Date();
+          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+          return attDate >= sevenDaysAgo.toISOString().split('T')[0] && attDate <= todayStr;
+        }
+        if (dateFilterType === "lastMonth") {
+          const startOfLastMonth = new Date();
+          startOfLastMonth.setDate(1);
+          startOfLastMonth.setMonth(startOfLastMonth.getMonth() - 1);
+          const endOfLastMonth = new Date(startOfLastMonth);
+          endOfLastMonth.setMonth(endOfLastMonth.getMonth() + 1);
+          endOfLastMonth.setDate(0);
+          
+          const startStr = startOfLastMonth.toISOString().split('T')[0];
+          const endStr = endOfLastMonth.toISOString().split('T')[0];
+          return attDate >= startStr && attDate <= endStr;
+        }
+        if (dateFilterType === "custom") {
+          if (dateFilter && dateFilterEnd) {
+            return attDate >= dateFilter && attDate <= dateFilterEnd;
+          } else if (dateFilter) {
+            return attDate === dateFilter;
+          }
+        }
+        return true;
+      });
+      
+      filteredAttendance.forEach(a => {
+        if (a.accumulatedWorkSeconds) {
+          totalSeconds += a.accumulatedWorkSeconds;
+        }
+      });
+    }
+
+    const productionHours = (totalSeconds / 3600).toFixed(1);
+
     return {
       total: employeeTasks.length,
       completed,
       inProgress,
       overdue,
       totalHours: totalHours.toFixed(1),
+      productionHours: productionHours,
     };
-  }, [employeeTasks]);
+  }, [employeeTasks, attendanceData, dateFilterType, dateFilter, dateFilterEnd, selectedEmployeeId]);
 
   const recentTasks = useMemo(() => {
     return [...employeeTasks]
@@ -127,13 +227,39 @@ export default function EmployeeAnalytics({
         </div>
 
         <div className="flex items-center gap-3">
-          <Input 
-            type="date"
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
-            className="bg-white border-slate-200 shadow-sm h-10 rounded-xl font-medium w-40"
-            title="Filter by Date"
-          />
+          <Select value={dateFilterType} onValueChange={setDateFilterType}>
+            <SelectTrigger className="bg-white border-slate-200 shadow-sm h-10 rounded-xl font-medium w-40">
+              <SelectValue placeholder="Date Filter" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="today">Today</SelectItem>
+              <SelectItem value="yesterday">Yesterday</SelectItem>
+              <SelectItem value="past7">Last 7 Days</SelectItem>
+              <SelectItem value="lastMonth">Last Month</SelectItem>
+              <SelectItem value="all">All Time</SelectItem>
+              <SelectItem value="custom">Custom Date</SelectItem>
+            </SelectContent>
+          </Select>
+          
+          {dateFilterType === "custom" && (
+            <div className="flex items-center gap-2">
+              <Input 
+                type="date"
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="bg-white border-slate-200 shadow-sm h-10 rounded-xl font-medium w-36"
+                title="Start Date"
+              />
+              <span className="text-slate-400 font-medium">to</span>
+              <Input 
+                type="date"
+                value={dateFilterEnd}
+                onChange={(e) => setDateFilterEnd(e.target.value)}
+                className="bg-white border-slate-200 shadow-sm h-10 rounded-xl font-medium w-36"
+                title="End Date"
+              />
+            </div>
+          )}
           <div className="w-72">
             <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId}>
               <SelectTrigger className="bg-white border-slate-200 shadow-sm h-10 rounded-xl font-medium">
@@ -274,13 +400,13 @@ export default function EmployeeAnalytics({
                 <Card className="border-slate-200 shadow-sm rounded-xl bg-white overflow-hidden">
                   <CardContent className="p-6">
                     <div className="flex flex-col gap-1 text-center">
-                      <p className="text-sm font-bold text-slate-500 uppercase tracking-wider">Total Estimated Hours</p>
+                      <p className="text-sm font-bold text-slate-500 uppercase tracking-wider">Production Hours</p>
                       <div className="flex items-baseline justify-center gap-2 mt-2">
-                        <h4 className="text-5xl font-black text-brand-teal">{stats.totalHours}</h4>
+                        <h4 className="text-5xl font-black text-brand-teal">{stats.productionHours}</h4>
                         <span className="text-base font-bold text-slate-400">hrs</span>
                       </div>
                       <p className="text-xs text-slate-400 mt-3 font-medium">
-                        Based on all assigned tasks
+                        Based on attendance records
                       </p>
                     </div>
                   </CardContent>
