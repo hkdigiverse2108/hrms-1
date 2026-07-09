@@ -107,9 +107,9 @@ export default function ModulesPage() {
   });
 
   // Module Tasks State
-  const [newModuleTasks, setNewModuleTasks] = useState<{ title: string; description: string; estimatedHours: number }[]>([]);
+  const [newModuleTasks, setNewModuleTasks] = useState<{ title: string; description: string; dueDate?: string | null }[]>([]);
   const [newModuleTaskTitle, setNewModuleTaskTitle] = useState("");
-  const [newModuleTaskHours, setNewModuleTaskHours] = useState<number>(0);
+  const [newModuleTaskDueDate, setNewModuleTaskDueDate] = useState<string>("");
   const [moduleTasks, setModuleTasks] = useState<any[]>([]);
   const [allTasks, setAllTasks] = useState<any[]>([]);
   const [loadingModuleTasks, setLoadingModuleTasks] = useState(false);
@@ -457,6 +457,39 @@ export default function ModulesPage() {
       });
       
       if (res.ok) {
+        for (const mod of modulesToAdd) {
+          if (mod.tasks && mod.tasks.length > 0) {
+            for (const pt of mod.tasks) {
+              const taskPayload = {
+                title: pt.title,
+                description: pt.description || "",
+                projectId: selectedProject.id,
+                projectName: selectedProject.title,
+                assignedToId: mod.assignedToId || "",
+                assignedToName: mod.assignedToName || "Unassigned",
+                dueDate: mod.dueDate || null,
+                moduleName: mod.name,
+                moduleDeadline: mod.dueDate || null,
+                status: "todo",
+                priority: mod.priority || "medium",
+                estimatedHours: pt.estimatedHours || 0,
+                phase: mod.phaseName || null,
+                performedBy: user?.id || "Unknown",
+                userName: user?.name || "User"
+              };
+              try {
+                await fetch(`${API_URL}/wm-tasks`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(taskPayload)
+                });
+              } catch (e) {
+                console.error("Error creating preset module task:", e);
+              }
+            }
+          }
+        }
+        
         toast.success("Preset applied successfully!");
         setPresetModalOpen(false);
         fetchData(); 
@@ -1400,11 +1433,29 @@ export default function ModulesPage() {
                     const modules = selectedProject.modules || [];
                     
                     const renderPhaseTable = (phaseName: string | null, displayName: string) => {
+                      const stageOrder: Record<string, number> = {
+                        "in_progress": 1,
+                        "in-progress": 1,
+                        "bugs": 2,
+                        "review": 3,
+                        "todo": 4,
+                        "to_do": 4,
+                        "onhold": 5,
+                        "on_hold": 5,
+                        "completed": 6
+                      };
+
                       const phaseModules = modules.filter((m: any) => {
                         const matchPhase = phaseName === null ? !m.phaseName : m.phaseName === phaseName;
                         const matchAssignee = filterAssignee === "all" || 
                           (filterAssignee === "unassigned" ? !m.assignedToId : m.assignedToId === filterAssignee);
                         return matchPhase && matchAssignee;
+                      }).sort((a: any, b: any) => {
+                        const stageA = a.stage?.toLowerCase() || "todo";
+                        const stageB = b.stage?.toLowerCase() || "todo";
+                        const orderA = stageOrder[stageA] || 99;
+                        const orderB = stageOrder[stageB] || 99;
+                        return orderA - orderB;
                       });
 
                       // If there are no modules in this phase, and user cannot manage modules, hide the slab
@@ -1850,7 +1901,7 @@ export default function ModulesPage() {
               <Label htmlFor="title">Module Name <span className="text-red-500">*</span></Label>
               <Input
                 id="title"
-                placeholder="e.g. User Authentication"
+                placeholder="Module Title"
                 value={formData.title}
                 onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
                 required
@@ -1988,23 +2039,20 @@ export default function ModulesPage() {
                     if (e.key === "Enter") {
                       e.preventDefault();
                       if (newModuleTaskTitle.trim()) {
-                        setNewModuleTasks(prev => [...prev, { title: newModuleTaskTitle.trim(), description: "", estimatedHours: newModuleTaskHours || 0 }]);
+                        setNewModuleTasks(prev => [...prev, { title: newModuleTaskTitle.trim(), description: "", dueDate: newModuleTaskDueDate || null }]);
                         setNewModuleTaskTitle("");
-                        setNewModuleTaskHours(0);
+                        setNewModuleTaskDueDate("");
                       }
                     }
                   }}
                 />
-                <div className="w-[100px] shrink-0">
+                <div className="w-[130px] shrink-0">
                   <Input
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    placeholder="⏱️ Hrs"
-                    value={newModuleTaskHours || ""}
-                    onChange={(e) => setNewModuleTaskHours(parseFloat(e.target.value) || 0)}
+                    type="date"
+                    value={newModuleTaskDueDate}
+                    onChange={(e) => setNewModuleTaskDueDate(e.target.value)}
                     className="text-xs h-8 bg-white"
-                    title="Estimated Hours"
+                    title="Due Date"
                   />
                 </div>
                 <Button
@@ -2013,9 +2061,9 @@ export default function ModulesPage() {
                   className="bg-brand-teal hover:bg-brand-teal/90 text-white h-8 text-xs font-bold shrink-0"
                   onClick={() => {
                     if (newModuleTaskTitle.trim()) {
-                      setNewModuleTasks(prev => [...prev, { title: newModuleTaskTitle.trim(), description: "", estimatedHours: newModuleTaskHours || 0 }]);
+                      setNewModuleTasks(prev => [...prev, { title: newModuleTaskTitle.trim(), description: "", dueDate: newModuleTaskDueDate || null }]);
                       setNewModuleTaskTitle("");
-                      setNewModuleTaskHours(0);
+                      setNewModuleTaskDueDate("");
                     }
                   }}
                 >
@@ -2464,7 +2512,7 @@ export default function ModulesPage() {
                       <Label htmlFor="edit-title" className="text-xs font-bold text-slate-700">Module Name <span className="text-red-500">*</span></Label>
                       <Input
                         id="edit-title"
-                        placeholder="e.g. User Authentication"
+                        placeholder="Module Title"
                         value={editFormData.title}
                         onChange={(e) => setEditFormData(prev => ({ ...prev, title: e.target.value }))}
                         required

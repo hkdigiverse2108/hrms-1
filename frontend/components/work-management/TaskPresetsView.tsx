@@ -29,7 +29,7 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
   const [formData, setFormData] = useState({
     name: "",
     description: "",
-    tasks: [{ title: "", description: "", projectId: "", projectName: "", department: "development" }],
+    tasks: [{ title: "", description: "", projectId: "", projectName: "", department: "development", estimatedHours: 0, estimatedMinutes: 0 }],
     modules: [{ name: "", tasks: [{ title: "", description: "", priority: "medium", estimatedHours: 0, status: "todo" }] }]
   });
 
@@ -86,7 +86,7 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
       setFormData({
         name: preset.name,
         description: preset.description || "",
-        tasks: preset.tasks?.length ? preset.tasks : [{ title: "", description: "", projectId: "", projectName: "", department: "development" }],
+        tasks: preset.tasks?.length ? preset.tasks : [{ title: "", description: "", projectId: "", projectName: "", department: "development", estimatedHours: 0, estimatedMinutes: 0 }],
         modules: preset.modules?.length ? preset.modules : [{ name: "", tasks: [{ title: "", description: "", priority: "medium", estimatedHours: 0, status: "todo" }] }]
       });
     } else {
@@ -94,7 +94,7 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
       setFormData({
         name: "",
         description: "",
-        tasks: [{ title: "", description: "", projectId: "", projectName: "", department: "development" }],
+        tasks: [{ title: "", description: "", projectId: "", projectName: "", department: "development", estimatedHours: 0, estimatedMinutes: 0 }],
         modules: [{ name: "", tasks: [{ title: "", description: "", priority: "medium", estimatedHours: 0, status: "todo" }] }]
       });
     }
@@ -118,7 +118,7 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
     } else {
       const validModules = formData.modules.filter(m => m.name.trim() !== "").map(m => ({
         ...m,
-        tasks: []
+        tasks: (m.tasks || []).filter((t: any) => t.title.trim() !== "")
       }));
       if (validModules.length === 0) return toast.error("At least one valid module is required");
       payload.modules = validModules;
@@ -206,7 +206,7 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
   const addTaskRow = () => {
     setFormData({
       ...formData,
-      tasks: [...formData.tasks, { title: "", description: "", projectId: "", projectName: "", department: "development" }]
+      tasks: [...formData.tasks, { title: "", description: "", projectId: "", projectName: "", department: "development", estimatedHours: 0, estimatedMinutes: 0 }]
     });
     setTimeout(() => {
       const inputs = document.querySelectorAll('.task-title-input');
@@ -221,7 +221,7 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
     setFormData({ ...formData, tasks: newTasks });
   };
 
-  const updateTask = (index: number, field: string, value: string) => {
+  const updateTask = (index: number, field: string, value: any) => {
     const newTasks = [...formData.tasks];
     newTasks[index] = { ...newTasks[index], [field]: value };
     setFormData({ ...formData, tasks: newTasks });
@@ -244,6 +244,27 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
   const updateModule = (index: number, field: string, value: any) => {
     const newModules = [...formData.modules];
     newModules[index] = { ...newModules[index], [field]: value };
+    setFormData({ ...formData, modules: newModules });
+  };
+
+  const addTaskToModule = (mIndex: number) => {
+    const newModules = [...formData.modules];
+    if (!newModules[mIndex].tasks) {
+      newModules[mIndex].tasks = [];
+    }
+    newModules[mIndex].tasks.push({ title: "", description: "", priority: "medium", estimatedHours: 0, estimatedMinutes: 0, status: "todo" });
+    setFormData({ ...formData, modules: newModules });
+  };
+
+  const removeTaskFromModule = (mIndex: number, tIndex: number) => {
+    const newModules = [...formData.modules];
+    newModules[mIndex].tasks.splice(tIndex, 1);
+    setFormData({ ...formData, modules: newModules });
+  };
+
+  const updateModuleTask = (mIndex: number, tIndex: number, field: string, value: any) => {
+    const newModules = [...formData.modules];
+    newModules[mIndex].tasks[tIndex] = { ...newModules[mIndex].tasks[tIndex], [field]: value };
     setFormData({ ...formData, modules: newModules });
   };
 
@@ -274,7 +295,7 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
               onClick={() => setActiveTab("normal")}
               className={`px-4 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 transition-colors ${activeTab === "normal" ? "bg-brand-teal text-white" : "text-slate-600 hover:bg-slate-50"}`}
             >
-              NORMAL PRESETS
+              PRESETS
             </button>
           </div>
         </div>
@@ -301,13 +322,14 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
                   <TableHead className="font-bold">Preset Name</TableHead>
                   <TableHead className="font-bold">Description</TableHead>
                   <TableHead className="font-bold text-center">{activeTab === "normal" ? "Modules" : "Tasks"}</TableHead>
+                  <TableHead className="font-bold text-center">Total Duration</TableHead>
                   <TableHead className="text-right font-bold">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {presets.filter(p => (p.presetType || "intern") === activeTab).length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-8 text-slate-500">
+                    <TableCell colSpan={5} className="text-center py-8 text-slate-500">
                       No presets found. Create one to get started!
                     </TableCell>
                   </TableRow>
@@ -320,6 +342,31 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
                         <span className="bg-brand-teal/10 text-brand-teal px-2.5 py-1 rounded-full text-xs font-bold">
                           {activeTab === "normal" ? `${preset.modules?.length || 0} modules` : `${preset.tasks?.length || 0} tasks`}
                         </span>
+                      </TableCell>
+                      <TableCell className="text-center text-xs font-semibold text-slate-600">
+                        {(() => {
+                          let totalMinutes = 0;
+                          if (activeTab === "intern" && preset.tasks) {
+                            totalMinutes = preset.tasks.reduce((sum: number, t: any) => sum + (parseFloat(t.estimatedHours || 0) * 60) + parseFloat(t.estimatedMinutes || 0), 0);
+                          } else if (activeTab === "normal" && preset.modules) {
+                            preset.modules.forEach((mod: any) => {
+                              if (mod.tasks) {
+                                totalMinutes += mod.tasks.reduce((sum: number, t: any) => sum + (parseFloat(t.estimatedHours || 0) * 60) + parseFloat(t.estimatedMinutes || 0), 0);
+                              }
+                            });
+                          }
+                          
+                          if (totalMinutes > 0) {
+                            const h = Math.floor(totalMinutes / 60);
+                            const m = Math.floor(totalMinutes % 60);
+                            return (
+                              <span className="bg-amber-50 text-amber-600 border border-amber-200 px-2 py-0.5 rounded-md">
+                                {h > 0 ? `${h}h ` : ""}{m > 0 ? `${m}m` : ""}
+                              </span>
+                            );
+                          }
+                          return "-";
+                        })()}
                       </TableCell>
                       <TableCell className="text-right space-x-2">
                         <Button variant="outline" size="sm" onClick={() => openAssignModal(preset)} title="Assign Preset">
@@ -381,31 +428,57 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
                   {formData.tasks.map((task, index) => (
                     <div key={index} className="flex gap-3 items-start bg-white p-3 rounded-lg border border-slate-200 shadow-sm relative group">
                       <div className="flex-1">
-                        <div className="grid grid-cols-2 gap-3">
-                          <Input 
-                            placeholder="Task Title *"
-                            value={task.title}
-                            onChange={(e) => updateTask(index, "title", e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                addTaskRow();
-                              }
-                            }}
-                            className="task-title-input font-semibold"
-                          />
-                          <Input 
-                            placeholder="Task Description (Optional)"
-                            value={task.description}
-                            onChange={(e) => updateTask(index, "description", e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                addTaskRow();
-                              }
-                            }}
-                            className="text-xs bg-slate-50"
-                          />
+                        <div className="grid grid-cols-12 gap-3">
+                          <div className="col-span-5">
+                            <Input 
+                              placeholder="Task Title *"
+                              value={task.title}
+                              onChange={(e) => updateTask(index, "title", e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  addTaskRow();
+                                }
+                              }}
+                              className="task-title-input font-semibold"
+                            />
+                          </div>
+                          <div className="col-span-4">
+                            <Input 
+                              placeholder="Task Description (Optional)"
+                              value={task.description}
+                              onChange={(e) => updateTask(index, "description", e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  addTaskRow();
+                                }
+                              }}
+                              className="text-xs bg-slate-50"
+                            />
+                          </div>
+                          <div className="col-span-3 flex gap-2">
+                            <div className="flex-1 relative">
+                              <Input 
+                                type="number" 
+                                placeholder="0" 
+                                value={task.estimatedHours || ""} 
+                                onChange={(e) => updateTask(index, "estimatedHours", parseFloat(e.target.value) || 0)} 
+                                className="pr-5 text-xs font-semibold" 
+                              />
+                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">h</span>
+                            </div>
+                            <div className="flex-1 relative">
+                              <Input 
+                                type="number" 
+                                placeholder="0" 
+                                value={task.estimatedMinutes || ""} 
+                                onChange={(e) => updateTask(index, "estimatedMinutes", parseFloat(e.target.value) || 0)} 
+                                className="pr-5 text-xs font-semibold" 
+                              />
+                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">m</span>
+                            </div>
+                          </div>
                         </div>
                       </div>
                       {formData.tasks.length > 1 && (
@@ -433,17 +506,16 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
                         <div className="flex-1 space-y-2">
                           <Label className="text-xs font-semibold text-slate-500">Module Name *</Label>
                           <Input 
-                            placeholder="e.g. Phase 1 Setup"
+                            placeholder="Module Title"
                             value={module.name}
                             onChange={(e) => updateModule(mIndex, "name", e.target.value)}
                             onKeyDown={(e) => {
                               if (e.key === "Enter") {
                                 e.preventDefault();
-                                addModuleRow();
                                 setTimeout(() => {
-                                  const inputs = document.querySelectorAll('input[placeholder="e.g. Phase 1 Setup"]');
-                                  if (inputs.length > 0) {
-                                    (inputs[inputs.length - 1] as HTMLInputElement).focus();
+                                  const taskInput = document.getElementById(`module-${mIndex}-task-0-title`);
+                                  if (taskInput) {
+                                    taskInput.focus();
                                   }
                                 }, 50);
                               }
@@ -461,11 +533,10 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
                             onKeyDown={(e) => {
                               if (e.key === "Enter") {
                                 e.preventDefault();
-                                addModuleRow();
                                 setTimeout(() => {
-                                  const inputs = document.querySelectorAll('input[placeholder="e.g. Phase 1 Setup"]');
-                                  if (inputs.length > 0) {
-                                    (inputs[inputs.length - 1] as HTMLInputElement).focus();
+                                  const taskInput = document.getElementById(`module-${mIndex}-task-0-title`);
+                                  if (taskInput) {
+                                    taskInput.focus();
                                   }
                                 }, 50);
                               }
@@ -478,6 +549,44 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
                             <Trash2 className="w-4 h-4" />
                           </Button>
                         )}
+                      </div>
+
+                      {/* Module Tasks */}
+                      <div className="mt-4 pt-4 border-t border-slate-200">
+                        <div className="flex justify-between items-center mb-3">
+                          <Label className="text-xs font-bold text-slate-500">Tasks in this Module</Label>
+                          <Button variant="ghost" size="sm" onClick={() => addTaskToModule(mIndex)} className="h-6 text-xs text-brand-teal gap-1 hover:bg-brand-teal/10">
+                            <PlusCircle className="w-3.5 h-3.5" /> Add Task
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          {module.tasks?.map((task: any, tIndex: number) => (
+                            <div key={tIndex} className="flex gap-2 items-center bg-white p-2 rounded border border-slate-200 relative group">
+                              <Input
+                                id={`module-${mIndex}-task-${tIndex}-title`}
+                                placeholder="Task Title *"
+                                value={task.title}
+                                onChange={(e) => updateModuleTask(mIndex, tIndex, "title", e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    addTaskToModule(mIndex);
+                                    setTimeout(() => {
+                                      const nextTaskInput = document.getElementById(`module-${mIndex}-task-${tIndex + 1}-title`);
+                                      if (nextTaskInput) {
+                                        nextTaskInput.focus();
+                                      }
+                                    }, 50);
+                                  }
+                                }}
+                                className="h-8 text-xs font-medium flex-1 bg-slate-50/50"
+                              />
+                              <Button variant="ghost" size="icon" onClick={() => removeTaskFromModule(mIndex, tIndex)} className="h-8 w-8 text-slate-400 hover:text-red-500 shrink-0">
+                                <X className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   ))}

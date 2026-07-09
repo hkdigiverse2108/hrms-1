@@ -14,7 +14,10 @@ from websocket import manager as ws_manager
 import google_auth
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
+import pytz
+import random
+from email_utils import send_otp_email
 import pytz
 async def get_actor_from_request(request: Request, db):
     authorization = request.headers.get("Authorization")
@@ -824,8 +827,77 @@ async def login(login_data: schemas.LoginRequest, db=Depends(get_db)):
     if user.get("status", "").lower() == "inactive":
         raise HTTPException(status_code=403, detail="Your account has been deactivated. Please contact the administrator.")
     
-    token = user.pop("token", None)
-    return {"message": "Login successful", "user": user, "token": token}
+    # Check OTP requirements
+    settings = await db.system_settings.find_one({}) or {}
+    otp_roles = settings.get("otpRequiredRoles", [])
+    
+    raw_role = user.get("role", "").strip().lower()
+    if raw_role == "admin":
+        mapped_role = "admin"
+    elif raw_role == "hr":
+        mapped_role = "hr"
+    else:
+        mapped_role = "employee"
+        
+    if mapped_role not in otp_roles:
+        # Skip OTP and return token directly
+        return {"message": "Login successful", "user": user, "token": user["token"], "require_otp": False}
+
+    # Generate 6-digit OTP
+    otp = str(random.randint(100000, 999999))
+    expiry = datetime.now(pytz.timezone('Asia/Kolkata')) + timedelta(minutes=5)
+    
+    # Save OTP to user document
+    await db.employees.update_one(
+        {"email": login_data.email},
+        {"$set": {"login_otp": otp, "login_otp_expiry": expiry.isoformat()}}
+    )
+    
+    # Send email
+    send_otp_email(login_data.email, otp)
+    
+    return {"message": "OTP sent to your email", "require_otp": True}
+
+@app.post("/login/verify-otp", response_model=schemas.LoginResponse)
+async def verify_otp(otp_data: schemas.VerifyOTPRequest, db=Depends(get_db)):
+    user = await db.employees.find_one({"email": otp_data.email})
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+        
+    stored_otp = user.get("login_otp")
+    expiry_str = user.get("login_otp_expiry")
+    
+    if not stored_otp or not expiry_str:
+        raise HTTPException(status_code=400, detail="OTP not requested or expired")
+        
+    expiry = datetime.fromisoformat(expiry_str)
+    now = datetime.now(pytz.timezone('Asia/Kolkata'))
+    
+    if now > expiry:
+        # Clear expired OTP
+        await db.employees.update_one({"email": otp_data.email}, {"$unset": {"login_otp": "", "login_otp_expiry": ""}})
+        raise HTTPException(status_code=400, detail="OTP expired")
+        
+    if stored_otp != otp_data.otp:
+        raise HTTPException(status_code=400, detail="Invalid OTP")
+        
+    # Clear OTP upon successful verification
+    await db.employees.update_one({"email": otp_data.email}, {"$unset": {"login_otp": "", "login_otp_expiry": ""}})
+    
+    # Generate JWT token
+    user_id = str(user["_id"])
+    user_fixed = crud.fix_id(user)
+    
+    permissions_doc = await db.user_permissions.find_one({"employeeId": user_id})
+    if permissions_doc:
+        user_fixed["permissions"] = crud.fix_id(permissions_doc).get("permissions", [])
+    else:
+        user_fixed["permissions"] = []
+        
+    token = auth.create_access_token(data={"sub": user_id, "role": user.get("role", "")})
+    user_fixed["token"] = token
+    
+    return {"message": "Login successful", "user": user_fixed, "token": token, "require_otp": False}
 
 # Employee Endpoints
 @app.get("/time")
@@ -1799,9 +1871,20 @@ async def update_chat_message(message_id: str, update: schemas.ChatMessageUpdate
     return updated
 
 @app.delete("/chat/messages/{message_id}")
-async def delete_chat_message(message_id: str, db=Depends(get_db)):
-    await crud.delete_message(db, message_id)
-    return {"message": "Message deleted successfully"}
+async def delete_chat_message(message_id: str, request: Request, deleteFor: str = "everyone", db=Depends(get_db)):
+    performed_by = None
+    try:
+        body = await request.json()
+        performed_by = body.get("performedBy")
+    except Exception:
+        pass
+    result = await crud.delete_message(db, message_id, delete_for=deleteFor, user_id=performed_by)
+    try:
+        from websocket import manager as ws_manager
+        await ws_manager.broadcast_all("message_deleted", {"messageId": message_id, "deleteFor": deleteFor})
+    except Exception:
+        pass
+    return result
 
 @app.post("/chat/mark-seen/{sender_id}/{receiver_id}")
 async def mark_messages_as_seen(sender_id: str, receiver_id: str, db=Depends(get_db)):

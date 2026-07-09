@@ -443,7 +443,7 @@ function patchNextjsConfig() {
 
 let BACKEND_PORT = '8000';
 let FRONTEND_PORT = '3535';
-const HOST = process.env.APP_HOST || '127.0.0.1';
+const HOST = '127.0.0.1';
 
 // Will be determined dynamically on app ready
 let frontendUrl = `http://127.0.0.1:${FRONTEND_PORT}`;

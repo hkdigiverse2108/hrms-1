@@ -746,16 +746,14 @@ export default function TasksPage() {
     const todayStr = new Date().toISOString().split('T')[0];
     const taskDate = t.dueDate || t.postingDate;
     if (taskTimeFilter === "today") {
-      // Only show tasks where due date is exactly today
-      if (taskDate !== todayStr) return false;
+      if (t.status === "completed" || t.status === "pending" || t.status === "onhold") return false;
+      if (!taskDate || taskDate > todayStr) return false;
     } else if (taskTimeFilter === "pending") {
-      const isOverdue = taskDate && taskDate < todayStr && t.status !== "completed";
       const isPendingStatus = t.status === "pending" || t.status === "onhold";
-      if (!isPendingStatus && !isOverdue) return false;
+      if (!isPendingStatus) return false;
     } else if (taskTimeFilter === "upcoming") {
-      // Show all non-completed tasks with a future date, OR "todo" tasks without any date
-      const isUpcoming = (taskDate && taskDate > todayStr && t.status !== "completed") || (!taskDate && t.status === "todo");
-      if (!isUpcoming) return false;
+      if (t.status === "completed") return false;
+      if (taskDate && taskDate <= todayStr) return false;
     }
 
     return true;

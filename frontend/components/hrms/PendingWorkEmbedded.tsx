@@ -560,8 +560,8 @@ export function PendingWorkEmbedded({
           
           const deadlineDate = parseLocalDate(t.deadline);
           
-          if (type === 'todays-work') return deadlineDate <= today && t.status === 'Pending';
-          if (type === 'upcoming-work') return deadlineDate > today && t.status === 'Pending';
+          if (type === 'todays-work') return deadlineDate <= today && t.status !== 'Approved';
+          if (type === 'upcoming-work') return deadlineDate > today && t.status !== 'Approved';
           return true;
         }
 
