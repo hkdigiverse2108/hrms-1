@@ -2476,6 +2476,7 @@ export default function ChatPage() {
   const recordingActionRef = useRef<'preview' | 'send' | 'delete'>('preview');
   const recordingStartTimeRef = useRef<number>(0);
   const [isPaused, setIsPaused] = useState(false);
+  const [isMessagesLoading, setIsMessagesLoading] = useState(false);
   const pausedDurationRef = useRef(0);
 
 
@@ -2866,6 +2867,7 @@ export default function ChatPage() {
   const fetchMessages = React.useCallback(async () => {
     if (!selectedChat || !user || !user.id) return;
     const targetId = selectedChat.id || selectedChat.employeeId;
+    setIsMessagesLoading(true);
     try {
       const url = (selectedChat.type === 'group' || selectedChat.type === 'general')
         ? `${API_URL}/chat/messages/${user.id}/${targetId}?group_id=${targetId}`
@@ -2933,6 +2935,8 @@ export default function ChatPage() {
       }
     } catch (err) {
       console.error("Error fetching messages:", err);
+    } finally {
+      setIsMessagesLoading(false);
     }
   }, [selectedChat, user, mutedChats, chatNotificationPrefs, globalDndEnabled, globalDefaultMode, globalDefaultSound]);
 
@@ -2994,10 +2998,18 @@ export default function ChatPage() {
         }
       }
 
-      // Live refresh lists
-      fetchChatSummaries();
-      fetchGroups();
-      fetchChannels();
+      // Live update sidebar lastMessage for all chats
+      const otherId = isGroupMsg ? data.groupId : (data.senderId === user.id ? data.receiverId : data.senderId);
+      const msgText = data.text || (data.isVoice ? "🎤 Voice message" : (data.attachmentName ? "📎 Media" : ""));
+      const nowIso = new Date().toISOString();
+      if (data.groupId) {
+        setChatGroups(prev => prev.map(g => g.id === data.groupId ? { ...g, lastMessage: msgText, lastMessageTime: nowIso, lastMessageSenderId: data.senderId } : g));
+      } else {
+        setChatSummaries(prev => ({
+          ...prev,
+          [otherId]: { ...prev[otherId], lastMessage: msgText, timestamp: nowIso, senderId: data.senderId }
+        }));
+      }
     }
     else if (eventType === "message_updated") {
       const activeChat = selectedChatRef.current;
@@ -3028,6 +3040,23 @@ export default function ChatPage() {
           }
         });
       }
+    }
+    else if (eventType === "message_deleted") {
+      const activeChat = selectedChatRef.current;
+      const activeChatId = activeChat ? (activeChat.id || activeChat.employeeId) : null;
+      const deletedMsgId = data.messageId || data.id;
+      const deletedFor = data.deleteFor || 'me';
+
+      if (deletedFor === 'everyone' || data.senderId === user.id || data.performedBy === user.id) {
+        setCurrentMessages((prev) => prev.filter(m => m.id !== deletedMsgId && m.tempId !== deletedMsgId));
+      } else {
+        setCurrentMessages((prev) =>
+          prev.map(m => m.id === deletedMsgId ? { ...m, text: "You deleted this message", deletedForMe: true } : m)
+        );
+      }
+      fetchChatSummaries();
+      fetchGroups();
+      fetchChannels();
     }
     else if (eventType === "messages_seen") {
       const { chatId: seenChatId, userId: readerUserId } = data;
@@ -3747,17 +3776,24 @@ export default function ChatPage() {
     }
   };
 
-  const [deleteForEveryone, setDeleteForEveryone] = useState(true);
-
   const handleDeleteMessage = (msg: any) => {
+    enterSelectionMode();
+    toggleMessageSelection(msg.id);
     setMessageToDelete(msg);
-    const canDeleteForEveryone = msg.isMe && dayjs().diff(dayjs(msg.timestamp), 'hour') < 1;
-    setDeleteForEveryone(canDeleteForEveryone);
     setShowDeleteConfirm(true);
   };
 
+  const canDeleteForEveryone = () => {
+    const ids = selectedMessageIds.length > 0 ? selectedMessageIds : (messageToDelete ? [messageToDelete.id] : []);
+    if (ids.length === 0) return false;
+    return ids.every(id => {
+      const msg = currentMessages.find(m => m.id === id);
+      return msg?.isMe;
+    });
+  };
+
   const confirmDeleteMessage = async (deleteFor: 'me' | 'everyone') => {
-    const idsToDelete = isSelectionMode && selectedMessageIds.length > 1
+    const idsToDelete = selectedMessageIds.length > 0
       ? selectedMessageIds
       : (messageToDelete ? [messageToDelete.id] : []);
     if (idsToDelete.length === 0) return;
@@ -5459,10 +5495,7 @@ export default function ChatPage() {
                           className="text-white hover:bg-white/20 h-8 w-8 rounded-full"
                           onClick={() => {
                             if (selectedMessageIds.length === 0) return;
-                            const msgs = currentMessages.filter(m => selectedMessageIds.includes(m.id));
-                            if (msgs.length === 0) return;
-                            setMessageToDelete(msgs[0]);
-                            setDeleteForEveryone(false);
+                            setMessageToDelete(null);
                             setShowDeleteConfirm(true);
                           }}
                           disabled={selectedMessageIds.length === 0}
@@ -5508,8 +5541,15 @@ export default function ChatPage() {
                       </span>
                     </div>
 
-                    {displayMessages.length === 0 ? (
-                      <div className="text-center py-10">
+                    {isMessagesLoading ? (
+                      <div className="flex items-center justify-center py-20">
+                        <div className="flex flex-col items-center gap-3">
+                          <div className="w-8 h-8 border-[3px] border-brand-teal border-t-transparent rounded-full animate-spin" />
+                          <span className="text-xs text-muted-foreground font-medium">Loading messages...</span>
+                        </div>
+                      </div>
+                    ) : displayMessages.length === 0 ? (
+                      <div className="flex items-center justify-center py-20">
                         <p className="text-sm text-muted-foreground">
                           {messageSearchQuery ? "No messages matching your search." : `No messages yet. Say hi to ${selectedChat.name}!`}
                         </p>
@@ -7102,43 +7142,25 @@ export default function ChatPage() {
 
       {/* Delete Message Confirmation Dialog */}
       <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-        <DialogContent className="sm:max-w-[400px] bg-white border-none rounded-2xl p-0 overflow-hidden shadow-2xl">
-          <div className="p-6">
-            <DialogHeader className="mb-4">
-              <DialogTitle className="text-lg font-bold text-slate-800">Delete message?</DialogTitle>
+        <DialogContent className="sm:max-w-[320px] bg-white border-none rounded-2xl p-0 overflow-hidden shadow-2xl">
+          <div className="p-5">
+            <DialogHeader className="mb-3">
+              <DialogTitle className="text-base font-bold text-slate-800 text-center">Delete message?</DialogTitle>
               <DialogDescription className="sr-only">Choose how to delete this message</DialogDescription>
             </DialogHeader>
 
-            {messageToDelete && (
-              <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 mb-5">
-                <div className="flex items-start gap-3">
-                  <Avatar className="w-8 h-8 border border-slate-200 shrink-0">
-                    <AvatarImage src={getAvatarUrl(messageToDelete.isMe ? user?.profilePhoto : selectedChat?.avatar)} />
-                    <AvatarFallback className="bg-brand-teal text-white font-bold uppercase text-xs">
-                      {(messageToDelete.isMe ? user?.name : selectedChat?.name)?.[0]}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-slate-600 line-clamp-2 leading-relaxed">
-                      {messageToDelete.text || (messageToDelete.attachmentName || "Media")}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1.5">
               <Button
-                onClick={() => confirmDeleteMessage('me')}
-                className="w-full justify-start text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border-0 rounded-xl py-6 px-4"
+                onClick={() => { confirmDeleteMessage('me'); if (isSelectionMode) exitSelectionMode(); }}
+                className="w-full justify-start text-sm font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl py-5 px-4 shadow-none"
               >
                 <Trash2 className="w-4 h-4 mr-3 text-slate-500" />
                 Delete for me
               </Button>
-              {messageToDelete?.isMe && (
+              {canDeleteForEveryone() && (
                 <Button
-                  onClick={() => confirmDeleteMessage('everyone')}
-                  className="w-full justify-start text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 border-0 rounded-xl py-6 px-4"
+                  onClick={() => { confirmDeleteMessage('everyone'); if (isSelectionMode) exitSelectionMode(); }}
+                  className="w-full justify-start text-sm font-semibold text-red-600 bg-white hover:bg-red-50 border border-slate-200 rounded-xl py-5 px-4 shadow-none"
                 >
                   <Trash2 className="w-4 h-4 mr-3 text-red-500" />
                   Delete for everyone
@@ -7146,8 +7168,8 @@ export default function ChatPage() {
               )}
               <Button
                 variant="ghost"
-                onClick={() => setShowDeleteConfirm(false)}
-                className="w-full justify-center text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded-xl py-4 mt-1"
+                onClick={() => { setShowDeleteConfirm(false); if (isSelectionMode) exitSelectionMode(); }}
+                className="w-full justify-center text-sm font-medium text-slate-500 hover:bg-slate-50 rounded-xl py-4 mt-0.5"
               >
                 Cancel
               </Button>
@@ -7544,13 +7566,21 @@ export default function ChatPage() {
       </Dialog>
 
       {/* Right-click Context Menu */}
-      {contextMenu && (
+      {contextMenu && (() => {
+        const menuW = 200, menuH = 320;
+        const vw = typeof window !== 'undefined' ? window.innerWidth : 0;
+        const vh = typeof window !== 'undefined' ? window.innerHeight : 0;
+        const fitsBelow = contextMenu.y + menuH <= vh;
+        const fitsRight = contextMenu.x + menuW <= vw;
+        return (
         <div
           key={`${contextMenu.msg.id}-${contextMenu.x}-${contextMenu.y}`}
           className="custom-ctx-menu fixed z-[999] bg-white/95 backdrop-blur-md border border-slate-200/80 rounded-xl shadow-2xl p-1.5 min-w-[200px] max-h-[70vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-100"
           style={{
-            top: Math.min(contextMenu.y, typeof window !== 'undefined' ? window.innerHeight - 320 : contextMenu.y),
-            left: Math.min(contextMenu.x, typeof window !== 'undefined' ? window.innerWidth - 220 : contextMenu.x)
+            top: fitsBelow ? contextMenu.y : undefined,
+            bottom: fitsBelow ? undefined : vh - contextMenu.y,
+            left: fitsRight ? contextMenu.x : undefined,
+            right: fitsRight ? undefined : vw - contextMenu.x
           }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -7598,31 +7628,28 @@ export default function ChatPage() {
                   toggleMessageSelection(contextMenu.msg.id);
                   setContextMenu(null);
                 }}
-                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
               >
                 {selectedMessageIds.includes(contextMenu.msg.id) ? (
-                  <>
-                    <X className="w-4 h-4 text-slate-400" />
-                    Deselect message
-                  </>
+                  <><X className="w-4 h-4 text-slate-400" /> Deselect</>
                 ) : (
-                  <>
-                    <Check className="w-4 h-4 text-slate-400" />
-                    Select message
-                  </>
+                  <><Check className="w-4 h-4 text-slate-400" /> Select</>
                 )}
               </button>
               <button
                 type="button"
                 onClick={() => {
-                  handleForwardSelectedMessages();
+                  if (selectedMessageIds.length > 0) {
+                    setShowDeleteConfirm(true);
+                    setMessageToDelete(null);
+                  }
                   setContextMenu(null);
                 }}
                 disabled={selectedMessageIds.length === 0}
-                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors disabled:opacity-50"
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-lg text-left transition-colors disabled:opacity-50"
               >
-                <Forward className="w-4 h-4 text-slate-400" />
-                Forward selected ({selectedMessageIds.length})
+                <Trash2 className="w-4 h-4 text-red-500" />
+                Delete ({selectedMessageIds.length})
               </button>
               <button
                 type="button"
@@ -7630,25 +7657,14 @@ export default function ChatPage() {
                   exitSelectionMode();
                   setContextMenu(null);
                 }}
-                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
               >
                 <X className="w-4 h-4 text-slate-400" />
-                Clear selection
+                Clear
               </button>
             </>
           ) : (
             <>
-              {contextMenu.msg.isMe && selectedChat?.type !== 'personal' && (
-                <button
-                  type="button"
-                  onClick={() => { setMsgInfoData(contextMenu.msg); setContextMenu(null); }}
-                  className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
-                >
-                  <Info className="w-4 h-4 text-slate-400" />
-                  Message Info
-                </button>
-              )}
-
               <button
                 type="button"
                 onClick={() => {
@@ -7656,7 +7672,7 @@ export default function ChatPage() {
                   setContextMenu(null);
                   setTimeout(() => messageInputRef.current?.focus(), 50);
                 }}
-                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
               >
                 <Reply className="w-4 h-4 text-slate-400" />
                 Reply
@@ -7665,77 +7681,13 @@ export default function ChatPage() {
               <button
                 type="button"
                 onClick={async () => {
-                  if (contextMenu.msg.text && !contextMenu.msg.attachmentName) {
+                  if (contextMenu.msg.text) {
                     navigator.clipboard.writeText(contextMenu.msg.text);
-                    toast.success("Copied to clipboard!");
-                  } else if (contextMenu.msg.attachmentName) {
-                    const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(contextMenu.msg.attachmentName);
-                    if (isImage) {
-                      try {
-                        const fullUrl = contextMenu.msg.attachmentUrl.startsWith('http')
-                          ? contextMenu.msg.attachmentUrl
-                          : `${API_URL}${contextMenu.msg.attachmentUrl}`;
-
-                        try {
-                          const response = await fetch(fullUrl);
-                          const originalBlob = await response.blob();
-                          if (originalBlob.type === 'image/png') {
-                            await navigator.clipboard.write([
-                              new ClipboardItem({
-                                [originalBlob.type]: originalBlob
-                              })
-                            ]);
-                            toast.success("Image copied to clipboard!");
-                            setContextMenu(null);
-                            return;
-                          }
-                        } catch (fetchErr) {
-                          console.warn("Direct image copy failed, using canvas fallback", fetchErr);
-                        }
-
-                        const img = new Image();
-                        img.crossOrigin = "anonymous";
-                        img.src = fullUrl;
-                        img.onload = () => {
-                          const canvas = document.createElement('canvas');
-                          canvas.width = img.naturalWidth;
-                          canvas.height = img.naturalHeight;
-                          const ctx = canvas.getContext('2d');
-                          if (ctx) {
-                            ctx.drawImage(img, 0, 0);
-                            canvas.toBlob(async (pngBlob) => {
-                              if (pngBlob) {
-                                try {
-                                  await navigator.clipboard.write([
-                                    new ClipboardItem({
-                                      [pngBlob.type]: pngBlob
-                                    })
-                                  ]);
-                                  toast.success("Image copied to clipboard!");
-                                } catch (err) {
-                                  navigator.clipboard.writeText(fullUrl);
-                                  toast.success("Copied image link to clipboard!");
-                                }
-                              }
-                            }, 'image/png');
-                          }
-                        };
-                        img.onerror = () => {
-                          navigator.clipboard.writeText(fullUrl);
-                          toast.success("Copied image link to clipboard!");
-                        };
-                      } catch (e) {
-                        navigator.clipboard.writeText(contextMenu.msg.attachmentName);
-                        toast.success("Copied file name to clipboard!");
-                      }
-                    } else {
-                      navigator.clipboard.writeText(contextMenu.msg.attachmentName);
-                      toast.success("Copied file name to clipboard!");
-                    }
+                    toast.success("Copied!");
                   }
                   setContextMenu(null);
                 }}
-                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
               >
                 <Copy className="w-4 h-4 text-slate-400" />
                 Copy
@@ -7744,7 +7696,7 @@ export default function ChatPage() {
               <button
                 type="button"
                 onClick={() => { setForwardingMessage(contextMenu.msg); setForwardingMessages(null); setContextMenu(null); }}
-                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
               >
                 <Forward className="w-4 h-4 text-slate-400" />
                 Forward
@@ -7757,7 +7709,7 @@ export default function ChatPage() {
                   toggleMessageSelection(contextMenu.msg.id);
                   setContextMenu(null);
                 }}
-                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
               >
                 <CheckCheck className="w-4 h-4 text-slate-400" />
                 Select messages
@@ -7766,7 +7718,7 @@ export default function ChatPage() {
               <button
                 type="button"
                 onClick={() => { handleTogglePin(contextMenu.msg.id); setContextMenu(null); }}
-                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
               >
                 <Pin className={cn("w-4 h-4 text-slate-400", contextMenu.msg.isPinned && "fill-current text-brand-teal")} />
                 {contextMenu.msg.isPinned ? "Unpin" : "Pin"}
@@ -7788,7 +7740,7 @@ export default function ChatPage() {
                   }
                   setContextMenu(null);
                 }}
-                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
               >
                 <Download className="w-4 h-4 text-slate-400" />
                 Save as
@@ -7798,48 +7750,8 @@ export default function ChatPage() {
 
               <button
                 type="button"
-                onClick={() => { handleToggleStarMessage(contextMenu.msg.id); setContextMenu(null); }}
-                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
-              >
-                <Star className="w-4 h-4 text-slate-400" />
-                Star
-              </button>
-
-              <button
-                type="button"
-                onClick={() => { handleShareMessage(contextMenu.msg); setContextMenu(null); }}
-                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
-              >
-                <Share2 className="w-4 h-4 text-slate-400" />
-                Share
-              </button>
-
-              {contextMenu.msg.attachmentUrl && (
-                <button
-                  type="button"
-                  onClick={() => { handleOpenWith(contextMenu.msg); setContextMenu(null); }}
-                  className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
-                >
-                  <ExternalLink className="w-4 h-4 text-slate-400" />
-                  Open with
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => { handleReportMessage(contextMenu.msg.id); setContextMenu(null); }}
-                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
-              >
-                <Flag className="w-4 h-4 text-slate-400" />
-                Report
-              </button>
-
-              <DropdownMenuSeparator className="my-1" />
-
-              <button
-                type="button"
-                onClick={() => { handleDeleteMessage(contextMenu.msg); setContextMenu(null); }}
-                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-lg text-left transition-colors"
+                onClick={() => { enterSelectionMode(); toggleMessageSelection(contextMenu.msg.id); setContextMenu(null); }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-lg text-left transition-colors"
               >
                 <Trash2 className="w-4 h-4 text-red-500" />
                 Delete
@@ -7847,15 +7759,23 @@ export default function ChatPage() {
             </>
           )}
         </div>
-      )}
+      ); })()}
 
       {/* Chat Background Context Menu */}
-      {chatBackgroundContextMenu && (
+      {chatBackgroundContextMenu && (() => {
+        const bgMenuW = 180, bgMenuH = 120;
+        const vw = typeof window !== 'undefined' ? window.innerWidth : 0;
+        const vh = typeof window !== 'undefined' ? window.innerHeight : 0;
+        const fitsBelow = chatBackgroundContextMenu.y + bgMenuH <= vh;
+        const fitsRight = chatBackgroundContextMenu.x + bgMenuW <= vw;
+        return (
         <div
           className="custom-ctx-menu fixed z-[999] bg-white/95 backdrop-blur-md border border-slate-200/80 rounded-xl shadow-2xl p-1.5 min-w-[180px] animate-in fade-in zoom-in-95 duration-100"
           style={{
-            top: Math.min(chatBackgroundContextMenu.y, typeof window !== 'undefined' ? window.innerHeight - 120 : chatBackgroundContextMenu.y),
-            left: Math.min(chatBackgroundContextMenu.x, typeof window !== 'undefined' ? window.innerWidth - 200 : chatBackgroundContextMenu.x)
+            top: fitsBelow ? chatBackgroundContextMenu.y : undefined,
+            bottom: fitsBelow ? undefined : vh - chatBackgroundContextMenu.y,
+            left: fitsRight ? chatBackgroundContextMenu.x : undefined,
+            right: fitsRight ? undefined : vw - chatBackgroundContextMenu.x
           }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -7906,7 +7826,7 @@ export default function ChatPage() {
             </>
           )}
         </div>
-      )}
+      ); })()}
 
       {showDiscardConfirm && (
         <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center animate-in fade-in duration-200">
