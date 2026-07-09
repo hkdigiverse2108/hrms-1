@@ -736,9 +736,22 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
     const tableData = filteredEntries.map(entry => {
       return indicesToRender.map(idx => {
         const key = fieldKeys[idx];
-        let val = entry[key] || "";
+        let val: any = entry[key] || "";
         if (dateFields.includes(key)) {
           val = formatDateToDDMMYY(val);
+        } else if (key.toLowerCase().includes("link") || key === "reference") {
+          const matches = (typeof val === 'string' ? val : '').match(/(https?:\/\/[^\s,;]+|www\.[^\s,;]+)/gi);
+          if (matches && matches.length > 0) {
+            let url = matches[0];
+            if (url.toLowerCase().startsWith("www.")) {
+              url = "https://" + url;
+            }
+            val = {
+              content: "           ", // spaces to allocate width
+              url: url,
+              isButton: true
+            };
+          }
         }
         return val;
       });
@@ -755,23 +768,56 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
       margin: { top: 44, right: 14, bottom: 20, left: 14 },
       willDrawCell: (data) => {
         if (data.section === 'body') {
-          const rawValue = String(data.cell.raw || "");
-          if (rawValue.match(/(https?:\/\/[^\s]+|www\.[^\s]+)/)) {
+          if (data.cell.raw && typeof data.cell.raw === 'object' && data.cell.raw.url) {
             doc.setTextColor(0, 102, 204); // Blue color for links
+          } else {
+            const rawValue = String(data.cell.raw || "");
+            if (rawValue.match(/(https?:\/\/[^\s]+|www\.[^\s]+)/)) {
+              doc.setTextColor(0, 102, 204); // Blue color for links
+            }
           }
         }
       },
       didDrawCell: (data) => {
         if (data.section === 'body') {
-          const rawValue = String(data.cell.raw || "");
-          const urlMatch = rawValue.match(/(https?:\/\/[^\s]+|www\.[^\s]+)/);
-          if (urlMatch) {
-            let url = urlMatch[0];
-            if (url.startsWith('www.')) {
-              url = 'https://' + url;
+          if (data.cell.raw && typeof data.cell.raw === 'object' && data.cell.raw.isButton && data.cell.raw.url) {
+            const url = data.cell.raw.url;
+            
+            const btnW = 11;
+            const btnH = 5.5;
+            const paddingX = (data.cell.width - btnW) / 2 > 0 ? (data.cell.width - btnW) / 2 : 1; 
+            const btnX = data.cell.x + paddingX;
+            const btnY = data.cell.y + (data.cell.height - btnH) / 2;
+            
+            // Draw rounded background (light blue)
+            doc.setFillColor(239, 246, 255);
+            doc.setDrawColor(219, 234, 254);
+            doc.setLineWidth(0.2);
+            doc.roundedRect(btnX, btnY, btnW, btnH, 1, 1, 'FD');
+            
+            // Draw text
+            doc.setTextColor(37, 99, 235);
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(6.5);
+            doc.text("Link", btnX + 2.5, btnY + 4);
+            
+            // reset font state
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(8);
+            doc.setTextColor(0, 0, 0);
+
+            // Clickable area for "Link" (Opens link directly)
+            doc.link(btnX, btnY, btnW, btnH, { url: url });
+          } else {
+            const rawValue = String(data.cell.raw || "");
+            const urlMatch = rawValue.match(/(https?:\/\/[^\s]+|www\.[^\s]+)/);
+            if (urlMatch) {
+              let url = urlMatch[0];
+              if (url.toLowerCase().startsWith('www.')) {
+                url = 'https://' + url;
+              }
+              doc.link(data.cell.x, data.cell.y, data.cell.width, data.cell.height, { url: url });
             }
-            // Add an invisible clickable link over the cell with the real URL (allows right-click -> copy link)
-            doc.link(data.cell.x, data.cell.y, data.cell.width, data.cell.height, { url: url });
           }
         }
       }
