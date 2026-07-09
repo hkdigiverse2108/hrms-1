@@ -247,6 +247,27 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
     setFormData({ ...formData, modules: newModules });
   };
 
+  const addTaskToModule = (mIndex: number) => {
+    const newModules = [...formData.modules];
+    if (!newModules[mIndex].tasks) {
+      newModules[mIndex].tasks = [];
+    }
+    newModules[mIndex].tasks.push({ title: "", description: "", priority: "medium", estimatedHours: 0, estimatedMinutes: 0, status: "todo" });
+    setFormData({ ...formData, modules: newModules });
+  };
+
+  const removeTaskFromModule = (mIndex: number, tIndex: number) => {
+    const newModules = [...formData.modules];
+    newModules[mIndex].tasks.splice(tIndex, 1);
+    setFormData({ ...formData, modules: newModules });
+  };
+
+  const updateModuleTask = (mIndex: number, tIndex: number, field: string, value: any) => {
+    const newModules = [...formData.modules];
+    newModules[mIndex].tasks[tIndex] = { ...newModules[mIndex].tasks[tIndex], [field]: value };
+    setFormData({ ...formData, modules: newModules });
+  };
+
   return (
     <div className="space-y-6 flex-1 flex flex-col">
       {viewState === "list" ? (
@@ -274,7 +295,7 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
               onClick={() => setActiveTab("normal")}
               className={`px-4 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 transition-colors ${activeTab === "normal" ? "bg-brand-teal text-white" : "text-slate-600 hover:bg-slate-50"}`}
             >
-              NORMAL PRESETS
+              PRESETS
             </button>
           </div>
         </div>
@@ -530,6 +551,37 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
                             <Trash2 className="w-4 h-4" />
                           </Button>
                         )}
+                      </div>
+
+                      {/* Module Tasks */}
+                      <div className="mt-4 pt-4 border-t border-slate-200">
+                        <div className="flex justify-between items-center mb-3">
+                          <Label className="text-xs font-bold text-slate-500">Tasks in this Module</Label>
+                          <Button variant="ghost" size="sm" onClick={() => addTaskToModule(mIndex)} className="h-6 text-xs text-brand-teal gap-1 hover:bg-brand-teal/10">
+                            <PlusCircle className="w-3.5 h-3.5" /> Add Task
+                          </Button>
+                        </div>
+                        <div className="space-y-2">
+                          {module.tasks?.map((task: any, tIndex: number) => (
+                            <div key={tIndex} className="flex gap-2 items-start bg-white p-2 rounded border border-slate-100 relative group">
+                              <Input
+                                placeholder="Task Title *"
+                                value={task.title}
+                                onChange={(e) => updateModuleTask(mIndex, tIndex, "title", e.target.value)}
+                                className="h-8 text-xs font-medium w-1/2"
+                              />
+                              <Input
+                                placeholder="Description (optional)"
+                                value={task.description}
+                                onChange={(e) => updateModuleTask(mIndex, tIndex, "description", e.target.value)}
+                                className="h-8 text-xs bg-slate-50 flex-1"
+                              />
+                              <Button variant="ghost" size="icon" onClick={() => removeTaskFromModule(mIndex, tIndex)} className="h-8 w-8 text-slate-400 hover:text-red-500 shrink-0">
+                                <X className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   ))}

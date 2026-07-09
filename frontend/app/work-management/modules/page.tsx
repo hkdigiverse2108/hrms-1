@@ -107,9 +107,9 @@ export default function ModulesPage() {
   });
 
   // Module Tasks State
-  const [newModuleTasks, setNewModuleTasks] = useState<{ title: string; description: string; estimatedHours: number }[]>([]);
+  const [newModuleTasks, setNewModuleTasks] = useState<{ title: string; description: string; dueDate?: string | null }[]>([]);
   const [newModuleTaskTitle, setNewModuleTaskTitle] = useState("");
-  const [newModuleTaskHours, setNewModuleTaskHours] = useState<number>(0);
+  const [newModuleTaskDueDate, setNewModuleTaskDueDate] = useState<string>("");
   const [moduleTasks, setModuleTasks] = useState<any[]>([]);
   const [allTasks, setAllTasks] = useState<any[]>([]);
   const [loadingModuleTasks, setLoadingModuleTasks] = useState(false);
@@ -2006,23 +2006,20 @@ export default function ModulesPage() {
                     if (e.key === "Enter") {
                       e.preventDefault();
                       if (newModuleTaskTitle.trim()) {
-                        setNewModuleTasks(prev => [...prev, { title: newModuleTaskTitle.trim(), description: "", estimatedHours: newModuleTaskHours || 0 }]);
+                        setNewModuleTasks(prev => [...prev, { title: newModuleTaskTitle.trim(), description: "", dueDate: newModuleTaskDueDate || null }]);
                         setNewModuleTaskTitle("");
-                        setNewModuleTaskHours(0);
+                        setNewModuleTaskDueDate("");
                       }
                     }
                   }}
                 />
-                <div className="w-[100px] shrink-0">
+                <div className="w-[130px] shrink-0">
                   <Input
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    placeholder="⏱️ Hrs"
-                    value={newModuleTaskHours || ""}
-                    onChange={(e) => setNewModuleTaskHours(parseFloat(e.target.value) || 0)}
+                    type="date"
+                    value={newModuleTaskDueDate}
+                    onChange={(e) => setNewModuleTaskDueDate(e.target.value)}
                     className="text-xs h-8 bg-white"
-                    title="Estimated Hours"
+                    title="Due Date"
                   />
                 </div>
                 <Button
@@ -2031,9 +2028,9 @@ export default function ModulesPage() {
                   className="bg-brand-teal hover:bg-brand-teal/90 text-white h-8 text-xs font-bold shrink-0"
                   onClick={() => {
                     if (newModuleTaskTitle.trim()) {
-                      setNewModuleTasks(prev => [...prev, { title: newModuleTaskTitle.trim(), description: "", estimatedHours: newModuleTaskHours || 0 }]);
+                      setNewModuleTasks(prev => [...prev, { title: newModuleTaskTitle.trim(), description: "", dueDate: newModuleTaskDueDate || null }]);
                       setNewModuleTaskTitle("");
-                      setNewModuleTaskHours(0);
+                      setNewModuleTaskDueDate("");
                     }
                   }}
                 >
