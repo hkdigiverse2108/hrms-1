@@ -250,14 +250,6 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (formData.department === "Development") {
-      if ((isAdmin || isTeamLeader) && !formData.endDate) {
-        toast.error("Client Deadline (End Date) is compulsory for Development projects.");
-        return;
-      }
-      if (!formData.teamDeadline) {
-        toast.error("Team Deadline is compulsory for Development projects.");
-        return;
-      }
 
       if (formData.endDate && formData.teamDeadline) {
         if (new Date(formData.teamDeadline) > new Date(formData.endDate)) {
@@ -450,7 +442,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
           <div className="space-y-2">
             <Label htmlFor="endDate">
               {formData.department === "Development" ? (
-                <>Client Deadline <span className="text-red-500">*</span></>
+                "Client Deadline (Optional)"
               ) : (
                 "End Date (Optional)"
               )}
@@ -460,14 +452,13 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
               type="date"
               value={formData.endDate || ""}
               onChange={(e) => handleChange("endDate", e.target.value)}
-              required={formData.department === "Development"}
             />
           </div>
         )}
         {formData.department === "Development" && (
           <div className="space-y-2">
             <Label htmlFor="teamDeadline">
-              Team Deadline <span className="text-red-500">*</span>
+              Team Deadline (Optional)
             </Label>
             <Input
               id="teamDeadline"
@@ -475,7 +466,6 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
               value={formData.teamDeadline || ""}
               onChange={(e) => handleChange("teamDeadline", e.target.value)}
               max={formData.endDate || ""}
-              required
             />
           </div>
         )}
