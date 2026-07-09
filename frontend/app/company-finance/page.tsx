@@ -89,6 +89,31 @@ export default function CompanyFinanceTransactionsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<"bank" | "cash">("bank");
 
+  // Filters state
+  const [filterCategory, setFilterCategory] = useState("all");
+  const [filterStartDate, setFilterStartDate] = useState("");
+  const [filterEndDate, setFilterEndDate] = useState("");
+  const [filterSynced, setFilterSynced] = useState("all");
+
+  // Categories helper
+  const categories = useMemo(() => {
+    const list = transactions
+      .filter((t) => t.paymentMethod === activeTab && t.category)
+      .map((t) => t.category || "");
+    return Array.from(new Set(list));
+  }, [transactions, activeTab]);
+
+  // All existing categories list (from all transactions in the system)
+  const allExistingCategories = useMemo(() => {
+    const list = transactions
+      .map((t) => t.category || "")
+      .filter((cat) => cat.trim() !== "");
+    return Array.from(new Set(list)).sort();
+  }, [transactions]);
+
+  const [showCreditCatDropdown, setShowCreditCatDropdown] = useState(false);
+  const [showDebitCatDropdown, setShowDebitCatDropdown] = useState(false);
+
   // Invoices for auto-completion in Credit modal
   const [invoicesList, setInvoicesList] = useState<any[]>([]);
 
@@ -181,10 +206,49 @@ export default function CompanyFinanceTransactionsPage() {
     toast.success("Invoices and ledger synchronized automatically!");
   };
 
-  // Filtered transactions for current tab
+  // Filtered transactions for current tab (latest first) with filters applied
   const currentTransactions = useMemo(() => {
-    return transactions.filter((t) => t.paymentMethod === activeTab);
-  }, [transactions, activeTab]);
+    return [...transactions]
+      .filter((t) => {
+        if (t.paymentMethod !== activeTab) return false;
+
+        if (searchTerm.trim() !== "") {
+          const query = searchTerm.toLowerCase();
+          const matchInvoice = t.invoiceNumber?.toLowerCase().includes(query);
+          const matchExpense = t.expenseNo?.toLowerCase().includes(query);
+          const matchDesc = (t.description || t.descriptions || "").toLowerCase().includes(query);
+          const matchThings = t.things?.toLowerCase().includes(query);
+          const matchNarrative = t.narrative?.toLowerCase().includes(query);
+          const matchCategory = t.category?.toLowerCase().includes(query);
+          if (!matchInvoice && !matchExpense && !matchDesc && !matchThings && !matchNarrative && !matchCategory) {
+            return false;
+          }
+        }
+
+        if (filterCategory !== "all" && t.category !== filterCategory) {
+          return false;
+        }
+
+        if (filterStartDate) {
+          if (!t.date || new Date(t.date) < new Date(filterStartDate)) return false;
+        }
+        if (filterEndDate) {
+          if (!t.date || new Date(t.date) > new Date(filterEndDate)) return false;
+        }
+
+        if (filterSynced !== "all") {
+          if (filterSynced === "synced" && !t.isSyncedInvoice) return false;
+          if (filterSynced === "manual" && t.isSyncedInvoice) return false;
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        const dateA = a.date ? new Date(a.date).getTime() : 0;
+        const dateB = b.date ? new Date(b.date).getTime() : 0;
+        return dateB - dateA;
+      });
+  }, [transactions, activeTab, searchTerm, filterCategory, filterStartDate, filterEndDate, filterSynced]);
 
   const creditTransactions = useMemo(() => {
     return currentTransactions.filter((t) => t.type === "credit");
@@ -578,6 +642,83 @@ export default function CompanyFinanceTransactionsPage() {
               className="pl-9 h-10 bg-white border-slate-200/80 rounded-xl shadow-sm text-sm"
             />
           </div>
+        </div>
+
+        {/* Filters Panel */}
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2 text-slate-700 font-bold text-sm">
+            <Filter className="w-4 h-4 text-slate-500" />
+            Filters:
+          </div>
+
+          {/* Date range filter */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-500">From:</span>
+            <Input
+              type="date"
+              value={filterStartDate}
+              onChange={(e) => setFilterStartDate(e.target.value)}
+              className="h-9 w-36 bg-white border-slate-200/80 rounded-xl text-xs px-2.5"
+            />
+            <span className="text-xs font-semibold text-slate-500">To:</span>
+            <Input
+              type="date"
+              value={filterEndDate}
+              onChange={(e) => setFilterEndDate(e.target.value)}
+              className="h-9 w-36 bg-white border-slate-200/80 rounded-xl text-xs px-2.5"
+            />
+          </div>
+
+          {/* Category Filter */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-500">Category:</span>
+            <select
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+              className="h-9 min-w-[140px] bg-white border border-slate-200/80 rounded-xl text-xs px-2.5 focus:outline-none focus:ring-1 focus:ring-slate-400 text-slate-700"
+            >
+              <option value="all">All Categories</option>
+              {categories.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Synced status filter */}
+          {activeTab === "bank" && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-500">Sync Status:</span>
+              <select
+                value={filterSynced}
+                onChange={(e) => setFilterSynced(e.target.value)}
+                className="h-9 bg-white border border-slate-200/80 rounded-xl text-xs px-2.5 focus:outline-none focus:ring-1 focus:ring-slate-400 text-slate-700"
+              >
+                <option value="all">All Entries</option>
+                <option value="synced">Auto-Synced Invoices</option>
+                <option value="manual">Manual Entries</option>
+              </select>
+            </div>
+          )}
+
+          {/* Reset Filters button */}
+          {(filterStartDate || filterEndDate || filterCategory !== "all" || filterSynced !== "all" || searchTerm) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setFilterStartDate("");
+                setFilterEndDate("");
+                setFilterCategory("all");
+                setFilterSynced("all");
+                setSearchTerm("");
+              }}
+              className="h-9 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl font-bold ml-auto"
+            >
+              <RefreshCw className="w-3.5 h-3.5 mr-1" /> Reset
+            </Button>
+          )}
         </div>
 
         {/* Balance Cards Header matching spreadsheet metrics */}
@@ -1027,14 +1168,51 @@ export default function CompanyFinanceTransactionsPage() {
               </div>
 
               {activeTab === "bank" && (
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 relative">
                   <label className="text-xs font-bold text-slate-700">Category / Client Name</label>
                   <Input
                     placeholder="e.g. HK DigiVerse LLP"
                     value={creditForm.category}
                     onChange={(e) => setCreditForm({ ...creditForm, category: e.target.value })}
+                    onFocus={() => setShowCreditCatDropdown(true)}
+                    onBlur={() => setTimeout(() => setShowCreditCatDropdown(false), 200)}
                     className="h-9 text-xs"
                   />
+                  {showCreditCatDropdown && (
+                    <div className="absolute z-50 w-full mt-1 max-h-40 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg divide-y divide-slate-100">
+                      {creditForm.category && !allExistingCategories.includes(creditForm.category) && (
+                        <button
+                          type="button"
+                          onMouseDown={() => setCreditForm({ ...creditForm, category: creditForm.category })}
+                          className="w-full px-3 py-2 text-left text-xs text-emerald-600 font-bold hover:bg-slate-50 flex items-center justify-between"
+                        >
+                          <span>Add new: "{creditForm.category}"</span>
+                          <span className="text-[10px] bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">New</span>
+                        </button>
+                      )}
+                      {allExistingCategories
+                        .filter((cat) =>
+                          cat.toLowerCase().includes((creditForm.category || "").toLowerCase())
+                        )
+                        .map((cat) => (
+                          <button
+                            key={cat}
+                            type="button"
+                            onMouseDown={() => setCreditForm({ ...creditForm, category: cat })}
+                            className="w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                          >
+                            {cat}
+                          </button>
+                        ))}
+                      {allExistingCategories.filter((cat) =>
+                        cat.toLowerCase().includes((creditForm.category || "").toLowerCase())
+                      ).length === 0 && !creditForm.category && (
+                        <div className="px-3 py-2 text-xs text-slate-400 text-center">
+                          No categories found. Type to add new.
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1136,14 +1314,51 @@ export default function CompanyFinanceTransactionsPage() {
               </div>
 
               {activeTab === "bank" && (
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 relative">
                   <label className="text-xs font-bold text-slate-700">Category</label>
                   <Input
                     placeholder="e.g. Office Rent, Hardware"
                     value={debitForm.category}
                     onChange={(e) => setDebitForm({ ...debitForm, category: e.target.value })}
+                    onFocus={() => setShowDebitCatDropdown(true)}
+                    onBlur={() => setTimeout(() => setShowDebitCatDropdown(false), 200)}
                     className="h-9 text-xs"
                   />
+                  {showDebitCatDropdown && (
+                    <div className="absolute z-50 w-full mt-1 max-h-40 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg divide-y divide-slate-100">
+                      {debitForm.category && !allExistingCategories.includes(debitForm.category) && (
+                        <button
+                          type="button"
+                          onMouseDown={() => setDebitForm({ ...debitForm, category: debitForm.category })}
+                          className="w-full px-3 py-2 text-left text-xs text-rose-600 font-bold hover:bg-slate-50 flex items-center justify-between"
+                        >
+                          <span>Add new: "{debitForm.category}"</span>
+                          <span className="text-[10px] bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">New</span>
+                        </button>
+                      )}
+                      {allExistingCategories
+                        .filter((cat) =>
+                          cat.toLowerCase().includes((debitForm.category || "").toLowerCase())
+                        )
+                        .map((cat) => (
+                          <button
+                            key={cat}
+                            type="button"
+                            onMouseDown={() => setDebitForm({ ...debitForm, category: cat })}
+                            className="w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                          >
+                            {cat}
+                          </button>
+                        ))}
+                      {allExistingCategories.filter((cat) =>
+                        cat.toLowerCase().includes((debitForm.category || "").toLowerCase())
+                      ).length === 0 && !debitForm.category && (
+                        <div className="px-3 py-2 text-xs text-slate-400 text-center">
+                          No categories found. Type to add new.
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
