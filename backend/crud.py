@@ -2137,13 +2137,15 @@ async def auto_close_stale_open_sessions(db, employee_id: str) -> int:
     """Auto-close open attendance sessions from previous days (forgotten punch-out)."""
     closed_count = 0
     today_str = get_now().strftime("%Y-%m-%d")
+    today_dt_naive = datetime.strptime(today_str, "%Y-%m-%d")
+    today_dt_aware = today_dt_naive.replace(tzinfo=IST)
     query_or = [{"employeeId": employee_id}]
     if ObjectId.is_valid(employee_id):
         query_or.append({"employeeId": ObjectId(employee_id)})
     cursor = db.attendance.find({
         "$or": query_or,
         "checkOut": None,
-        "date": {"$ne": today_str}
+        "date": {"$nin": [today_str, today_dt_naive, today_dt_aware]}
     })
     async for record in cursor:
         try:
