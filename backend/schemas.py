@@ -886,6 +886,11 @@ class LoginResponse(BaseModel):
     message: str
     user: Optional[Employee] = None
     token: Optional[str] = None
+    require_otp: Optional[bool] = None
+
+class VerifyOTPRequest(BaseModel):
+    email: str
+    otp: str
 
 class EventBase(BaseModel):
     title: str
