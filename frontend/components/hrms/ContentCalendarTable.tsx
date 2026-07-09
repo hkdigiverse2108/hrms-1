@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
 import { useConfirm } from "@/context/ConfirmContext";
@@ -14,20 +15,30 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { Badge } from "@/components/ui/badge";
 import { useUserContext } from "@/context/UserContext";
 import dayjs from "dayjs";
 
 interface ContentCalendarTableProps {
   clientId: string;
+  clientName?: string;
 }
 
-export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
+export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTableProps) {
+  const searchParams = useSearchParams();
+  const highlightTask = searchParams.get('highlightTask');
   const [entries, setEntries] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   });
+  const [typeFilter, setTypeFilter] = useState<string>("all");
+
+  const filteredEntries = React.useMemo(() => {
+    if (typeFilter === "all") return entries;
+    return entries.filter(e => e.postReel === typeFilter);
+  }, [entries, typeFilter]);
   const monthYear = selectedDate ? selectedDate.substring(0, 7) : (() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -38,6 +49,26 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
   const [isFullScreen, setIsFullScreen] = useState(false);
   const { confirm } = useConfirm();
   const { user } = useUserContext();
+
+  const [companyName, setCompanyName] = useState(clientName || "Harikrushn Digiverse LLP");
+
+  useEffect(() => {
+    if (clientName) {
+      setCompanyName(clientName);
+    } else if (clientId) {
+      fetch(`${API_URL}/clients/${clientId}`)
+        .then(res => {
+          if (res.ok) return res.json();
+          throw new Error("Failed to fetch client");
+        })
+        .then(data => {
+          if (data && data.companyName) {
+            setCompanyName(data.companyName);
+          }
+        })
+        .catch(err => console.error(err));
+    }
+  }, [clientId, clientName]);
 
   const currentMonthDate = React.useMemo(() => {
     if (!monthYear) return new Date();
@@ -58,26 +89,78 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
   const [isPdfDialogOpen, setIsPdfDialogOpen] = useState(false);
   const [logsDialogOpen, setLogsDialogOpen] = useState(false);
   const [currentLogs, setCurrentLogs] = useState<any[]>([]);
+  const [isCommonLogs, setIsCommonLogs] = useState(false);
 
   const [selectedDates, setSelectedDates] = useState<Date[] | undefined>([]);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
 
+  const [showReasonDialog, setShowReasonDialog] = useState(false);
+  const [pendingStatusChange, setPendingStatusChange] = useState<string | null>(null);
+  const [statusChangeReason, setStatusChangeReason] = useState("");
+  const [overallMaxDate, setOverallMaxDate] = useState<Date | null>(null);
+
+  const fetchOverallMaxDate = async () => {
+    try {
+      const res = await fetch(`${API_URL}/content-calendar?clientId=${clientId}`);
+      if (res.ok) {
+        const data = await res.json();
+        let max = new Date(0);
+        let found = false;
+        data.forEach((e: any) => {
+          if (e.postingDate) {
+            const d = new Date(e.postingDate);
+            if (!isNaN(d.getTime()) && d > max) {
+              max = d;
+              found = true;
+            }
+          }
+        });
+        setOverallMaxDate(found ? max : null);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    if (clientId) {
+      fetchOverallMaxDate();
+    }
+  }, [clientId, entries]);
+
   const handleOpenLogs = (entry: any) => {
     setCurrentLogs(entry.logs || []);
+    setIsCommonLogs(false);
+    setLogsDialogOpen(true);
+  };
+
+  const handleOpenCommonLogs = () => {
+    const allLogs = entries.flatMap(entry => {
+      if (!entry.logs || !Array.isArray(entry.logs)) return [];
+      return entry.logs.map((log: any) => ({
+        ...log,
+        rowConcept: entry.concept || entry.topic || entry.postingDate || "Unknown Row"
+      }));
+    });
+    
+    allLogs.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    
+    setCurrentLogs(allLogs);
+    setIsCommonLogs(true);
     setLogsDialogOpen(true);
   };
   const tableHeaders = [
-    "Posting Date", "Posting Day", "Post/Reel", "Concept", "Topic", "Reference",
+    "Posting Date", "Posting Day", "Post/Reel", "Topic", "Concept", "Reference",
     "Script Date", "Script Link", "Shoot Date", "Shoot Link", "Editing Start",
     "Final Reel Link", "Final Post Link", "Approval by Het", "Is Approved", "Thumbnail Link",
-    "Posting Link IG", "Actual Posting Date", ""
+    "Caption", "Posting Link IG", "Actual Posting Date", "Remark", ""
   ];
 
   const fieldKeys = [
-    "postingDate", "postingDay", "postReel", "concept", "topic", "reference",
+    "postingDate", "postingDay", "postReel", "topic", "concept", "reference",
     "scriptDate", "scriptLink", "shootDate", "shootLink", "editingStart",
     "finalReelLink", "finalPostLink", "approval", "isApproved", "thumbnailLink",
-    "postingLinkOfIg", "actualPostingDate"
+    "caption", "postingLinkOfIg", "actualPostingDate", "remark"
   ];
   
   const [selectedColumnsForPdf, setSelectedColumnsForPdf] = useState<string[]>(tableHeaders.filter(h => h !== ""));
@@ -92,14 +175,49 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
 
   const fetchSettings = async () => {
     try {
+      let globalSettings = {
+        scriptDateOffset: undefined,
+        shootDateOffset: undefined,
+        editingStartOffset: undefined,
+        approvalOffset: undefined
+      };
+
+      const sysRes = await fetch(`${API_URL}/system-settings`);
+      if (sysRes.ok) {
+        const sysData = await sysRes.json();
+        if (sysData) {
+          globalSettings = {
+            scriptDateOffset: sysData.defaultScriptDateOffset,
+            shootDateOffset: sysData.defaultShootDateOffset,
+            editingStartOffset: sysData.defaultEditingStartOffset,
+            approvalOffset: sysData.defaultApprovalOffset
+          };
+        }
+      }
+
       const res = await fetch(`${API_URL}/content-calendar-settings?clientId=${clientId}&monthYear=${monthYear}`);
+      let customSettings = {};
       if (res.ok) {
         const data = await res.json();
         if (data && Object.keys(data).length > 0) {
-          setSettings((prev: any) => ({ ...prev, ...data }));
-          setSettingsForm((prev: any) => ({ ...prev, ...data }));
+          // Temporarily ignore cached backend defaults (14, 12, 6, 5) if they match exactly
+          if (data.scriptDateOffset == 14 && data.shootDateOffset == 12 && data.editingStartOffset == 6 && data.approvalOffset == 5) {
+             delete data.scriptDateOffset;
+             delete data.shootDateOffset;
+             delete data.editingStartOffset;
+             delete data.approvalOffset;
+          }
+          customSettings = data;
         }
       }
+
+      const finalSettings = {
+        ...globalSettings,
+        ...customSettings
+      };
+
+      setSettings(finalSettings);
+      setSettingsForm(finalSettings);
     } catch (err) {
       console.error("Failed to fetch settings", err);
     }
@@ -127,9 +245,50 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
   };
 
   useEffect(() => {
+    if (highlightTask && clientId) {
+      fetch(`${API_URL}/content-calendar?clientId=${clientId}`)
+        .then(res => {
+          if (res.ok) return res.json();
+          throw new Error("Failed to fetch entries");
+        })
+        .then(data => {
+          if (Array.isArray(data)) {
+            const task = data.find(t => t.id === highlightTask);
+            if (task) {
+              const dateVal = task.postingDate || task.scriptDate || task.shootDate || task.editingStart || task.actualPostingDate || task.monthYear;
+              if (dateVal && typeof dateVal === 'string') {
+                if (dateVal.match(/^\d{4}-\d{2}-\d{2}/)) {
+                  setSelectedDate(dateVal);
+                } else if (dateVal.match(/^\d{4}-\d{2}/)) {
+                  setSelectedDate(`${dateVal}-01`);
+                }
+              }
+            }
+          }
+        })
+        .catch(err => console.error(err));
+    }
+  }, [highlightTask, clientId]);
+
+  useEffect(() => {
     fetchEntries();
     fetchSettings();
   }, [clientId, monthYear]);
+
+  useEffect(() => {
+    if (entries.length > 0 && highlightTask) {
+      setTimeout(() => {
+        const el = document.getElementById(`task-${highlightTask}`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.classList.add("ring-2", "ring-brand-teal", "!bg-brand-teal/10");
+          setTimeout(() => {
+            el.classList.remove("ring-2", "ring-brand-teal", "!bg-brand-teal/10");
+          }, 3000);
+        }
+      }, 500);
+    }
+  }, [entries, highlightTask]);
 
   useEffect(() => {
     if (isFullScreen) {
@@ -154,7 +313,8 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
         body: JSON.stringify({
           clientId,
           monthYear,
-          updatedBy: userName
+          updatedBy: userName,
+          postReel: typeFilter !== "all" ? typeFilter : undefined
         }),
       });
       if (res.ok) {
@@ -177,7 +337,8 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
         clientId,
         monthYear,
         postingDate: dateString,
-        updatedBy: userName
+        updatedBy: userName,
+        postReel: typeFilter !== "all" ? typeFilter : undefined
       };
 
       try {
@@ -304,11 +465,28 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
   };
 
   const handleStatusChange = async (newStatus: string) => {
+    const oldStatus = settings?.approvalStatus || "Pending";
+    if (
+      (oldStatus === "Approved by Client" && newStatus !== "Approved by Client") ||
+      newStatus === "Rejected" ||
+      newStatus === "Changes Requested"
+    ) {
+      setPendingStatusChange(newStatus);
+      setStatusChangeReason("");
+      setShowReasonDialog(true);
+      return;
+    }
+    
+    await proceedWithStatusChange(newStatus, "");
+  };
+
+  const proceedWithStatusChange = async (newStatus: string, reason: string) => {
     try {
       const newLog = {
         timestamp: new Date().toISOString(),
         status: newStatus,
-        user: user?.name || "Unknown User"
+        user: user?.name || "Unknown User",
+        reason: reason
       };
       const updatedLogs = [...(settings?.statusLogs || []), newLog];
       const updatedSettings = { ...settings, clientId, monthYear, approvalStatus: newStatus, statusLogs: updatedLogs };
@@ -361,18 +539,25 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
     const user = storedUser ? JSON.parse(storedUser) : null;
     const userName = user?.name || (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : null) || "Unknown User";
 
+    const payload = { ...editForm, updatedBy: userName };
+    if (payload.postingDate && typeof payload.postingDate === "string") {
+      const parts = payload.postingDate.split("-");
+      if (parts.length >= 2) {
+        payload.monthYear = `${parts[0]}-${parts[1]}`;
+      }
+    }
+
     try {
       const res = await fetch(`${API_URL}/content-calendar/${editingId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...editForm, updatedBy: userName }),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
-        const updated = await res.json();
-        setEntries(entries.map(e => e.id === editingId ? updated : e));
+        toast.success("Row updated");
         setEditingId(null);
         setIsNewRow(false);
-        toast.success("Row updated");
+        fetchEntries();
       } else {
         toast.error("Failed to update row");
       }
@@ -447,9 +632,80 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
       toast.error("Please select at least one column");
       return;
     }
+    exportPdf();
+  };
 
+  const exportPdf = () => {
     const doc = new jsPDF("landscape");
     
+    const formatDateToDDMMYY = (dateStr: string) => {
+      if (!dateStr) return "";
+      const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (match) {
+        const [_, year, month, day] = match;
+        return `${day}-${month}-${year.slice(-2)}`;
+      }
+      return dateStr;
+    };
+
+    const formatMonthYearToMMYY = (myStr: string) => {
+      if (!myStr) return "";
+      const match = myStr.match(/^(\d{4})-(\d{2})$/);
+      if (match) {
+        const [_, year, month] = match;
+        return `${month}-${year.slice(-2)}`;
+      }
+      return myStr;
+    };
+
+    const columnsToRender = [...selectedColumnsForPdf].sort((a, b) => tableHeaders.indexOf(a) - tableHeaders.indexOf(b));
+    const indicesToRender = columnsToRender.map(col => tableHeaders.indexOf(col));
+
+    const filteredEntries = entries.filter(entry => {
+      const matchesType = typeFilter === "all" || entry.postReel === typeFilter;
+      return matchesType;
+    });
+
+    if (filteredEntries.length === 0) {
+      toast.error(`No entries with posting dates in ${monthYear} to download`);
+      return;
+    }
+
+    // Determine the calendar start date's month and year dynamically
+    let monthLabel = "";
+    let headerMonthStr = formatMonthYearToMMYY(monthYear);
+
+    if (filteredEntries.length > 0 && filteredEntries[0].postingDate) {
+      const parts = filteredEntries[0].postingDate.split("-");
+      if (parts.length >= 2) {
+        const year = parts[0];
+        const monthNum = parseInt(parts[1], 10);
+        headerMonthStr = `${parts[1]}-${parts[0].slice(-2)}`;
+        
+        const monthNames = [
+          "January", "February", "March", "April", "May", "June",
+          "July", "August", "September", "October", "November", "December"
+        ];
+        if (monthNum >= 1 && monthNum <= 12) {
+          monthLabel = `${monthNames[monthNum - 1]}`;
+        }
+      }
+    }
+
+    if (!monthLabel) {
+      const [year, month] = monthYear.split("-");
+      const monthNum = parseInt(month, 10);
+      const monthNames = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+      ];
+      if (monthNum >= 1 && monthNum <= 12) {
+        monthLabel = `${monthNames[monthNum - 1]}`;
+      } else {
+        monthLabel = monthYear;
+      }
+    }
+
     const pageWidth = doc.internal.pageSize.width;
 
     // Corporate Letterhead Style
@@ -457,7 +713,7 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
     doc.setFontSize(22);
     doc.setTextColor(13, 148, 136); // Brand teal
     doc.setFont("helvetica", "bold");
-    doc.text("Harikrushna Digiverse LLP", 14, 20);
+    doc.text(companyName, 14, 20);
 
     // Document Title
     doc.setFontSize(14);
@@ -468,20 +724,35 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
     // Right-aligned meta details
     doc.setFontSize(10);
     doc.setTextColor(100, 100, 100);
-    doc.text(`Month: ${monthYear}`, pageWidth - 14, 20, { align: "right" });
+    doc.setFont("helvetica", "normal");
+    doc.text(`Month: ${headerMonthStr}`, pageWidth - 14, 20, { align: "right" });
 
     // Decorative separator line
     doc.setDrawColor(220, 220, 220);
     doc.setLineWidth(0.5);
-    doc.line(14, 32, pageWidth - 14, 32);
+    doc.line(14, 38, pageWidth - 14, 38);
 
-    const columnsToRender = selectedColumnsForPdf;
-    const indicesToRender = columnsToRender.map(col => tableHeaders.indexOf(col));
-
-    const tableData = entries.map(entry => {
+    const dateFields = ["postingDate", "scriptDate", "shootDate", "editingStart", "actualPostingDate"];
+    const tableData = filteredEntries.map(entry => {
       return indicesToRender.map(idx => {
         const key = fieldKeys[idx];
-        let val = entry[key] || "";
+        let val: any = entry[key] || "";
+        if (dateFields.includes(key)) {
+          val = formatDateToDDMMYY(val);
+        } else if (key.toLowerCase().includes("link") || key === "reference") {
+          const matches = (typeof val === 'string' ? val : '').match(/(https?:\/\/[^\s,;]+|www\.[^\s,;]+)/gi);
+          if (matches && matches.length > 0) {
+            let url = matches[0];
+            if (url.toLowerCase().startsWith("www.")) {
+              url = "https://" + url;
+            }
+            val = {
+              content: "           ", // spaces to allocate width
+              url: url,
+              isButton: true
+            };
+          }
+        }
         return val;
       });
     });
@@ -494,7 +765,62 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
       styles: { fontSize: 8, cellPadding: 2, overflow: "linebreak", font: "helvetica" },
       headStyles: { fillColor: [13, 148, 136], textColor: 255, fontStyle: 'bold', halign: 'center' },
       alternateRowStyles: { fillColor: [248, 250, 252] },
-      margin: { top: 38, right: 14, bottom: 20, left: 14 }
+      margin: { top: 44, right: 14, bottom: 20, left: 14 },
+      willDrawCell: (data) => {
+        if (data.section === 'body') {
+          if (data.cell.raw && typeof data.cell.raw === 'object' && data.cell.raw.url) {
+            doc.setTextColor(0, 102, 204); // Blue color for links
+          } else {
+            const rawValue = String(data.cell.raw || "");
+            if (rawValue.match(/(https?:\/\/[^\s]+|www\.[^\s]+)/)) {
+              doc.setTextColor(0, 102, 204); // Blue color for links
+            }
+          }
+        }
+      },
+      didDrawCell: (data) => {
+        if (data.section === 'body') {
+          if (data.cell.raw && typeof data.cell.raw === 'object' && data.cell.raw.isButton && data.cell.raw.url) {
+            const url = data.cell.raw.url;
+            
+            const btnW = 11;
+            const btnH = 5.5;
+            const paddingX = (data.cell.width - btnW) / 2 > 0 ? (data.cell.width - btnW) / 2 : 1; 
+            const btnX = data.cell.x + paddingX;
+            const btnY = data.cell.y + (data.cell.height - btnH) / 2;
+            
+            // Draw rounded background (light blue)
+            doc.setFillColor(239, 246, 255);
+            doc.setDrawColor(219, 234, 254);
+            doc.setLineWidth(0.2);
+            doc.roundedRect(btnX, btnY, btnW, btnH, 1, 1, 'FD');
+            
+            // Draw text
+            doc.setTextColor(37, 99, 235);
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(6.5);
+            doc.text("Link", btnX + 2.5, btnY + 4);
+            
+            // reset font state
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(8);
+            doc.setTextColor(0, 0, 0);
+
+            // Clickable area for "Link" (Opens link directly)
+            doc.link(btnX, btnY, btnW, btnH, { url: url });
+          } else {
+            const rawValue = String(data.cell.raw || "");
+            const urlMatch = rawValue.match(/(https?:\/\/[^\s]+|www\.[^\s]+)/);
+            if (urlMatch) {
+              let url = urlMatch[0];
+              if (url.toLowerCase().startsWith('www.')) {
+                url = 'https://' + url;
+              }
+              doc.link(data.cell.x, data.cell.y, data.cell.width, data.cell.height, { url: url });
+            }
+          }
+        }
+      }
     });
 
     // Add Footer with Page Numbers
@@ -503,10 +829,11 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
       doc.setPage(i);
       doc.setFontSize(8);
       doc.setTextColor(150, 150, 150);
-      doc.text(`Page ${i} of ${pageCount}  |  Harikrushna Digiverse LLP`, pageWidth / 2, doc.internal.pageSize.height - 10, { align: "center" });
+      doc.text(`Page ${i} of ${pageCount}  |  ${companyName}`, pageWidth / 2, doc.internal.pageSize.height - 10, { align: "center" });
     }
 
-    doc.save(`Content-Calendar-${monthYear}.pdf`);
+    const safeCompanyName = companyName.replace(/[\\/:*?"<>|]/g, "");
+    doc.save(`${safeCompanyName} ${monthLabel} Content Calendar.pdf`);
     setIsPdfDialogOpen(false);
   };
 
@@ -603,9 +930,10 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
           <h2 className="text-lg font-bold text-slate-800">Content Calendar</h2>
           <p className="text-xs text-slate-500">Plan and track content creation and posting</p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1">
+        <div className="flex items-start gap-3">
+          <div className="flex items-start gap-2">
+            <div className="flex flex-col gap-1 items-end">
+              <div className="flex items-center gap-1">
               <Select 
                 value={settings?.approvalStatus || "Pending"} 
                 onValueChange={handleStatusChange}
@@ -645,6 +973,11 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
                               <span className="text-[10px] text-slate-400">{dayjs(log.timestamp).format('MMM D, h:mm A')}</span>
                             </div>
                             <div className="text-xs text-slate-500">by {log.user}</div>
+                            {log.reason && (
+                              <div className="mt-1 text-xs text-rose-600 bg-rose-50 p-1.5 rounded border border-rose-100">
+                                <strong>Reason:</strong> {log.reason}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -653,6 +986,28 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
                 </Popover>
               )}
             </div>
+            {settings?.statusLogs && settings.statusLogs.length > 0 && settings.statusLogs[settings.statusLogs.length - 1].reason && (
+              <div className="text-[10px] text-rose-600 font-medium max-w-[200px] truncate bg-rose-50 px-2 py-0.5 rounded border border-rose-100" title={settings.statusLogs[settings.statusLogs.length - 1].reason}>
+                Reason: {settings.statusLogs[settings.statusLogs.length - 1].reason}
+              </div>
+            )}
+            </div>
+            {overallMaxDate && (
+              <div className="flex items-center gap-2 border border-orange-200 bg-orange-50 rounded-md px-3 h-9 text-sm shrink-0 shadow-sm">
+                <span className="font-medium text-orange-700">End Date:</span>
+                <span className="font-bold text-orange-900">{overallMaxDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+              </div>
+            )}
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="w-[120px] h-9 text-xs bg-white border border-slate-200">
+                <SelectValue placeholder="All Types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="Post">Post</SelectItem>
+                <SelectItem value="Reel">Reel</SelectItem>
+              </SelectContent>
+            </Select>
             <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
               <PopoverTrigger asChild>
               <Button variant="outline" className="w-[180px] justify-start text-left font-normal h-9 bg-white">
@@ -739,9 +1094,15 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
             </PopoverContent>
           </Popover>
           </div>
-          <Button onClick={() => { setSettingsForm(settings); setIsSettingsOpen(true); }} size="icon" variant="outline" title="Settings">
-            <Settings2 className="w-4 h-4 text-slate-600" />
+          <Button onClick={handleOpenCommonLogs} size="sm" variant="outline" className="text-slate-700">
+            <History className="w-4 h-4 mr-1" />
+            Common Logs
           </Button>
+          {user?.role?.toLowerCase() === 'admin' && (
+            <Button onClick={() => { setSettingsForm(settings); setIsSettingsOpen(true); }} size="icon" variant="outline" title="Settings">
+              <Settings2 className="w-4 h-4 text-slate-600" />
+            </Button>
+          )}
           <Button onClick={() => setIsPdfDialogOpen(true)} size="sm" variant="outline" className="text-slate-700">
             <Download className="w-4 h-4 mr-1" />
             PDF
@@ -767,24 +1128,71 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
               <Label className="text-right col-span-2">Script Date Offset</Label>
-              <Input type="number" className="col-span-2" value={settingsForm.scriptDateOffset || 0} onChange={e => setSettingsForm({...settingsForm, scriptDateOffset: e.target.value})} />
+              <Input type="number" className="col-span-2" value={settingsForm.scriptDateOffset ?? ""} onChange={e => setSettingsForm({...settingsForm, scriptDateOffset: e.target.value ? Number(e.target.value) : undefined})} />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label className="text-right col-span-2">Shoot Date Offset</Label>
-              <Input type="number" className="col-span-2" value={settingsForm.shootDateOffset || 0} onChange={e => setSettingsForm({...settingsForm, shootDateOffset: e.target.value})} />
+              <Input type="number" className="col-span-2" value={settingsForm.shootDateOffset ?? ""} onChange={e => setSettingsForm({...settingsForm, shootDateOffset: e.target.value ? Number(e.target.value) : undefined})} />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label className="text-right col-span-2">Editing Start Offset</Label>
-              <Input type="number" className="col-span-2" value={settingsForm.editingStartOffset || 0} onChange={e => setSettingsForm({...settingsForm, editingStartOffset: e.target.value})} />
+              <Input type="number" className="col-span-2" value={settingsForm.editingStartOffset ?? ""} onChange={e => setSettingsForm({...settingsForm, editingStartOffset: e.target.value ? Number(e.target.value) : undefined})} />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label className="text-right col-span-2">Approval Offset</Label>
-              <Input type="number" className="col-span-2" value={settingsForm.approvalOffset || 0} onChange={e => setSettingsForm({...settingsForm, approvalOffset: e.target.value})} />
+              <Input type="number" className="col-span-2" value={settingsForm.approvalOffset ?? ""} onChange={e => setSettingsForm({...settingsForm, approvalOffset: e.target.value ? Number(e.target.value) : undefined})} />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsSettingsOpen(false)}>Cancel</Button>
             <Button onClick={handleSaveSettings} className="bg-brand-teal text-white">Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showReasonDialog} onOpenChange={setShowReasonDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reason Required</DialogTitle>
+            <DialogDescription>
+              Please provide a reason for changing the status to <span className="font-semibold text-brand-teal">{pendingStatusChange}</span>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label className="mb-2 block">Reason</Label>
+            <Input 
+              value={statusChangeReason} 
+              onChange={e => setStatusChangeReason(e.target.value)} 
+              placeholder="Enter reason..." 
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (!statusChangeReason.trim()) {
+                    toast.error("Reason is required");
+                    return;
+                  }
+                  setShowReasonDialog(false);
+                  proceedWithStatusChange(pendingStatusChange!, statusChangeReason);
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowReasonDialog(false)}>Cancel</Button>
+            <Button 
+              onClick={() => {
+                if (!statusChangeReason.trim()) {
+                  toast.error("Reason is required");
+                  return;
+                }
+                setShowReasonDialog(false);
+                proceedWithStatusChange(pendingStatusChange!, statusChangeReason);
+              }}
+              className="bg-brand-teal text-white"
+            >
+              Confirm
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -816,9 +1224,9 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
                 Clear All
               </Button>
             </div>
-            <div className="grid grid-cols-2 gap-2 max-h-[400px] overflow-y-auto p-1">
+            <div className="columns-2 gap-4 p-1">
               {tableHeaders.filter(h => h !== "").map((header, idx) => (
-                <div key={idx} className="flex items-center space-x-2">
+                <div key={idx} className="flex items-center space-x-2 mb-3 break-inside-avoid">
                   <input
                     type="checkbox"
                     id={`col-${idx}`}
@@ -851,9 +1259,9 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
               <History className="h-5 w-5" />
             </div>
             <div>
-              <DialogTitle className="text-[22px] font-bold text-slate-900">Row Activity History</DialogTitle>
+              <DialogTitle className="text-[22px] font-bold text-slate-900">{isCommonLogs ? "Project Activity Logs" : "Row Activity History"}</DialogTitle>
               <DialogDescription className="text-xs text-slate-500 mt-1 italic">
-                Content Calendar
+                {isCommonLogs ? "Combined logs for this content calendar" : "Content Calendar Row"}
               </DialogDescription>
             </div>
           </div>
@@ -887,6 +1295,11 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
                             <div className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold border ${actionColor} tracking-wider`}>
                               {actionText}
                             </div>
+                            {isCommonLogs && log.rowConcept && (
+                              <Badge className="ml-1 bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200 shadow-none font-medium px-1.5 py-0">
+                                {log.rowConcept}
+                              </Badge>
+                            )}
                           </div>
                           <span className="text-[10px] text-slate-400 font-medium">
                             {new Date(log.timestamp).toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}
@@ -928,21 +1341,34 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
             <thead>
               <tr className="bg-slate-50">
                 {tableHeaders.map((h, i) => (
-                  <th key={i} className="px-3 py-2 font-semibold text-slate-600 text-xs uppercase tracking-wider border border-slate-200">
+                  <th 
+                    key={i} 
+                    className={`px-3 py-2 font-semibold text-slate-600 text-xs uppercase tracking-wider border border-slate-200 ${
+                      i <= 2 ? "sticky z-20 bg-slate-50" : i === tableHeaders.length - 1 ? "sticky right-0 z-20 bg-slate-50" : ""
+                    }`}
+                    style={{
+                      left: i === 0 ? 0 : i === 1 ? '140px' : i === 2 ? '260px' : 'auto',
+                      minWidth: i === 0 ? '140px' : i === 1 ? '120px' : i === 2 ? '100px' : i === tableHeaders.length - 1 ? '80px' : 'auto',
+                      maxWidth: i === 0 ? '140px' : i === 1 ? '120px' : i === 2 ? '100px' : i === tableHeaders.length - 1 ? '80px' : 'auto',
+                      boxShadow: i === 2 ? 'inset -1px 0 0 0 #e2e8f0, 2px 0 4px -2px rgba(0,0,0,0.1)' : (i < 2 ? 'inset -1px 0 0 0 #e2e8f0' : i === tableHeaders.length - 1 ? 'inset 1px 0 0 0 #e2e8f0, -2px 0 4px -2px rgba(0,0,0,0.1)' : undefined)
+                    }}
+                  >
                     {h}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {entries.length === 0 ? (
+              {filteredEntries.length === 0 ? (
                 <tr>
                   <td colSpan={tableHeaders.length} className="px-4 py-8 text-center text-slate-500">
-                    No entries for this month. Click "Add Row" or "Select Dates" to start planning.
+                    {entries.length === 0 
+                      ? "No entries for this month. Click \"Add Row\" or \"Select Dates\" to start planning."
+                      : "No entries found matching the selected filter."}
                   </td>
                 </tr>
               ) : (
-                entries.map((entry) => {
+                filteredEntries.map((entry) => {
                   const isEditing = editingId === entry.id;
                   
                   let isDue = false;
@@ -960,9 +1386,21 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
                   }
                   
                   return (
-                    <tr key={entry.id} className={isDue ? "bg-red-50 border-red-200" : "odd:bg-white even:bg-slate-50"}>
-                      {fieldKeys.map((key) => (
-                        <td key={key} className="px-2 py-1 border border-slate-200 max-w-[200px]">
+                    <tr key={entry.id} id={`task-${entry.id}`} className={`transition-all duration-1000 ${isDue ? "bg-red-50 border-red-200" : "odd:bg-white even:bg-slate-50"}`}>
+                      {fieldKeys.map((key, index) => (
+                        <td 
+                          key={key} 
+                          className={`px-2 py-1 border border-slate-200 max-w-[200px] ${
+                            index <= 2 ? "sticky z-10" : ""
+                          }`}
+                          style={{
+                            left: index === 0 ? 0 : index === 1 ? '140px' : index === 2 ? '260px' : 'auto',
+                            minWidth: index === 0 ? '140px' : index === 1 ? '120px' : index === 2 ? '100px' : 'auto',
+                            maxWidth: index === 0 ? '140px' : index === 1 ? '120px' : index === 2 ? '100px' : 'auto',
+                            backgroundColor: index <= 2 ? 'inherit' : undefined,
+                            boxShadow: index === 2 ? 'inset -1px 0 0 0 #e2e8f0, 2px 0 4px -2px rgba(0,0,0,0.1)' : (index < 2 ? 'inset -1px 0 0 0 #e2e8f0' : undefined)
+                          }}
+                        >
                           {isEditing ? (
                             key === "postReel" ? (
                               <Select 
@@ -1006,47 +1444,75 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
                                 className="h-8 text-xs px-2 py-1"
                                 value={editForm[key] || ""}
                                 onChange={(e) => setEditForm({ ...editForm, [key]: e.target.value })}
+                                placeholder={key === "reference" || key.toLowerCase().includes("link") ? "Enter link(s) separated by spaces or commas..." : ""}
                               />
                             )
                           ) : (
-                            <div 
-                              className="truncate px-1 cursor-pointer min-h-[20px] flex items-center text-xs" 
-                              onClick={() => startEditing(entry)}
-                              title={entry[key] || ""}
-                            >
-                              {entry[key] && (key.toLowerCase().includes("link") || key === "reference") && entry[key].startsWith("http") ? (
-                                <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
-                                  <a href={entry[key]} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-500 text-xs flex-1 truncate" style={{ textDecoration: 'underline' }}>
-                                    Link
-                                  </a>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-5 w-5 hover:bg-slate-100"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      navigator.clipboard.writeText(entry[key]);
-                                      toast.success("Link copied!");
-                                    }}
-                                  >
-                                    <Copy className="h-3 w-3 text-slate-400 hover:text-slate-600" />
-                                  </Button>
-                                </div>
-                              ) : (
-                                <>
-                                  {formatDateDisplay(entry[key]) || null}
-                                  {key === "postingDate" && isDue && (
-                                    <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-100 text-red-800">
-                                      Due
-                                    </span>
-                                  )}
-                                </>
-                              )}
-                            </div>
-                          )}
+                             <div 
+                               className="px-1 cursor-pointer min-h-[20px] flex items-center text-xs w-full overflow-hidden" 
+                               onClick={() => startEditing(entry)}
+                               title={entry[key] || ""}
+                             >
+                               {(() => {
+                                 if (entry[key] && (key.toLowerCase().includes("link") || key === "reference")) {
+                                   const matches = entry[key].match(/(https?:\/\/[^\s,;]+|www\.[^\s,;]+)/gi);
+                                   if (matches && matches.length > 0) {
+                                     return (
+                                       <div className="flex flex-wrap items-center gap-1 w-full">
+                                         {matches.map((matchUrl: string, idx: number) => {
+                                           let url = matchUrl;
+                                           if (url.toLowerCase().startsWith("www.")) {
+                                             url = "https://" + url;
+                                           }
+                                           return (
+                                             <div key={idx} className="flex items-center gap-1 bg-blue-50 text-blue-600 px-1 py-0.5 rounded border border-blue-100 text-[10px] select-none hover:bg-blue-100/70 transition-colors">
+                                               <a href={url} target="_blank" rel="noopener noreferrer" className="hover:underline font-semibold max-w-[80px] truncate" title={url} onClick={e => e.stopPropagation()}>
+                                                 {matches.length > 1 ? `Link ${idx + 1}` : "Link"}
+                                               </a>
+                                               <Button
+                                                 variant="ghost"
+                                                 size="icon"
+                                                 className="h-3 w-3 p-0 hover:bg-blue-200/55 rounded flex items-center justify-center shadow-none border-none bg-transparent"
+                                                 onClick={(e) => {
+                                                   e.stopPropagation();
+                                                   navigator.clipboard.writeText(url);
+                                                   toast.success("Link copied!");
+                                                 }}
+                                               >
+                                                 <Copy className="h-2 w-2 text-blue-400 hover:text-blue-600" />
+                                               </Button>
+                                             </div>
+                                           );
+                                         })}
+                                       </div>
+                                     );
+                                   }
+                                 }
+
+                                 return (
+                                   <>
+                                     <span className="truncate flex-1">
+                                       {formatDateDisplay(entry[key]) || null}
+                                     </span>
+                                     {key === "postingDate" && isDue && (
+                                       <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-100 text-red-800 shrink-0">
+                                         Due
+                                       </span>
+                                     )}
+                                   </>
+                                 );
+                               })()}
+                             </div>
+                           )}
                         </td>
                       ))}
-                      <td className="px-2 py-1 border border-slate-200 min-w-[80px]">
+                      <td 
+                        className="px-2 py-1 border border-slate-200 min-w-[80px] sticky right-0 z-10"
+                        style={{
+                          backgroundColor: 'inherit',
+                          boxShadow: 'inset 1px 0 0 0 #e2e8f0, -2px 0 4px -2px rgba(0,0,0,0.1)'
+                        }}
+                      >
                         <div className="flex items-center justify-center gap-1">
                           {isEditing ? (
                             <>

@@ -15,6 +15,9 @@ import {
 } from '@/components/ui/dialog'
 import { Plus, Clock, Pencil, Trash2, Users } from 'lucide-react'
 import { DeleteConfirmDialog } from '@/components/hrms/delete-confirm-dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { TIME_OPTIONS } from "@/lib/constants"
+import { formatTime12h } from '@/lib/utils'
 
 interface Shift {
   id: string
@@ -137,7 +140,7 @@ export default function ShiftsPage() {
                 <div className="flex items-center gap-2">
                   <Clock className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm">
-                    {shift.startTime} - {shift.endTime}
+                    {formatTime12h(shift.startTime)} - {formatTime12h(shift.endTime)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -210,21 +213,25 @@ export default function ShiftsPage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="startTime">Start Time</Label>
-                <Input
-                  id="startTime"
-                  type="time"
-                  value={formData.startTime}
-                  onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
-                />
+                <Select value={formData.startTime} onValueChange={(v) => setFormData({ ...formData, startTime: v })}>
+                  <SelectTrigger id="startTime" className="w-full">
+                    <SelectValue placeholder="Start Time" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[250px]">
+                    {TIME_OPTIONS.map(opt => <SelectItem key={`start-${opt.valueNoSec}`} value={opt.valueNoSec}>{opt.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="endTime">End Time</Label>
-                <Input
-                  id="endTime"
-                  type="time"
-                  value={formData.endTime}
-                  onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
-                />
+                <Select value={formData.endTime} onValueChange={(v) => setFormData({ ...formData, endTime: v })}>
+                  <SelectTrigger id="endTime" className="w-full">
+                    <SelectValue placeholder="End Time" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[250px]">
+                    {TIME_OPTIONS.map(opt => <SelectItem key={`end-${opt.valueNoSec}`} value={opt.valueNoSec}>{opt.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="space-y-2">

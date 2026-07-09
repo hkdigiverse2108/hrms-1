@@ -229,7 +229,13 @@ export default function BonusesPage() {
     })
     .filter(a => {
       if (!searchQuery) return true
-      return a.reason?.toLowerCase().includes(searchQuery.toLowerCase())
+      const emp = (employees as any[])?.find(e => e.id === a.employeeId)
+      const empName = emp?.name || ''
+      const searchLower = searchQuery.toLowerCase()
+      return (
+        (a.reason && a.reason.toLowerCase().includes(searchLower)) ||
+        empName.toLowerCase().includes(searchLower)
+      )
     })
     .filter(a => {
       return selectedEmpId === 'all' || a.employeeId === selectedEmpId
@@ -279,7 +285,7 @@ export default function BonusesPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
           <input 
             type="text" 
-            placeholder="Search by reason..." 
+            placeholder="Search by employee or reason..." 
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full h-9 pl-9 pr-4 py-1.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-teal focus:border-brand-teal transition-all placeholder:text-slate-400 text-gray-700 shadow-sm"
@@ -295,9 +301,10 @@ export default function BonusesPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Employees</SelectItem>
-                {(employees as any[])?.map(emp => (
-                  <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                ))}
+                {(employees as any[])?.map(emp => {
+                  if (!emp || !emp.id) return null;
+                  return <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                })}
               </SelectContent>
             </Select>
           </div>

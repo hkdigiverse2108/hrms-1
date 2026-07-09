@@ -328,19 +328,24 @@ export default function DocumentTemplatesPage() {
           padding: 0 !important;
           margin: 0 !important;
         }
-        .edit-quill-sync .ql-editor {
+        .edit-quill-sync .ql-editor, .edit-quill-sync .ql-editor * {
           font-family: inherit !important;
           font-size: inherit !important;
           line-height: inherit !important;
-          padding: 12px 15px !important;
           overflow-y: visible !important;
-          min-height: 500px;
-          border-radius: 0.5rem !important;
           transition-property: all !important;
           transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1) !important;
           transition-duration: 150ms !important;
+          white-space: pre-wrap !important;
           word-break: normal !important;
+          word-wrap: break-word !important;
           overflow-wrap: break-word !important;
+          max-width: 100% !important;
+        }
+        .edit-quill-sync .ql-editor {
+          padding: 12px 15px !important;
+          min-height: 500px;
+          border-radius: 0.5rem !important;
         }
         .edit-quill-sync.quill {
           border: none !important;

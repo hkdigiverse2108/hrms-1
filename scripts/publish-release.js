@@ -2,6 +2,8 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
+const https = require('https');
+const http = require('http');
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -19,6 +21,98 @@ function normalizeApiUrl(url) {
     url = url + '/api';
   }
   return url;
+}
+
+function uploadRelease(apiUrl, token, version, changelogPoints, exePath, exeFile) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(`${apiUrl}/desktop/release`);
+    const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
+    
+    const delimiter = `--${boundary}\r\n`;
+    const closeDelimiter = `\r\n--${boundary}--\r\n`;
+    
+    let headerText = '';
+    headerText += delimiter + `Content-Disposition: form-data; name="version"\r\n\r\n${version}\r\n`;
+    headerText += delimiter + `Content-Disposition: form-data; name="changelog"\r\n\r\n${JSON.stringify(changelogPoints)}\r\n`;
+    headerText += delimiter + `Content-Disposition: form-data; name="file"; filename="${exeFile}"\r\n`;
+    headerText += `Content-Type: application/x-msdownload\r\n\r\n`;
+    
+    const headerBuffer = Buffer.from(headerText, 'utf-8');
+    const footerBuffer = Buffer.from(closeDelimiter, 'utf-8');
+    
+    const stats = fs.statSync(exePath);
+    const totalSize = headerBuffer.length + stats.size + footerBuffer.length;
+    
+    const options = {
+      method: 'POST',
+      hostname: url.hostname,
+      port: url.port || (url.protocol === 'https:' ? 443 : 80),
+      path: url.pathname + url.search,
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Content-Length': totalSize
+      },
+      timeout: 600000 // 10 minutes timeout
+    };
+    
+    const transport = url.protocol === 'https:' ? https : http;
+    
+    const req = transport.request(options, (res) => {
+      let resBody = '';
+      res.on('data', (chunk) => {
+        resBody += chunk;
+      });
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          try {
+            resolve(JSON.parse(resBody));
+          } catch (e) {
+            resolve({ success: true, message: 'Uploaded', rawBody: resBody });
+          }
+        } else {
+          reject(new Error(`Server returned HTTP ${res.statusCode}: ${resBody}`));
+        }
+      });
+    });
+    
+    req.on('error', (err) => {
+      reject(err);
+    });
+    
+    req.on('timeout', () => {
+      req.destroy(new Error('Upload timed out'));
+    });
+    
+    req.write(headerBuffer);
+    
+    const fileStream = fs.createReadStream(exePath);
+    let uploadedBytes = 0;
+    let lastProgressTime = Date.now();
+    
+    fileStream.on('data', (chunk) => {
+      uploadedBytes += chunk.length;
+      const now = Date.now();
+      if (now - lastProgressTime > 1000 || uploadedBytes === stats.size) {
+        const percent = ((uploadedBytes / stats.size) * 100).toFixed(1);
+        const mb = (uploadedBytes / (1024 * 1024)).toFixed(1);
+        const totalMb = (stats.size / (1024 * 1024)).toFixed(1);
+        console.log(`Uploading release file: ${mb}MB / ${totalMb}MB (${percent}%)`);
+        lastProgressTime = now;
+      }
+    });
+    
+    fileStream.on('error', (err) => {
+      req.destroy(err);
+    });
+    
+    fileStream.on('end', () => {
+      req.write(footerBuffer);
+      req.end();
+    });
+    
+    fileStream.pipe(req, { end: false });
+  });
 }
 
 async function main() {
@@ -154,38 +248,14 @@ async function main() {
   // 8. Upload installer .exe to the server
   console.log(`\nUploading release v${newVersion} to server (${apiUrl})...`);
   try {
-    const formData = new FormData();
-    formData.append('version', newVersion);
-    formData.append('changelog', JSON.stringify(changelogPoints));
-    
-    const fileBuffer = fs.readFileSync(exePath);
-    const fileBlob = new Blob([fileBuffer], { type: 'application/x-msdownload' });
-    formData.append('file', fileBlob, exeFile);
-
-    const uploadRes = await fetch(`${apiUrl}/desktop/release`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`
-      },
-      body: formData
-    });
-
-    if (uploadRes.ok) {
-      const uploadData = await uploadRes.json();
-      const baseUrl = apiUrl.replace('/api', '');
-      console.log("\n=============================================");
-      console.log("SUCCESS: Desktop app release published successfully!");
-      console.log(`Version: ${newVersion}`);
-      console.log(`Download URL: ${baseUrl}${uploadData.release.downloadUrl}`);
-      console.log("All employee desktop apps will now prompt for auto-update.");
-      console.log("=============================================");
-    } else {
-      const errText = await uploadRes.text();
-      console.error(`Upload failed: ${uploadRes.status} - ${errText}`);
-      console.log("\nRestoring original version in package.json...");
-      pkg.version = currentVersion;
-      fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2), 'utf8');
-    }
+    const uploadData = await uploadRelease(apiUrl, token, newVersion, changelogPoints, exePath, exeFile);
+    const baseUrl = apiUrl.replace('/api', '');
+    console.log("\n=============================================");
+    console.log("SUCCESS: Desktop app release published successfully!");
+    console.log(`Version: ${newVersion}`);
+    console.log(`Download URL: ${baseUrl}${uploadData.release ? uploadData.release.downloadUrl : ''}`);
+    console.log("All employee desktop apps will now prompt for auto-update.");
+    console.log("=============================================");
   } catch (uploadErr) {
     console.error("Upload failed with error:", uploadErr);
     console.log("\nRestoring original version in package.json...");

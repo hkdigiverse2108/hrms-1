@@ -224,7 +224,15 @@ export default function LeavePage() {
       const res = await fetch(endpoint);
       if (res.ok) {
         const data = await res.json();
-        setLeaves(data);
+        const parseDDMMYYYY = (dateStr: string) => {
+          if (!dateStr) return 0;
+          const [d, m, y] = dateStr.split("-").map(Number);
+          return new Date(y, m - 1, d).getTime();
+        };
+        const sortedData = data.sort((a: any, b: any) => {
+          return parseDDMMYYYY(b.start_date) - parseDDMMYYYY(a.start_date);
+        });
+        setLeaves(sortedData);
       }
     } catch (err) {
       console.error("Error fetching leaves:", err);

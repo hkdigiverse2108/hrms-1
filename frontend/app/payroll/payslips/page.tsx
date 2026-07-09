@@ -73,7 +73,7 @@ const getPayslipNumber = (record: any, allPayrolls: any[]): string => {
   const sorted = [...filtered].sort((a, b) => {
     const idA = a.id || a._id || ''
     const idB = b.id || b._id || ''
-    return idA.localeCompare(idB)
+    return idB.localeCompare(idA)
   })
 
   // Find index of current record

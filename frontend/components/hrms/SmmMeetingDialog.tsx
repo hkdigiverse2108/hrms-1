@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { 
   Dialog, 
   DialogContent, 
@@ -12,19 +12,28 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Calendar, MessageSquare, Plus, User, Clock, Users, Pencil, Trash2, MapPin, Link as LinkIcon, Target, Flag } from "lucide-react";
+import { Calendar, MessageSquare, Plus, User, Clock, Users, Pencil, Trash2, MapPin, Link as LinkIcon, Target, Flag, X, Search, Check, Loader2, Zap } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
 import { useConfirm } from "@/context/ConfirmContext";
+import { TIME_OPTIONS } from "@/lib/constants";
 
 interface SmmMeetingDialogProps {
   client: any;
   onUpdate: () => void;
   userId?: string;
   userName?: string;
+}
+
+interface EmployeeOption {
+  id: string;
+  name: string;
+  department?: string;
+  designation?: string;
+  profilePhoto?: string;
 }
 
 const formatDisplayDate = (dStr: string) => {
@@ -50,6 +59,154 @@ const formatDisplayDate = (dStr: string) => {
   }
 };
 
+const formatDurationLabel = (mins: number) => {
+  if (mins === 30) return "30 Minutes (Half Hour)";
+  if (mins < 60) return `${mins} Minutes`;
+  if (mins === 60) return "1 Hour";
+  if (mins % 60 === 0) return `${mins / 60} Hours`;
+  
+  const hrs = Math.floor(mins / 60);
+  const remainingMins = mins % 60;
+  return `${hrs} ${hrs === 1 ? 'Hour' : 'Hours'} ${remainingMins} Mins`;
+};
+
+// --- Multi-Select Employee Dropdown ---
+function EmployeeMultiSelect({ 
+  employees, 
+  selectedIds, 
+  onChange, 
+  isLoading 
+}: { 
+  employees: EmployeeOption[]; 
+  selectedIds: string[]; 
+  onChange: (ids: string[]) => void;
+  isLoading: boolean;
+}) {
+  const [search, setSearch] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filtered = employees.filter(emp => 
+    emp.name.toLowerCase().includes(search.toLowerCase()) ||
+    (emp.department || "").toLowerCase().includes(search.toLowerCase()) ||
+    (emp.designation || "").toLowerCase().includes(search.toLowerCase())
+  );
+
+  const toggleEmployee = (id: string) => {
+    if (selectedIds.includes(id)) {
+      onChange(selectedIds.filter(sid => sid !== id));
+    } else {
+      onChange([...selectedIds, id]);
+    }
+  };
+
+  const removeEmployee = (id: string) => {
+    onChange(selectedIds.filter(sid => sid !== id));
+  };
+
+  const selectedEmployees = employees.filter(e => selectedIds.includes(e.id));
+
+  return (
+    <div ref={containerRef} className="relative">
+      {/* Selected employees as badge chips */}
+      {selectedEmployees.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-1.5">
+          {selectedEmployees.map(emp => (
+            <Badge 
+              key={emp.id} 
+              variant="outline" 
+              className="bg-brand-teal/10 text-brand-teal border-brand-teal/30 text-[10px] py-0 px-1.5 pr-0.5 gap-1 font-medium"
+            >
+              {emp.name}
+              <button 
+                onClick={(e) => { e.stopPropagation(); removeEmployee(emp.id); }}
+                className="ml-0.5 hover:bg-brand-teal/20 rounded-full p-0.5 transition-colors"
+              >
+                <X className="w-2.5 h-2.5" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+      )}
+
+      {/* Search input */}
+      <div className="relative">
+        <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+        <Input
+          placeholder={isLoading ? "Loading employees..." : "Search employees..."}
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setIsOpen(true); }}
+          onFocus={() => setIsOpen(true)}
+          className="bg-white border-slate-200 focus-visible:ring-brand-teal h-8 text-xs pl-7"
+          disabled={isLoading}
+        />
+        {isLoading && (
+          <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 animate-spin" />
+        )}
+      </div>
+
+      {/* Dropdown list */}
+      {isOpen && !isLoading && (
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-[180px] overflow-y-auto">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-4 text-center text-xs text-slate-400">
+              No employees found
+            </div>
+          ) : (
+            filtered.map(emp => {
+              const isSelected = selectedIds.includes(emp.id);
+              return (
+                <button
+                  key={emp.id}
+                  onClick={() => toggleEmployee(emp.id)}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors text-xs hover:bg-slate-50 ${isSelected ? 'bg-brand-teal/5' : ''}`}
+                >
+                  <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${isSelected ? 'bg-brand-teal border-brand-teal text-white' : 'border-slate-300'}`}>
+                    {isSelected && <Check className="w-3 h-3" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-slate-700 truncate">{emp.name}</div>
+                    {(emp.department || emp.designation) && (
+                      <div className="text-[10px] text-slate-400 truncate">
+                        {[emp.designation, emp.department].filter(Boolean).join(' · ')}
+                      </div>
+                    )}
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- Free Slot Badge ---
+function FreeSlotBadge({ slot, onClick }: { slot: { start: string; end: string }; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60 hover:bg-emerald-100 hover:border-emerald-300 transition-all duration-150 cursor-pointer shadow-sm hover:shadow"
+      title="Click to use this time slot"
+    >
+      <Clock className="w-3 h-3" />
+      {slot.start} – {slot.end}
+    </button>
+  );
+}
+
 export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeetingDialogProps) {
   const { confirm } = useConfirm();
   const [note, setNote] = useState("");
@@ -58,6 +215,8 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [editNote, setEditNote] = useState("");
   const [meetingDate, setMeetingDate] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
   const [editDate, setEditDate] = useState("");
 
   const [type, setType] = useState("");
@@ -74,7 +233,225 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
   const [editStatus, setEditStatus] = useState("");
   const [editNextSteps, setEditNextSteps] = useState("");
   const [editDuration, setEditDuration] = useState("");
+  const [editStartTime, setEditStartTime] = useState("");
+  const [editEndTime, setEditEndTime] = useState("");
   const [editLink, setEditLink] = useState("");
+
+  // New state: employees list, selected employee IDs, free slots
+  const [employees, setEmployees] = useState<EmployeeOption[]>([]);
+  const [isLoadingEmployees, setIsLoadingEmployees] = useState(false);
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
+  const [freeSlots, setFreeSlots] = useState<{ start: string; end: string }[]>([]);
+  const [isLoadingSlots, setIsLoadingSlots] = useState(false);
+  const [selectedDuration, setSelectedDuration] = useState<number>(30);
+  const [showCustomDuration, setShowCustomDuration] = useState<boolean>(false);
+  const [customHours, setCustomHours] = useState<string>("");
+
+  // Edit mode employee selection
+  const [editSelectedEmployeeIds, setEditSelectedEmployeeIds] = useState<string[]>([]);
+  const [editFreeSlots, setEditFreeSlots] = useState<{ start: string; end: string }[]>([]);
+  const [isLoadingEditSlots, setIsLoadingEditSlots] = useState(false);
+  const [editSelectedDuration, setEditSelectedDuration] = useState<number>(30);
+  const [showEditCustomDuration, setShowEditCustomDuration] = useState<boolean>(false);
+  const [editCustomHours, setEditCustomHours] = useState<string>("");
+
+  // Time Validation Constants
+  const todayStr = new Date().toISOString().split('T')[0];
+  const now = new Date();
+  const nowTimeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+  
+  const isAddToday = meetingDate === todayStr;
+  const isEditToday = editDate === todayStr;
+
+  // Fetch employees when dialog opens
+  useEffect(() => {
+    if (isOpen && employees.length === 0) {
+      fetchEmployees();
+    }
+  }, [isOpen]);
+
+  const fetchEmployees = async () => {
+    setIsLoadingEmployees(true);
+    try {
+      const res = await fetch(`${API_URL}/employees`);
+      if (res.ok) {
+        const data = await res.json();
+        const active = data
+          .filter((e: any) => e.status?.toLowerCase() !== "inactive")
+          .map((e: any) => ({
+            id: e.id,
+            name: e.name || `${e.firstName || ''} ${e.lastName || ''}`.trim() || 'Unknown',
+            department: e.department || '',
+            designation: e.designation || '',
+            profilePhoto: e.profilePhoto || '',
+          }));
+        setEmployees(active);
+      }
+    } catch (err) {
+      console.error("Error fetching employees:", err);
+    } finally {
+      setIsLoadingEmployees(false);
+    }
+  };
+
+  // Fetch free slots when date + attendees change (add mode)
+  const fetchFreeSlots = useCallback(async (empIds: string[], dateStr: string, durationVal: number) => {
+    if (!empIds.length || !dateStr) {
+      setFreeSlots([]);
+      return;
+    }
+    // Use the date value directly (YYYY-MM-DD)
+    const datePart = dateStr.split("T")[0];
+    if (!datePart || datePart.length !== 10) {
+      setFreeSlots([]);
+      return;
+    }
+
+    setIsLoadingSlots(true);
+    try {
+      const res = await fetch(`${API_URL}/schedules/free-slots`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employeeIds: empIds,
+          date: datePart,
+          durationMins: durationVal,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setFreeSlots(data.freeSlots || []);
+      }
+    } catch (err) {
+      console.error("Error fetching free slots:", err);
+    } finally {
+      setIsLoadingSlots(false);
+    }
+  }, []);
+
+  // Fetch free slots when date + attendees change (edit mode)
+  const fetchEditFreeSlots = useCallback(async (empIds: string[], dateStr: string, durationVal: number) => {
+    if (!empIds.length || !dateStr) {
+      setEditFreeSlots([]);
+      return;
+    }
+    const datePart = dateStr.split("T")[0] || dateStr;
+    if (!datePart || datePart.length !== 10) {
+      setEditFreeSlots([]);
+      return;
+    }
+
+    setIsLoadingEditSlots(true);
+    try {
+      const res = await fetch(`${API_URL}/schedules/free-slots`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employeeIds: empIds,
+          date: datePart,
+          durationMins: durationVal,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setEditFreeSlots(data.freeSlots || []);
+      }
+    } catch (err) {
+      console.error("Error fetching edit free slots:", err);
+    } finally {
+      setIsLoadingEditSlots(false);
+    }
+  }, []);
+
+  // Watch for changes in add mode
+  useEffect(() => {
+    const idsToCheck = userId ? Array.from(new Set([...selectedEmployeeIds, userId])) : selectedEmployeeIds;
+    fetchFreeSlots(idsToCheck, meetingDate, selectedDuration);
+  }, [selectedEmployeeIds, meetingDate, selectedDuration, fetchFreeSlots, userId]);
+
+  // Watch for changes in edit mode
+  useEffect(() => {
+    if (editingIdx !== null) {
+      const idsToCheck = userId ? Array.from(new Set([...editSelectedEmployeeIds, userId])) : editSelectedEmployeeIds;
+      fetchEditFreeSlots(idsToCheck, editDate, editSelectedDuration);
+    }
+  }, [editSelectedEmployeeIds, editDate, editSelectedDuration, editingIdx, fetchEditFreeSlots, userId]);
+
+  // Sync selected employee IDs to attendees string
+  useEffect(() => {
+    const names = employees
+      .filter(e => selectedEmployeeIds.includes(e.id))
+      .map(e => e.name);
+    setAttendees(names.join(", "));
+  }, [selectedEmployeeIds, employees]);
+
+  // Sync edit selected employee IDs to edit attendees string
+  useEffect(() => {
+    if (editingIdx !== null) {
+      const names = employees
+        .filter(e => editSelectedEmployeeIds.includes(e.id))
+        .map(e => e.name);
+      setEditAttendees(names.join(", "));
+    }
+  }, [editSelectedEmployeeIds, employees, editingIdx]);
+
+  // Synchronize times and duration in add mode
+  useEffect(() => {
+    if (startTime && endTime) {
+      try {
+        const [sh, sm] = startTime.split(":").map(Number);
+        const [eh, em] = endTime.split(":").map(Number);
+        const diff = (eh * 60 + em) - (sh * 60 + sm);
+        if (diff > 0 && diff !== selectedDuration) {
+          setSelectedDuration(diff);
+        }
+      } catch (e) {}
+    }
+  }, [startTime, endTime]);
+
+  useEffect(() => {
+    if (startTime && selectedDuration) {
+      try {
+        const [sh, sm] = startTime.split(":").map(Number);
+        const total = sh * 60 + sm + selectedDuration;
+        const eh = Math.floor(total / 60) % 24;
+        const em = total % 60;
+        const calculatedEnd = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
+        if (calculatedEnd !== endTime) {
+          setEndTime(calculatedEnd);
+        }
+      } catch (e) {}
+    }
+  }, [startTime, selectedDuration]);
+
+  // Synchronize times and duration in edit mode
+  useEffect(() => {
+    if (editStartTime && editEndTime) {
+      try {
+        const [sh, sm] = editStartTime.split(":").map(Number);
+        const [eh, em] = editEndTime.split(":").map(Number);
+        const diff = (eh * 60 + em) - (sh * 60 + sm);
+        if (diff > 0 && diff !== editSelectedDuration) {
+          setEditSelectedDuration(diff);
+        }
+      } catch (e) {}
+    }
+  }, [editStartTime, editEndTime]);
+
+  useEffect(() => {
+    if (editStartTime && editSelectedDuration) {
+      try {
+        const [sh, sm] = editStartTime.split(":").map(Number);
+        const total = sh * 60 + sm + editSelectedDuration;
+        const eh = Math.floor(total / 60) % 24;
+        const em = total % 60;
+        const calculatedEnd = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
+        if (calculatedEnd !== editEndTime) {
+          setEditEndTime(calculatedEnd);
+        }
+      } catch (e) {}
+    }
+  }, [editStartTime, editSelectedDuration]);
 
   const handleAddMeeting = async () => {
     if (!note.trim()) return;
@@ -85,14 +462,15 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           note: note,
-          date: meetingDate ? meetingDate.replace('T', ' ') : new Date().toISOString().split('T')[0] + " " + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+          date: meetingDate ? `${meetingDate} ${startTime}`.trim() : new Date().toISOString().split('T')[0],
           performedBy: userName,
           type: type,
           location: location,
           attendees: attendees,
+          attendeeIds: selectedEmployeeIds,
           status: status,
           nextSteps: nextSteps,
-          duration: duration,
+          duration: startTime && endTime ? `${startTime} - ${endTime}` : duration,
           link: link
         }),
       });
@@ -101,13 +479,20 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
         toast.success("Meeting added");
         setNote("");
         setMeetingDate("");
+        setStartTime("");
+        setEndTime("");
         setType("");
         setLocation("");
         setAttendees("");
+        setSelectedEmployeeIds([]);
         setStatus("");
         setNextSteps("");
         setDuration("");
         setLink("");
+        setFreeSlots([]);
+        setSelectedDuration(30);
+        setShowCustomDuration(false);
+        setCustomHours("");
         onUpdate();
       } else {
         toast.error("Failed to add meeting");
@@ -130,13 +515,14 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
         body: JSON.stringify({
           ...client.meetings[idx],
           note: editNote,
-          date: editDate ? editDate.replace('T', ' ') : client.meetings[idx].date,
+          date: editDate ? `${editDate} ${editStartTime}`.trim() : client.meetings[idx].date,
           type: editType,
           location: editLocation,
           attendees: editAttendees,
+          attendeeIds: editSelectedEmployeeIds,
           status: editStatus,
           nextSteps: editNextSteps,
-          duration: editDuration,
+          duration: editStartTime && editEndTime ? `${editStartTime} - ${editEndTime}` : editDuration,
           link: editLink
         }),
       });
@@ -145,6 +531,11 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
         toast.success("Meeting updated");
         setEditingIdx(null);
         setEditNote("");
+        setEditSelectedEmployeeIds([]);
+        setEditFreeSlots([]);
+        setEditSelectedDuration(30);
+        setShowEditCustomDuration(false);
+        setEditCustomHours("");
         onUpdate();
       } else {
         toast.error("Failed to update meeting");
@@ -189,6 +580,87 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
     }
   };
 
+  // Helper: split free time blocks into chunks of selected duration with a 30-min sliding window step
+  const getDurationChunks = (slots: { start: string; end: string }[], durationMins: number) => {
+    const chunks: { start: string; end: string }[] = [];
+
+    const timeToMins = (t: string): number => {
+      const parts = t.split(":");
+      return Number(parts[0]) * 60 + Number(parts[1]);
+    };
+
+    const minsToTime = (m: number): string => {
+      const h = Math.floor(m / 60) % 24;
+      const mins = m % 60;
+      return `${String(h).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+    };
+
+    const step = 30; // 30 minutes sliding step
+
+    slots.forEach(slot => {
+      const startMins = timeToMins(slot.start);
+      const endMins = timeToMins(slot.end);
+      let current = startMins;
+      const remainder = current % 15;
+      if (remainder > 0) {
+        current += (15 - remainder);
+      }
+
+      while (current + durationMins <= endMins) {
+        if (current >= 540 && current + durationMins <= 1110) {
+          chunks.push({
+            start: minsToTime(current),
+            end: minsToTime(current + durationMins)
+          });
+        }
+        current += step;
+      }
+    });
+
+    return chunks;
+  };
+
+  // Helper: resolve attendee names to employee IDs (for edit mode)
+  const resolveAttendeesToIds = (attendeesStr: string): string[] => {
+    if (!attendeesStr || employees.length === 0) return [];
+    const names = attendeesStr.split(",").map(n => n.trim().toLowerCase()).filter(Boolean);
+    return employees
+      .filter(e => names.includes(e.name.toLowerCase()))
+      .map(e => e.id);
+  };
+
+  // Helper: apply a free slot to the date/time picker
+  const applyFreeSlot = (slot: { start: string; end: string }, mode: 'add' | 'edit') => {
+    const durationMins = mode === 'add' ? selectedDuration : editSelectedDuration;
+    
+    const calculateEndTime = (startStr: string, limitEndStr: string): string => {
+      try {
+        const [sh, sm] = startStr.split(":").map(Number);
+        const [eh, em] = limitEndStr.split(":").map(Number);
+        const startMins = sh * 60 + sm;
+        const limitMins = eh * 60 + em;
+        const targetMins = Math.min(startMins + durationMins, limitMins);
+        
+        const h = Math.floor(targetMins / 60);
+        const m = targetMins % 60;
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      } catch (e) {
+        return limitEndStr;
+      }
+    };
+    
+    const computedEnd = calculateEndTime(slot.start, slot.end);
+
+    if (mode === 'add') {
+      setStartTime(slot.start);
+      setEndTime(computedEnd);
+    } else {
+      setEditStartTime(slot.start);
+      setEditEndTime(computedEnd);
+    }
+    toast.success(`Time slot ${slot.start} – ${computedEnd} applied`);
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
@@ -205,7 +677,7 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
           <Users className="w-4 h-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-md" onClick={(e) => e.stopPropagation()}>
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             Meetings: <span className="text-brand-teal">{client.companyName}</span>
@@ -216,10 +688,11 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
           <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-100">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Date & Time *</Label>
+                <Label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Date *</Label>
                 <Input 
-                  type="datetime-local" 
+                  type="date" 
                   value={meetingDate}
+                  min={todayStr}
                   onChange={(e) => setMeetingDate(e.target.value)}
                   className="bg-white border-slate-200 focus-visible:ring-brand-teal h-8 text-xs"
                 />
@@ -274,35 +747,168 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
               </div>
             </div>
 
+            {/* Attendees: Multi-select employee dropdown */}
             <div className="space-y-1.5 mt-3">
               <Label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Attendees *</Label>
-              <Input 
-                placeholder="e.g. John Doe, Jane Smith" 
-                value={attendees}
-                onChange={(e) => setAttendees(e.target.value)}
-                className="bg-white border-slate-200 focus-visible:ring-brand-teal h-8 text-xs"
+              <EmployeeMultiSelect
+                employees={employees}
+                selectedIds={selectedEmployeeIds}
+                onChange={setSelectedEmployeeIds}
+                isLoading={isLoadingEmployees}
               />
             </div>
 
+            {/* Meeting Duration */}
+            <div className="space-y-1.5 mt-3">
+              <Label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Meeting Duration *</Label>
+              <Select 
+                value={showCustomDuration ? "custom" : String(selectedDuration)} 
+                onValueChange={(val) => {
+                  if (val === "custom") {
+                    setShowCustomDuration(true);
+                  } else {
+                    setSelectedDuration(Number(val));
+                    setShowCustomDuration(false);
+                  }
+                }}
+              >
+                <SelectTrigger className="h-8 text-xs bg-white border-slate-200 focus-visible:ring-brand-teal">
+                  <SelectValue placeholder="Select duration" />
+                </SelectTrigger>
+                <SelectContent className="max-h-[200px]">
+                  {(() => {
+                    const durationOptions = [30, 60, 120, 180, 240];
+                    if (!durationOptions.includes(selectedDuration)) {
+                      durationOptions.push(selectedDuration);
+                      durationOptions.sort((a, b) => a - b);
+                    }
+                    const items = durationOptions.map(mins => {
+                      return (
+                        <SelectItem key={mins} value={String(mins)}>
+                          {formatDurationLabel(mins)}
+                        </SelectItem>
+                      );
+                    });
+                    items.push(
+                      <SelectItem key="custom" value="custom" className="text-brand-teal font-medium hover:bg-brand-teal/5 focus:bg-brand-teal/5">
+                        + Custom Duration...
+                      </SelectItem>
+                    );
+                    return items;
+                  })()}
+                </SelectContent>
+              </Select>
+
+              {showCustomDuration && (
+                <div className="flex items-center gap-2 mt-1.5 p-2 bg-slate-50 border border-slate-100 rounded-md animate-in fade-in duration-200">
+                  <Input
+                    type="number"
+                    placeholder="Hours (e.g. 1.5)"
+                    value={customHours}
+                    onChange={(e) => setCustomHours(e.target.value)}
+                    className="h-8 text-xs bg-white border-slate-200 focus-visible:ring-brand-teal w-28"
+                    min="0.1"
+                    step="any"
+                    autoFocus
+                  />
+                  <span className="text-[10px] text-slate-500 font-medium">Hours</span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      const hours = parseFloat(customHours);
+                      if (hours > 0) {
+                        const mins = Math.round(hours * 60);
+                        setSelectedDuration(mins);
+                        setShowCustomDuration(false);
+                        setCustomHours("");
+                      } else {
+                        toast.error("Please enter a valid number of hours");
+                      }
+                    }}
+                    className="h-8 px-2 text-xs bg-brand-teal hover:bg-brand-teal-light text-white font-medium"
+                  >
+                    Add
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setShowCustomDuration(false);
+                      setCustomHours("");
+                    }}
+                    className="h-8 px-2 text-xs text-slate-500 hover:bg-slate-200"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Free Slots Section */}
+            {(selectedEmployeeIds.length > 0 && meetingDate) && (
+              <div className="mt-3 space-y-1.5">
+                <Label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                  <Zap className="w-3 h-3 text-emerald-500" />
+                  Available Free Slots
+                </Label>
+                {isLoadingSlots ? (
+                  <div className="flex items-center gap-2 py-2">
+                    <Loader2 className="w-3 h-3 animate-spin text-brand-teal" />
+                    <span className="text-[10px] text-slate-400">Finding free slots...</span>
+                  </div>
+                ) : getDurationChunks(freeSlots, selectedDuration).length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5 max-h-[150px] overflow-y-auto p-1 border border-slate-100 rounded-lg custom-scrollbar w-full">
+                    {getDurationChunks(freeSlots, selectedDuration).map((slot, idx) => (
+                      <FreeSlotBadge 
+                        key={idx} 
+                        slot={slot} 
+                        onClick={() => applyFreeSlot(slot, 'add')} 
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-rose-500 bg-rose-50 rounded px-2 py-1.5 border border-rose-100">
+                    No common free slots available for the selected attendees on this date.
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3 mt-3">
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Duration</Label>
-                <Input 
-                  placeholder="e.g. 30 mins" 
-                  value={duration}
-                  onChange={(e) => setDuration(e.target.value)}
-                  className="bg-white border-slate-200 focus-visible:ring-brand-teal h-8 text-xs"
-                />
+                <Label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Start Time *</Label>
+                <Select value={startTime} onValueChange={setStartTime}>
+                  <SelectTrigger className="bg-white border-slate-200 focus-visible:ring-brand-teal h-8 text-xs">
+                    <SelectValue placeholder="Start Time" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[250px]">
+                    {TIME_OPTIONS.map(opt => <SelectItem key={`start-${opt.valueNoSec}`} value={opt.valueNoSec}>{opt.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Meeting Link</Label>
-                <Input 
-                  placeholder="https://..." 
-                  value={link}
-                  onChange={(e) => setLink(e.target.value)}
-                  className="bg-white border-slate-200 focus-visible:ring-brand-teal h-8 text-xs"
-                />
+                <Label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">End Time *</Label>
+                <Select value={endTime} onValueChange={setEndTime}>
+                  <SelectTrigger className="bg-white border-slate-200 focus-visible:ring-brand-teal h-8 text-xs">
+                    <SelectValue placeholder="End Time" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[250px]">
+                    {TIME_OPTIONS.map(opt => <SelectItem key={`end-${opt.valueNoSec}`} value={opt.valueNoSec}>{opt.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
+            </div>
+            
+            <div className="space-y-1.5 mt-3">
+              <Label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Meeting Link</Label>
+              <Input 
+                placeholder="https://..." 
+                value={link}
+                onChange={(e) => setLink(e.target.value)}
+                className="bg-white border-slate-200 focus-visible:ring-brand-teal h-8 text-xs"
+              />
             </div>
 
             <div className="space-y-1.5 mt-3">
@@ -327,7 +933,8 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
             <Button 
               className="w-full bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-9"
               onClick={handleAddMeeting}
-              disabled={isSubmitting || !note.trim() || !meetingDate || !attendees.trim()}
+              disabled={isSubmitting || !note.trim() || !meetingDate || !startTime || !endTime || selectedEmployeeIds.length === 0 || (isAddToday && startTime < nowTimeStr) || startTime >= endTime}
+              title={!meetingDate ? 'Select a date' : (!startTime || !endTime) ? 'Select start and end time' : (isAddToday && startTime < nowTimeStr) ? 'Start time cannot be in the past' : (startTime >= endTime) ? 'End time must be after start time' : selectedEmployeeIds.length === 0 ? 'Select attendees' : !note.trim() ? 'Add a meeting note' : ''}
             >
               {isSubmitting ? "Saving..." : "Add Meeting"}
             </Button>
@@ -364,10 +971,38 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
                                       setEditingIdx(originalIdx);
                                       setEditNote(m.note);
                                       let dStr = m.date || '';
+                                      // Extract just the date part (YYYY-MM-DD)
                                       dStr = dStr.replace(' ', 'T');
-                                      if (dStr.length === 10) dStr += 'T00:00';
-                                      if (dStr.length > 16) dStr = dStr.substring(0, 16);
-                                      setEditDate(dStr);
+                                      const dPart = dStr.split('T')[0] || dStr.substring(0, 10);
+                                      const tPart = dStr.split('T')[1]?.substring(0, 5) || "";
+                                      setEditDate(dPart);
+                                      setEditStartTime(tPart);
+                                      
+                                      // Try to parse end time from duration if present
+                                      let eTime = "";
+                                      if (m.duration && m.duration.includes("-")) {
+                                        eTime = m.duration.split("-")[1].trim();
+                                      }
+                                      setEditEndTime(eTime);
+
+                                      // Calculate duration mins for free slot lookup
+                                      let computedDuration = 30;
+                                      if (tPart && eTime) {
+                                        try {
+                                          const [sH, sM] = tPart.split(":").map(Number);
+                                          const [eH, eM] = eTime.split(":").map(Number);
+                                          const diff = (eH * 60 + eM) - (sH * 60 + sM);
+                                          if (diff > 0) {
+                                            computedDuration = diff;
+                                          }
+                                        } catch (e) {
+                                          console.error("Failed to parse computed duration:", e);
+                                        }
+                                      }
+                                      setEditSelectedDuration(computedDuration);
+                                      setShowEditCustomDuration(false);
+                                      setEditCustomHours("");
+                                      
                                       setEditType(m.type || "");
                                       setEditLocation(m.location || "");
                                       setEditAttendees(m.attendees || "");
@@ -375,6 +1010,9 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
                                       setEditNextSteps(m.nextSteps || "");
                                       setEditDuration(m.duration || "");
                                       setEditLink(m.link || "");
+                                      // Resolve attendee names to IDs for editing
+                                      const ids = resolveAttendeesToIds(m.attendees || "");
+                                      setEditSelectedEmployeeIds(ids);
                                     }}
                                     className="text-teal-600 hover:text-teal-700 transition-colors border border-teal-100 rounded p-1 bg-teal-50"
                                     title="Edit"
@@ -397,8 +1035,9 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
                             <div className="space-y-2 mt-2 border-t pt-2 border-slate-100">
                               <div className="grid grid-cols-2 gap-2">
                                 <Input 
-                                  type="datetime-local" 
+                                  type="date" 
                                   value={editDate}
+                                  min={todayStr}
                                   onChange={(e) => setEditDate(e.target.value)}
                                   className="h-8 text-xs"
                                 />
@@ -441,26 +1080,157 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
                                   </SelectContent>
                                 </Select>
                               </div>
-                              <Input 
-                                placeholder="Attendees" 
-                                value={editAttendees}
-                                onChange={(e) => setEditAttendees(e.target.value)}
-                                className="h-8 text-xs"
-                              />
-                              <div className="grid grid-cols-2 gap-2">
-                                <Input 
-                                  placeholder="Duration" 
-                                  value={editDuration}
-                                  onChange={(e) => setEditDuration(e.target.value)}
-                                  className="h-8 text-xs"
-                                />
-                                <Input 
-                                  placeholder="Meeting Link" 
-                                  value={editLink}
-                                  onChange={(e) => setEditLink(e.target.value)}
-                                  className="h-8 text-xs"
+
+                              {/* Edit mode: employee multi-select */}
+                              <div className="space-y-1">
+                                <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Attendees</Label>
+                                <EmployeeMultiSelect
+                                  employees={employees}
+                                  selectedIds={editSelectedEmployeeIds}
+                                  onChange={setEditSelectedEmployeeIds}
+                                  isLoading={isLoadingEmployees}
                                 />
                               </div>
+                              {/* Edit mode: Meeting Duration */}
+                              <div className="space-y-1">
+                                <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Meeting Duration</Label>
+                                <Select 
+                                  value={showEditCustomDuration ? "custom" : String(editSelectedDuration)} 
+                                  onValueChange={(val) => {
+                                    if (val === "custom") {
+                                      setShowEditCustomDuration(true);
+                                    } else {
+                                      setEditSelectedDuration(Number(val));
+                                      setShowEditCustomDuration(false);
+                                    }
+                                  }}
+                                >
+                                  <SelectTrigger className="h-8 text-xs bg-white border-slate-200 focus-visible:ring-brand-teal">
+                                    <SelectValue placeholder="Select duration" />
+                                  </SelectTrigger>
+                                  <SelectContent className="max-h-[200px]">
+                                    {(() => {
+                                      const editDurationOptions = [30, 60, 120, 180, 240];
+                                      if (!editDurationOptions.includes(editSelectedDuration)) {
+                                        editDurationOptions.push(editSelectedDuration);
+                                        editDurationOptions.sort((a, b) => a - b);
+                                      }
+                                      const items = editDurationOptions.map(mins => {
+                                        return (
+                                          <SelectItem key={mins} value={String(mins)}>
+                                            {formatDurationLabel(mins)}
+                                          </SelectItem>
+                                        );
+                                      });
+                                      items.push(
+                                        <SelectItem key="custom" value="custom" className="text-brand-teal font-medium hover:bg-brand-teal/5 focus:bg-brand-teal/5">
+                                          + Custom Duration...
+                                        </SelectItem>
+                                      );
+                                      return items;
+                                    })()}
+                                  </SelectContent>
+                                </Select>
+
+                                {showEditCustomDuration && (
+                                  <div className="flex items-center gap-2 mt-1.5 p-2 bg-slate-50 border border-slate-100 rounded-md animate-in fade-in duration-200">
+                                    <Input
+                                      type="number"
+                                      placeholder="Hours (e.g. 1.5)"
+                                      value={editCustomHours}
+                                      onChange={(e) => setEditCustomHours(e.target.value)}
+                                      className="h-8 text-xs bg-white border-slate-200 focus-visible:ring-brand-teal w-28"
+                                      min="0.1"
+                                      step="any"
+                                      autoFocus
+                                    />
+                                    <span className="text-[10px] text-slate-500 font-medium">Hours</span>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      onClick={() => {
+                                        const hours = parseFloat(editCustomHours);
+                                        if (hours > 0) {
+                                          const mins = Math.round(hours * 60);
+                                          setEditSelectedDuration(mins);
+                                          setShowEditCustomDuration(false);
+                                          setEditCustomHours("");
+                                        } else {
+                                          toast.error("Please enter a valid number of hours");
+                                        }
+                                      }}
+                                      className="h-8 px-2 text-xs bg-brand-teal hover:bg-brand-teal-light text-white font-medium"
+                                    >
+                                      Add
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        setShowEditCustomDuration(false);
+                                        setEditCustomHours("");
+                                      }}
+                                      className="h-8 px-2 text-xs text-slate-500 hover:bg-slate-200"
+                                    >
+                                      Cancel
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Edit mode: free slots */}
+                              {(editSelectedEmployeeIds.length > 0 && editDate) && (
+                                <div className="space-y-1">
+                                  <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                                    <Zap className="w-2.5 h-2.5 text-emerald-500" />
+                                    Free Slots
+                                  </Label>
+                                  {isLoadingEditSlots ? (
+                                    <div className="flex items-center gap-1.5 py-1">
+                                      <Loader2 className="w-3 h-3 animate-spin text-brand-teal" />
+                                      <span className="text-[10px] text-slate-400">Finding slots...</span>
+                                    </div>
+                                  ) : getDurationChunks(editFreeSlots, editSelectedDuration).length > 0 ? (
+                                    <div className="flex flex-wrap gap-1 max-h-[120px] overflow-y-auto p-1 border border-slate-100 rounded-lg custom-scrollbar w-full">
+                                      {getDurationChunks(editFreeSlots, editSelectedDuration).map((slot, idx) => (
+                                        <FreeSlotBadge 
+                                          key={idx} 
+                                          slot={slot} 
+                                          onClick={() => applyFreeSlot(slot, 'edit')} 
+                                        />
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <p className="text-[10px] text-rose-500">No common free slots available.</p>
+                                  )}
+                                </div>
+                              )}
+
+                              <div className="grid grid-cols-2 gap-2">
+                                <Select value={editStartTime} onValueChange={setEditStartTime}>
+                                  <SelectTrigger className="h-8 text-xs">
+                                    <SelectValue placeholder="Start Time" />
+                                  </SelectTrigger>
+                                  <SelectContent className="max-h-[250px]">
+                                    {TIME_OPTIONS.map(opt => <SelectItem key={`edit-start-${opt.valueNoSec}`} value={opt.valueNoSec}>{opt.label}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                                <Select value={editEndTime} onValueChange={setEditEndTime}>
+                                  <SelectTrigger className="h-8 text-xs">
+                                    <SelectValue placeholder="End Time" />
+                                  </SelectTrigger>
+                                  <SelectContent className="max-h-[250px]">
+                                    {TIME_OPTIONS.map(opt => <SelectItem key={`edit-end-${opt.valueNoSec}`} value={opt.valueNoSec}>{opt.label}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <Input 
+                                placeholder="Meeting Link" 
+                                value={editLink}
+                                onChange={(e) => setEditLink(e.target.value)}
+                                className="h-8 text-xs"
+                              />
                               <Textarea 
                                 className="min-h-[60px] text-xs" 
                                 placeholder="Meeting Note"
@@ -478,7 +1248,8 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
                                   size="sm" 
                                   className="h-7 text-[10px] font-bold bg-brand-teal hover:bg-brand-teal-light text-white"
                                   onClick={() => handleUpdateMeeting(originalIdx)}
-                                  disabled={isSubmitting || !editNote.trim() || !editDate || !editAttendees.trim()}
+                                  disabled={isSubmitting || !editNote.trim() || !editDate || !editStartTime || !editEndTime || editSelectedEmployeeIds.length === 0 || (isEditToday && editStartTime < nowTimeStr) || editStartTime >= editEndTime}
+                                  title={(isEditToday && editStartTime < nowTimeStr) ? 'Start time cannot be in the past' : (editStartTime >= editEndTime) ? 'End time must be after start time' : ''}
                                 >
                                   {isSubmitting ? "..." : "Save"}
                                 </Button>
@@ -486,7 +1257,14 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
                                   variant="ghost" 
                                   size="sm" 
                                   className="h-7 text-[10px] font-bold text-slate-500"
-                                  onClick={() => setEditingIdx(null)}
+                                  onClick={() => { 
+                                    setEditingIdx(null); 
+                                    setEditSelectedEmployeeIds([]); 
+                                    setEditFreeSlots([]); 
+                                    setEditSelectedDuration(30);
+                                    setShowEditCustomDuration(false);
+                                    setEditCustomHours("");
+                                  }}
                                 >
                                   Cancel
                                 </Button>

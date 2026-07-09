@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Calendar } from "lucide-react";
 import { API_URL } from "@/lib/config";
+import { toast } from "sonner";
+import { useUser } from "@/hooks/useUser";
 
 export interface WMTaskFormData {
   title: string;
@@ -14,10 +16,13 @@ export interface WMTaskFormData {
   projectId: string;
   assignedToId: string;
   department?: string;
+  phase?: string;
   dueDate: string;
   status: string;
   priority: string;
+  moduleName?: string;
   remarks?: string;
+  reasonForPending?: string;
   createdDate?: string;
   
   // Graphics fields
@@ -35,6 +40,9 @@ export interface WMTaskFormData {
   reviewByTL?: string;
   finalLink?: string;
   postingStatus?: string;
+  estimatedHours?: number;
+  isBatchDistribution?: boolean;
+  distributedTasks?: any[];
 }
 
 const defaultFormData: WMTaskFormData = {
@@ -42,11 +50,14 @@ const defaultFormData: WMTaskFormData = {
   description: "",
   projectId: "",
   assignedToId: "",
-  department: "",
+  department: "Development",
+  phase: "",
   dueDate: new Date().toISOString().split('T')[0],
   status: "todo",
   priority: "medium",
+  moduleName: "",
   remarks: "",
+  reasonForPending: "",
   postingDate: "",
   postingDay: "",
   reelPost: "Post",
@@ -61,6 +72,7 @@ const defaultFormData: WMTaskFormData = {
   reviewByTL: "",
   finalLink: "",
   postingStatus: "No",
+  estimatedHours: 0,
 };
 
 interface WMTaskFormProps {
@@ -71,17 +83,51 @@ interface WMTaskFormProps {
 }
 
 export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment }: WMTaskFormProps) {
-  const [formData, setFormData] = useState<WMTaskFormData>({
-    ...defaultFormData,
-    ...initialData,
-  });
+  const { user } = useUser();
   const [projects, setProjects] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [isLoadingMeta, setIsLoadingMeta] = useState(true);
+  const [distributedList, setDistributedList] = useState<any[]>([]);
+
+  const isExistingTask = Boolean((initialData as any)?.id || (initialData as any)?._id);
+  const isAdmin = user?.role?.toLowerCase() === "admin" || user?.name === "Admin Admin";
+  const isTeamLeader = projects.some(p => p.teamLeaderId === user?.id) || 
+                       user?.role?.toLowerCase() === "team leader" || 
+                       user?.designation?.toLowerCase() === "team leader";
+  const isRegularEmployee = !isAdmin && !isTeamLeader;
+  const defaultAssignee = !isExistingTask ? (initialData?.assignedToId || user?.id || "") : (initialData?.assignedToId || "");
+
+  const [formData, setFormData] = useState<WMTaskFormData>({
+    ...defaultFormData,
+    assignedToId: defaultAssignee,
+    ...initialData,
+  });
 
   useEffect(() => {
     fetchMetadata();
   }, []);
+
+  useEffect(() => {
+    setFormData(prev => {
+      const isExisting = Boolean((initialData as any)?.id || (initialData as any)?._id);
+      if (!isExisting && !prev.assignedToId && user?.id) {
+        return { ...prev, assignedToId: user.id };
+      }
+      return prev;
+    });
+  }, [user]);
+
+  useEffect(() => {
+    const today = new Date().toISOString().split('T')[0];
+    const isExisting = Boolean((initialData as any)?.id || (initialData as any)?._id);
+    const assignee = !isExisting ? (initialData?.assignedToId || user?.id || "") : (initialData?.assignedToId || "");
+    setFormData({
+      ...defaultFormData,
+      dueDate: today,
+      ...initialData,
+      assignedToId: assignee,
+    });
+  }, [initialData]);
 
   const fetchMetadata = async () => {
     try {
@@ -111,10 +157,17 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
       }
       
       // Auto-set department when employee is selected
-      if (field === "assignedToId" && value) {
-        const emp = employees.find(e => e.id === value);
-        if (emp && emp.department) {
-          newData.department = emp.department;
+      if (field === "assignedToId") {
+        if (value) {
+          const emp = employees.find(e => e.id === value);
+          if (emp) {
+            if (emp.department) {
+              newData.department = emp.department;
+            }
+            newData.assignedToName = `${emp.firstName} ${emp.lastName || ''}`.trim();
+          }
+        } else {
+          newData.assignedToName = "Unassigned";
         }
       }
 
@@ -125,8 +178,27 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
           newData.projectId = "";
         }
         const currentEmployee = employees.find(e => e.id === prev.assignedToId);
-        if (currentEmployee && currentEmployee.department?.toLowerCase() !== value.toLowerCase()) {
+        if (currentEmployee && currentEmployee.department && currentEmployee.department.toLowerCase() !== value.toLowerCase()) {
           newData.assignedToId = "";
+        }
+      }
+
+      // Reset module when project or phase changes
+      if (field === "projectId" || field === "phase") {
+        newData.moduleName = "";
+      }
+      
+      if (field === "moduleName") {
+        if (value === "none" || !value) {
+          newData.moduleName = "";
+        } else {
+          newData.moduleName = value;
+          const currentProject = projects.find(p => p.id === prev.projectId);
+          const selectedMod = currentProject?.modules?.find((m: any) => m.name === value);
+          if (selectedMod) {
+            const modAssignee = selectedMod.assignedToId;
+            newData.assignedToId = (modAssignee && modAssignee !== "unassigned") ? modAssignee : "";
+          }
         }
       }
       
@@ -135,12 +207,12 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
   };
 
   const filteredProjects = formData.department
-    ? projects.filter(p => p.department?.toLowerCase() === formData.department.toLowerCase())
-    : projects;
+    ? projects.filter(p => p.department?.toLowerCase() === formData.department?.toLowerCase())
+    : projects.filter(p => p.department?.toLowerCase() === "development");
 
   const filteredEmployees = formData.department
-    ? employees.filter(e => e.department?.toLowerCase() === formData.department.toLowerCase())
-    : employees;
+    ? employees.filter(e => e.department?.toLowerCase() === formData.department?.toLowerCase())
+    : employees.filter(e => e.department?.toLowerCase() === "development");
 
   const selectedProject = projects.find(p => p.id === formData.projectId);
   const isGraphicsProject = 
@@ -148,8 +220,93 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
     userDepartment?.toLowerCase() === "creative" || 
     formData.department?.toLowerCase() === "creative";
 
+  const projectTeamMembers = React.useMemo(() => {
+    if (!selectedProject) return filteredEmployees;
+    const ids = new Set<string>();
+    if (selectedProject.assignedEmployeeId) ids.add(selectedProject.assignedEmployeeId);
+    if (Array.isArray(selectedProject.assignedTeamIds)) {
+      selectedProject.assignedTeamIds.forEach((id: string) => ids.add(id));
+    }
+    if (Array.isArray(selectedProject.phases)) {
+      selectedProject.phases.forEach((p: any) => {
+        if (p.assignedToId) ids.add(p.assignedToId);
+        if (Array.isArray(p.assignedToIds)) p.assignedToIds.forEach((id: string) => ids.add(id));
+      });
+    }
+    if (ids.size === 0) return filteredEmployees;
+    return employees.filter(e => ids.has(e.id));
+  }, [selectedProject, filteredEmployees, employees]);
+
+  const handleCalculateDistribution = () => {
+    if (!selectedProject || projectTeamMembers.length === 0) {
+      toast.error("No team members found for this project");
+      return;
+    }
+    const team = projectTeamMembers;
+    const totalHours = formData.estimatedHours || 10;
+    
+    if (distributedList.length === 0) {
+      const hoursPerMember = parseFloat((totalHours / team.length).toFixed(1));
+      const newList = team.map((emp, i) => ({
+        title: team.length > 1 ? `${formData.title || "Task"} (${emp.firstName})` : (formData.title || "Task"),
+        hours: hoursPerMember,
+        assignedToId: emp.id
+      }));
+      setDistributedList(newList);
+      toast.success(`Task split and auto-distributed across ${team.length} team members!`);
+    } else {
+      const allocated: Record<string, number> = {};
+      team.forEach(e => allocated[e.id] = 0);
+      
+      const newList = distributedList.map(row => {
+        let lowestEmp = team[0];
+        let lowestHrs = Infinity;
+        team.forEach(emp => {
+          if ((allocated[emp.id] || 0) < lowestHrs) {
+            lowestHrs = allocated[emp.id] || 0;
+            lowestEmp = emp;
+          }
+        });
+        allocated[lowestEmp.id] = (allocated[lowestEmp.id] || 0) + (row.hours || 0);
+        return { ...row, assignedToId: lowestEmp.id };
+      });
+      setDistributedList(newList);
+      toast.success("Workload auto-rebalanced across team!");
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (formData.status === "pending" && !formData.reasonForPending?.trim()) {
+      toast.error("Reason for pending is required when marking a task as Pending");
+      return;
+    }
+    if (selectedProject) {
+      if (formData.dueDate && selectedProject.endDate && new Date(formData.dueDate) > new Date(selectedProject.endDate)) {
+        toast.error("Task deadline cannot exceed Project deadline");
+        return;
+      }
+      if (formData.phase && selectedProject.phases) {
+        const selectedPhase = selectedProject.phases.find((p: any) => p.name === formData.phase);
+        if (selectedPhase && formData.dueDate && selectedPhase.endDate && new Date(formData.dueDate) > new Date(selectedPhase.endDate)) {
+          toast.error("Task deadline cannot exceed Phase deadline");
+          return;
+        }
+      }
+    }
+    if (formData.department?.toLowerCase() === "development" && distributedList.length > 0) {
+      onSubmit({
+        ...formData,
+        isBatchDistribution: true,
+        distributedTasks: distributedList.map(item => ({
+          ...formData,
+          title: item.title || formData.title,
+          estimatedHours: item.hours || 0,
+          assignedToId: item.assignedToId || formData.assignedToId
+        }))
+      });
+      return;
+    }
     onSubmit(formData);
   };
 
@@ -165,7 +322,7 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
         <Label htmlFor="title">Task Title</Label>
         <Input
           id="title"
-          placeholder="e.g. Design Login Page"
+          placeholder="e.g. Implement User Authentication"
           value={formData.title ?? ""}
           onChange={(e) => handleChange("title", e.target.value)}
           required
@@ -184,8 +341,6 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="Development">Development</SelectItem>
-              <SelectItem value="Creative">Creative</SelectItem>
-              <SelectItem value="Marketing">Marketing</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -207,14 +362,14 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
           </Select>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="assignedToId">Assign To</Label>
+          <Label htmlFor="assignedToId">Assign Member</Label>
           <Select 
-            value={formData.assignedToId ?? ""} 
+            value={isRegularEmployee && !isExistingTask ? (user?.id || "") : (formData.assignedToId ?? "")} 
             onValueChange={(v) => handleChange("assignedToId", v)}
-            disabled={isLoadingMeta}
+            disabled={isLoadingMeta || isRegularEmployee}
           >
             <SelectTrigger className="w-full">
-              <SelectValue placeholder={isLoadingMeta ? "Loading..." : "Select Employee"} />
+              <SelectValue placeholder={isLoadingMeta ? "Loading..." : "Select Member"} />
             </SelectTrigger>
             <SelectContent>
               {filteredEmployees.map((e) => (
@@ -224,6 +379,51 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
           </Select>
         </div>
       </div>
+
+      {(selectedProject?.isPhaseWise || (selectedProject?.modules && selectedProject.modules.length > 0)) && (
+        <div className="grid grid-cols-2 gap-4">
+          {selectedProject?.isPhaseWise && selectedProject?.phases && selectedProject.phases.length > 0 && (
+            <div className="space-y-2">
+              <Label htmlFor="phase">Project Phase</Label>
+              <Select 
+                value={formData.phase ?? ""} 
+                onValueChange={(v) => handleChange("phase", v)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select Phase" />
+                </SelectTrigger>
+                <SelectContent>
+                  {selectedProject.phases.map((p: any) => (
+                    <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {selectedProject?.modules && selectedProject.modules.length > 0 && (
+            <div className="space-y-2">
+              <Label htmlFor="moduleName">Module Name</Label>
+              <Select 
+                value={formData.moduleName || "none"} 
+                onValueChange={(v) => handleChange("moduleName", v)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select Module" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No Module</SelectItem>
+                  {selectedProject.modules
+                    .filter((m: any) => !formData.phase || m.phaseName === formData.phase)
+                    .map((m: any) => (
+                      <SelectItem key={m.name} value={m.name}>{m.name}</SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="space-y-2">
         <Label htmlFor="description">Description</Label>
@@ -238,7 +438,7 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
 
       <div className="grid grid-cols-3 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="dueDate">Due Date</Label>
+          <Label htmlFor="dueDate">Task Deadline</Label>
           <Input
             id="dueDate"
             type="date"
@@ -258,7 +458,9 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
             <SelectContent>
               <SelectItem value="todo">To Do</SelectItem>
               <SelectItem value="in-progress">In Progress</SelectItem>
-              <SelectItem value="review">Review</SelectItem>
+              <SelectItem value="bugs">Bugs</SelectItem>
+              <SelectItem value="onhold">On Hold</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
               <SelectItem value="completed">Completed</SelectItem>
             </SelectContent>
           </Select>
@@ -281,6 +483,19 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
           </Select>
         </div>
       </div>
+
+      {formData.status === "pending" && (
+        <div className="space-y-2">
+          <Label htmlFor="reasonForPending" className="after:content-['_*'] after:text-red-500">Reason for Pending</Label>
+          <Input
+            id="reasonForPending"
+            placeholder="Required: Why is this task pending?"
+            value={formData.reasonForPending ?? ""}
+            onChange={(e) => handleChange("reasonForPending", e.target.value)}
+            required
+          />
+        </div>
+      )}
 
       <div className="space-y-2">
         <Label htmlFor="remarks">Remarks</Label>
@@ -388,7 +603,7 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
       <div className="flex justify-end gap-3 pt-4">
         <Button type="submit" className="bg-brand-teal hover:bg-brand-teal-light text-white" disabled={isSubmitting}>
           {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {initialData ? "Update Task" : "Create Task"}
+          {initialData ? "Update Task" : "Assign Task"}
         </Button>
       </div>
     </form>

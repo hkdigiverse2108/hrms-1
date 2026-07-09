@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Map, Layout, Sparkles, Package, Plus, Trash2 } from "lucide-react";
+import { Map, Layout, Sparkles, Package, Plus, Trash2, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApi } from "@/hooks/useApi";
 import { useUser } from "@/hooks/useUser";
@@ -221,6 +221,66 @@ const getEmployeeAssets = (employeeName: string, assets: any[]) => {
     if (!asset.assignedTo) return false;
     return asset.assignedTo.toLowerCase() === employeeName.toLowerCase();
   });
+};
+
+const isFutureJoiner = (emp: any) => {
+  if (!emp || !emp.joinDate) return false;
+  let joinTime = 0;
+  const dateStr = emp.joinDate;
+  if (dateStr.includes('-')) {
+    const parts = dateStr.split('-');
+    if (parts[0].length === 4) {
+      joinTime = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])).getTime();
+    } else if (parts[2].length === 4) {
+      joinTime = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0])).getTime();
+    }
+  } else if (dateStr.includes('/')) {
+    const parts = dateStr.split('/');
+    if (parts[0].length === 4) {
+      joinTime = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])).getTime();
+    } else if (parts[2].length === 4) {
+      joinTime = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0])).getTime();
+    }
+  } else {
+    joinTime = new Date(dateStr).getTime();
+  }
+  
+  if (isNaN(joinTime)) return false;
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return joinTime > today.getTime();
+};
+
+const formatJoinDate = (dateStr: string) => {
+  if (!dateStr) return '';
+  try {
+    let d = new Date(dateStr);
+    if (isNaN(d.getTime())) {
+      if (dateStr.includes('-')) {
+        const parts = dateStr.split('-');
+        if (parts[0].length === 4) {
+          d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        } else if (parts[2].length === 4) {
+          d = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+        }
+      } else if (dateStr.includes('/')) {
+        const parts = dateStr.split('/');
+        if (parts[0].length === 4) {
+          d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        } else if (parts[2].length === 4) {
+          d = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+        }
+      }
+    }
+    if (!isNaN(d.getTime())) {
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${day}-${month}-${year}`;
+    }
+  } catch (e) {}
+  return dateStr;
 };
 
 const sanitizeDesks = (desks: any[]): Desk[] => {
@@ -757,6 +817,10 @@ export default function SeatingArrangementPage() {
                 <div className="w-6 h-4 bg-slate-900 rounded-sm"></div>
                 <span>Allocated Seats</span>
               </div>
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-4 bg-emerald-700 rounded-sm ring-2 ring-yellow-400"></div>
+                <span>Future Joining</span>
+              </div>
             </div>
 
             {/* Scrollable Canvas for Map */}
@@ -838,6 +902,7 @@ export default function SeatingArrangementPage() {
                       const employee = getSeatEmployee(seat, data?.employees || [], desk.id, desksState);
                       const empAssets = employee ? getEmployeeAssets(employee.name || `${employee.firstName} ${employee.lastName}`, data?.assets || []) : [];
                       const isMySeat = checkIsMySeat(employee);
+                      const isFutureJoin = isFutureJoiner(employee);
 
                       // Smart positioning to avoid boundary clipping
                       const isLeftEdge = seat.id === 't1';
@@ -882,7 +947,8 @@ export default function SeatingArrangementPage() {
                             "absolute w-[12%] h-[30%] -top-[35%] rounded-t-2xl shadow-sm transition-all hover:-translate-y-1 cursor-pointer group z-20 hover:z-50",
                             seat.available 
                               ? 'bg-emerald-700 hover:bg-emerald-600' 
-                              : 'bg-slate-900 hover:bg-slate-800'
+                              : (isFutureJoin ? 'bg-emerald-700 hover:bg-emerald-600' : 'bg-slate-900 hover:bg-slate-800'),
+                            isFutureJoin && "ring-2 ring-yellow-400 ring-offset-1"
                           )}
                           style={{ left: `calc(${seat.x}% - 6%)` }}
                         >
@@ -924,6 +990,12 @@ export default function SeatingArrangementPage() {
                                     </p>
                                     <p className="text-[10px] font-bold text-brand-teal/80 uppercase tracking-wider truncate">{employee.designation}</p>
                                     <p className="text-[10px] text-muted-foreground truncate">{employee.department}</p>
+                                    {isFutureJoin && (
+                                      <p className="text-[10px] text-amber-600 font-extrabold flex items-center gap-1 mt-1 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/50 w-fit">
+                                        <Calendar className="w-3.5 h-3.5" />
+                                        Joining: {formatJoinDate(employee.joinDate)}
+                                      </p>
+                                    )}
                                   </div>
                                 </div>
                                 
@@ -962,6 +1034,7 @@ export default function SeatingArrangementPage() {
                       const employee = getSeatEmployee(seat, data?.employees || [], desk.id, desksState);
                       const empAssets = employee ? getEmployeeAssets(employee.name || `${employee.firstName} ${employee.lastName}`, data?.assets || []) : [];
                       const isMySeat = checkIsMySeat(employee);
+                      const isFutureJoin = isFutureJoiner(employee);
 
                       // Smart positioning to avoid boundary clipping
                       const isLeftEdge = seat.id === 'b1';
@@ -1006,7 +1079,8 @@ export default function SeatingArrangementPage() {
                             "absolute w-[12%] h-[30%] -bottom-[35%] rounded-b-2xl shadow-sm transition-all hover:translate-y-1 cursor-pointer group z-20 hover:z-50",
                             seat.available 
                               ? 'bg-emerald-700 hover:bg-emerald-600' 
-                              : 'bg-slate-900 hover:bg-slate-800'
+                              : (isFutureJoin ? 'bg-emerald-700 hover:bg-emerald-600' : 'bg-slate-900 hover:bg-slate-800'),
+                            isFutureJoin && "ring-2 ring-yellow-400 ring-offset-1"
                           )}
                           style={{ left: `calc(${seat.x}% - 6%)` }}
                         >
@@ -1048,6 +1122,12 @@ export default function SeatingArrangementPage() {
                                     </p>
                                     <p className="text-[10px] font-bold text-brand-teal/80 uppercase tracking-wider truncate">{employee.designation}</p>
                                     <p className="text-[10px] text-muted-foreground truncate">{employee.department}</p>
+                                    {isFutureJoin && (
+                                      <p className="text-[10px] text-amber-600 font-extrabold flex items-center gap-1 mt-1 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/50 w-fit">
+                                        <Calendar className="w-3.5 h-3.5" />
+                                        Joining: {formatJoinDate(employee.joinDate)}
+                                      </p>
+                                    )}
                                   </div>
                                 </div>
                                 

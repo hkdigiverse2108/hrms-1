@@ -133,6 +133,16 @@
 }
 
 /* Fix for Quill Editor empty paragraphs collapsing in Tailwind environments */
+.ql-editor, .ql-editor * {
+  font-family: inherit !important;
+  font-size: inherit !important;
+  line-height: inherit !important;
+  white-space: pre-wrap !important;
+  word-break: normal !important;
+  word-wrap: break-word !important;
+  overflow-wrap: break-word !important;
+  max-width: 100% !important;
+}
 .ql-editor p {
   min-height: 1.5em;
   margin-bottom: 0.75em !important;
@@ -218,11 +228,12 @@
   align-items: center;
   gap: 3px;
   user-select: none;
-  margin-left: 16px;
+  margin-left: 8px;
   float: right;
   margin-top: 4px;
+  margin-bottom: -2px;
   position: relative;
-  bottom: -2px;
+  bottom: -1px;
 }
 
 /* Custom premium scrollbars */
@@ -268,3 +279,5 @@
   scrollbar-width: thin;
   scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
 }
+
+.chat-link-hover:hover { text-decoration: underline !important; text-decoration-thickness: 1.5px !important; text-underline-offset: 2px !important; }

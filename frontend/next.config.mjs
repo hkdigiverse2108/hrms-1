@@ -14,10 +14,14 @@ const nextConfig = {
   },
   productionBrowserSourceMaps: false,
   async rewrites() {
-    const backendUrl = (process.env.BACKEND_URL || 'http://127.0.0.1:8001').replace(/\/$/, '');
-    const localBackendPort = process.env.BACKEND_PORT || '8001';
+    const localBackendPort = process.env.BACKEND_PORT || '8000';
+    const backendUrl = (process.env.BACKEND_URL || `http://127.0.0.1:${localBackendPort}`).replace(/\/$/, '');
     return {
       beforeFiles: [
+        {
+          source: '/uploads/:path*',
+          destination: `${backendUrl}/uploads/:path*`,
+        },
         {
           source: '/api/activity/session-active/:path*',
           destination: `http://127.0.0.1:${localBackendPort}/activity/session-active/:path*`,

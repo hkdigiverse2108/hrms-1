@@ -87,7 +87,9 @@ export function Header() {
 
   useEffect(() => {
     if (user?.id) {
-      fetchNotifications();
+      // Defer notifications fetch to avoid competing with rendering-critical calls
+      const timer = setTimeout(() => fetchNotifications(), 1500);
+      return () => clearTimeout(timer);
     }
   }, [user?.id]);
 
@@ -105,8 +107,20 @@ export function Header() {
     }
   };
 
-  useAppEvent("new_notification", () => {
+  useAppEvent("new_notification", (data) => {
     fetchNotifications();
+    if (data?.type === 'wm-task' || data?.type === 'task') {
+      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+        const notifUrl = data.type === 'wm-task' ? '/work-management/development' : '/tasks';
+        const notification = new Notification(data.title || "Task Assigned", {
+          body: data.message,
+        });
+        notification.onclick = () => {
+          window.focus();
+          router.push(notifUrl);
+        };
+      }
+    }
   });
 
   // Dynamically update the browser tab title with the unread chat badge count (like Email / WhatsApp) app-wide
@@ -264,6 +278,10 @@ export function Header() {
                                   router.push(user?.role === 'Employee' ? '/attendance' : '/employees/attendance');
                                 } else if (n.type === 'recruitment') {
                                   router.push('/recruitment');
+                                } else if (n.type === 'task') {
+                                  router.push('/tasks');
+                                } else if (n.type === 'wm-task') {
+                                  router.push('/work-management/development');
                                 }
                                 markAsRead(n.id);
                               }}
@@ -336,18 +354,18 @@ export function Header() {
               </div>
             </div>
           </Link>
-          {isElectron && (
-            <div className="flex items-center gap-1.5 ml-2 border border-slate-200 bg-slate-50/50 px-2.5 py-1 rounded-md text-xs font-semibold text-slate-500 leading-none">
-              <span>v{appVersion}</span>
-              <button 
-                onClick={() => window.dispatchEvent(new Event("check-for-updates-manual"))}
-                className="p-0.5 text-muted-foreground hover:text-brand-teal rounded transition-colors flex items-center justify-center"
-                title="Check for updates"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
+        {isElectron && (
+          <div className="flex items-center gap-1.5 ml-2 border border-slate-200 bg-slate-50/50 px-2.5 py-1 rounded-md text-xs font-semibold text-slate-500 leading-none">
+            <span>v{appVersion}</span>
+            <button 
+              onClick={() => window.dispatchEvent(new Event("check-for-updates-manual"))}
+              className="p-0.5 text-muted-foreground hover:text-brand-teal rounded transition-colors flex items-center justify-center"
+              title="Check for updates"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
           <button 
             onClick={handleLogout}
             className="ml-2 p-1.5 text-muted-foreground hover:text-brand-danger hover:bg-red-50 rounded-md transition-colors"
@@ -464,6 +482,10 @@ export function Header() {
                                     router.push(user?.role === 'Employee' ? '/attendance' : '/employees/attendance');
                                   } else if (n.type === 'recruitment') {
                                     router.push('/recruitment');
+                                  } else if (n.type === 'task') {
+                                    router.push('/tasks');
+                                  } else if (n.type === 'wm-task') {
+                                    router.push('/work-management/development');
                                   }
                                   markAsRead(n.id);
                                 }}

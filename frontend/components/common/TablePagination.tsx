@@ -21,7 +21,7 @@ export function TablePagination({
 }: TablePaginationProps) {
   const totalPages = Math.ceil(totalItems / itemsPerPage);
   
-  if (isNaN(totalPages) || totalPages <= 1) return null;
+  if (isNaN(totalPages) || totalPages < 1) return null;
 
   const getPageNumbers = () => {
     const pages = [];

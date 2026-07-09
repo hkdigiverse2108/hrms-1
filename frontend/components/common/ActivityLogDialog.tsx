@@ -58,12 +58,106 @@ export function ActivityLogDialog({
   isLoading = false,
 }: ActivityLogDialogProps) {
   const processedLogs = logs.map(log => {
-    if (!log.details) return { ...log, processedDetails: [] };
+    let derivedAction = log.action;
+    if (title === "Client Activity History" && log.action === "Updated") {
+      derivedAction = "CLIENT UPDATED";
+    }
+    if (log.action === "Remark created") {
+      derivedAction = "REMARK CREATED";
+    } else if (log.action === "Remark updated") {
+      derivedAction = "REMARK UPDATED";
+    }
+
+    if (!log.details) return { ...log, processedDetails: [], derivedAction };
     
-    const detailsList = log.details
-      .replace(/^Client '[^']+': /, '')
-      .split(', ')
+    let detailsStr = log.details.replace(/^(Client|Project|Task|Asset|Lead|Candidate|Report|Daily Report|Monthly Report) ('[^']+'|[^:]+):\s*/i, '');
+    
+    // Custom split function that ignores commas inside quotes or brackets
+    const splitDetails = (str: string) => {
+      const result = [];
+      let current = '';
+      let inQuotes = false;
+      let bracketLevel = 0;
+      let curlyLevel = 0;
+      
+      for (let i = 0; i < str.length; i++) {
+        const char = str[i];
+        if (char === "'") inQuotes = !inQuotes;
+        else if (char === "[") bracketLevel++;
+        else if (char === "]") bracketLevel--;
+        else if (char === "{") curlyLevel++;
+        else if (char === "}") curlyLevel--;
+        
+        if (char === ',' && str[i+1] === ' ' && !inQuotes && bracketLevel === 0 && curlyLevel === 0) {
+          result.push(current);
+          current = '';
+          i++; // skip space
+        } else {
+          current += char;
+        }
+      }
+      if (current) result.push(current);
+      return result;
+    };
+
+    let detailsList = splitDetails(detailsStr)
       .map(d => d.trim())
+      .map(d => {
+        if (d.startsWith("Campaigns changed from")) {
+          const fromMatch = d.match(/from '(\[.*?\])' to/);
+          const toMatch = d.match(/to '(\[.*?\])'/);
+          if (fromMatch && toMatch) {
+            try {
+              const extractCampsObj = (s: string) => {
+                const dicts = [...s.matchAll(/\{([^{}]+)\}/g)];
+                const obj: Record<string, boolean> = {};
+                dicts.forEach(m => {
+                  const nameMatch = m[1].match(/'name':\s*'([^']+)'/);
+                  const isActiveMatch = m[1].match(/'isActive':\s*(True|False)/);
+                  if (nameMatch && isActiveMatch) {
+                    obj[nameMatch[1]] = isActiveMatch[1] === 'True';
+                  }
+                });
+                return obj;
+              };
+              
+              const fromObj = extractCampsObj(fromMatch[1]);
+              const toObj = extractCampsObj(toMatch[1]);
+              
+              const changes = [];
+              let hasAdds = false;
+              let hasUpdates = false;
+              
+              for (const [name, isActive] of Object.entries(toObj)) {
+                if (!(name in fromObj)) {
+                  hasAdds = true;
+                  changes.push(`Added new campaign '${name}' (${isActive ? 'Active' : 'Inactive'})`);
+                } else if (fromObj[name] !== isActive) {
+                  hasUpdates = true;
+                  changes.push(`Campaign '${name}' status changed to ${isActive ? 'Active' : 'Inactive'}`);
+                }
+              }
+              
+              for (const name of Object.keys(fromObj)) {
+                if (!(name in toObj)) {
+                  hasUpdates = true;
+                  changes.push(`Deleted campaign '${name}'`);
+                }
+              }
+              
+              if (hasAdds && !hasUpdates) {
+                derivedAction = "CAMPAIGN CREATED";
+              } else if (hasUpdates || hasAdds) {
+                derivedAction = "CAMPAIGN UPDATED";
+              }
+              
+              if (changes.length > 0) return changes.join(" | ");
+              else return "Campaigns updated";
+            } catch (e) {}
+          }
+        }
+        return d;
+      })
       .filter(d => {
         if (!d) return false;
         if (d.toLowerCase().includes("updated_at changed")) return false;
@@ -74,13 +168,59 @@ export function ActivityLogDialog({
         return true;
       });
 
-    return { ...log, processedDetails: detailsList };
+    return { ...log, processedDetails: detailsList, derivedAction };
   }).filter(log => {
-    if (log.details && log.processedDetails.length === 0 && log.action === "Updated") {
+    if (log.details && log.processedDetails.length === 0 && !(log as any).diffs?.length && log.action === "Updated") {
       return false;
     }
     return true;
   });
+
+  const renderDiffContent = (oldStr: string, newStr: string) => {
+    if (!oldStr && newStr) {
+      return <span className="bg-emerald-100 text-emerald-900 px-1.5 py-0.5 rounded font-mono text-[12px] whitespace-pre-wrap break-all border border-emerald-300">{newStr}</span>;
+    }
+    if (oldStr && !newStr) {
+      return <span className="bg-red-100 text-red-900 line-through px-1.5 py-0.5 rounded font-mono text-[12px] whitespace-pre-wrap break-all border border-red-300">{oldStr}</span>;
+    }
+    if (oldStr === newStr) {
+      return <span className="font-mono text-[12px] whitespace-pre-wrap break-all text-slate-700">{newStr}</span>;
+    }
+
+    let p = 0;
+    while (p < oldStr.length && p < newStr.length && oldStr[p] === newStr[p]) {
+      p++;
+    }
+
+    let sOld = oldStr.length - 1;
+    let sNew = newStr.length - 1;
+    while (sOld >= p && sNew >= p && oldStr[sOld] === newStr[sNew]) {
+      sOld--;
+      sNew--;
+    }
+
+    const prefix = oldStr.slice(0, p);
+    const removed = oldStr.slice(p, sOld + 1);
+    const added = newStr.slice(p, sNew + 1);
+    const suffix = oldStr.slice(sOld + 1);
+
+    return (
+      <div className="font-mono text-[12px] leading-relaxed bg-slate-50 border border-slate-200 rounded p-2 text-slate-800 whitespace-pre-wrap break-all">
+        {prefix}
+        {removed ? (
+          <span className="bg-red-100 text-red-900 line-through px-1 mx-0.5 rounded border border-red-300 font-bold">
+            {removed}
+          </span>
+        ) : null}
+        {added ? (
+          <span className="bg-emerald-200 text-emerald-950 px-1 mx-0.5 rounded border border-emerald-400 font-bold shadow-sm">
+            {added}
+          </span>
+        ) : null}
+        {suffix}
+      </div>
+    );
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -124,21 +264,28 @@ export function ActivityLogDialog({
                         <span className="text-[10.5px] font-medium text-[#9CA3AF] tabular-nums">{formatTimestamp(log.timestamp)}</span>
                       </div>
                       
-                      {log.action && (
+                      {log.derivedAction && (
                         <div className="mb-1">
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#F0FDF4] text-[#0D9488] border border-[#D1FAE5] uppercase tracking-wider">
-                            {log.action}
+                            {log.derivedAction}
                           </span>
                         </div>
                       )}
                       
-                      <div className="text-[13px] text-[#4B5563] leading-[1.6] font-medium space-y-1">
-                        {log.processedDetails && log.processedDetails.length > 0 ? (
-                          <ul className="list-disc pl-4 marker:text-[#9CA3AF]">
-                            {log.processedDetails.map((detail: string, i: number) => (
-                              <li key={i}>{detail.replace(" 00:00:00", "")}</li>
+                      <div className="text-[13px] text-[#4B5563] leading-[1.6] font-medium space-y-2">
+                        {(log as any).diffs && (log as any).diffs.length > 0 ? (
+                          <div className="space-y-2.5 mt-1">
+                            {(log as any).diffs.map((df: any, idx: number) => (
+                              <div key={idx} className="space-y-1">
+                                <span className="text-[11px] font-bold text-slate-600 tracking-wider uppercase block">{df.field}:</span>
+                                {renderDiffContent(df.old, df.new)}
+                              </div>
                             ))}
-                          </ul>
+                          </div>
+                        ) : log.processedDetails && log.processedDetails.length > 0 ? (
+                          log.processedDetails.map((detail: string, i: number) => (
+                            <p key={i}>{detail.replace(/ 00:00:00/g, "")}</p>
+                          ))
                         ) : (
                           (!log.details && log.action) ? <span>Action logged</span> : null
                         )}

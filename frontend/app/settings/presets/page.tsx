@@ -67,12 +67,13 @@ const PERMISSION_GROUPS = [
     icon: Briefcase,
     modules: [
       { moduleName: 'projects', displayName: 'Projects', tabUrl: '/work-management/projects' },
-      { moduleName: 'tasks', displayName: 'Tasks', tabUrl: '/work-management/tasks' },
+      { moduleName: 'tasks', displayName: 'Development', tabUrl: '/work-management/development' },
+      { moduleName: 'personal-tasks', displayName: 'Tasks', tabUrl: '/tasks' },
       { moduleName: 'daily-progress', displayName: 'Daily Progress', tabUrl: '/work-management/daily-progress' },
       { moduleName: 'sales', displayName: 'Sales', tabUrl: '/work-management/sales' },
       { moduleName: 'clients', displayName: 'Clients', tabUrl: '/work-management/clients' },
-      { moduleName: 'marketing', displayName: 'Marketing Reports', tabUrl: '/work-management/marketing-reports' },
-      { moduleName: 'creative', displayName: 'SMM', tabUrl: '/work-management/smm' },
+      { moduleName: 'marketing', displayName: 'Digital Marketing', tabUrl: '/work-management/digital-marketing' },
+      { moduleName: 'creative', displayName: 'Social Media Management', tabUrl: '/work-management/smm' },
     ]
   },
   {
@@ -88,8 +89,8 @@ const PERMISSION_GROUPS = [
     name: 'More',
     icon: MessagesSquare,
     modules: [
-      { moduleName: 'remarks', displayName: 'Remarks', tabUrl: '/remarks' },
-      { moduleName: 'review', displayName: 'Review', tabUrl: '/review' },
+      { moduleName: 'remarks', displayName: 'Penalty', tabUrl: '/penalty' },
+      { moduleName: 'review', displayName: 'Remarks', tabUrl: '/remarks' },
       { moduleName: 'invoice', displayName: 'Invoice', tabUrl: '/invoice' },
       { moduleName: 'chat', displayName: 'Chat', tabUrl: '/chat' },
     ]

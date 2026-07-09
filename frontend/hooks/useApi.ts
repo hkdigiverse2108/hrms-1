@@ -26,20 +26,103 @@ const ENDPOINTS = [
   { key: 'documentTypes', url: '/document-types' }
 ];
 
+// Module-level global store for caching, sharing loading states and deduplicating fetches
+let globalData: any = { ...staticData };
+let globalIsLoading = true;
+let globalError: string | null = null;
+let activeFetchPromise: Promise<void> | null = null;
+const listeners = new Set<() => void>();
+
+function emitChange() {
+  listeners.forEach(listener => listener());
+}
+
+async function fetchAllData(force = false) {
+  if (activeFetchPromise && !force) {
+    return activeFetchPromise;
+  }
+
+  activeFetchPromise = (async () => {
+    globalIsLoading = true;
+    emitChange();
+    try {
+      const token = localStorage.getItem('token');
+      const headers: HeadersInit = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const requests = ENDPOINTS.map(ep => 
+        fetch(`${API_URL}${ep.url}`, { mode: 'cors', headers })
+          .then(res => {
+            if (res.status === 401) return [];
+            if (!res.ok) {
+              console.warn(`Failed to fetch ${ep.key}: Status ${res.status}`);
+              return null;
+            }
+            return res.json();
+          })
+          .then(data => ({ key: ep.key, data }))
+          .catch(err => {
+            console.warn(`Error fetching ${ep.key}:`, err);
+            return { key: ep.key, data: null };
+          })
+      );
+
+      const results = await Promise.all(requests);
+      results.forEach(res => {
+        if (res.data !== null) {
+          globalData[res.key] = res.data;
+        }
+      });
+      globalError = null;
+    } catch (err: any) {
+      globalError = err.message || 'An error occurred fetching data';
+    } finally {
+      globalIsLoading = false;
+      activeFetchPromise = null;
+      emitChange();
+    }
+  })();
+
+  return activeFetchPromise;
+}
+
 export function useApi() {
-  const [data, setData] = useState({
-    ...staticData,
+  const [state, setState] = useState({
+    data: globalData,
+    isLoading: globalIsLoading,
+    error: globalError
   });
-  
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  useEffect(() => {
+    const handleChange = () => {
+      setState({
+        data: globalData,
+        isLoading: globalIsLoading,
+        error: globalError
+      });
+    };
 
-  const refresh = () => setRefreshTrigger(prev => prev + 1);
+    listeners.add(handleChange);
+
+    // Initial fetch if it's the first time and not currently fetching
+    if (globalIsLoading && !activeFetchPromise) {
+      fetchAllData();
+    }
+
+    return () => {
+      listeners.delete(handleChange);
+    };
+  }, []);
+
+  const refresh = useCallback(async () => {
+    await fetchAllData(true);
+  }, []);
 
   const updateData = useCallback((key: string, value: any) => {
-    setData(prev => ({ ...prev, [key]: value }));
+    globalData = { ...globalData, [key]: value };
+    emitChange();
   }, []);
 
   const refreshItem = useCallback(async (key: string) => {
@@ -61,67 +144,12 @@ export function useApi() {
     }
   }, [updateData]);
 
-  useEffect(() => {
-    let mounted = true;
-
-    async function fetchAllData() {
-      setIsLoading(true);
-      try {
-        const token = localStorage.getItem('token');
-        const headers: HeadersInit = {};
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`;
-        }
-
-        const requests = ENDPOINTS.map(ep => 
-          fetch(`${API_URL}${ep.url}`, { mode: 'cors', headers })
-            .then(res => {
-              if (res.status === 401) {
-                return [];
-              }
-              if (!res.ok) {
-                console.warn(`Failed to fetch ${ep.key}: Status ${res.status}`);
-                return null;
-              }
-              return res.json();
-            })
-            .then(data => ({ key: ep.key, data }))
-            .catch(err => {
-              console.warn(`Error fetching ${ep.key}:`, err);
-              return { key: ep.key, data: null };
-            })
-        );
-
-        const results = await Promise.all(requests);
-
-        if (mounted) {
-          setData(prev => {
-            const newData = { ...prev };
-            results.forEach(res => {
-              if (res.data !== null) {
-                (newData as any)[res.key] = res.data;
-              }
-            });
-            return newData;
-          });
-        }
-      } catch (err: any) {
-        if (mounted) {
-          setError(err.message || 'An error occurred fetching data');
-        }
-      } finally {
-        if (mounted) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    fetchAllData();
-
-    return () => {
-      mounted = false;
-    };
-  }, [refreshTrigger]);
-
-  return { data, isLoading, error, refresh, updateData, refreshItem };
+  return { 
+    data: state.data, 
+    isLoading: state.isLoading, 
+    error: state.error, 
+    refresh, 
+    updateData, 
+    refreshItem 
+  };
 }

@@ -13,6 +13,7 @@ import { AccessDenied } from "@/components/common/AccessDenied";
 import { API_URL } from "@/lib/config";
 import dayjs from "dayjs";
 import { toast } from "sonner";
+import { TIME_OPTIONS } from "@/lib/constants";
 
 const { Content } = Layout;
 
@@ -22,11 +23,11 @@ const INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 function getRequiredModuleForPath(pathname: string): string | null {
   if (pathname === "/") return null; // Always allow landing on the dashboard
   if (pathname.startsWith("/work-management/projects")) return "projects";
-  if (pathname.startsWith("/work-management/tasks")) return "tasks";
+  if (pathname.startsWith("/work-management/development")) return "tasks";
   if (pathname.startsWith("/work-management/daily-progress")) return "daily-progress";
   if (pathname.startsWith("/work-management/sales")) return "sales";
   if (pathname.startsWith("/work-management/clients")) return "clients";
-  if (pathname.startsWith("/work-management/marketing-reports")) return "marketing";
+  if (pathname.startsWith("/work-management/digital-marketing")) return "marketing";
   if (pathname.startsWith("/work-management/smm")) return "creative";
   
   if (pathname.startsWith("/employees/organization")) return "org-structure";
@@ -54,14 +55,15 @@ function getRequiredModuleForPath(pathname: string): string | null {
   if (pathname.startsWith("/workspace/seating")) return "seating-arrangement";
   if (pathname.startsWith("/workspace/resource")) return "resource-management";
   
-  if (pathname.startsWith("/remarks")) return "remarks";
-  if (pathname.startsWith("/review")) return "review";
+  if (pathname.startsWith("/penalty")) return "remarks";
+  if (pathname.startsWith("/remarks")) return "review";
   if (pathname.startsWith("/invoice")) return "invoice";
   if (pathname.startsWith("/chat")) return "chat";
-  if (pathname.startsWith("/task")) return "personal-tasks";
+  if (pathname.startsWith("/tasks")) return "personal-tasks";
   if (pathname.startsWith("/schedule")) return "schedule";
   if (pathname.startsWith("/settings")) return "settings";
   if (pathname.startsWith("/activity-tracker")) return "activity-tracker";
+  if (pathname.startsWith("/activity-logs")) return "activity-logs";
   
   return null;
 }
@@ -71,7 +73,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { user, isLoading, logout } = useUserContext();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
-  const isPublicPage = pathname.startsWith("/login") || pathname.startsWith("/register") || pathname.startsWith("/feedback/");
+  const isPublicPage = pathname.startsWith("/login") || pathname.startsWith("/register") || pathname.startsWith("/feedback/") || pathname.startsWith("/f/");
 
   // Inactivity auto-punch-out and recovery states
   const [showRecoveryModal, setShowRecoveryModal] = useState(false);
@@ -90,6 +92,34 @@ export function AppLayout({ children }: { children: ReactNode }) {
     reason: ""
   });
   const [isSubmittingRecovery, setIsSubmittingRecovery] = useState(false);
+  const [systemSettings, setSystemSettings] = useState<any>(() => {
+    // Restore cached settings instantly
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('system-settings-cache');
+        if (cached) return JSON.parse(cached);
+      } catch {}
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (isPublicPage || !user) return;
+    // Defer to avoid competing with rendering-critical calls
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`${API_URL}/system-settings`);
+        if (res.ok) {
+          const data = await res.json();
+          setSystemSettings(data);
+          localStorage.setItem('system-settings-cache', JSON.stringify(data));
+        }
+      } catch (err) {
+        console.warn("Error fetching settings in AppLayout:", err);
+      }
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [user, isPublicPage]);
 
   // Desktop auto-update states
   const [updateInfo, setUpdateInfo] = useState<{
@@ -159,9 +189,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
     };
   }, [user, isPublicPage]);
 
-  // Monitor download progress from Electron IPC
+  // Monitor download progress from Electron IPC — subscribe on mount so we never miss events
   useEffect(() => {
-    if (typeof window === "undefined" || !(window as any).electronAPI || !isDownloadingUpdate) return;
+    if (typeof window === "undefined" || !(window as any).electronAPI) return;
     
     const unsubscribe = (window as any).electronAPI.onUpdateProgress((progress: number) => {
       setDownloadProgress(progress);
@@ -170,7 +200,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     return () => {
       unsubscribe();
     };
-  }, [isDownloadingUpdate]);
+  }, []);
 
   const handleStartUpdate = async () => {
     if (!updateInfo) return;
@@ -191,15 +221,21 @@ export function AppLayout({ children }: { children: ReactNode }) {
   // Trigger retroactive punch-out due to inactivity
   const handleInactivityPunchOut = useCallback(async () => {
     if (!user || showRecoveryModal) return;
+    const userRole = user?.role?.toLowerCase() || "employee";
+    const isAdmin = ['admin', 'super admin', 'superadmin', 'administrator', 'founder'].includes(userRole.trim());
+    if (isAdmin) return;
+
+    if (!systemSettings?.inactivityTimeoutEnabled) return;
+    const timeoutMs = (systemSettings?.inactivityTimeoutMins || 5) * 60 * 1000;
 
     // Double check if there was global PC activity (clicks/keypress/mouse movement)
     try {
-      const activeRes = await fetch(`${API_URL}/activity/last-active`);
+      const activeRes = await fetch(`${API_URL}/activity/last-active?employee_id=${user.id || user.employeeId}`);
       if (activeRes.ok) {
         const activeData = await activeRes.json();
         if (activeData && typeof activeData.last_active === 'number') {
           const globalLastActiveMs = activeData.last_active * 1000;
-          if (Date.now() - globalLastActiveMs < INACTIVITY_TIMEOUT_MS) {
+          if (Date.now() - globalLastActiveMs < timeoutMs) {
             // User was active globally, skip punch out and reset timer
             localStorage.setItem("last_activity_timestamp", globalLastActiveMs.toString());
             lastActivityTimeRef.current = globalLastActiveMs;
@@ -312,23 +348,28 @@ export function AppLayout({ children }: { children: ReactNode }) {
         window.dispatchEvent(new Event("attendance-update"));
       }
     } catch (err) {
-      console.error("Error during inactivity punch out:", err);
+      console.warn("Error during inactivity punch out:", err);
     }
-  }, [user, showRecoveryModal]);
+  }, [user, showRecoveryModal, systemSettings]);
 
   const resetInactivityTimer = useCallback(() => {
+    if (!systemSettings?.inactivityTimeoutEnabled) return;
     if (!user || showRecoveryModal) return;
     
     if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
-    inactivityTimerRef.current = setTimeout(handleInactivityPunchOut, INACTIVITY_TIMEOUT_MS);
-  }, [user, handleInactivityPunchOut, showRecoveryModal]);
+    const timeoutMs = (systemSettings?.inactivityTimeoutMins || 5) * 60 * 1000;
+    inactivityTimerRef.current = setTimeout(handleInactivityPunchOut, timeoutMs);
+  }, [user, handleInactivityPunchOut, showRecoveryModal, systemSettings]);
 
   // Sync ref with the actual callback
   resetInactivityTimerRef.current = resetInactivityTimer;
 
-  // Check pending recovery status on mount and window focus
   const checkPendingRecovery = useCallback(async () => {
     if (!user || isPublicPage) return;
+
+    const userRole = user?.role?.toLowerCase() || "employee";
+    const isAdmin = ['admin', 'super admin', 'superadmin', 'administrator', 'founder'].includes(userRole.trim());
+    if (isAdmin) return;
 
 
     // Fetch employee's current attendance status to check punch-in and break status first
@@ -358,7 +399,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         }
       }
     } catch (err) {
-      console.error("Error fetching status during recovery check:", err);
+      console.warn("Error fetching status during recovery check:", err);
     }
 
     // IF NOT PUNCHED IN, DO NOT SHOW POPUPS OR CHECK INACTIVITY!
@@ -440,7 +481,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
     // 2. Fetch last active time from local backend/tracker
     try {
-      const activeRes = await fetch(`${API_URL}/activity/last-active`);
+      const activeRes = await fetch(`${API_URL}/activity/last-active?employee_id=${user.id || user.employeeId}`);
       if (activeRes.ok) {
         const activeData = await activeRes.json();
         if (activeData && typeof activeData.last_active === 'number') {
@@ -460,7 +501,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
     }
 
     // 3. Check if user went inactive while away/sleep
-    if (Date.now() - resolvedLastActivityTs > INACTIVITY_TIMEOUT_MS) {
+    if (!systemSettings?.inactivityTimeoutEnabled) return;
+    const timeoutMs = (systemSettings?.inactivityTimeoutMins || 5) * 60 * 1000;
+    if (Date.now() - resolvedLastActivityTs > timeoutMs) {
       if (isCurrentlyPunchedIn) {
         try {
           // Check scheduled meeting overlap
@@ -511,11 +554,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
           setShowRecoveryModal(true);
           window.dispatchEvent(new Event("attendance-update"));
         } catch (err) {
-          console.error("Focus sync error:", err);
+          console.warn("Focus sync error:", err);
         }
       }
     }
-  }, [user, isPublicPage]);
+  }, [user, isPublicPage, systemSettings]);
 
   const handleRecoverySubmit = async () => {
     if (!user) return;
@@ -550,7 +593,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           employee_name: user.name || "Employee",
           date: dayjs().format("YYYY-MM-DD"),
           late_minutes: 0,
-          recovery_minutes: 0,
+          recovery_minutes: endObj.diff(startObj, 'minute'),
           recovery_type: recoveryForm.type,
           start_time: `${startStr}:00`,
           end_time: `${endStr}:00`,
@@ -582,7 +625,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         toast.error("Failed to submit recovery request.");
       }
     } catch (err) {
-      console.error("Error submitting recovery:", err);
+      console.warn("Error submitting recovery:", err);
       toast.error("Failed to connect to the server.");
     } finally {
       setIsSubmittingRecovery(false);
@@ -595,19 +638,21 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
 
     // 1. All users listen to window focus and attendance updates to check pending recovery
-    const handleFocus = () => { checkPendingRecovery().catch(console.error); };
+    const handleFocus = () => { checkPendingRecovery().catch(e => console.warn("Recovery check error:", e)); };
     window.addEventListener("focus", handleFocus);
 
     const handleAttendanceUpdate = () => {
       localStorage.setItem("last_activity_timestamp", Date.now().toString());
       lastActivityTimeRef.current = Date.now();
       resetInactivityTimer();
-      checkPendingRecovery().catch(console.error);
+      checkPendingRecovery().catch(e => console.warn("Recovery check error:", e));
     };
     window.addEventListener("attendance-update", handleAttendanceUpdate);
 
-    // Initial check on mount
-    checkPendingRecovery().catch(console.error);
+    // Initial check on mount (deferred to avoid competing with rendering-critical API calls)
+    const recoveryTimer = setTimeout(() => {
+      checkPendingRecovery().catch(e => console.warn("Recovery check error:", e));
+    }, 3000);
 
     // 2. Track OS/browser activity and set inactivity timeouts
     const events = ["mousemove", "keydown", "mousedown", "touchstart", "scroll", "click"];
@@ -622,6 +667,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     resetInactivityTimer();
 
     return () => {
+      clearTimeout(recoveryTimer);
       window.removeEventListener("focus", handleFocus);
       window.removeEventListener("attendance-update", handleAttendanceUpdate);
       events.forEach((e) => window.removeEventListener(e, handleActivity));
@@ -687,8 +733,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <Sidebar />
       <Layout className="site-layout h-screen overflow-y-auto relative custom-scrollbar">
         <Header />
-        <Content className="px-4 sm:px-6 lg:px-8 pb-8 mx-auto w-full max-w-[1600px]">
+        <Content 
+          className="px-4 sm:px-6 lg:px-8 w-full"
+          style={{ paddingBottom: '24px' }}
+        >
           {hasAccess ? children : <AccessDenied />}
+          <div style={{ height: '24px', width: '100%', clear: 'both' }}></div>
         </Content>
       </Layout>
 
@@ -785,8 +835,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               <div style={{ display: "flex", gap: "12px" }}>
                 <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
                   <label style={{ fontSize: "13px", fontWeight: 700, color: "#475569" }}>Start Time</label>
-                  <input
-                    type="time"
+                  <select
                     value={recoveryForm.startTime}
                     onChange={(e) => setRecoveryForm({ ...recoveryForm, startTime: e.target.value })}
                     style={{
@@ -798,12 +847,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
                       width: "100%",
                       outline: "none"
                     }}
-                  />
+                  >
+                    {TIME_OPTIONS.map(opt => <option key={`start-${opt.valueNoSec}`} value={opt.valueNoSec}>{opt.label}</option>)}
+                  </select>
                 </div>
                 <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
                   <label style={{ fontSize: "13px", fontWeight: 700, color: "#475569" }}>End Time</label>
-                  <input
-                    type="time"
+                  <select
                     value={recoveryForm.endTime}
                     onChange={(e) => setRecoveryForm({ ...recoveryForm, endTime: e.target.value })}
                     style={{
@@ -815,7 +865,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
                       width: "100%",
                       outline: "none"
                     }}
-                  />
+                  >
+                    {TIME_OPTIONS.map(opt => <option key={`end-${opt.valueNoSec}`} value={opt.valueNoSec}>{opt.label}</option>)}
+                  </select>
                 </div>
               </div>
 
@@ -949,17 +1001,29 @@ export function AppLayout({ children }: { children: ReactNode }) {
               <div style={{ width: "100%", marginTop: "20px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", fontWeight: 700, color: "#475569", marginBottom: "8px" }}>
                   <span>Downloading update...</span>
-                  <span>{downloadProgress}%</span>
+                  <span>{downloadProgress > 0 ? `${downloadProgress}%` : downloadProgress === -1 ? '...' : '0%'}</span>
                 </div>
                 <div style={{ width: "100%", height: "8px", background: "#e2e8f0", borderRadius: "4px", overflow: "hidden" }}>
-                  <div
-                    style={{
-                      width: `${downloadProgress}%`,
-                      height: "100%",
-                      background: "linear-gradient(90deg, #0d9488, #0f766e)",
-                      transition: "width 0.2s ease"
-                    }}
-                  />
+                  {downloadProgress > 0 ? (
+                    <div
+                      style={{
+                        width: `${downloadProgress}%`,
+                        height: "100%",
+                        background: "linear-gradient(90deg, #0d9488, #0f766e)",
+                        transition: "width 0.3s ease"
+                      }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: "30%",
+                        height: "100%",
+                        background: "linear-gradient(90deg, #0d9488, #0f766e)",
+                        borderRadius: "4px",
+                        animation: "indeterminate 1.5s ease-in-out infinite"
+                      }}
+                    />
+                  )}
                 </div>
                 <p style={{ fontSize: "11px", color: "#94a3b8", marginTop: "8px", fontStyle: "italic" }}>
                   The app will automatically close and restart when download finishes.
@@ -1009,6 +1073,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
               </div>
             )}
           </div>
+          <style>{`
+            @keyframes indeterminate {
+              0% { margin-left: -30%; width: 30%; }
+              50% { margin-left: 50%; width: 30%; }
+              100% { margin-left: 100%; width: 30%; }
+            }
+          `}</style>
         </div>
       )}
     </Layout>

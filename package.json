@@ -1,6 +1,6 @@
 {
   "name": "hrms-desktop",
-  "version": "1.0.3",
+  "version": "1.2.8",
   "description": "HRMS Desktop Application Container",
   "main": "main.js",
   "scripts": {

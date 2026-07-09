@@ -23,17 +23,29 @@ import {
   Coffee,
   Pencil,
   Trash2,
-  Plus
+  Plus,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import { API_URL, getAvatarUrl } from "@/lib/config";
 import { useUserContext } from "@/context/UserContext";
 import { exportToCSV } from "@/lib/export-utils";
 import { toast } from 'sonner';
-import { formatTime12h } from "@/lib/utils";
+import { formatTime12h, calculateAttendanceTimes } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useConfirm } from "@/context/ConfirmContext";
  
+const TIME_OPTIONS = Array.from({ length: 24 * 4 }).map((_, i) => {
+  const hour = Math.floor(i / 4);
+  const minute = (i % 4) * 15;
+  const ampm = hour >= 12 ? "PM" : "AM";
+  const displayHour = hour % 12 || 12;
+  const timeString = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}:00`;
+  const displayString = `${displayHour}:${minute.toString().padStart(2, "0")} ${ampm}`;
+  return { value: timeString, label: displayString };
+});
+
 export default function AttendancePage() {
   const { confirm } = useConfirm();
   const { user, getISTNow } = useUserContext();
@@ -70,6 +82,8 @@ export default function AttendancePage() {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [calendarMonth, setCalendarMonth] = useState<dayjs.Dayjs>(dayjs());
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
   const [editForm, setEditForm] = useState<any>({
@@ -116,8 +130,8 @@ export default function AttendancePage() {
         adminIdsRef.current = new Set(
           data.filter((e: any) => e.role?.toLowerCase() === 'admin').map((e: any) => e.id)
         );
-        // Filter out admin employees - they don't have attendance
-        setAllEmployees(data.filter((e: any) => e.role?.toLowerCase() !== 'admin'));
+        // Filter out admin and inactive employees - they don't have attendance
+        setAllEmployees(data.filter((e: any) => e.role?.toLowerCase() !== 'admin' && e.status?.toLowerCase() !== 'inactive'));
       }
     } catch (err) {
       console.error("Error fetching employees:", err);
@@ -210,6 +224,12 @@ export default function AttendancePage() {
     if (selectedEmployeeId !== "all") {
       result = result.filter((a: any) => a.employeeId === selectedEmployeeId);
     }
+    if (selectedDate) {
+      result = result.filter((a: any) => {
+        const recordDate = a.date ? (typeof a.date === 'string' ? a.date.split('T')[0].split(' ')[0] : dayjs(a.date).format('YYYY-MM-DD')) : '';
+        return recordDate === selectedDate;
+      });
+    }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       result = result.filter((a: any) => 
@@ -219,7 +239,7 @@ export default function AttendancePage() {
       );
     }
     return result;
-  }, [attendance, selectedEmployeeId, searchQuery]);
+  }, [attendance, selectedEmployeeId, selectedDate, searchQuery]);
 
   useEffect(() => {
     calculateStats(filteredAttendance);
@@ -446,6 +466,14 @@ export default function AttendancePage() {
       return;
     }
     try {
+      const startObj = dayjs(`2000-01-01 ${recoveryForm.recordedBreakIn}`);
+      const endObj = dayjs(`2000-01-01 ${recoveryForm.actualBreakOut}`);
+      let diffMins = 0;
+      if (startObj.isValid() && endObj.isValid()) {
+        diffMins = endObj.diff(startObj, 'minute');
+        if (diffMins < 0) diffMins = 0;
+      }
+
       const res = await fetch(`${API_URL}/time-recovery`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -453,8 +481,11 @@ export default function AttendancePage() {
           employee_id: user?.id || user?.employeeId,
           employee_name: user?.name || "Unknown",
           date: recoveryForm.date,
-          late_minutes: 0, // Not used in this version
-          recovery_minutes: 0, // Not used in this version
+          late_minutes: 0,
+          recovery_minutes: diffMins,
+          recovery_type: "break",
+          start_time: recoveryForm.recordedBreakIn,
+          end_time: recoveryForm.actualBreakOut,
           reason: `Break-In: ${recoveryForm.recordedBreakIn}, Actual Break-Out: ${recoveryForm.actualBreakOut}. ${recoveryForm.reason}`,
           status: "pending"
         })
@@ -481,16 +512,44 @@ export default function AttendancePage() {
   );
  
   const CalendarWidget = () => {
-    const istNow = dayjs(getISTNow());
+    const istNow = calendarMonth;
     const daysInMonth = istNow.daysInMonth();
     const firstDayOfMonth = istNow.startOf('month').day();
+
+    // Filter records by selected employee to show relevant indicators
+    const empFilteredAttendance = selectedEmployeeId === "all" 
+      ? attendance 
+      : attendance.filter((a: any) => a.employeeId === selectedEmployeeId);
+
+    const presentDaysInMonth = empFilteredAttendance.filter(a => {
+      const recordDate = dayjs(a.date);
+      return recordDate.month() === istNow.month() && 
+             recordDate.year() === istNow.year() &&
+             a.checkIn && a.checkIn !== "--" && a.checkIn !== "--:--";
+    }).length;
 
     return (
       <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-foreground text-lg">{istNow.format("MMMM YYYY")}</h3>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setCalendarMonth(prev => prev.subtract(1, 'month'))}
+              className="p-1 hover:bg-gray-100 rounded-md transition-colors"
+              title="Previous Month"
+            >
+              <ChevronLeft className="w-5 h-5 text-muted-foreground" />
+            </button>
+            <h3 className="font-bold text-foreground text-lg min-w-[120px] text-center">{istNow.format("MMMM YYYY")}</h3>
+            <button 
+              onClick={() => setCalendarMonth(prev => prev.add(1, 'month'))}
+              className="p-1 hover:bg-gray-100 rounded-md transition-colors"
+              title="Next Month"
+            >
+              <ChevronRight className="w-5 h-5 text-muted-foreground" />
+            </button>
+          </div>
           <div className="bg-brand-light/50 text-brand-teal text-xs font-medium px-2 py-1 rounded-md">
-            {stats.presentDays} present
+            {presentDaysInMonth} present
           </div>
         </div>
         <div className="grid grid-cols-7 gap-y-2 text-center text-sm mb-2">
@@ -510,7 +569,15 @@ export default function AttendancePage() {
             // Render days of the month
             for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
               const isToday = dayNum === istNow.date();
-              const hasRecord = filteredAttendance.some(a => {
+              const cellDateStr = istNow.date(dayNum).format("YYYY-MM-DD");
+              const isSelected = selectedDate === cellDateStr;
+
+              // Filter records by selected employee to show relevant indicators
+              const empFilteredAttendance = selectedEmployeeId === "all" 
+                ? attendance 
+                : attendance.filter((a: any) => a.employeeId === selectedEmployeeId);
+
+              const hasRecord = empFilteredAttendance.some(a => {
                 const recordDate = dayjs(a.date);
                 return recordDate.date() === dayNum && 
                        recordDate.month() === istNow.month() && 
@@ -520,9 +587,20 @@ export default function AttendancePage() {
               days.push(
                 <div 
                   key={dayNum} 
-                  className={`py-2 rounded-md m-0.5 text-xs ${
-                    isToday ? 'bg-brand-teal text-white font-bold shadow-sm' : 
-                    hasRecord ? 'bg-brand-light/40 text-brand-teal font-medium' : 'text-foreground bg-gray-50'
+                  onClick={() => {
+                    if (isSelected) {
+                      setSelectedDate(null);
+                    } else {
+                      setSelectedDate(cellDateStr);
+                    }
+                  }}
+                  className={`py-2 rounded-md m-0.5 text-xs cursor-pointer transition-all hover:scale-105 ${
+                    isToday ? (
+                      isSelected ? 'bg-brand-teal text-white font-bold ring-2 ring-brand-teal ring-offset-2' : 'bg-brand-teal text-white font-bold shadow-sm'
+                    ) : (
+                      isSelected ? 'bg-brand-teal text-white font-bold ring-2 ring-brand-teal ring-offset-1' :
+                      hasRecord ? 'bg-brand-light/40 text-brand-teal font-medium hover:bg-brand-light/60' : 'text-foreground bg-gray-50 hover:bg-gray-100'
+                    )
                   }`}
                 >
                   {dayNum}
@@ -581,27 +659,29 @@ export default function AttendancePage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2 flex flex-col">
                       <label className="text-sm font-medium text-foreground">Recorded Break-In</label>
-                      <TimePicker 
-                        className="w-full h-9" 
-                        format="hh:mm A" 
-                        use12Hours 
-                        showNow={false}
-                        value={recoveryForm.recordedBreakIn ? dayjs(`2000-01-01 ${recoveryForm.recordedBreakIn}`, "YYYY-MM-DD HH:mm:ss") : null}
-                        onChange={(time) => setRecoveryForm({...recoveryForm, recordedBreakIn: time ? time.format("HH:mm:ss") : ""})}
-                        getPopupContainer={(trigger) => trigger.parentNode as HTMLElement}
-                      />
+                      <Select value={recoveryForm.recordedBreakIn} onValueChange={(v) => setRecoveryForm({...recoveryForm, recordedBreakIn: v})}>
+                        <SelectTrigger className="w-full h-9">
+                          <SelectValue placeholder="Recorded Break-In" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[250px]">
+                          {TIME_OPTIONS.map(opt => (
+                            <SelectItem key={`breakin-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-2 flex flex-col">
                       <label className="text-sm font-medium text-foreground">Actual Break-Out Time</label>
-                      <TimePicker 
-                        className="w-full h-9" 
-                        format="hh:mm A" 
-                        use12Hours 
-                        showNow={false}
-                        value={recoveryForm.actualBreakOut ? dayjs(`2000-01-01 ${recoveryForm.actualBreakOut}`, "YYYY-MM-DD HH:mm:ss") : null}
-                        onChange={(time) => setRecoveryForm({...recoveryForm, actualBreakOut: time ? time.format("HH:mm:ss") : ""})}
-                        getPopupContainer={(trigger) => trigger.parentNode as HTMLElement}
-                      />
+                      <Select value={recoveryForm.actualBreakOut} onValueChange={(v) => setRecoveryForm({...recoveryForm, actualBreakOut: v})}>
+                        <SelectTrigger className="w-full h-9">
+                          <SelectValue placeholder="Actual Break-Out Time" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[250px]">
+                          {TIME_OPTIONS.map(opt => (
+                            <SelectItem key={`breakout-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                 <div className="space-y-2 flex flex-col">
@@ -675,23 +755,29 @@ export default function AttendancePage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Check In</label>
-                      <input 
-                        type="time" 
-                        step="1"
-                        className="w-full p-2 border rounded-md" 
-                        value={createForm.checkIn}
-                        onChange={(e) => setCreateForm({...createForm, checkIn: e.target.value})}
-                      />
+                      <Select value={createForm.checkIn} onValueChange={(v) => setCreateForm({...createForm, checkIn: v})}>
+                        <SelectTrigger className="w-full h-10">
+                          <SelectValue placeholder="Check In" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[250px]">
+                          {TIME_OPTIONS.map(opt => (
+                            <SelectItem key={`checkin-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Check Out</label>
-                      <input 
-                        type="time" 
-                        step="1"
-                        className="w-full p-2 border rounded-md" 
-                        value={createForm.checkOut}
-                        onChange={(e) => setCreateForm({...createForm, checkOut: e.target.value})}
-                      />
+                      <Select value={createForm.checkOut} onValueChange={(v) => setCreateForm({...createForm, checkOut: v})}>
+                        <SelectTrigger className="w-full h-10">
+                          <SelectValue placeholder="Check Out" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[250px]">
+                          {TIME_OPTIONS.map(opt => (
+                            <SelectItem key={`checkout-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                 </div>
@@ -828,6 +914,18 @@ export default function AttendancePage() {
                     </Select>
                   </div>
                 )}
+                {selectedDate && (
+                  <div className="flex items-center gap-1.5 bg-brand-light text-brand-teal px-3 py-1 rounded-full text-xs font-semibold border border-brand-teal/20 shadow-sm animate-fade-in">
+                    <span>Date: {dayjs(selectedDate).format("DD MMM YYYY")}</span>
+                    <button 
+                      onClick={() => setSelectedDate(null)} 
+                      className="hover:text-red-500 font-bold ml-1 focus:outline-none"
+                      title="Clear date filter"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="relative w-full md:w-[280px]">
                 <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
@@ -881,26 +979,14 @@ export default function AttendancePage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">{filteredAttendance.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((row, idx) => {
-                      const totalBreakMinutes = (row.breaks || []).reduce((acc: number, b: any) => acc + (parseInt(b.duration) || 0), 0);
-                      const breakStr = formatToHhMm(totalBreakMinutes);
-                      
-                      const isToday = dayjs(row.date).isSame(dayjs(), 'day');
-                      const checkIn = dayjs(`${row.date} ${row.checkIn}`);
-                      const checkOut = row.checkOut 
-                        ? dayjs(`${row.date} ${row.checkOut}`) 
-                        : (isToday && row.checkIn && row.checkIn !== "--" ? dayjs() : null);
-                      
-                      // Total Working Hours
-                      let totalWorkingMinutes = 0;
-                      if (checkIn.isValid() && checkOut && checkOut.isValid()) {
-                        totalWorkingMinutes = checkOut.diff(checkIn, 'minute');
-                      }
+                      const { productionMinutes, totalWorkingMinutes, breakMinutes } = calculateAttendanceTimes(row, getISTNow());
+                      const breakStr = formatToHhMm(breakMinutes);
                       const totalWorkingStr = formatToHhMm(totalWorkingMinutes);
-                      
-                      // Production Hours
-                      const productionMinutes = Math.max(0, totalWorkingMinutes - totalBreakMinutes);
                       const productionStr = formatToHhMm(productionMinutes);
-                      
+
+                      const dateStr = row.date ? (typeof row.date === 'string' ? row.date.split('T')[0].split(' ')[0] : dayjs(row.date).format('YYYY-MM-DD')) : '';
+                      const checkIn = dayjs(`${dateStr} ${row.checkIn}`);
+
                       // Late
                       // Check for approved recovery request
                       const recoveryReq = recoveryRequests.find(req => 
@@ -924,22 +1010,50 @@ export default function AttendancePage() {
                         return punchMins > limitMins;
                       })();
                       
-                      const lateMinutes = checkIn.isValid() ? Math.max(0, checkIn.diff(dayjs(`${row.date} ${sysSettings?.officeStartTime || "09:30"}`), 'minute')) : 0;
+                      const lateMinutes = checkIn.isValid() ? Math.max(0, checkIn.diff(dayjs(`${dateStr} ${sysSettings?.officeStartTime || "09:30"}`), 'minute')) : 0;
                       // Just show the actual minutes as requested
                       const lateStr = isLate || recoveryReq 
                         ? formatToHhMm(lateMinutes) 
                         : "-";
                       
-                      // Overtime
                       const shiftDurationMinutes = (() => {
-                        const officeStartTime = sysSettings?.officeStartTime || "09:30";
-                        const officeEndTime = sysSettings?.officeEndTime || "18:30";
-                        const [sh, sm] = officeStartTime.split(':').map(Number);
-                        const [eh, em] = officeEndTime.split(':').map(Number);
-                        return (eh * 60 + em) - (sh * 60 + sm);
+                        const emp = allEmployees.find(e => e.id === row.employeeId || e.employeeId === row.employeeId);
+                        const officeStartTime = emp?.startTime || sysSettings?.officeStartTime || "09:30";
+                        const officeEndTime = emp?.endTime || sysSettings?.officeEndTime || "18:30";
+                        
+                        const parseTimeToMinutes = (timeStr: string): number => {
+                          if (!timeStr) return 0;
+                          const cleaned = timeStr.trim().toUpperCase();
+                          let hours = 0;
+                          let minutes = 0;
+                          const ampmMatch = cleaned.match(/(\d+):(\d+)(?::\d+)?\s*(AM|PM)/);
+                          if (ampmMatch) {
+                            hours = parseInt(ampmMatch[1], 10);
+                            minutes = parseInt(ampmMatch[2], 10);
+                            const ampm = ampmMatch[3];
+                            if (ampm === "PM" && hours < 12) hours += 12;
+                            if (ampm === "AM" && hours === 12) hours = 0;
+                          } else {
+                            const parts = cleaned.split(':');
+                            hours = parseInt(parts[0] || '0', 10);
+                            minutes = parseInt(parts[1] || '0', 10);
+                            if (hours >= 1 && hours <= 8) {
+                              hours += 12;
+                            }
+                          }
+                          return hours * 60 + minutes;
+                        };
+
+                        const startMinutes = parseTimeToMinutes(officeStartTime);
+                        const endMinutes = parseTimeToMinutes(officeEndTime);
+                        let diff = endMinutes - startMinutes;
+                        if (diff < 0) {
+                          diff += 24 * 60;
+                        }
+                        return diff;
                       })();
                       
-                      const overtimeMinutes = Math.max(0, productionMinutes - shiftDurationMinutes);
+                      const overtimeMinutes = productionMinutes > 0 ? Math.max(0, productionMinutes - shiftDurationMinutes) : 0;
                       const overtimeStr = formatToHhMm(overtimeMinutes);
  
                       let statusLabel = row.status === "Leave" ? "Leave" : (row.checkIn && row.checkIn !== "--" && row.checkIn !== "--:--" ? "Present" : "Absent");
@@ -1015,8 +1129,8 @@ export default function AttendancePage() {
                             ) : "-"}
                           </td>
                            <td className="px-4 py-4 font-medium text-foreground">{totalWorkingStr}</td>
-                          <td className="px-4 py-4 text-[11px] text-muted-foreground max-w-[200px] truncate" title={(!row.remarks || row.remarks === "-") ? (isLate ? `Late punch-in; ${lateMinutes} mins after expected start (${sysSettings?.officeStartTime || "09:30"} AM)` : undefined) : row.remarks}>
-                            {(!row.remarks || row.remarks === "-") ? (isLate ? `Late punch-in; ${lateMinutes} mins after expected start (${sysSettings?.officeStartTime || "09:30"} AM)` : "-") : row.remarks}
+                          <td className="px-4 py-4 text-[11px] text-muted-foreground max-w-[200px] truncate" title={(!row.remarks || row.remarks === "-") ? (isLate ? `Late punch-in; ${lateMinutes} mins after expected start (${formatTime12h(sysSettings?.officeStartTime || "09:30")})` : undefined) : row.remarks}>
+                            {(!row.remarks || row.remarks === "-") ? (isLate ? `Late punch-in; ${lateMinutes} mins after expected start (${formatTime12h(sysSettings?.officeStartTime || "09:30")})` : "-") : row.remarks}
                           </td>
                           <td className="px-4 py-4 text-right">
                               <div className="flex justify-end gap-2">
@@ -1217,23 +1331,29 @@ export default function AttendancePage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Check In</label>
-                <input 
-                  type="time" 
-                  step="1"
-                  className="w-full p-2 border rounded-md" 
-                  value={editForm.checkIn}
-                  onChange={(e) => setEditForm({...editForm, checkIn: e.target.value})}
-                />
+                <Select value={editForm.checkIn} onValueChange={(v) => setEditForm({...editForm, checkIn: v})}>
+                  <SelectTrigger className="w-full h-10">
+                    <SelectValue placeholder="Check In" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[250px]">
+                    {TIME_OPTIONS.map(opt => (
+                      <SelectItem key={`edit-checkin-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Check Out</label>
-                <input 
-                  type="time" 
-                  step="1"
-                  className="w-full p-2 border rounded-md" 
-                  value={editForm.checkOut}
-                  onChange={(e) => setEditForm({...editForm, checkOut: e.target.value})}
-                />
+                <Select value={editForm.checkOut} onValueChange={(v) => setEditForm({...editForm, checkOut: v})}>
+                  <SelectTrigger className="w-full h-10">
+                    <SelectValue placeholder="Check Out" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[250px]">
+                    {TIME_OPTIONS.map(opt => (
+                      <SelectItem key={`edit-checkout-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="space-y-2">

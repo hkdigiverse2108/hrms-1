@@ -51,6 +51,8 @@ import {
 import { useUserContext } from "@/context/UserContext";
 import { API_URL, getAvatarUrl } from "@/lib/config";
 import dayjs from "dayjs";
+import isSameOrAfter from "dayjs/plugin/isSameOrAfter";
+dayjs.extend(isSameOrAfter);
 import { TablePagination } from "@/components/common/TablePagination";
 import { formatTime12h } from "@/lib/utils";
 import { RequestPunchOutDialog } from "@/components/dashboard/RequestPunchOutDialog";
@@ -94,6 +96,7 @@ const formatWorkHours = (workHours: string) => {
 
 export default function DashboardPage() {
   const { user, isLoading, getISTNow, isTimeSynced } = useUserContext();
+  const [hrActiveFilter, setHrActiveFilter] = useState<string | null>(null);
   const [attendanceStatus, setAttendanceStatus] = useState<{isPunchedIn: boolean, record: any} | null>(null);
   const [recentAttendance, setRecentAttendance] = useState<any[]>([]);
   const [isPunching, setIsPunching] = useState(false);
@@ -117,8 +120,8 @@ export default function DashboardPage() {
     if (user?.id) {
       fetchStatus();
       fetchHistory();
+      fetchLeaveRequests();
       if (user.role === "Admin" || user.role === "HR") {
-        fetchLeaveRequests();
         fetchEmployees();
         fetchInterns();
         fetchAllAttendance();
@@ -221,7 +224,6 @@ export default function DashboardPage() {
     let interval: any;
     if (attendanceStatus?.isPunchedIn && attendanceStatus.record?.checkIn) {
       const parseTimeToDate = (timeStr: string, baseDate: Date) => {
-        const d = new Date(baseDate.getTime());
         const cleaned = timeStr.trim();
         let hours = 0, minutes = 0, seconds = 0;
         const ampmMatch = cleaned.match(/(\d+):(\d+):?(\d+)?\s*(AM|PM)/i);
@@ -238,8 +240,25 @@ export default function DashboardPage() {
           minutes = parts[1] ? parseInt(parts[1]) : 0;
           seconds = parts[2] ? parseInt(parts[2]) : 0;
         }
-        d.setHours(hours, minutes, seconds, 0);
-        return d;
+
+        // Format the baseDate into Year-Month-Day in Asia/Kolkata timezone
+        const formatter = new Intl.DateTimeFormat("en-US", {
+          timeZone: "Asia/Kolkata",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit"
+        });
+        const parts = formatter.formatToParts(baseDate);
+        const year = parts.find(p => p.type === "year")?.value;
+        const month = parts.find(p => p.type === "month")?.value;
+        const day = parts.find(p => p.type === "day")?.value;
+
+        const hh = hours.toString().padStart(2, '0');
+        const mm = minutes.toString().padStart(2, '0');
+        const ss = seconds.toString().padStart(2, '0');
+
+        const isoStr = `${year}-${month}-${day}T${hh}:${mm}:${ss}+05:30`;
+        return new Date(isoStr);
       };
 
       const runTimer = () => {
@@ -249,7 +268,8 @@ export default function DashboardPage() {
 
         const normalizeDate = (d: Date) => {
           if (d.getTime() > istNow.getTime() + 60000) {
-            d.setDate(d.getDate() - 1);
+            // Shift date back by 1 day timezone-safely
+            return new Date(d.getTime() - 24 * 60 * 60 * 1000);
           }
           return d;
         };
@@ -402,6 +422,10 @@ export default function DashboardPage() {
  
   const fetchStatus = async () => {
     try {
+      const userRole = user?.role?.toLowerCase() || "employee";
+      const isAdmin = ['admin', 'super admin', 'superadmin', 'administrator', 'founder'].includes(userRole.trim());
+      if (isAdmin) return;
+
       const res = await fetch(`${API_URL}/attendance/status/${user?.id}`);
       if (res.ok) {
         const data = await res.json();
@@ -526,7 +550,7 @@ export default function DashboardPage() {
   }
  
   const userRole = user?.role?.toLowerCase() || "employee";
-  const isAdmin = userRole === "admin";
+  const isAdmin = ['admin', 'super admin', 'superadmin', 'administrator', 'founder'].includes(userRole.trim());
   const isHR = userRole === "hr";
   const isEmployee = userRole === "employee";
  
@@ -547,28 +571,83 @@ export default function DashboardPage() {
         )}
       </PageHeader>
  
-      {isAdmin && <AdminView user={user} leaves={leaveRequests} employees={employees} interns={interns} allAttendance={allAttendance} getISTNow={getISTNow} />}
+      {isAdmin ? (
+        <AdminView user={user} leaves={leaveRequests} employees={employees} interns={interns} allAttendance={allAttendance} getISTNow={getISTNow} />
+      ) : (
+        <div className="space-y-6">
+          {/* 1. If HR, show the 4 HR StatCards on top (full width) */}
+          {isHR && (
+            <HRView 
+              user={user} 
+              leaves={leaveRequests} 
+              applications={applications} 
+              assets={assets} 
+              showStatsOnly={true}
+              activeFilter={hrActiveFilter}
+              setActiveFilter={setHrActiveFilter}
+            />
+          )}
 
-      {isHR && <HRView user={user} leaves={leaveRequests} applications={applications} assets={assets} />}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-6">
+              {/* 2. Show Employee Punch Card Box */}
+              <EmployeeView 
+                user={user} 
+                attendanceStatus={attendanceStatus} 
+                handlePunch={handlePunch} 
+                handleGoingForMeeting={handleGoingForMeeting}
+                isPunching={isPunching}
+                workTime={workTime}
+                totalBreakTime={totalBreakTime}
+                allTimeHours={allTimeHours}
+                recentAttendance={recentAttendance}
+                currentTime={currentTime}
+                isTimeSynced={isTimeSynced}
+                getISTNow={getISTNow}
+                punchCardRef={punchCardRef}
+                showPunchCardOnly={true}
+              />
 
-      {(!isAdmin) && (
-        <EmployeeView 
-          user={user} 
-          attendanceStatus={attendanceStatus} 
-          handlePunch={handlePunch} 
-          handleGoingForMeeting={handleGoingForMeeting}
-          isPunching={isPunching}
-          workTime={workTime}
-          totalBreakTime={totalBreakTime}
-          allTimeHours={allTimeHours}
-          recentAttendance={recentAttendance}
-          currentTime={currentTime}
-          isTimeSynced={isTimeSynced}
-          getISTNow={getISTNow}
-          punchCardRef={punchCardRef}
-          missingPunchOutDate={missingPunchOutDate}
-          setIsRequestDialogOpen={setIsRequestDialogOpen}
-        />
+              {/* 3. Show Employee stats and Recent Attendance table */}
+              <EmployeeView 
+                user={user} 
+                attendanceStatus={attendanceStatus} 
+                handlePunch={handlePunch} 
+                handleGoingForMeeting={handleGoingForMeeting}
+                isPunching={isPunching}
+                workTime={workTime}
+                totalBreakTime={totalBreakTime}
+                allTimeHours={allTimeHours}
+                recentAttendance={recentAttendance}
+                currentTime={currentTime}
+                isTimeSynced={isTimeSynced}
+                getISTNow={getISTNow}
+                punchCardRef={punchCardRef}
+                showStatsAndAttendanceOnly={true}
+              />
+
+              {/* 4. If HR, show HR Lists (Recent Leave Requests, Upcoming Interviews) */}
+              {isHR && (
+                <HRView 
+                  user={user} 
+                  leaves={leaveRequests} 
+                  applications={applications} 
+                  assets={assets} 
+                  showListsOnly={true}
+                  activeFilter={hrActiveFilter}
+                  setActiveFilter={setHrActiveFilter}
+                />
+              )}
+
+              {/* 5. Show Upcoming Approved Leaves Card */}
+              <UpcomingApprovedLeavesCard leaves={leaveRequests} />
+            </div>
+
+            <div className="lg:col-span-1">
+              <EventsSidebar user={user} leaves={leaveRequests} />
+            </div>
+          </div>
+        </div>
       )}
  
       <RequestPunchOutDialog 
@@ -594,11 +673,78 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+function UpcomingApprovedLeavesCard({ leaves }: { leaves: any[] }) {
+  const today = dayjs();
+  const upcomingApprovedLeaves = (leaves || [])
+    .filter((l: any) => {
+      if (l.status !== 'Approved') return false;
+      const endDate = dayjs(l.end_date, "DD-MM-YYYY");
+      return endDate.isSameOrAfter(today, 'day');
+    })
+    .sort((a: any, b: any) => {
+      const dateA = dayjs(a.start_date, "DD-MM-YYYY");
+      const dateB = dayjs(b.start_date, "DD-MM-YYYY");
+      return dateA.diff(dateB);
+    });
+
+  return (
+    <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden">
+      <div className="p-5 border-b border-border flex justify-between items-center bg-white">
+        <div className="flex items-center gap-2">
+          <CalendarIcon className="w-5 h-5 text-brand-teal" />
+          <h3 className="font-bold text-lg text-[#111827]">Upcoming Approved Leaves</h3>
+        </div>
+      </div>
+      <div className="p-0">
+        {upcomingApprovedLeaves.length > 0 ? (
+          <div className="divide-y divide-border">
+            {upcomingApprovedLeaves.slice(0, 5).map((leave: any, idx: number) => {
+              const start = dayjs(leave.start_date, "DD-MM-YYYY");
+              const end = dayjs(leave.end_date, "DD-MM-YYYY");
+              const dateDisplay = start.isSame(end, 'day') 
+                ? start.format("MMM DD, YYYY")
+                : `${start.format("MMM DD")} - ${end.format("MMM DD, YYYY")}`;
+              
+              return (
+                <div key={leave.id || idx} className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-9 w-9">
+                      <AvatarFallback className="bg-brand-light text-brand-teal font-bold">
+                        {(leave.employee_name || "L")[0]}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <div className="text-sm font-semibold text-gray-950">{leave.employee_name}</div>
+                      <div className="text-xs text-muted-foreground capitalize">{leave.type} • {leave.duration}</div>
+                    </div>
+                  </div>
+                  <span className="text-xs font-semibold px-2.5 py-1 bg-brand-light text-brand-teal rounded-md">
+                    {dateDisplay}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="p-8 text-center text-sm text-muted-foreground">
+            No upcoming approved leaves found
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
  
 function AdminView({ user, leaves, employees, interns, allAttendance, getISTNow }: { user: any, leaves: any[], employees: any[], interns: any[], allAttendance: any[], getISTNow: () => Date }) {
 
   // Exclude admin employees from attendance-related calculations
-  const nonAdminEmployees = employees?.filter(e => e.role?.toLowerCase() !== 'admin') || [];
+  const isRoleAdmin = (r?: string) => {
+    if (!r) return false;
+    const clean = r.toLowerCase().trim();
+    return clean === 'admin' || clean === 'super admin' || clean === 'superadmin' || clean === 'administrator' || clean === 'founder' || clean === 'super_admin';
+  };
+  const nonAdminEmployees = employees?.filter(e => !isRoleAdmin(e.role)) || [];
 
   const todayStr = dayjs(getISTNow()).format('YYYY-MM-DD');
   const todayAttendance = allAttendance?.filter(a => a.date === todayStr) || [];
@@ -628,11 +774,11 @@ function AdminView({ user, leaves, employees, interns, allAttendance, getISTNow 
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
         <StatCard 
           title="Total Employees" 
           value={totalEmployeesCount.toString()} 
-          trend={`+${employees?.filter(e => dayjs(e.joinDate).isAfter(dayjs().subtract(1, 'month'))).length || 0}`} 
+          trend={`+${nonAdminEmployees?.filter(e => dayjs(e.joinDate).isAfter(dayjs().subtract(1, 'month'))).length || 0}`} 
           trendLabel="new this month" 
           icon={<Users className="w-5 h-5 text-muted-foreground" />} 
         />
@@ -703,125 +849,151 @@ function AdminView({ user, leaves, employees, interns, allAttendance, getISTNow 
             </div>
           </div>
           <DepartmentDistribution />
+          <UpcomingApprovedLeavesCard leaves={leaves} />
         </div>
         <div className="lg:col-span-1">
-          <EventsSidebar user={user} />
+          <EventsSidebar user={user} leaves={leaves} />
         </div>
       </div>
     </div>
   );
 }
  
-function HRView({ user, leaves, applications, assets }: { user: any, leaves: any[], applications: any[], assets: any[] }) {
-  const [activeFilter, setActiveFilter] = useState<string | null>(null);
+function HRView({ 
+  user, 
+  leaves, 
+  applications, 
+  assets,
+  showStatsOnly = false,
+  showListsOnly = false,
+  activeFilter: externalActiveFilter,
+  setActiveFilter: externalSetActiveFilter
+}: { 
+  user: any, 
+  leaves: any[], 
+  applications: any[], 
+  assets: any[],
+  showStatsOnly?: boolean,
+  showListsOnly?: boolean,
+  activeFilter?: string | null,
+  setActiveFilter?: (val: string | null) => void
+}) {
+  const [internalActiveFilter, setInternalActiveFilter] = useState<string | null>(null);
+  const activeFilter = externalActiveFilter !== undefined ? externalActiveFilter : internalActiveFilter;
+  const setActiveFilter = externalSetActiveFilter !== undefined ? externalSetActiveFilter : setInternalActiveFilter;
 
   const filteredLeaves = activeFilter 
     ? leaves.filter(l => l.status === activeFilter) 
     : leaves;
 
+  const statsSection = (
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div onClick={() => setActiveFilter(activeFilter === 'Pending' ? null : 'Pending')} className="cursor-pointer">
+        <StatCard 
+          title="Pending Leaves" 
+          value={leaves.filter(l => l.status === 'Pending').length.toString().padStart(2, '0')} 
+          trend="Action Required" 
+          trendLabel="awaiting approval" 
+          icon={<CalendarIcon className={`w-5 h-5 ${activeFilter === 'Pending' ? 'text-brand-teal' : 'text-muted-foreground'}`} />} 
+          color={activeFilter === 'Pending' ? 'brand' : undefined}
+        />
+      </div>
+
+      <Link href="/recruitment/hiring-board">
+        <StatCard title="New Applications" value={(applications?.length || 0).toString().padStart(2, '0')} trend="+5" trendLabel="this week" icon={<FileCheck className="w-5 h-5 text-muted-foreground" />} trendUp/>
+      </Link>
+      <div onClick={() => setActiveFilter(activeFilter === 'Approved' ? null : 'Approved')} className="cursor-pointer">
+        <StatCard 
+          title="Approved Leaves" 
+          value={leaves.filter(l => l.status === 'Approved').length.toString().padStart(2, '0')} 
+          trend="Past & Future" 
+          trendLabel="approved requests" 
+          icon={<CheckCircle2 className={`w-5 h-5 ${activeFilter === 'Approved' ? 'text-brand-teal' : 'text-muted-foreground'}`} />} 
+          color={activeFilter === 'Approved' ? 'brand' : undefined}
+        />
+      </div>
+      <StatCard title="Asset Requests" value={(assets?.filter(a => a.status === 'Requested' || a.status === 'Pending')?.length || 0).toString().padStart(2, '0')} trend="Pending" trendLabel="laptop & equipment" icon={<AlertCircle className="w-5 h-5 text-muted-foreground" />} trendUp={false} />
+    </div>
+  );
+
+  const listsSection = (
+    <div className="space-y-6">
+      <div className="bg-white border border-border rounded-xl shadow-sm">
+        <div className="p-5 border-b border-border flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <h3 className="font-bold text-lg text-[#111827]">Recent Leave Requests</h3>
+            {activeFilter && (
+              <Badge variant="outline" className="bg-brand-light text-brand-teal border-brand-teal/20 px-2 py-0">
+                {activeFilter}
+                <X className="w-3 h-3 ml-1 cursor-pointer" onClick={() => setActiveFilter(null)} />
+              </Badge>
+            )}
+          </div>
+          <Link href="/leave">
+            <Button variant="ghost" size="sm" className="text-brand-teal">View All</Button>
+          </Link>
+        </div>
+        <div className="p-0">
+          {filteredLeaves.length > 0 ? filteredLeaves.slice(0, 5).map((leave, i) => (
+            <div key={i} className="flex items-center justify-between p-4 border-b last:border-0 border-border hover:bg-gray-50 transition-colors">
+              <div className="flex items-center gap-3">
+                <Avatar className="h-9 w-9">
+                  <AvatarFallback className="bg-brand-light text-brand-teal font-bold">{leave.employee_name[0]}</AvatarFallback>
+                </Avatar>
+                <div>
+                  <div className="text-sm font-semibold">{leave.employee_name}</div>
+                  <div className="text-xs text-muted-foreground capitalize">{leave.type} • {leave.duration}</div>
+                </div>
+              </div>
+              <span className={`text-xs font-semibold px-2 py-1 rounded-md ${
+                leave.status === 'Approved' ? 'bg-green-50 text-green-600' : 
+                leave.status === 'Rejected' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'
+              }`}>
+                {leave.status}
+              </span>
+            </div>
+          )) : (
+            <div className="p-8 text-center text-sm text-muted-foreground">No {activeFilter ? activeFilter.toLowerCase() : ''} leave requests found</div>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white border border-border rounded-xl p-6 shadow-sm">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="font-bold text-lg text-[#111827]">Upcoming Interviews</h3>
+          <Link href="/recruitment/hiring-board">
+            <Button variant="ghost" size="sm" className="text-brand-teal">Hiring Board</Button>
+          </Link>
+        </div>
+        <div className="space-y-4">
+          {applications && applications.length > 0 ? (
+            applications.slice(0, 3).map((app, i) => (
+              <div key={i} className="flex gap-4 p-3 rounded-lg border border-border hover:border-brand-teal/30 transition-colors">
+                <div className="bg-brand-light p-2 rounded-md h-fit"><Clock className="w-4 h-4 text-brand-teal" /></div>
+                <div className="flex-1">
+                  <h4 className="font-semibold text-sm">{app.candidate_name || app.name}</h4>
+                  <p className="text-xs text-muted-foreground">{app.applied_for || app.role}</p>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs font-bold text-brand-teal">{app.status || 'Applied'}</div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="p-8 text-center text-sm text-muted-foreground">No upcoming interviews or recent applications</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  if (showStatsOnly) return statsSection;
+  if (showListsOnly) return listsSection;
+
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div onClick={() => setActiveFilter(activeFilter === 'Pending' ? null : 'Pending')} className="cursor-pointer">
-          <StatCard 
-            title="Pending Leaves" 
-            value={leaves.filter(l => l.status === 'Pending').length.toString().padStart(2, '0')} 
-            trend="Action Required" 
-            trendLabel="awaiting approval" 
-            icon={<CalendarIcon className={`w-5 h-5 ${activeFilter === 'Pending' ? 'text-brand-teal' : 'text-muted-foreground'}`} />} 
-            color={activeFilter === 'Pending' ? 'brand' : undefined}
-          />
-        </div>
-
-        <Link href="/recruitment/hiring-board">
-          <StatCard title="New Applications" value={(applications?.length || 0).toString().padStart(2, '0')} trend="+5" trendLabel="this week" icon={<FileCheck className="w-5 h-5 text-muted-foreground" />} trendUp/>
-        </Link>
-        <div onClick={() => setActiveFilter(activeFilter === 'Approved' ? null : 'Approved')} className="cursor-pointer">
-          <StatCard 
-            title="Approved Leaves" 
-            value={leaves.filter(l => l.status === 'Approved').length.toString().padStart(2, '0')} 
-            trend="Past & Future" 
-            trendLabel="approved requests" 
-            icon={<CheckCircle2 className={`w-5 h-5 ${activeFilter === 'Approved' ? 'text-brand-teal' : 'text-muted-foreground'}`} />} 
-            color={activeFilter === 'Approved' ? 'brand' : undefined}
-          />
-        </div>
-        <StatCard title="Asset Requests" value={(assets?.filter(a => a.status === 'Requested' || a.status === 'Pending')?.length || 0).toString().padStart(2, '0')} trend="Pending" trendLabel="laptop & equipment" icon={<AlertCircle className="w-5 h-5 text-muted-foreground" />} trendUp={false} />
-      </div>
- 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white border border-border rounded-xl shadow-sm">
-            <div className="p-5 border-b border-border flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                <h3 className="font-bold text-lg text-[#111827]">Recent Leave Requests</h3>
-                {activeFilter && (
-                  <Badge variant="outline" className="bg-brand-light text-brand-teal border-brand-teal/20 px-2 py-0">
-                    {activeFilter}
-                    <X className="w-3 h-3 ml-1 cursor-pointer" onClick={() => setActiveFilter(null)} />
-                  </Badge>
-                )}
-              </div>
-              <Link href="/leave">
-                <Button variant="ghost" size="sm" className="text-brand-teal">View All</Button>
-              </Link>
-            </div>
-            <div className="p-0">
-              {filteredLeaves.length > 0 ? filteredLeaves.slice(0, 5).map((leave, i) => (
-                <div key={i} className="flex items-center justify-between p-4 border-b last:border-0 border-border hover:bg-gray-50 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-9 w-9">
-                      <AvatarFallback className="bg-brand-light text-brand-teal font-bold">{leave.employee_name[0]}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <div className="text-sm font-semibold">{leave.employee_name}</div>
-                      <div className="text-xs text-muted-foreground capitalize">{leave.type} • {leave.duration}</div>
-                    </div>
-                  </div>
-                  <span className={`text-xs font-semibold px-2 py-1 rounded-md ${
-                    leave.status === 'Approved' ? 'bg-green-50 text-green-600' : 
-                    leave.status === 'Rejected' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'
-                  }`}>
-                    {leave.status}
-                  </span>
-                </div>
-              )) : (
-                <div className="p-8 text-center text-sm text-muted-foreground">No {activeFilter ? activeFilter.toLowerCase() : ''} leave requests found</div>
-              )}
-            </div>
-          </div>
-
-          <div className="bg-white border border-border rounded-xl p-6 shadow-sm">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-lg text-[#111827]">Upcoming Interviews</h3>
-              <Link href="/recruitment/hiring-board">
-                <Button variant="ghost" size="sm" className="text-brand-teal">Hiring Board</Button>
-              </Link>
-            </div>
-            <div className="space-y-4">
-              {applications && applications.length > 0 ? (
-                applications.slice(0, 3).map((app, i) => (
-                  <div key={i} className="flex gap-4 p-3 rounded-lg border border-border hover:border-brand-teal/30 transition-colors">
-                    <div className="bg-brand-light p-2 rounded-md h-fit"><Clock className="w-4 h-4 text-brand-teal" /></div>
-                    <div className="flex-1">
-                      <h4 className="font-semibold text-sm">{app.candidate_name || app.name}</h4>
-                      <p className="text-xs text-muted-foreground">{app.applied_for || app.role}</p>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-xs font-bold text-brand-teal">{app.status || 'Applied'}</div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="p-8 text-center text-sm text-muted-foreground">No upcoming interviews or recent applications</div>
-              )}
-            </div>
-          </div>
-        </div>
-        <div className="lg:col-span-1">
-          <EventsSidebar user={user} />
-        </div>
-      </div>
+      {statsSection}
+      {listsSection}
     </div>
   );
 }
@@ -840,8 +1012,9 @@ function EmployeeView({
   isTimeSynced,
   getISTNow,
   punchCardRef,
-  missingPunchOutDate,
-  setIsRequestDialogOpen
+  leaves,
+  showPunchCardOnly = false,
+  showStatsAndAttendanceOnly = false
 }: { 
   user: any, 
   attendanceStatus: any, 
@@ -856,8 +1029,9 @@ function EmployeeView({
   isTimeSynced: boolean,
   getISTNow: () => Date,
   punchCardRef: React.RefObject<HTMLDivElement | null>,
-  missingPunchOutDate: Date | null,
-  setIsRequestDialogOpen: (open: boolean) => void
+  leaves?: any[],
+  showPunchCardOnly?: boolean,
+  showStatsAndAttendanceOnly?: boolean
 }) {
   const userName = user?.name || "Guest";
   const firstName = user?.firstName || userName.split(' ')[0];
@@ -865,7 +1039,9 @@ function EmployeeView({
   const isPunchedIn = attendanceStatus?.isPunchedIn;
   const isOnBreak = attendanceStatus?.record?.status === "On Break";
   const punchInTimeRaw = attendanceStatus?.record?.checkIn || (recentAttendance[0]?.checkIn || "Not Started");
-  const punchOutTimeRaw = attendanceStatus?.record?.checkOut || (recentAttendance[0]?.checkOut || "Active");
+  const punchOutTimeRaw = isPunchedIn
+    ? (attendanceStatus?.record?.checkOut || "Active")
+    : (attendanceStatus?.record?.checkOut || recentAttendance[0]?.checkOut || "Active");
   const punchInTime = formatTime12h(punchInTimeRaw);
   const punchOutTime = formatTime12h(punchOutTimeRaw);
 
@@ -879,12 +1055,8 @@ function EmployeeView({
     }
     return "Not Started";
   };
- 
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <div ref={punchCardRef} className="bg-white border border-border rounded-2xl p-8 shadow-sm scroll-mt-20 relative overflow-hidden">
+  const punchCardSection = (
+    <div ref={punchCardRef} className="bg-white border border-border rounded-2xl p-8 shadow-sm scroll-mt-20 relative overflow-hidden">
             <div className="flex justify-between items-start mb-8">
               <div className="flex flex-col gap-4">
                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-brand-light/50 border border-brand-teal/20 rounded-full w-fit">
@@ -896,7 +1068,7 @@ function EmployeeView({
                      <Moon className="w-4 h-4 text-brand-teal" />
                    )}
                    <span className="text-[11px] font-bold text-brand-teal">
-                     {getISTNow().getHours() < 12 ? "Good morning" : getISTNow().getHours() < 17 ? "Good afternoon" : "Good evening"}, {firstName}
+                     {getISTNow().getHours() < 12 ? "Good Morning" : getISTNow().getHours() < 17 ? "Good Afternoon" : "Good Evening"}, {firstName}
                    </span>
                 </div>
                 <div className="flex items-center gap-4">
@@ -945,17 +1117,17 @@ function EmployeeView({
               </div>
               <div className="text-sm text-gray-500 font-medium min-h-[20px] flex items-center justify-center gap-2">
                 {isPunchedIn ? (
-                  isOnBreak ? (
-                    <span className="text-amber-600 font-bold flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                      On Break
-                    </span>
-                  ) : (
-                    <span className="text-brand-teal font-bold flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-brand-teal animate-pulse"></span>
-                      Live Tracking Active
-                    </span>
-                  )
+                   isOnBreak ? (
+                     <span className="text-amber-600 font-bold flex items-center gap-1.5">
+                       <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                       On Break
+                     </span>
+                   ) : (
+                     <span className="text-brand-teal font-bold flex items-center gap-1.5">
+                       <span className="w-1.5 h-1.5 rounded-full bg-brand-teal animate-pulse"></span>
+                       Live Tracking Active
+                     </span>
+                   )
                 ) : (
                   <span className="text-gray-400 font-bold">Not Started</span>
                 )}
@@ -978,7 +1150,7 @@ function EmployeeView({
                   <><Coffee className="w-5 h-5 mr-3" /> {isOnBreak ? 'Break Out' : 'Take Break'}</>
                 )}
               </Button>
-
+ 
               <Button 
                 onClick={handleGoingForMeeting} 
                 disabled={isPunching || !isPunchedIn || isOnBreak}
@@ -1001,29 +1173,24 @@ function EmployeeView({
               </Button>
             </div>
  
-            {missingPunchOutDate && (
-              <div className="bg-amber-50 text-amber-800 p-4 rounded-xl mb-8 border border-amber-200 flex justify-between items-center">
-                <span className="font-medium text-sm">You have a missing punch-out from {missingPunchOutDate.toLocaleDateString()}.</span>
-                <Button variant="outline" size="sm" onClick={() => setIsRequestDialogOpen(true)} className="border-amber-300 text-amber-700 hover:bg-amber-100">Resolve Now</Button>
-              </div>
-            )}
-
-            <div className="grid grid-cols-4 gap-0 border border-brand-teal/10 rounded-xl overflow-hidden bg-white">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-0 border border-brand-teal/10 rounded-xl overflow-hidden bg-white">
                {[
                  { label: 'First In', value: punchInTime, highlight: false },
                  { label: 'Last Out', value: punchOutTime, highlight: punchOutTime === "Active" },
                  { label: 'Break In Time', value: totalBreakTime, highlight: false },
                  { label: 'Worked Time', value: isPunchedIn ? "Active" : (workTime !== "00:00:00" ? getFormattedWorkedTime() : "Not Started"), highlight: isPunchedIn },
                ].map((item, idx) => (
-                 <div key={idx} className={`p-4 ${idx < 3 ? 'border-r border-brand-teal/10' : ''} bg-[#EAF7F6]/10`}>
+                 <div key={idx} className={`p-4 ${idx < 3 ? 'sm:border-r border-brand-teal/10' : ''} ${idx === 0 || idx === 2 ? 'border-r border-brand-teal/10' : ''} ${idx < 2 ? 'border-b sm:border-b-0 border-brand-teal/10' : ''} bg-[#EAF7F6]/10`}>
                    <div className="text-[10px] font-bold text-gray-500 uppercase mb-1">{item.label}</div>
                    <div className={`text-sm font-black ${item.highlight ? 'text-brand-teal' : 'text-[#111827]'}`}>{item.value}</div>
                  </div>
                ))}
             </div>
           </div>
- 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+  );
+
+  const statsSection = (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <StatCard 
                 title="Today's Hours" 
                 value={isPunchedIn ? workTime.split(':').slice(0, 2).join('h ') + 'm' : (workTime !== "00:00:00" ? getFormattedWorkedTime() : '0h 0m')} 
@@ -1054,14 +1221,10 @@ function EmployeeView({
                hideTrend
              />
           </div>
-        </div>
- 
-        <div className="lg:col-span-1">
-          <EventsSidebar user={user} />
-        </div>
-      </div>
- 
-      <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden">
+  );
+
+  const attendanceSection = (
+    <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden">
         <div className="px-6 py-5 flex justify-between items-center">
           <h3 className="font-bold text-lg text-foreground">Recent Attendance</h3>
         </div>
@@ -1125,13 +1288,29 @@ function EmployeeView({
             </tbody>
           </table>
         </div>
-
       </div>
+  );
+
+  if (showPunchCardOnly) return punchCardSection;
+  if (showStatsAndAttendanceOnly) {
+    return (
+      <div className="space-y-6">
+        {statsSection}
+        {attendanceSection}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {punchCardSection}
+      {statsSection}
+      {attendanceSection}
     </div>
   );
 }
  
-function EventsSidebar({ user }: { user: any }) {
+function EventsSidebar({ user, leaves }: { user: any, leaves: any[] }) {
   const [isAddEventOpen, setIsAddEventOpen] = useState(false);
   const [isViewAllOpen, setIsViewAllOpen] = useState(false);
   const [events, setEvents] = useState<any[]>([]);
@@ -1173,7 +1352,19 @@ function EventsSidebar({ user }: { user: any }) {
         };
       });
 
-      const allCombined = [...eventsData, ...birthdayEvents];
+      const resignationEvents = empData.filter((emp: any) => emp.hasResignation && emp.resignationDate).map((emp: any) => {
+        const empName = emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || 'Employee';
+        return {
+          id: `resignation-${emp.id}`,
+          type: 'resignation',
+          title: `${empName} - Last Day`,
+          description: 'Last working day.',
+          date: emp.resignationDate,
+          originalResignationDate: emp.resignationDate
+        };
+      });
+
+      const allCombined = [...eventsData, ...birthdayEvents, ...resignationEvents];
       setEvents(allCombined.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime()));
     } catch (err) {
       console.error("Error fetching events:", err);
@@ -1372,11 +1563,14 @@ function EventsSidebar({ user }: { user: any }) {
              <div className={`${
                event.type === 'meeting' ? 'bg-[#F0FDF4] text-green-600' : 
                event.type === 'discussion' ? 'bg-[#EFF6FF] text-blue-600' : 
+               event.type === 'birthday' ? 'bg-[#FFF7ED] text-orange-600' : 
+               event.type === 'resignation' ? 'bg-[#FEF2F2] text-red-600' :
                'bg-[#FFF7ED] text-orange-600'
              } p-3 rounded-xl`}>
                {event.type === 'meeting' ? <CalendarIcon className="w-5 h-5" /> : 
                 event.type === 'discussion' ? <MessageSquare className="w-5 h-5" /> : 
                 event.type === 'birthday' ? <Cake className="w-5 h-5" /> : 
+                event.type === 'resignation' ? <UserX className="w-5 h-5" /> :
                 <CalendarIcon className="w-5 h-5" />}
              </div>
              <div className="flex-1 min-w-0">
@@ -1385,11 +1579,11 @@ function EventsSidebar({ user }: { user: any }) {
              </div>
              <div className="text-right">
                <div className="text-[13px] font-bold text-[#111827]">{dayjs(event.date).format("DD MMM")}</div>
-               {event.type !== 'birthday' && (
+               {event.type !== 'birthday' && event.type !== 'resignation' && (
                  <div className="text-[11px] text-gray-400 font-medium">{event.time}</div>
                )}
                
-               {canAddEvents && event.type !== 'birthday' && (
+               {canAddEvents && event.type !== 'birthday' && event.type !== 'resignation' && (
                  <div className="flex items-center justify-end gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button 
                       onClick={() => handleEditClick(event)}

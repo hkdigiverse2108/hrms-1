@@ -38,7 +38,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     modules: [
       { moduleName: 'employee-list', displayName: 'Employee List', tabUrl: '/employees' },
       { moduleName: 'org-structure', displayName: 'Org Structure', tabUrl: '/employees/organization/departments' },
-      { moduleName: 'employee-attendance', displayName: 'Employee Attendance', tabUrl: '/employees/attendance' },
+      { moduleName: 'employee-attendance', displayName: 'Employee Attendance List', tabUrl: '/employees/attendance' },
       { moduleName: 'leave-requests', displayName: 'Leave Requests', tabUrl: '/employees/leave' },
       { moduleName: 'employee-documents', displayName: 'Employee Documents', tabUrl: '/employees/documents' },
       { moduleName: 'document-generator', displayName: 'Document Generator', tabUrl: '/employees/documents/generate' },
@@ -89,14 +89,14 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     name: 'Penalty',
     icon: MessagesSquare,
     modules: [
-      { moduleName: 'remarks', displayName: 'Penalty', tabUrl: '/remarks' },
+      { moduleName: 'remarks', displayName: 'Penalty', tabUrl: '/penalty' },
     ]
   },
   {
     name: 'Remarks',
     icon: Star,
     modules: [
-      { moduleName: 'review', displayName: 'Remarks', tabUrl: '/review' },
+      { moduleName: 'review', displayName: 'Remarks', tabUrl: '/remarks' },
     ]
   },
   {
@@ -118,11 +118,13 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     icon: Briefcase,
     modules: [
       { moduleName: 'projects', displayName: 'Projects', tabUrl: '/work-management/projects' },
-      { moduleName: 'tasks', displayName: 'Tasks', tabUrl: '/work-management/tasks' },
+      { moduleName: 'tasks', displayName: 'Development', tabUrl: '/work-management/development' },
+      { moduleName: 'personal-tasks', displayName: 'Tasks', tabUrl: '/tasks' },
       { moduleName: 'daily-progress', displayName: 'Daily Progress', tabUrl: '/work-management/daily-progress' },
-      { moduleName: 'sales', displayName: 'Sales', tabUrl: '/work-management/sales' },
+      { moduleName: 'sales', displayName: 'Sales', tabUrl: '/work-management/sales' },  
       { moduleName: 'clients', displayName: 'Clients', tabUrl: '/work-management/clients' },
-      { moduleName: 'marketing', displayName: 'Marketing Reports', tabUrl: '/work-management/marketing-reports' },
+      { moduleName: 'marketing', displayName: 'Digital Marketing', tabUrl: '/work-management/digital-marketing' },
+      { moduleName: 'creative', displayName: 'Social Media Management', tabUrl: '/work-management/smm' },
     ]
   },
   {

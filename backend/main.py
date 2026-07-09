@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, File, Form, UploadFile, Request, Response, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Depends, File, Form, UploadFile, Request, Response, WebSocket, WebSocketDisconnect, Query
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
@@ -14,9 +14,31 @@ from websocket import manager as ws_manager
 import google_auth
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
-from bson import ObjectId
+import random
+from email_utils import send_otp_email
+import pytz
+async def get_actor_from_request(request: Request, db):
+    authorization = request.headers.get("Authorization")
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+        try:
+            from jose import jwt
+            from bson import ObjectId
+            from auth import SECRET_KEY, ALGORITHM
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM], options={"verify_exp": False})
+            user_id = payload.get("sub")
+            if user_id:
+                user = await db.employees.find_one({"_id": ObjectId(user_id) if len(user_id) == 24 else user_id})
+                if user:
+                    return str(user.get("_id")), user.get("name", "System User")
+        except Exception as e:
+            print(f"JWT Decode error in get_actor_from_request: {e}", flush=True)
+            pass
+    else:
+        print(f"No Authorization header found in request: {request.url}", flush=True)
+    return "System", "System User"
 
 async def content_calendar_reminder_task():
     from database import db
@@ -104,9 +126,207 @@ async def content_calendar_reminder_task():
             
         await asyncio.sleep(300) # Sleep for 5 minutes
 
+async def feedback_reminder_task():
+    from database import db
+    import crud
+    import schemas
+    
+    print("[Feedback Reminder] Task started.", flush=True)
+    await asyncio.sleep(15) # wait for startup
+    
+    while True:
+        try:
+            now = datetime.now(pytz.timezone('Asia/Kolkata'))
+            today_str = now.strftime("%Y-%m-%d")
+            
+            # Check for Morning Reminder (e.g. 9:00 AM - 9:09 AM)
+            if now.hour == 9 and now.minute < 10:
+                # Find projects where nextFeedbackDate is today or overdue
+                projects = await db.projects.find({
+                    "nextFeedbackDate": {"$lte": today_str},
+                    "status": {"$ne": "completed"}
+                }).to_list(length=1000)
+                
+                if projects:
+                    for project in projects:
+                        project_id = str(project["_id"]) if "_id" in project else project.get("id")
+                        client_name = project.get("clientName", "Unknown Client")
+                        project_title = project.get("title", "Unknown Project")
+                        
+                        target_id = project.get("teamLeaderId")
+                        if not target_id:
+                            # fallback to admin
+                            admins = await db.employees.find({"role": {"$regex": "^Admin$", "$options": "i"}}).to_list(length=1)
+                            if admins:
+                                target_id = str(admins[0]["_id"]) if "_id" in admins[0] else admins[0].get("id")
+                                
+                        if target_id:
+                            # Check if we already notified today to prevent spam within the 10 min window
+                            # Using start of day for check
+                            start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                            existing_notif = await db.notifications.find_one({
+                                "employee_id": target_id,
+                                "type": "feedback_reminder",
+                                "reference_id": project_id,
+                                "title": "Feedback Collection Due"
+                            }, sort=[("_id", -1)])
+                            
+                            should_notify = True
+                            if existing_notif and existing_notif.get("created_at"):
+                                # check if created_at was today
+                                created_at = existing_notif.get("created_at")
+                                if hasattr(created_at, "replace"):
+                                    if created_at >= start_of_day:
+                                        should_notify = False
+                            
+                            if should_notify:
+                                await crud.create_notification(db, schemas.NotificationCreate(
+                                    employee_id=target_id,
+                                    title="Feedback Collection Due",
+                                    message=f"It is time to collect feedback for project '{project_title}' ({client_name}).",
+                                    type="feedback_reminder",
+                                    reference_id=project_id
+                                ))
+
+        except Exception as e:
+            print(f"[Feedback Reminder] Error: {e}", flush=True)
+            
+        await asyncio.sleep(300) # Sleep for 5 minutes
+
+async def activity_logs_cleanup_task():
+    """Runs a periodic cleanup to remove activity logs older than 45 days and chats older than 90 days."""
+    from database import db
+    import datetime
+    
+    print("[Logs Cleanup] Task started.", flush=True)
+    await asyncio.sleep(30)  # Wait for startup
+    
+    while True:
+        try:
+            print("[Logs Cleanup] Starting periodic cleanup of database...", flush=True)
+            # 1. Activity Logs (45 days)
+            cutoff_logs = datetime.datetime.now() - datetime.timedelta(days=45)
+            cutoff_logs_str = cutoff_logs.strftime("%Y-%m-%d %H:%M:%S")
+            result_logs = await db.task_logs.delete_many({
+                "timestamp": {"$lt": cutoff_logs_str}
+            })
+            print(f"[Logs Cleanup] Deleted {result_logs.deleted_count} logs older than '{cutoff_logs_str}'.", flush=True)
+            
+            # 2. Chat Messages (90 days) - preserving saved messages
+            cutoff_chats = datetime.datetime.now() - datetime.timedelta(days=90)
+            cutoff_chats_str = cutoff_chats.isoformat()
+            result_chats = await db.messages.delete_many({
+                "timestamp": {"$lt": cutoff_chats_str},
+                "$or": [
+                    {"savedBy": {"$exists": False}},
+                    {"savedBy": None},
+                    {"savedBy": {"$size": 0}}
+                ]
+            })
+            print(f"[Logs Cleanup] Deleted {result_chats.deleted_count} chat messages older than '{cutoff_chats_str}'.", flush=True)
+        except Exception as e:
+            print(f"[Logs Cleanup] Error during cleanup: {e}", flush=True)
+        await asyncio.sleep(86400) # Check once a day (24 hours)
+            
+async def auto_inactive_employee_task():
+    from database import db
+    import crud
+    
+    print("[Auto Inactive Employee] Task started.", flush=True)
+    await asyncio.sleep(20) # wait for startup
+    
+    while True:
+        try:
+            settings = await crud.get_system_settings(db)
+            if settings.get("autoInactiveAfterResignation") == True:
+                now = datetime.now(pytz.timezone('Asia/Kolkata'))
+                today_midnight = datetime(now.year, now.month, now.day, 0, 0, 0)
+                today_str = now.strftime("%Y-%m-%d")
+                
+                active_employees = await db.employees.find({
+                    "status": "active",
+                    "hasResignation": True,
+                    "$or": [
+                        {"resignationDate": {"$lt": today_midnight}},
+                        {"resignationDate": {"$lt": today_str}}
+                    ]
+                }).to_list(length=1000)
+                
+                for emp in active_employees:
+                    emp_id = str(emp["_id"]) if "_id" in emp else emp.get("id")
+                    print(f"[Auto Inactive] Setting employee {emp.get('name')} ({emp_id}) to inactive. Resignation date was {emp.get('resignationDate')}.", flush=True)
+                    
+                    await db.employees.update_one(
+                        {"_id": emp["_id"]},
+                        {"$set": {"status": "inactive"}}
+                    )
+                    
+                    await crud.log_activity(
+                        db=db,
+                        action="Employee Inactivated",
+                        performedBy="System",
+                        userName="System Auto-Inactivator",
+                        details=f"Automatically set status to inactive on next day of resignation date ({emp.get('resignationDate')})."
+                    )
+        except Exception as e:
+            print(f"[Auto Inactive Employee] Error: {e}", flush=True)
+            
+        await asyncio.sleep(1800) # Check every 30 minutes
+
+async def monthly_report_scheduler_task():
+    from database import db
+    import crud
+    from datetime import timedelta
+    
+    print("[Monthly Report Scheduler] Task started.", flush=True)
+    await asyncio.sleep(20) # wait for startup
+    
+    while True:
+        try:
+            now = datetime.now(pytz.timezone('Asia/Kolkata'))
+            
+            # Run every night at 23:45
+            if now.hour == 23 and now.minute >= 45:
+                await crud.sync_monthly_marketing_reports(db)
+                print(f"[Monthly Report Scheduler] Synced reports for {now.strftime('%B %Y')}", flush=True)
+                await asyncio.sleep(7200) # Sleep for 2 hours to avoid running multiple times
+                continue
+                
+            # On the 1st of the month, run a final sync for the previous month shortly after midnight
+            if now.day == 1 and now.hour == 0 and now.minute >= 5:
+                prev_day = now - timedelta(days=1)
+                await crud.sync_monthly_marketing_reports(db, date_str=prev_day.strftime("%Y-%m-%d"))
+                print(f"[Monthly Report Scheduler] Final sync for previous month: {prev_day.strftime('%B %Y')}", flush=True)
+                await asyncio.sleep(7200) # Sleep for 2 hours
+                continue
+                
+        except Exception as e:
+            print(f"[Monthly Report Scheduler] Error: {e}", flush=True)
+            
+        await asyncio.sleep(300) # Sleep for 5 minutes
+
 @asynccontextmanager
 async def lifespan(app):
     # --- Startup ---
+    # Database migration: clean up department and designation for admin users
+    try:
+        from database import db
+        print("[Admin Migration] Cleaning up department and designation for admin users...", flush=True)
+        admin_roles_list = ["admin", "super admin", "superadmin", "administrator", "founder"]
+        admin_query = {
+            "$or": [
+                {"role": {"$regex": r"^(admin|super\s*admin|superadmin|administrator|founder)$", "$options": "i"}},
+                {"role": {"$in": admin_roles_list}}
+            ]
+        }
+        await db.employees.update_many(
+            admin_query,
+            {"$set": {"department": "", "designation": ""}}
+        )
+        print("[Admin Migration] Completed admin cleanup.", flush=True)
+    except Exception as e:
+        print(f"[Admin Migration] Error: {e}", flush=True)
+
     # Database migration: clean up registered_pcs duplicate hostnames and restore raw/original casing
     try:
         from database import db
@@ -294,20 +514,47 @@ async def lifespan(app):
     except Exception as e:
         print(f"[PC Registration] Failed to register PC: {e}")
 
-    # Ensure database indexes for chat messages are created to speed up loading
+    # Ensure database indexes are created to speed up loading across high-traffic collections
     try:
         from database import db
-        print("[Chat Indexing] Ensuring database indexes for chat messages...", flush=True)
-        # Index for group/general chats
+        print("[Database Indexing] Ensuring indexes for high-traffic collections...", flush=True)
+        # Chat Messages
         await db.messages.create_index([("groupId", 1), ("timestamp", 1)])
-        # Indexes for personal chats
         await db.messages.create_index([("senderId", 1), ("receiverId", 1), ("timestamp", 1)])
         await db.messages.create_index([("receiverId", 1), ("senderId", 1), ("timestamp", 1)])
-        print("[Chat Indexing] Chat message indexes verified/created successfully.", flush=True)
+        
+        # Work Management Tasks
+        await db.wm_tasks.create_index([("department", 1), ("status", 1)])
+        await db.wm_tasks.create_index([("assignedToId", 1), ("status", 1)])
+        await db.wm_tasks.create_index([("projectId", 1)])
+        await db.wm_tasks.create_index([("dueDate", 1)])
+        await db.wm_tasks.create_index([("postingDate", 1)])
+        
+        # Projects
+        await db.projects.create_index([("department", 1), ("status", 1)])
+        await db.projects.create_index([("clientId", 1)])
+        await db.projects.create_index([("teamLeaderId", 1)])
+        
+        # Employees & Attendance
+        await db.employees.create_index([("email", 1)])
+        await db.employees.create_index([("department", 1)])
+        await db.attendance.create_index([("employeeId", 1), ("date", -1)])
+        await db.attendance.create_index([("date", -1)])
+        
+        # Logs & Clients
+        await db.task_logs.create_index([("taskId", 1), ("timestamp", -1)])
+        await db.task_logs.create_index([("projectId", 1), ("timestamp", -1)])
+        await db.clients.create_index([("department", 1)])
+        
+        print("[Database Indexing] All database indexes verified/created successfully.", flush=True)
     except Exception as e:
-        print(f"[Chat Indexing] Failed to create chat indexes: {e}", flush=True)
+        print(f"[Database Indexing] Failed to create indexes: {e}", flush=True)
 
     reminder_task = asyncio.create_task(content_calendar_reminder_task())
+    feedback_task = asyncio.create_task(feedback_reminder_task())
+    monthly_report_task = asyncio.create_task(monthly_report_scheduler_task())
+    logs_cleanup_task = asyncio.create_task(activity_logs_cleanup_task())
+    auto_inactive_task = asyncio.create_task(auto_inactive_employee_task())
     yield
     # --- Shutdown ---
     try:
@@ -319,11 +566,52 @@ async def lifespan(app):
     try:
         if not reminder_task.done():
             reminder_task.cancel()
+        if not feedback_task.done():
+            feedback_task.cancel()
+        if not monthly_report_task.done():
+            monthly_report_task.cancel()
+        if not logs_cleanup_task.done():
+            logs_cleanup_task.cancel()
+        if not auto_inactive_task.done():
+            auto_inactive_task.cancel()
     except Exception:
         pass
     # Reload trigger: 1
 
 app = FastAPI(title="HRMS API", lifespan=lifespan)
+
+from fastapi.exceptions import RequestValidationError
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    import json
+    import os
+    import sys
+    try:
+        body = await request.body()
+        body_str = body.decode("utf-8", errors="ignore")
+    except Exception:
+        body_str = "could not read body"
+    
+    errors = exc.errors()
+    sys.stderr.write(f"\nVALIDATION_ERROR_DETAILS: {json.dumps({'url': str(request.url), 'errors': errors, 'body': body_str})}\n")
+    sys.stderr.flush()
+    
+    try:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        err_path = os.path.join(current_dir, "validation_error.json")
+        with open(err_path, "w", encoding="utf-8") as f:
+            json.dump({
+                "url": str(request.url),
+                "errors": errors,
+                "body": body_str
+            }, f, indent=2)
+    except Exception as ex:
+        sys.stderr.write(f"Error writing validation error to file: {ex}\n")
+        sys.stderr.flush()
+    return JSONResponse(
+        status_code=422,
+        content={"detail": errors}
+    )
 
 # CORS: read allowed origins from env (comma-separated), fallback to localhost for dev
 _default_origins = "http://localhost:3535,http://127.0.0.1:3535,http://localhost:3550,http://127.0.0.1:3550"
@@ -351,6 +639,7 @@ class SafeStaticFiles(StaticFiles):
         except Exception as ex:
             if hasattr(ex, "status_code") and ex.status_code == 404:
                 ext = os.path.splitext(path)[1].lower()
+                # Only return placeholder SVG for image files, NOT for binary/download files
                 if ext in ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg']:
                     placeholder_svg = (
                         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="%23cbd5e1" stroke-width="1.5">'
@@ -360,6 +649,7 @@ class SafeStaticFiles(StaticFiles):
                         '</svg>'
                     )
                     return Response(content=placeholder_svg, media_type="image/svg+xml")
+                # For .exe, .zip, .pdf and other binary files — re-raise so proper 404 is returned
             raise ex
 
 # Ensure uploads directory exists
@@ -416,6 +706,21 @@ async def upload_file(file: UploadFile = File(...)):
         buffer.write(contents)
     return {"url": f"/uploads/{filename}"}
 
+@app.delete("/upload/{filename}")
+async def delete_file(filename: str):
+    import os
+    # Prevent directory traversal
+    safe_filename = os.path.basename(filename)
+    file_path = os.path.join(UPLOAD_DIR, safe_filename)
+    if os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+            return {"message": "File deleted successfully"}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error deleting file: {str(e)}")
+    else:
+        raise HTTPException(status_code=404, detail="File not found")
+
 @app.post("/upload-profile-photo/{user_id}")
 async def upload_profile_photo(user_id: str, file: UploadFile = File(...), db=Depends(get_db)):
     contents = await file.read()
@@ -454,6 +759,54 @@ async def upload_profile_photo(user_id: str, file: UploadFile = File(...), db=De
 
     return updated_user
 
+@app.get("/attachments/open/{filename:path}")
+async def open_attachment(filename: str):
+    import re
+    import mimetypes
+    import urllib.parse
+    from fastapi.responses import FileResponse
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    clean_name = re.sub(r'^[a-f0-9]+_', '', filename)
+    content_type, _ = mimetypes.guess_type(file_path)
+    if not content_type:
+        content_type = "application/octet-stream"
+        
+    ascii_name = clean_name.encode('ascii', errors='ignore').decode('ascii')
+    encoded_name = urllib.parse.quote(clean_name)
+    headers = {
+        "Content-Disposition": f"inline; filename=\"{ascii_name}\"; filename*=UTF-8''{encoded_name}"
+    }
+    return FileResponse(
+        path=file_path,
+        media_type=content_type,
+        headers=headers
+    )
+
+@app.get("/attachments/download/{filename:path}")
+async def download_attachment(filename: str):
+    import re
+    import urllib.parse
+    from fastapi.responses import FileResponse
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    clean_name = re.sub(r'^[a-f0-9]+_', '', filename)
+    
+    ascii_name = clean_name.encode('ascii', errors='ignore').decode('ascii')
+    encoded_name = urllib.parse.quote(clean_name)
+    headers = {
+        "Content-Disposition": f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{encoded_name}"
+    }
+    return FileResponse(
+        path=file_path,
+        media_type="application/octet-stream",
+        headers=headers
+    )
+
 @app.post("/chat/upload")
 async def upload_chat_file(file: UploadFile = File(...)):
     contents = await file.read()
@@ -474,8 +827,77 @@ async def login(login_data: schemas.LoginRequest, db=Depends(get_db)):
     if user.get("status", "").lower() == "inactive":
         raise HTTPException(status_code=403, detail="Your account has been deactivated. Please contact the administrator.")
     
-    token = user.pop("token", None)
-    return {"message": "Login successful", "user": user, "token": token}
+    # Check OTP requirements
+    settings = await db.system_settings.find_one({}) or {}
+    otp_roles = settings.get("otpRequiredRoles", [])
+    
+    raw_role = user.get("role", "").strip().lower()
+    if raw_role == "admin":
+        mapped_role = "admin"
+    elif raw_role == "hr":
+        mapped_role = "hr"
+    else:
+        mapped_role = "employee"
+        
+    if mapped_role not in otp_roles:
+        # Skip OTP and return token directly
+        return {"message": "Login successful", "user": user, "token": user["token"], "require_otp": False}
+
+    # Generate 6-digit OTP
+    otp = str(random.randint(100000, 999999))
+    expiry = datetime.now(pytz.timezone('Asia/Kolkata')) + timedelta(minutes=5)
+    
+    # Save OTP to user document
+    await db.employees.update_one(
+        {"email": login_data.email},
+        {"$set": {"login_otp": otp, "login_otp_expiry": expiry.isoformat()}}
+    )
+    
+    # Send email
+    send_otp_email(login_data.email, otp)
+    
+    return {"message": "OTP sent to your email", "require_otp": True}
+
+@app.post("/login/verify-otp", response_model=schemas.LoginResponse)
+async def verify_otp(otp_data: schemas.VerifyOTPRequest, db=Depends(get_db)):
+    user = await db.employees.find_one({"email": otp_data.email})
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+        
+    stored_otp = user.get("login_otp")
+    expiry_str = user.get("login_otp_expiry")
+    
+    if not stored_otp or not expiry_str:
+        raise HTTPException(status_code=400, detail="OTP not requested or expired")
+        
+    expiry = datetime.fromisoformat(expiry_str)
+    now = datetime.now(pytz.timezone('Asia/Kolkata'))
+    
+    if now > expiry:
+        # Clear expired OTP
+        await db.employees.update_one({"email": otp_data.email}, {"$unset": {"login_otp": "", "login_otp_expiry": ""}})
+        raise HTTPException(status_code=400, detail="OTP expired")
+        
+    if stored_otp != otp_data.otp:
+        raise HTTPException(status_code=400, detail="Invalid OTP")
+        
+    # Clear OTP upon successful verification
+    await db.employees.update_one({"email": otp_data.email}, {"$unset": {"login_otp": "", "login_otp_expiry": ""}})
+    
+    # Generate JWT token
+    user_id = str(user["_id"])
+    user_fixed = crud.fix_id(user)
+    
+    permissions_doc = await db.user_permissions.find_one({"employeeId": user_id})
+    if permissions_doc:
+        user_fixed["permissions"] = crud.fix_id(permissions_doc).get("permissions", [])
+    else:
+        user_fixed["permissions"] = []
+        
+    token = auth.create_access_token(data={"sub": user_id, "role": user.get("role", "")})
+    user_fixed["token"] = token
+    
+    return {"message": "Login successful", "user": user_fixed, "token": token, "require_otp": False}
 
 # Employee Endpoints
 @app.get("/time")
@@ -488,8 +910,8 @@ async def get_system_time():
     }
 
 @app.get("/employees", response_model=List[schemas.Employee])
-async def read_employees(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
-    return await crud.get_employees(db, skip=skip, limit=limit)
+async def read_employees(skip: int = 0, limit: int = 10000, include_inactive: bool = False, db=Depends(get_db)):
+    return await crud.get_employees(db, skip=skip, limit=limit, include_inactive=include_inactive)
 
 @app.get("/employees/{employee_id}", response_model=schemas.Employee)
 async def read_employee(employee_id: str, db=Depends(get_db)):
@@ -499,20 +921,24 @@ async def read_employee(employee_id: str, db=Depends(get_db)):
     return employee
 
 @app.post("/employees", response_model=schemas.Employee)
-async def create_employee(employee: schemas.EmployeeCreate, db=Depends(get_db)):
-    return await crud.create_employee(db, employee)
+async def create_employee(employee: schemas.EmployeeCreate, request: Request, db=Depends(get_db)):
+    performed_by, user_name = await get_actor_from_request(request, db)
+    return await crud.create_employee(db, employee, performed_by=performed_by, user_name=user_name)
 
 @app.put("/employees/{employee_id}", response_model=schemas.Employee)
-async def update_employee(employee_id: str, employee_update: schemas.EmployeeUpdate, db=Depends(get_db)):
-    updated = await crud.update_employee(db, employee_id, employee_update)
+async def update_employee(employee_id: str, employee_update: schemas.EmployeeUpdate, request: Request, db=Depends(get_db)):
+    performed_by, user_name = await get_actor_from_request(request, db)
+    updated = await crud.update_employee(db, employee_id, employee_update, performed_by=performed_by, user_name=user_name)
     if not updated:
         raise HTTPException(status_code=404, detail="Employee not found")
     return updated
 
 @app.delete("/employees/{employee_id}")
-async def delete_employee(employee_id: str, db=Depends(get_db)):
-    await crud.delete_employee(db, employee_id)
+async def delete_employee(employee_id: str, request: Request, db=Depends(get_db)):
+    performed_by, user_name = await get_actor_from_request(request, db)
+    await crud.delete_employee(db, employee_id, performed_by=performed_by, user_name=user_name)
     return {"message": "Employee deleted successfully"}
+
 
 # Attendance Endpoints
 @app.get("/attendance", response_model=List[schemas.Attendance])
@@ -525,9 +951,10 @@ async def get_attendance_status(employee_id: str, db=Depends(get_db)):
     return status if status else {"status": "Logged Out"}
 
 @app.post("/attendance/punch-in/{employee_id}")
-async def punch_in(employee_id: str, payload: Optional[schemas.PunchInRequest] = None, db=Depends(get_db)):
+async def punch_in(employee_id: str, request: Request, payload: Optional[schemas.PunchInRequest] = None, db=Depends(get_db)):
     punch_in_time = payload.punch_in_time if payload else None
-    result = await crud.punch_in(db, employee_id, punch_in_time=punch_in_time)
+    performed_by, user_name = await get_actor_from_request(request, db)
+    result = await crud.punch_in(db, employee_id, punch_in_time=punch_in_time, performed_by=performed_by, user_name=user_name)
     if not result:
         raise HTTPException(status_code=400, detail="Punch in failed")
     return result
@@ -539,8 +966,9 @@ async def create_attendance(attendance: schemas.AttendanceCreate, db=Depends(get
     return await crud.create_manual_attendance(db, attendance)
 
 @app.put("/attendance/{attendance_id}", response_model=schemas.Attendance)
-async def update_attendance(attendance_id: str, attendance_update: schemas.AttendanceUpdate, db=Depends(get_db)):
-    updated = await crud.update_attendance(db, attendance_id, attendance_update)
+async def update_attendance(attendance_id: str, attendance_update: schemas.AttendanceUpdate, request: Request, db=Depends(get_db)):
+    performed_by, user_name = await get_actor_from_request(request, db)
+    updated = await crud.update_attendance(db, attendance_id, attendance_update, performed_by=performed_by, user_name=user_name)
     if not updated:
         raise HTTPException(status_code=404, detail="Attendance record not found")
     return updated
@@ -563,9 +991,10 @@ async def delete_multiple_attendance(request: dict, db=Depends(get_db)):
     return {"message": f"Deleted {len(attendance_ids)} records"}
 
 @app.post("/attendance/punch-out/{employee_id}")
-async def punch_out(employee_id: str, payload: Optional[schemas.PunchOutRequest] = None, db=Depends(get_db)):
+async def punch_out(employee_id: str, request: Request, payload: Optional[schemas.PunchOutRequest] = None, db=Depends(get_db)):
     punch_out_time = payload.punch_out_time if payload else None
-    result = await crud.punch_out(db, employee_id, punch_out_time=punch_out_time)
+    performed_by, user_name = await get_actor_from_request(request, db)
+    result = await crud.punch_out(db, employee_id, punch_out_time=punch_out_time, performed_by=performed_by, user_name=user_name)
     if not result:
         raise HTTPException(status_code=400, detail="Punch out failed")
     return result
@@ -594,15 +1023,18 @@ async def read_user_leave_requests(employee_id: str, skip: int = 0, limit: int =
     return await crud.get_user_leave_requests(db, employee_id, skip=skip, limit=limit)
 
 @app.post("/leaves", response_model=schemas.LeaveRequest)
-async def create_leave_request(leave: schemas.LeaveRequestCreate, db=Depends(get_db)):
-    return await crud.create_leave_request(db, leave)
+async def create_leave_request(leave: schemas.LeaveRequestCreate, request: Request, db=Depends(get_db)):
+    performed_by, user_name = await get_actor_from_request(request, db)
+    return await crud.create_leave_request(db, leave, performed_by=performed_by, user_name=user_name)
 
 @app.put("/leaves/{leave_id}", response_model=schemas.LeaveRequest)
-async def update_leave_request(leave_id: str, leave_update: schemas.LeaveRequestUpdate, db=Depends(get_db)):
-    return await crud.update_leave_request(db, leave_id, leave_update.dict(exclude_unset=True))
+async def update_leave_request(leave_id: str, leave_update: schemas.LeaveRequestUpdate, request: Request, db=Depends(get_db)):
+    performed_by, user_name = await get_actor_from_request(request, db)
+    return await crud.update_leave_request(db, leave_id, leave_update.dict(exclude_unset=True), performed_by=performed_by, user_name=user_name)
 
 @app.patch("/leaves/{leave_id}/status", response_model=schemas.LeaveRequest)
-async def update_leave_status(leave_id: str, update_data: schemas.LeaveRequestUpdate, db=Depends(get_db)):
+async def update_leave_status(leave_id: str, update_data: schemas.LeaveRequestUpdate, request: Request, db=Depends(get_db)):
+    performed_by, user_name = await get_actor_from_request(request, db)
     return await crud.update_leave_request_status(
         db, 
         leave_id, 
@@ -612,12 +1044,15 @@ async def update_leave_status(leave_id: str, update_data: schemas.LeaveRequestUp
         update_data.approved_by_id,
         update_data.approved_by_photo,
         update_data.reject_reason,
-        update_data.approve_reason
+        update_data.approve_reason,
+        performed_by=performed_by,
+        user_name=user_name
     )
 
 @app.delete("/leaves/{leave_id}")
-async def delete_leave_request(leave_id: str, db=Depends(get_db)):
-    success = await crud.delete_leave_request(db, leave_id)
+async def delete_leave_request(leave_id: str, request: Request, db=Depends(get_db)):
+    performed_by, user_name = await get_actor_from_request(request, db)
+    success = await crud.delete_leave_request(db, leave_id, performed_by=performed_by, user_name=user_name)
     if not success:
         raise HTTPException(status_code=404, detail="Leave request not found")
     return {"message": "Leave request deleted successfully"}
@@ -642,13 +1077,14 @@ async def read_payroll(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_payroll(db, skip=skip, limit=limit)
 
 @app.post("/payroll/process")
-async def process_payroll(request: dict, db=Depends(get_db)):
+async def process_payroll(request: dict, request_obj: Request, db=Depends(get_db)):
     # request should contain month and year
     month = request.get("month")
     year = request.get("year")
     if not month or not year:
         raise HTTPException(status_code=400, detail="Month and year required")
-    return await crud.run_payroll_processing(db, month, year)
+    performed_by, user_name = await get_actor_from_request(request_obj, db)
+    return await crud.run_payroll_processing(db, month, year, performed_by=performed_by, user_name=user_name)
 
 @app.put("/payroll/{payroll_id}", response_model=schemas.Payroll)
 async def update_payroll(payroll_id: str, request: dict, db=Depends(get_db)):
@@ -966,22 +1402,29 @@ async def delete_review(review_id: str, db=Depends(get_db)): return await crud.d
 @app.get("/remarks", response_model=List[schemas.Remark])
 async def read_remarks(skip: int = 0, limit: int = 10000, db=Depends(get_db)): return await crud.get_remarks(db, skip, limit)
 @app.post("/remarks", response_model=schemas.Remark)
-async def create_remark(remark: schemas.RemarkCreate, db=Depends(get_db)): return await crud.create_remark(db, remark)
+async def create_remark(remark: schemas.RemarkCreate, request: Request, db=Depends(get_db)):
+    performed_by, user_name = await get_actor_from_request(request, db)
+    return await crud.create_remark(db, remark, performed_by=performed_by, user_name=user_name)
 @app.put("/remarks/{remark_id}", response_model=schemas.Remark)
-async def update_remark(remark_id: str, update: schemas.RemarkUpdate, db=Depends(get_db)): return await crud.update_remark(db, remark_id, update)
+async def update_remark(remark_id: str, update: schemas.RemarkUpdate, request: Request, db=Depends(get_db)):
+    performed_by, user_name = await get_actor_from_request(request, db)
+    return await crud.update_remark(db, remark_id, update, performed_by=performed_by, user_name=user_name)
 @app.delete("/remarks/{remark_id}")
-async def delete_remark(remark_id: str, db=Depends(get_db)):
-    await crud.delete_remark(db, remark_id)
+async def delete_remark(remark_id: str, request: Request, db=Depends(get_db)):
+    performed_by, user_name = await get_actor_from_request(request, db)
+    await crud.delete_remark(db, remark_id, performed_by=performed_by, user_name=user_name)
     return {"message": "Remark soft-deleted successfully"}
 
 @app.post("/remarks/{remark_id}/restore")
-async def restore_remark(remark_id: str, db=Depends(get_db)):
-    await crud.restore_remark(db, remark_id)
+async def restore_remark(remark_id: str, request: Request, db=Depends(get_db)):
+    performed_by, user_name = await get_actor_from_request(request, db)
+    await crud.restore_remark(db, remark_id, performed_by=performed_by, user_name=user_name)
     return {"message": "Remark restored successfully"}
 
 @app.delete("/remarks/{remark_id}/permanent")
-async def permanently_delete_remark(remark_id: str, db=Depends(get_db)):
-    await crud.permanently_delete_remark(db, remark_id)
+async def permanently_delete_remark(remark_id: str, request: Request, db=Depends(get_db)):
+    performed_by, user_name = await get_actor_from_request(request, db)
+    await crud.permanently_delete_remark(db, remark_id, performed_by=performed_by, user_name=user_name)
     return {"message": "Remark permanently deleted"}
 
 # Penalty Type Endpoints
@@ -1036,8 +1479,9 @@ async def delete_event(event_id: str, db=Depends(get_db)): return await crud.del
 
 # Client Endpoints
 @app.get("/clients", response_model=List[schemas.Client])
-async def read_clients(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
-    return await crud.get_clients(db, skip=skip, limit=limit)
+async def read_clients(skip: int = 0, limit: int = 10000, userId: str = None, role: str = None, db=Depends(get_db)):
+    user_info = {"sub": userId, "role": role} if userId else None
+    return await crud.get_clients(db, skip=skip, limit=limit, user_info=user_info)
 
 @app.get("/clients/{client_id}", response_model=schemas.Client)
 async def read_client(client_id: str, db=Depends(get_db)):
@@ -1075,7 +1519,7 @@ async def delete_client(client_id: str, db=Depends(get_db)):
     return {"message": "Client deleted successfully"}
 
 # Project Endpoints
-@app.get("/projects", response_model=List[schemas.Project])
+@app.get("/projects")
 async def read_projects(userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_projects(db, userId=userId, role=role, skip=skip, limit=limit)
 
@@ -1093,6 +1537,21 @@ async def delete_project(project_id: str, db=Depends(get_db)):
     if not success:
         raise HTTPException(status_code=404, detail="Project not found")
     return {"message": "Project deleted successfully"}
+
+@app.put("/projects/{project_id}/modules/notebook", response_model=schemas.Project)
+async def update_module_notebook(project_id: str, payload: schemas.ModuleNotebookUpdate, db=Depends(get_db)):
+    updated = await crud.update_module_notebook(db, project_id, payload)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Project or module not found")
+    return updated
+
+@app.post("/projects/{project_id}/modules/comments", response_model=schemas.Project)
+async def add_module_comment(project_id: str, payload: schemas.ModuleCommentCreate, db=Depends(get_db)):
+    updated = await crud.add_module_comment(db, project_id, payload)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Project or module not found")
+    return updated
+
 
 # WM Task Endpoints
 # General Task Endpoints
@@ -1132,10 +1591,37 @@ async def read_wm_tasks(userId: Optional[str] = None, role: Optional[str] = None
 
 @app.post("/wm-tasks", response_model=schemas.WMTask)
 async def create_wm_task(task: schemas.WMTaskCreate, db=Depends(get_db)):
+    if task.status == "pending" and (not task.reasonForPending or not task.reasonForPending.strip()):
+        raise HTTPException(status_code=400, detail="Reason for pending is required when marking a task as pending")
+    if task.status == "in-progress" and task.assignedToId:
+        existing = await db.wm_tasks.find_one({"assignedToId": task.assignedToId, "status": "in-progress"})
+        if existing:
+            raise HTTPException(status_code=400, detail="already a task in progress")
     return await crud.create_wm_task(db, task=task)
 
 @app.put("/wm-tasks/{task_id}", response_model=schemas.WMTask)
 async def update_wm_task(task_id: str, task_update: schemas.WMTaskUpdate, db=Depends(get_db)):
+    from bson import ObjectId
+    if task_update.status == "pending":
+        reason = task_update.reasonForPending
+        if not reason or not reason.strip():
+            # Check existing task in db
+            existing = await db.wm_tasks.find_one({"_id": ObjectId(task_id)})
+            if not existing or not existing.get("reasonForPending") or not existing.get("reasonForPending").strip():
+                raise HTTPException(status_code=400, detail="Reason for pending is required when marking a task as pending")
+                
+    if task_update.status == "in-progress":
+        current_task = await db.wm_tasks.find_one({"_id": ObjectId(task_id)})
+        assignee_id = task_update.assignedToId or (current_task.get("assignedToId") if current_task else None)
+        if assignee_id:
+            existing = await db.wm_tasks.find_one({
+                "assignedToId": assignee_id,
+                "status": "in-progress",
+                "_id": {"$ne": ObjectId(task_id)}
+            })
+            if existing:
+                raise HTTPException(status_code=400, detail="already a task in progress")
+
     updated = await crud.update_wm_task(db, task_id, task_update)
     if not updated:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -1159,6 +1645,31 @@ async def read_task_logs(
     db=Depends(get_db)
 ):
     return await crud.get_task_logs(db, taskId=taskId, projectId=projectId, clientId=clientId, dailyReportId=dailyReportId, monthlyReportId=monthlyReportId)
+
+@app.get("/admin/activity-logs")
+async def read_all_activity_logs(
+    performedBy: Optional[str] = None,
+    action: Optional[str] = None,
+    search: Optional[str] = None,
+    startDate: Optional[str] = None,
+    endDate: Optional[str] = None,
+    limit: int = 50,
+    skip: int = 0,
+    db=Depends(get_db),
+    current_user=Depends(auth.require_admin_or_activity_logs)
+):
+    logs, total = await crud.get_all_activity_logs(
+        db,
+        performedBy=performedBy,
+        action=action,
+        search=search,
+        startDate=startDate,
+        endDate=endDate,
+        limit=limit,
+        skip=skip
+    )
+    return {"logs": logs, "total": total}
+
 
 @app.post("/task-logs", response_model=schemas.TaskLog)
 async def create_task_log(log: schemas.TaskLogBase, db=Depends(get_db)):
@@ -1199,13 +1710,18 @@ async def delete_task_log(log_id: str, db=Depends(get_db)):
     return {"message": "Log deleted successfully"}
 
 # Marketing Reports Endpoints
+@app.post("/marketing/reports/daily/generate-yesterday")
+async def generate_yesterday_marketing_reports(db=Depends(get_db)):
+    return await crud.generate_missing_daily_reports_for_yesterday(db)
+
 @app.post("/marketing/reports/daily", response_model=schemas.MarketingDailyReport)
 async def create_marketing_daily_report(report: schemas.MarketingDailyReportCreate, db=Depends(get_db)):
     return await crud.create_marketing_daily_report(db, report)
 
 @app.get("/marketing/reports/daily", response_model=List[schemas.MarketingDailyReport])
-async def get_marketing_daily_reports(client_id: str = None, date: str = None, db=Depends(get_db)):
-    return await crud.get_marketing_daily_reports(db, client_id, date)
+async def get_marketing_daily_reports(client_id: str = None, date: str = None, start_date: str = None, end_date: str = None, userId: str = None, role: str = None, db=Depends(get_db)):
+    user_info = {"sub": userId, "role": role} if userId else None
+    return await crud.get_marketing_daily_reports(db, client_id, date, start_date, end_date, user_info=user_info)
 
 @app.put("/marketing/reports/daily/{report_id}", response_model=schemas.MarketingDailyReport)
 async def update_marketing_daily_report(report_id: str, report: schemas.MarketingDailyReportUpdate, db=Depends(get_db)):
@@ -1218,16 +1734,60 @@ async def update_marketing_daily_report(report_id: str, report: schemas.Marketin
 async def delete_marketing_daily_report(report_id: str, db=Depends(get_db)):
     success = await crud.delete_marketing_daily_report(db, report_id)
     if not success:
+        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Daily report not found")
     return {"message": "Daily report deleted"}
+
+@app.post("/marketing/reports/daily/bulk-delete-leads")
+async def bulk_delete_daily_leads(req: schemas.BulkDeleteLeadsRequest, db=Depends(get_db)):
+    urls_to_delete = await crud.bulk_clear_leads_files(db, req.ids, "marketing_daily_reports")
+    import os
+    for url in urls_to_delete:
+        parts = url.split('/uploads/')
+        if len(parts) > 1:
+            filename = parts[1]
+            file_path = os.path.join(UPLOAD_DIR, os.path.basename(filename))
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except Exception:
+                    pass
+    return {"message": f"Cleared {len(urls_to_delete)} leads files."}
+
+@app.post("/marketing/project-remarks", response_model=schemas.ProjectDailyRemark)
+async def upsert_project_daily_remark(remark: schemas.ProjectDailyRemarkCreate, db=Depends(get_db)):
+    doc = remark.model_dump(mode='json')
+    result = await db.marketing_project_daily_remarks.update_one(
+        {"projectId": remark.projectId, "date": str(remark.date)},
+        {"$set": doc},
+        upsert=True
+    )
+    saved = await db.marketing_project_daily_remarks.find_one({"projectId": remark.projectId, "date": str(remark.date)})
+    return crud.fix_id(saved)
+
+@app.get("/marketing/project-remarks", response_model=List[schemas.ProjectDailyRemark])
+async def get_project_daily_remarks(clientId: Optional[str] = None, projectId: Optional[str] = None, startDate: Optional[str] = None, endDate: Optional[str] = None, db=Depends(get_db)):
+    query = {}
+    if clientId:
+        query["clientId"] = clientId
+    if projectId:
+        query["projectId"] = projectId
+    if startDate and endDate:
+        query["date"] = {"$gte": startDate, "$lte": endDate}
+    elif startDate:
+        query["date"] = startDate
+        
+    remarks = await db.marketing_project_daily_remarks.find(query).to_list(1000)
+    return [crud.fix_id(r) for r in remarks]
 
 @app.post("/marketing/reports/monthly", response_model=schemas.MarketingMonthlyReport)
 async def create_marketing_monthly_report(report: schemas.MarketingMonthlyReportCreate, db=Depends(get_db)):
     return await crud.create_marketing_monthly_report(db, report)
 
 @app.get("/marketing/reports/monthly", response_model=List[schemas.MarketingMonthlyReport])
-async def get_marketing_monthly_reports(client_id: str = None, month: str = None, db=Depends(get_db)):
-    return await crud.get_marketing_monthly_reports(db, client_id, month)
+async def get_marketing_monthly_reports(client_id: str = None, month: Optional[List[str]] = Query(None), userId: str = None, role: str = None, db=Depends(get_db)):
+    user_info = {"sub": userId, "role": role} if userId else None
+    return await crud.get_marketing_monthly_reports(db, client_id, month, user_info=user_info)
 
 @app.put("/marketing/reports/monthly/{report_id}", response_model=schemas.MarketingMonthlyReport)
 async def update_marketing_monthly_report(report_id: str, report: schemas.MarketingMonthlyReportUpdate, db=Depends(get_db)):
@@ -1307,9 +1867,20 @@ async def update_chat_message(message_id: str, update: schemas.ChatMessageUpdate
     return updated
 
 @app.delete("/chat/messages/{message_id}")
-async def delete_chat_message(message_id: str, db=Depends(get_db)):
-    await crud.delete_message(db, message_id)
-    return {"message": "Message deleted successfully"}
+async def delete_chat_message(message_id: str, request: Request, deleteFor: str = "everyone", db=Depends(get_db)):
+    performed_by = None
+    try:
+        body = await request.json()
+        performed_by = body.get("performedBy")
+    except Exception:
+        pass
+    result = await crud.delete_message(db, message_id, delete_for=deleteFor, user_id=performed_by)
+    try:
+        from websocket import manager as ws_manager
+        await ws_manager.broadcast_all("message_deleted", {"messageId": message_id, "deleteFor": deleteFor})
+    except Exception:
+        pass
+    return result
 
 @app.post("/chat/mark-seen/{sender_id}/{receiver_id}")
 async def mark_messages_as_seen(sender_id: str, receiver_id: str, db=Depends(get_db)):
@@ -1584,11 +2155,11 @@ async def chat_websocket_endpoint(websocket: WebSocket, user_id: str):
                             }
                             await ws_manager.send_personal_message(chat_id, "typing_status", personal_event_data)
     except WebSocketDisconnect:
-        await ws_manager.disconnect(user_id)
+        await ws_manager.disconnect(user_id, websocket)
     except Exception as e:
         import logging
         logging.getLogger("websocket").warning(f"WebSocket error for user {user_id}: {e}")
-        await ws_manager.disconnect(user_id)
+        await ws_manager.disconnect(user_id, websocket)
 
 # Employee Document Endpoints
 @app.post("/employee-documents", response_model=schemas.EmployeeDocument)
@@ -1766,9 +2337,15 @@ async def update_lead_follow_up(lead_id: str, follow_up_idx: int, follow_up: sch
     return await crud.update_lead_follow_up(db, lead_id, follow_up_idx, follow_up, performedBy=performedBy, userName=userName)
 
 # Sales Target Routes
-@app.get("/sales-targets", response_model=List[schemas.SalesTarget])
+@app.get("/sales-targets")
 async def read_sales_targets(month: Optional[str] = None, year: Optional[int] = None, type: Optional[str] = None, db=Depends(get_db)):
-    return await crud.get_sales_targets(db, month, year, type)
+    try:
+        targets = await crud.get_sales_targets(db, month, year, type)
+        return targets
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/sales-targets", response_model=schemas.SalesTarget)
 async def upsert_sales_target(target: schemas.SalesTargetCreate, db=Depends(get_db)):
@@ -1846,8 +2423,9 @@ async def read_user_permissions(employee_id: str, db=Depends(get_db)):
     return await crud.get_user_permissions(db, employee_id)
 
 @app.post("/user-permissions/{employee_id}", response_model=schemas.UserPermission)
-async def update_user_permissions(employee_id: str, permissions: schemas.UserPermissionUpdate, db=Depends(get_db)):
-    return await crud.save_user_permissions(db, employee_id, permissions)
+async def update_user_permissions(employee_id: str, permissions: schemas.UserPermissionUpdate, request: Request, db=Depends(get_db)):
+    performed_by, user_name = await get_actor_from_request(request, db)
+    return await crud.save_user_permissions(db, employee_id, permissions, performed_by=performed_by, user_name=user_name)
 
 # Permission Presets Routes
 @app.get("/permission-presets", response_model=List[schemas.PermissionPreset])
@@ -1871,6 +2449,13 @@ async def update_permission_preset(preset_id: str, preset: schemas.PermissionPre
     if not updated:
         raise HTTPException(status_code=404, detail="Preset not found")
     return updated
+
+@app.delete("/task-presets/{preset_id}")
+async def delete_task_preset_entry(preset_id: str, db=Depends(get_db)):
+    success = await crud.delete_task_preset(db, preset_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Preset not found")
+    return {"status": "success"}
 
 @app.delete("/permission-presets/{preset_id}")
 async def delete_permission_preset(preset_id: str, db=Depends(get_db)):
@@ -1905,8 +2490,8 @@ async def create_invoice(invoice: schemas.InvoiceCreate, db=Depends(get_db)):
     return await crud.create_invoice(db, invoice)
 
 @app.get("/invoices", response_model=List[schemas.Invoice])
-async def read_invoices(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
-    return await crud.get_invoices(db, skip=skip, limit=limit)
+async def read_invoices(skip: int = 0, limit: int = 10000, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
+    return await crud.get_invoices(db, current_user, skip=skip, limit=limit)
 
 @app.get("/invoices/next-number")
 async def get_next_number(type: str = "Tax Invoice", taxType: str = "CGST+SGST", db=Depends(get_db)):
@@ -1914,22 +2499,22 @@ async def get_next_number(type: str = "Tax Invoice", taxType: str = "CGST+SGST",
     return {"nextInvoiceNumber": next_num}
 
 @app.get("/invoices/{invoice_id}", response_model=schemas.Invoice)
-async def read_invoice(invoice_id: str, db=Depends(get_db)):
-    db_invoice = await crud.get_invoice(db, invoice_id)
+async def read_invoice(invoice_id: str, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
+    db_invoice = await crud.get_invoice(db, invoice_id, current_user)
     if db_invoice is None:
         raise HTTPException(status_code=404, detail="Invoice not found")
     return db_invoice
 
 @app.put("/invoices/{invoice_id}", response_model=schemas.Invoice)
-async def update_invoice(invoice_id: str, invoice_update: schemas.InvoiceUpdate, db=Depends(get_db)):
-    updated = await crud.update_invoice(db, invoice_id, invoice_update)
+async def update_invoice(invoice_id: str, invoice_update: schemas.InvoiceUpdate, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
+    updated = await crud.update_invoice(db, invoice_id, invoice_update, current_user)
     if updated is None:
         raise HTTPException(status_code=404, detail="Invoice not found")
     return updated
 
 @app.post("/invoices/{invoice_id}/convert-to-tax", response_model=schemas.Invoice)
-async def convert_invoice_to_tax(invoice_id: str, db=Depends(get_db)):
-    db_invoice = await crud.get_invoice(db, invoice_id)
+async def convert_invoice_to_tax(invoice_id: str, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
+    db_invoice = await crud.get_invoice(db, invoice_id, current_user)
     if not db_invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
     if db_invoice.get("invoiceType") != "Proforma Invoice":
@@ -1952,7 +2537,7 @@ async def convert_invoice_to_tax(invoice_id: str, db=Depends(get_db)):
     return created_invoice
 
 @app.delete("/invoices/{invoice_id}")
-async def delete_invoice(invoice_id: str, db=Depends(get_db)):
+async def delete_invoice(invoice_id: str, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
     success = await crud.delete_invoice(db, invoice_id)
     if not success:
         raise HTTPException(status_code=404, detail="Invoice not found")
@@ -1965,17 +2550,27 @@ async def get_schedules(employeeId: Optional[str] = None, date: Optional[str] = 
     return await crud.get_schedules(db, employee_id=employeeId, date_str=date, date_from=date_from, date_to=date_to)
 
 @app.post("/schedules", response_model=schemas.Schedule)
-async def create_schedule(schedule: schemas.ScheduleCreate, db=Depends(get_db)):
+async def create_schedule(schedule: schemas.ScheduleCreate, db=Depends(get_db), _token=Depends(auth.require_auth)):
     from datetime import datetime, date
     # Check for overlaps
-    existing_schedules = await crud.get_schedules(db, employee_id=schedule.employeeId, date_str=str(schedule.date))
-    if existing_schedules:
-        for existing in existing_schedules:
+    all_schedules = await crud.get_schedules(db, date_str=str(schedule.date))
+    check_ids = [str(schedule.employeeId)] + [str(x) for x in getattr(schedule, "attendees", []) or []]
+    
+    if all_schedules:
+        for existing in all_schedules:
+            existing_emp = str(existing.get("employeeId"))
+            existing_attendees = [str(x) for x in existing.get("attendees", []) or []]
+            
+            overlapping_check_ids = [cid for cid in check_ids if cid == existing_emp or cid in existing_attendees]
+            if not overlapping_check_ids:
+                continue
+                
             ex_start = existing.get("startTime")
             ex_end = existing.get("endTime")
             if ex_start and ex_end:
                 if max(schedule.startTime, ex_start) < min(schedule.endTime, ex_end):
-                    raise HTTPException(status_code=400, detail="Schedule overlaps with an existing schedule for this employee on this date.")
+                    if any(cid != str(_token.get("sub")) for cid in overlapping_check_ids):
+                        raise HTTPException(status_code=400, detail="Cannot assign an overlapping schedule to someone else or an attendee.")
 
     schedule_data = schedule.model_dump()
     dt_val = schedule_data.get("date")
@@ -1987,9 +2582,34 @@ async def create_schedule(schedule: schemas.ScheduleCreate, db=Depends(get_db)):
     return await crud.create_schedule(db, schedule_data)
 
 @app.put("/schedules/{schedule_id}", response_model=schemas.Schedule)
-async def update_schedule(schedule_id: str, schedule: schemas.ScheduleUpdate, db=Depends(get_db)):
+async def update_schedule(schedule_id: str, schedule: schemas.ScheduleUpdate, db=Depends(get_db), _token=Depends(auth.require_auth)):
     from datetime import datetime, date
     update_data = schedule.model_dump(exclude_unset=True)
+
+    # Check for overlaps if time is updated
+    if update_data.get("startTime") and update_data.get("endTime"):
+        all_schedules = await crud.get_schedules(db, date_str=str(update_data.get("date")))
+        check_ids = [str(update_data.get("employeeId"))] + [str(x) for x in update_data.get("attendees", []) or []]
+        
+        if all_schedules:
+            for existing in all_schedules:
+                if str(existing.get("_id")) == schedule_id or str(existing.get("id")) == schedule_id:
+                    continue
+                
+                existing_emp = str(existing.get("employeeId"))
+                existing_attendees = [str(x) for x in existing.get("attendees", []) or []]
+                
+                overlapping_check_ids = [cid for cid in check_ids if cid == existing_emp or cid in existing_attendees]
+                if not overlapping_check_ids:
+                    continue
+                    
+                ex_start = existing.get("startTime")
+                ex_end = existing.get("endTime")
+                if ex_start and ex_end:
+                    if max(update_data["startTime"], ex_start) < min(update_data["endTime"], ex_end):
+                        if any(cid != str(_token.get("sub")) for cid in overlapping_check_ids):
+                            raise HTTPException(status_code=400, detail="Cannot assign an overlapping schedule to someone else or an attendee.")
+
     dt_val = update_data.get("date")
     if dt_val is not None:
         if type(dt_val) is date:
@@ -2009,14 +2629,238 @@ async def delete_schedule(schedule_id: str, db=Depends(get_db)):
         raise HTTPException(status_code=404, detail="Schedule not found")
     return {"message": "Schedule deleted successfully"}
 
+@app.post("/schedules/free-slots")
+async def get_free_slots(request: dict, db=Depends(get_db)):
+    """
+    Compute common free time slots for a list of employees on a given date.
+    Body: { "employeeIds": ["id1", "id2"], "date": "YYYY-MM-DD", "durationMins": 30 }
+    Returns: { "freeSlots": [{ "start": "HH:MM", "end": "HH:MM" }, ...] }
+    """
+    employee_ids = request.get("employeeIds", [])
+    date_str = request.get("date")
+    duration_mins = request.get("durationMins", 30)
+
+    if not employee_ids or not date_str:
+        return {"freeSlots": []}
+
+    # Collect all busy intervals across all employees
+    all_busy = []
+    for emp_id in employee_ids:
+        schedules = await crud.get_schedules(db, employee_id=emp_id, date_str=date_str)
+        for s in schedules:
+            start_t = s.get("startTime", "")
+            end_t = s.get("endTime", "")
+            if start_t and end_t:
+                all_busy.append((start_t, end_t))
+
+    # Also check for SMM client meetings that mention these employees
+    # (meetings stored in client documents are text-based, so we skip those)
+
+    # Sort and merge overlapping busy intervals
+    def time_to_mins(t: str) -> int:
+        parts = t.split(":")
+        return int(parts[0]) * 60 + int(parts[1])
+
+    def mins_to_time(m: int) -> str:
+        return f"{m // 60:02d}:{m % 60:02d}"
+
+    busy_mins = sorted([(time_to_mins(s), time_to_mins(e)) for s, e in all_busy])
+
+    merged = []
+    for start, end in busy_mins:
+        if merged and start < merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+
+    # Office hours: get from settings, default to 09:30 to 18:30
+    sys_settings = await crud.get_system_settings(db)
+    office_start_str = sys_settings.get("officeStartTime", "09:30")
+    office_end_str = sys_settings.get("officeEndTime", "18:30")
+    
+    office_start = time_to_mins(office_start_str)
+    office_end = time_to_mins(office_end_str)
+
+    # If the requested date is today, do not allow past time slots
+    now = crud.get_now()
+    if date_str == now.strftime("%Y-%m-%d"):
+        current_mins = now.hour * 60 + now.minute
+        if current_mins > office_start:
+            office_start = min(current_mins, office_end)
+
+    # Invert merged busy intervals to get free slots within office hours
+    free_slots = []
+    cursor = office_start
+
+    for busy_start, busy_end in merged:
+        # Clamp to office hours
+        bs = max(busy_start, office_start)
+        be = min(busy_end, office_end)
+        if bs > cursor and (bs - cursor) >= duration_mins:
+            free_slots.append({"start": mins_to_time(cursor), "end": mins_to_time(bs)})
+        if be > cursor:
+            cursor = be
+
+    # Remaining time after last busy block
+    if cursor < office_end and (office_end - cursor) >= duration_mins:
+        free_slots.append({"start": mins_to_time(cursor), "end": mins_to_time(office_end)})
+
+    return {"freeSlots": free_slots}
+
+
+# --- Appointment Scheduling APIs ---
+@app.get("/appointments/config")
+@app.get("/api/appointments/config")
+async def get_all_appointment_configs(employeeId: Optional[str] = None, db=Depends(get_db)):
+    query = {"employeeId": employeeId} if employeeId else {}
+    cursor = db.appointment_configs.find(query)
+    configs = await cursor.to_list(length=1000)
+    return [crud.fix_id(c) for c in configs]
+
+@app.get("/appointments/config/{employee_id}")
+@app.get("/api/appointments/config/{employee_id}")
+async def get_appointment_config(employee_id: str, db=Depends(get_db)):
+    config = await crud.get_appointment_config(db, employee_id)
+    if not config:
+        return {
+            "employeeId": employee_id,
+            "duration": 30,
+            "availability": {
+                "Monday": [{"start": "09:00", "end": "17:00"}],
+                "Tuesday": [{"start": "09:00", "end": "17:00"}],
+                "Wednesday": [{"start": "09:00", "end": "17:00"}],
+                "Thursday": [{"start": "09:00", "end": "17:00"}],
+                "Friday": [{"start": "09:00", "end": "17:00"}],
+                "Saturday": [],
+                "Sunday": []
+            },
+            "timezone": "Asia/Kolkata",
+            "active": True
+        }
+    return config
+
+@app.post("/appointments/config")
+@app.post("/api/appointments/config")
+async def save_appointment_config(config: dict, db=Depends(get_db), _token=Depends(auth.require_auth)):
+    curr_user_id = str(_token.get("sub"))
+    target_emp_id = config.get("employeeId")
+    if not target_emp_id:
+        raise HTTPException(status_code=400, detail="employeeId is required")
+    
+    if curr_user_id != str(target_emp_id):
+        user_role = _token.get("role")
+        if user_role not in ["Admin", "HR"]:
+            raise HTTPException(status_code=403, detail="Not authorized to edit this configuration")
+            
+    return await crud.save_appointment_config(db, config)
+
+@app.delete("/appointments/config/{config_id}")
+@app.delete("/api/appointments/config/{config_id}")
+async def delete_appointment_config(config_id: str, db=Depends(get_db), _token=Depends(auth.require_auth)):
+    curr_user_id = str(_token.get("sub"))
+    user_role = _token.get("role")
+    
+    if ObjectId.is_valid(config_id) and len(str(config_id)) == 24:
+        existing = await db.appointment_configs.find_one({"_id": ObjectId(config_id)})
+        if existing and str(existing.get("employeeId")) != curr_user_id and user_role not in ["Admin", "HR"]:
+            raise HTTPException(status_code=403, detail="Not authorized to delete this configuration")
+            
+    success = await crud.delete_appointment_config(db, config_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Configuration not found or invalid ID")
+    return {"status": "success", "deleted": True}
+
+@app.get("/appointments/public/slots")
+@app.get("/api/appointments/public/slots")
+async def get_public_slots(employeeId: str, date: str, configId: Optional[str] = None, db=Depends(get_db)):
+    if not employeeId or not date:
+        raise HTTPException(status_code=400, detail="employeeId and date are required")
+    slots = await crud.calculate_public_slots(db, employeeId, date, config_id=configId)
+    return {"slots": slots}
+
+@app.post("/appointments/public/book")
+@app.post("/api/appointments/public/book")
+async def public_book_appointment(booking: dict, db=Depends(get_db)):
+    employee_id = booking.get("employeeId")
+    date_str = booking.get("date")
+    start_time = booking.get("startTime")
+    end_time = booking.get("endTime")
+    config_id = booking.get("configId") or booking.get("linkId")
+    
+    if not all([employee_id, date_str, start_time, end_time]):
+        raise HTTPException(status_code=400, detail="Missing required booking details")
+        
+    all_schedules = await crud.get_schedules(db, date_str=date_str)
+    if all_schedules:
+        for existing in all_schedules:
+            if str(existing.get("employeeId")) != str(employee_id) and str(employee_id) not in [str(x) for x in existing.get("attendees", []) or []]:
+                continue
+            ex_start = existing.get("startTime")
+            ex_end = existing.get("endTime")
+            if ex_start and ex_end:
+                if max(start_time, ex_start) < min(end_time, ex_end):
+                    raise HTTPException(status_code=400, detail="Requested slot is no longer available.")
+
+    from bson import ObjectId
+    q = {"_id": ObjectId(employee_id)} if ObjectId.is_valid(employee_id) else {"_id": employee_id}
+    emp = await db.employees.find_one(q)
+    if not emp:
+        raise HTTPException(status_code=404, detail="Employee not found")
+        
+    client_name = booking.get("attendeeName", "Client")
+    client_email = booking.get("attendeeEmail", "")
+    reason = booking.get("description", "")
+
+    config = None
+    if config_id and ObjectId.is_valid(config_id) and len(str(config_id)) == 24:
+        config = await db.appointment_configs.find_one({"_id": ObjectId(config_id)})
+    if not config and ObjectId.is_valid(employee_id) and len(str(employee_id)) == 24:
+        config = await db.appointment_configs.find_one({"_id": ObjectId(employee_id)})
+    if not config:
+        config = await db.appointment_configs.find_one({"employeeId": employee_id})
+
+    co_host_ids = []
+    real_emp_id = employee_id
+    if config:
+        if config.get("employeeIds"):
+            co_host_ids = [str(x) for x in config.get("employeeIds")]
+        if config.get("employeeId"):
+            real_emp_id = str(config.get("employeeId"))
+            if real_emp_id != str(employee_id):
+                real_q = {"_id": ObjectId(real_emp_id)} if ObjectId.is_valid(real_emp_id) else {"_id": real_emp_id}
+                real_emp = await db.employees.find_one(real_q)
+                if real_emp:
+                    emp = real_emp
+                    employee_id = real_emp_id
+    
+    schedule_data = {
+        "title": booking.get("title", f"Appointment with {client_name}"),
+        "description": f"Client Name: {client_name}\nEmail: {client_email}\nNotes: {reason}",
+        "employeeId": employee_id,
+        "employeeName": emp.get("name", "Unknown"),
+        "startTime": start_time,
+        "endTime": end_time,
+        "type": "appointment",
+        "attendees": co_host_ids,
+        "createdBy": "public"
+    }
+    
+    from datetime import datetime
+    schedule_data["date"] = datetime.strptime(date_str, "%Y-%m-%d")
+    
+    created = await crud.create_schedule(db, schedule_data)
+    return created
+
+
 # --- Google Calendar Integration API ---
 from fastapi.responses import RedirectResponse
 
 @app.get("/auth/google/url")
-async def get_google_auth_url(employeeId: str):
+async def get_google_auth_url(employeeId: str, desktop: bool = False):
     """Generates the Google OAuth URL to link a user's account."""
     try:
-        url = google_auth.get_authorization_url(state=employeeId)
+        state_str = f"{employeeId}:desktop" if desktop else employeeId
+        url = google_auth.get_authorization_url(state=state_str)
         return RedirectResponse(url=url)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -2026,8 +2870,11 @@ async def get_google_auth_url(employeeId: str):
 async def google_auth_callback(code: str, state: str, db=Depends(get_db)):
     """Handles the OAuth callback, exchanges code for tokens, and saves them."""
     try:
-        # State parameter carries the employeeId
-        employee_id = state
+        # State parameter carries the employeeId and optional desktop flag
+        parts = state.split(":")
+        employee_id = parts[0]
+        is_desktop = len(parts) > 1 and parts[1] == "desktop"
+        
         tokens = google_auth.fetch_tokens(code, state)
         
         from bson import ObjectId
@@ -2044,6 +2891,32 @@ async def google_auth_callback(code: str, state: str, db=Depends(get_db)):
         if result.modified_count == 0:
             print(f"Warning: Failed to update Google Calendar Tokens for user {employee_id}. User not found.")
             
+        if is_desktop:
+            from fastapi.responses import HTMLResponse
+            html_content = """
+            <html>
+            <head>
+              <title>Google Calendar Connected</title>
+              <style>
+                body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background-color: #f3f4f6; }
+                .card { background: white; padding: 40px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); text-align: center; max-width: 400px; }
+                h1 { color: #0d9488; margin-top: 0; font-size: 24px; }
+                p { color: #4b5563; font-size: 15px; line-height: 1.5; margin: 10px 0; }
+                .success-icon { font-size: 54px; margin-bottom: 15px; }
+              </style>
+            </head>
+            <body>
+              <div class="card">
+                <div class="success-icon">✅</div>
+                <h1>Google Calendar Connected!</h1>
+                <p>Your Google Calendar has been successfully linked to your HRMS account.</p>
+                <p>You can now close this browser tab and return to the HRMS Desktop Application.</p>
+              </div>
+            </body>
+            </html>
+            """
+            return HTMLResponse(content=html_content, status_code=200)
+            
         # Redirect the user back to the frontend schedule page
         frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3535")
         return RedirectResponse(url=f"{frontend_url}/schedule?google_linked=true")
@@ -2059,12 +2932,47 @@ async def disconnect_google_calendar(employeeId: str, db=Depends(get_db)):
         if ObjectId.is_valid(employeeId):
             query = {"$or": [{"employeeId": employeeId}, {"_id": ObjectId(employeeId)}]}
             
+        emp = await db.employees.find_one(query)
+        if not emp:
+            raise HTTPException(status_code=404, detail="Employee not found.")
+            
+        if emp.get("googleCalendarTokens"):
+            # They have connected. Let's delete events.
+            try:
+                import asyncio
+                import google_calendar
+                creds = await crud._get_creds_and_persist(db, emp)
+                if creds:
+                    # Find all schedules with a googleEventId
+                    cursor = db.schedules.find({
+                        "employeeId": employeeId,
+                        "googleEventId": {"$exists": True, "$ne": None}
+                    })
+                    schedules = await cursor.to_list(length=10000)
+                    
+                    for sched in schedules:
+                        gid = sched.get("googleEventId")
+                        if sched.get("type") == "Google Event":
+                            # Event originated from Google, so just delete the local copy
+                            await db.schedules.delete_one({"_id": sched["_id"]})
+                        else:
+                            # It's an HRMS event pushed to Google, delete from Google
+                            try:
+                                await asyncio.to_thread(google_calendar.delete_event, creds, gid)
+                            except Exception as e:
+                                print(f"Error deleting event {gid} from Google Calendar: {e}")
+                            # Remove the googleEventId from the local HRMS schedule
+                            await db.schedules.update_one(
+                                {"_id": sched["_id"]},
+                                {"$unset": {"googleEventId": ""}}
+                            )
+            except Exception as e:
+                print(f"Error cleaning up Google Calendar events during disconnect: {e}")
+            
         result = await db.employees.update_one(
-            query,
+            {"_id": emp["_id"]},
             {"$unset": {"googleCalendarTokens": ""}}
         )
-        if result.modified_count == 0:
-            raise HTTPException(status_code=404, detail="Employee not found or already disconnected.")
         return {"message": "Successfully disconnected Google Calendar."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -2166,7 +3074,28 @@ async def clear_active_session(db=Depends(get_db)):
     return {"message": "Session tracking stopped"}
 
 @app.get("/activity/last-active")
-async def get_last_active():
+async def get_last_active(employee_id: Optional[str] = None, db=Depends(get_db)):
+    if employee_id:
+        from datetime import datetime
+        import pytz
+        from database import db as mongo_db
+        IST = pytz.timezone('Asia/Kolkata')
+        today_str = datetime.now(IST).strftime("%Y-%m-%d")
+        
+        stat = await mongo_db.user_input_stats.find_one({"employeeId": employee_id, "date": today_str})
+        if stat and "lastActive" in stat:
+            last_active_dt = stat["lastActive"]
+            if last_active_dt:
+                # Convert naive datetime in UTC or localized datetime to timestamp
+                if last_active_dt.tzinfo is None:
+                    # Naive datetime in MongoDB is typically stored as UTC.
+                    # But if the app stored it as local naive or UTC naive, let's treat it as UTC first,
+                    # or localized. Let's make it aware.
+                    last_active_dt = last_active_dt.replace(tzinfo=pytz.UTC).astimezone(IST)
+                else:
+                    last_active_dt = last_active_dt.astimezone(IST)
+                return {"last_active": last_active_dt.timestamp()}
+                
     import input_tracker
     return {"last_active": input_tracker.get_last_global_activity_time()}
 
@@ -2314,15 +3243,15 @@ async def get_content_calendar_settings(clientId: str, monthYear: str, db=Depend
     settings = await crud.get_content_calendar_settings(db, clientId, monthYear)
     if settings:
         return settings
-    # Return defaults if not found
+    # Return empty if not found
     return {
         "clientId": clientId,
-        "monthYear": monthYear,
-        "scriptDateOffset": 14,
-        "shootDateOffset": 12,
-        "editingStartOffset": 6,
-        "approvalOffset": 5
+        "monthYear": monthYear
     }
+
+@app.get("/content-calendar-settings/all", response_model=List[schemas.ContentCalendarSettingsBase])
+async def get_all_content_calendar_settings(monthYear: str, db=Depends(get_db)):
+    return await crud.get_all_content_calendar_settings(db, monthYear)
 
 @app.post("/content-calendar-settings", response_model=schemas.ContentCalendarSettings)
 async def upsert_content_calendar_settings(settings: schemas.ContentCalendarSettingsBase, db=Depends(get_db)):
@@ -2335,6 +3264,223 @@ async def upsert_content_calendar_settings(settings: schemas.ContentCalendarSett
 @app.post("/forms", response_model=schemas.FeedbackForm)
 async def create_feedback_form(form: schemas.FeedbackFormCreate, createdBy: Optional[str] = None, db=Depends(get_db)):
     return await crud.create_feedback_form(db, form, createdBy=createdBy or "Unknown")
+
+@app.get("/forms/all/forms", response_model=List[schemas.FeedbackForm])
+async def read_all_forms(db=Depends(get_db)):
+    return await crud.get_all_feedback_forms(db)
+
+@app.get("/forms/all/responses", response_model=List[schemas.FeedbackResponse])
+async def read_all_responses(db=Depends(get_db)):
+    return await crud.get_all_feedback_responses(db)
+
+@app.get("/forms/{form_id}", response_model=schemas.FeedbackForm)
+async def get_feedback_form(form_id: str, db=Depends(get_db)):
+    form = await crud.get_feedback_form(db, form_id)
+    if not form:
+        raise HTTPException(status_code=404, detail="Form not found")
+    return form
+
+@app.get("/forms/client/{client_id}", response_model=List[schemas.FeedbackForm])
+async def get_client_feedback_forms(client_id: str, db=Depends(get_db)):
+    return await crud.get_client_feedback_forms(db, client_id)
+
+@app.put("/forms/{form_id}", response_model=schemas.FeedbackForm)
+async def update_feedback_form(form_id: str, form: schemas.FeedbackFormCreate, db=Depends(get_db)):
+    updated_form = await crud.update_feedback_form(db, form_id, form)
+    if not updated_form:
+        raise HTTPException(status_code=404, detail="Form not found")
+    return updated_form
+
+@app.delete("/forms/{form_id}")
+async def delete_feedback_form(form_id: str, db=Depends(get_db)):
+    deleted = await crud.delete_feedback_form(db, form_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Form not found")
+    return {"message": "Form deleted successfully"}
+
+@app.post("/forms/{form_id}/responses", response_model=schemas.FeedbackResponse)
+async def submit_feedback_response(form_id: str, response: schemas.FeedbackResponseCreate, db=Depends(get_db)):
+    if response.formId != form_id:
+        raise HTTPException(status_code=400, detail="Form ID mismatch")
+    return await crud.create_feedback_response(db, response)
+
+@app.get("/forms/{form_id}/responses", response_model=List[schemas.FeedbackResponse])
+async def get_form_responses(form_id: str, db=Depends(get_db)):
+    return await crud.get_form_responses(db, form_id)
+
+@app.get("/forms/client/{client_id}/responses", response_model=List[schemas.FeedbackResponse])
+async def get_client_form_responses(client_id: str, db=Depends(get_db)):
+    return await crud.get_client_form_responses(db, client_id)
+# --- Desktop Auto-Update Endpoints ---
+
+@app.get("/desktop/download/{filename}")
+async def download_desktop_file(filename: str):
+    """Serve desktop installer .exe with proper Content-Disposition download headers."""
+    from fastapi.responses import FileResponse
+    import re
+    if not re.match(r'^HRMS_Setup_[\w.\-]+\.exe$', filename):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    file_path = os.path.join(UPLOAD_DIR, "desktop", filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(
+        path=file_path,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+@app.get("/desktop/version")
+async def get_desktop_version(db=Depends(get_db)):
+    """Retrieve the latest desktop app version, download URL, and changelog."""
+    release = await db.desktop_releases.find_one(sort=[("created_at", -1)])
+    if not release:
+        return {
+            "version": "1.0.0",
+            "downloadUrl": "",
+            "changelog": []
+        }
+    return {
+        "version": release.get("version"),
+        "downloadUrl": release.get("downloadUrl"),
+        "changelog": release.get("changelog", [])
+    }
+
+@app.post("/desktop/release")
+async def upload_desktop_release(
+    version: str = Form(...),
+    changelog: str = Form(...),  # JSON string or comma-separated
+    file: UploadFile = File(...),
+    token_payload: dict = Depends(auth.require_admin),
+    db=Depends(get_db)
+):
+    """Admin-only endpoint to upload a new compiled desktop installer .exe and log its version."""
+    import shutil
+    import json
+    import traceback
+    
+    try:
+        # Create directory uploads/desktop if it doesn't exist
+        desktop_dir = os.path.join(UPLOAD_DIR, "desktop")
+        if not os.path.exists(desktop_dir):
+            os.makedirs(desktop_dir)
+            
+        # Standardize filename to prevent path traversal issues
+        safe_version = "".join([c for c in version if c.isalnum() or c in ".-_"])
+        filename = f"HRMS_Setup_{safe_version}.exe"
+        file_path = os.path.join(desktop_dir, filename)
+        
+        # Save the file
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        # Generate download URL (relative path)
+        download_url = f"/api/desktop/download/{filename}"
+        
+        # Parse changelog
+        changelog_list = []
+        try:
+            changelog_list = json.loads(changelog)
+            if not isinstance(changelog_list, list):
+                changelog_list = [str(changelog_list)]
+        except Exception:
+            # Fallback to newline separation
+            changelog_list = [line.strip() for line in changelog.split("\n") if line.strip()]
+            if not changelog_list:
+                changelog_list = [line.strip() for line in changelog.split(",") if line.strip()]
+                
+        # Insert new release into DB
+        from datetime import datetime
+        new_release = {
+            "version": version,
+            "downloadUrl": download_url,
+            "changelog": changelog_list,
+            "created_at": datetime.utcnow().isoformat()
+        }
+        result = await db.desktop_releases.insert_one(new_release)
+        inserted_id = result.inserted_id
+        
+        return {
+            "message": "Release uploaded successfully",
+            "release": {**new_release, "_id": str(inserted_id)}
+        }
+    except Exception as e:
+        err_msg = f"Error: {str(e)}\n{traceback.format_exc()}"
+        print("[Desktop Release Error]", err_msg, flush=True)
+
+
+
+
+# --- Content Calendar API ---
+@app.get("/content-calendar/all")
+async def get_all_content_calendar_entries(db=Depends(get_db)):
+    try:
+        return await crud.get_all_content_calendar_entries(db)
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return {"error": str(e), "trace": traceback.format_exc()}
+
+@app.get("/content-calendar")
+async def get_content_calendar_entries(clientId: str, monthYear: Optional[str] = None, db=Depends(get_db)):
+    try:
+        return await crud.get_content_calendar_entries(db, client_id=clientId, month_year=monthYear)
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return {"error": str(e), "trace": traceback.format_exc()}
+
+@app.post("/content-calendar", response_model=schemas.ContentCalendarEntry)
+async def create_content_calendar_entry(entry: schemas.ContentCalendarEntryCreate, db=Depends(get_db)):
+    return await crud.create_content_calendar_entry(db, entry.model_dump())
+
+@app.put("/content-calendar/{entry_id}", response_model=schemas.ContentCalendarEntry)
+async def update_content_calendar_entry(entry_id: str, entry: schemas.ContentCalendarEntryUpdate, db=Depends(get_db)):
+    updated = await crud.update_content_calendar_entry(db, entry_id, entry.model_dump(exclude_unset=True))
+    if not updated:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return updated
+
+@app.delete("/content-calendar/{entry_id}")
+async def delete_content_calendar_entry(entry_id: str, db=Depends(get_db)):
+    success = await crud.delete_content_calendar_entry(db, entry_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return {"message": "Entry deleted successfully"}
+
+@app.get("/content-calendar-settings", response_model=schemas.ContentCalendarSettingsBase)
+async def get_content_calendar_settings(clientId: str, monthYear: str, db=Depends(get_db)):
+    settings = await crud.get_content_calendar_settings(db, clientId, monthYear)
+    if settings:
+        return settings
+    # Return empty if not found
+    return {
+        "clientId": clientId,
+        "monthYear": monthYear
+    }
+
+@app.get("/content-calendar-settings/all", response_model=List[schemas.ContentCalendarSettingsBase])
+async def get_all_content_calendar_settings(monthYear: str, db=Depends(get_db)):
+    return await crud.get_all_content_calendar_settings(db, monthYear)
+
+@app.post("/content-calendar-settings", response_model=schemas.ContentCalendarSettings)
+async def upsert_content_calendar_settings(settings: schemas.ContentCalendarSettingsBase, db=Depends(get_db)):
+    return await crud.upsert_content_calendar_settings(
+        db, settings.clientId, settings.monthYear, settings.model_dump()
+    )
+
+# Dynamic Feedback Forms
+
+@app.post("/forms", response_model=schemas.FeedbackForm)
+async def create_feedback_form(form: schemas.FeedbackFormCreate, createdBy: Optional[str] = None, db=Depends(get_db)):
+    return await crud.create_feedback_form(db, form, createdBy=createdBy or "Unknown")
+
+@app.get("/forms/all/forms", response_model=List[schemas.FeedbackForm])
+async def read_all_forms(db=Depends(get_db)):
+    return await crud.get_all_feedback_forms(db)
+
+@app.get("/forms/all/responses", response_model=List[schemas.FeedbackResponse])
+async def read_all_responses(db=Depends(get_db)):
+    return await crud.get_all_feedback_responses(db)
 
 @app.get("/forms/{form_id}", response_model=schemas.FeedbackForm)
 async def get_feedback_form(form_id: str, db=Depends(get_db)):
@@ -2420,7 +3566,7 @@ async def upload_desktop_release(
             shutil.copyfileobj(file.file, buffer)
             
         # Generate download URL (relative path)
-        download_url = f"/uploads/desktop/{filename}"
+        download_url = f"/api/desktop/download/{filename}"
         
         # Parse changelog
         changelog_list = []
@@ -2454,7 +3600,167 @@ async def upload_desktop_release(
         print("[Desktop Release Error]", err_msg, flush=True)
         raise HTTPException(status_code=500, detail=err_msg)
 
+# --- Other Work API ---
+@app.get("/other-work/all", response_model=List[schemas.OtherWork])
+async def get_all_other_work(db=Depends(get_db)):
+    try:
+        return await crud.get_all_other_work(db)
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return []
+
+@app.post("/other-work", response_model=schemas.OtherWork)
+async def create_other_work(entry: schemas.OtherWorkCreate, db=Depends(get_db)):
+    return await crud.create_other_work(db, entry.model_dump())
+
+@app.put("/other-work/{entry_id}", response_model=schemas.OtherWork)
+async def update_other_work(entry_id: str, entry: schemas.OtherWorkUpdate, db=Depends(get_db)):
+    updated = await crud.update_other_work(db, entry_id, entry.model_dump(exclude_unset=True))
+    if not updated:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return updated
+
+@app.delete("/other-work/{entry_id}")
+async def delete_other_work(entry_id: str, db=Depends(get_db)):
+    success = await crud.delete_other_work(db, entry_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return {"message": "Entry deleted successfully"}
+
+# --- Work Transfer Request API ---
+@app.get("/work-transfer-requests", response_model=List[schemas.WorkTransferRequest])
+async def get_all_transfer_requests(task_id: Optional[str] = None, task_type: Optional[str] = None, taskType: Optional[str] = None, db=Depends(get_db)):
+    actual_task_type = taskType or task_type
+    return await crud.get_all_transfer_requests(db, task_id, actual_task_type)
+
+@app.post("/work-transfer-requests", response_model=schemas.WorkTransferRequest)
+async def create_transfer_request(request: schemas.WorkTransferRequestCreate, db=Depends(get_db)):
+    try:
+        return await crud.create_transfer_request(db, request.model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/work-transfer-requests/incoming/{employee_id}", response_model=List[schemas.WorkTransferRequest])
+async def get_incoming_transfer_requests(employee_id: str, task_type: Optional[str] = None, taskType: Optional[str] = None, db=Depends(get_db)):
+    actual_task_type = taskType or task_type
+    return await crud.get_incoming_transfer_requests(db, employee_id, actual_task_type)
+
+@app.get("/work-transfer-requests/outgoing/{employee_id}", response_model=List[schemas.WorkTransferRequest])
+async def get_outgoing_transfer_requests(employee_id: str, task_type: Optional[str] = None, taskType: Optional[str] = None, db=Depends(get_db)):
+    actual_task_type = taskType or task_type
+    return await crud.get_outgoing_transfer_requests(db, employee_id, actual_task_type)
+
+@app.put("/work-transfer-requests/{request_id}/respond", response_model=schemas.WorkTransferRequest)
+async def respond_to_transfer_request(request_id: str, payload: dict, db=Depends(get_db)):
+    status = payload.get("status")
+    if status not in ["Accepted", "Rejected"]:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    updated = await crud.respond_to_transfer_request(db, request_id, status)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Request not found")
+    return updated
+
+# --- Gallery Endpoints ---
+@app.get("/gallery", response_model=List[schemas.Gallery])
+async def read_galleries(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+    return await crud.get_galleries(db, skip, limit)
+
+@app.post("/gallery", response_model=schemas.Gallery)
+async def create_gallery_entry(gallery: schemas.GalleryCreate, db=Depends(get_db)):
+    return await crud.create_gallery(db, gallery)
+
+@app.put("/gallery/{gallery_id}", response_model=schemas.Gallery)
+async def update_gallery_entry(gallery_id: str, payload: dict, db=Depends(get_db)):
+    if "date" in payload and payload["date"] == "":
+        payload["date"] = None
+    updated = await crud.update_gallery(db, gallery_id, payload)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Gallery entry not found")
+    return updated
+
+@app.delete("/gallery/{gallery_id}")
+async def delete_gallery_entry(gallery_id: str, db=Depends(get_db)):
+    success = await crud.delete_gallery(db, gallery_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Gallery entry not found")
+    return {"status": "success"}
+
+# --- Task Preset Endpoints ---
+@app.get("/task-presets", response_model=List[schemas.TaskPreset])
+async def read_task_presets(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+    return await crud.get_task_presets(db, skip, limit)
+
+@app.post("/task-presets", response_model=schemas.TaskPreset)
+async def create_task_preset_entry(preset: schemas.TaskPresetCreate, db=Depends(get_db)):
+    return await crud.create_task_preset(db, preset)
+
+@app.put("/task-presets/{preset_id}", response_model=schemas.TaskPreset)
+async def update_task_preset_entry(preset_id: str, payload: dict, db=Depends(get_db)):
+    updated = await crud.update_task_preset(db, preset_id, payload)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Preset not found")
+    return updated
+
+    if not success:
+        raise HTTPException(status_code=404, detail="Preset not found")
+    return {"status": "success"}
+
+@app.post("/task-presets/{preset_id}/assign")
+async def assign_task_preset(preset_id: str, payload: dict, db=Depends(get_db)):
+    from bson import ObjectId
+    import datetime
+    
+    assignee_ids = payload.get("assignedToIds", [])
+    if not assignee_ids and payload.get("assignedToId"):
+        assignee_ids = [payload.get("assignedToId")]
+        
+    performer_id = payload.get("performedBy", "Unknown")
+    user_name = payload.get("userName", "Unknown")
+    
+    if not assignee_ids:
+        raise HTTPException(status_code=400, detail="assignee_ids is required")
+        
+    presets = await crud.get_task_presets(db, 0, 1000)
+    target_preset = next((p for p in presets if str(p.get("_id")) == preset_id or str(p.get("id")) == preset_id), None)
+    
+    if not target_preset:
+        raise HTTPException(status_code=404, detail="Preset not found")
+        
+    tasks = target_preset.get("tasks", [])
+    created_tasks = []
+    
+    for assignee_id in assignee_ids:
+        emp = await db.employees.find_one({"_id": ObjectId(assignee_id)})
+        assignee_name = f"{emp.get('firstName', '')} {emp.get('lastName', '')}".strip() if emp else "Unknown"
+        
+        for pt in tasks:
+            new_task = schemas.WMTaskCreate(
+                title=pt.get("title"),
+                description=pt.get("description", ""),
+                projectId=pt.get("projectId"),
+                projectName=pt.get("projectName"),
+                department=pt.get("department", "development"),
+                assignedToId=assignee_id,
+                assignedToName=assignee_name,
+                status="todo",
+                priority="medium",
+                estimatedHours=0,
+                createdBy=performer_id,
+                performedBy=performer_id,
+                userName=user_name,
+                postingDate=datetime.datetime.now().strftime("%Y-%m-%d"),
+                dueDate=datetime.datetime.now().strftime("%Y-%m-%d")
+            )
+            created = await crud.create_wm_task(db, new_task)
+            created_tasks.append(created)
+            
+    return {"message": "Success", "tasks_created": len(created_tasks), "tasks": created_tasks}
+
+
 if __name__ == "__main__":
-    port = int(os.environ.get("BACKEND_PORT", os.environ.get("PORT", 8001)))
-    print(f"Starting HRMS Backend on http://0.0.0.0:{port}")
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    port = int(os.environ.get("BACKEND_PORT", os.environ.get("PORT", 8000)))
+    print(f"Starting HRMS Backend on http://127.0.0.1:{port}")
+    uvicorn.run("main:app", host="127.0.0.1", port=port, reload=False)
