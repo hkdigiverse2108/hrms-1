@@ -1030,7 +1030,7 @@ export default function SettingsPage() {
 
                   <div className="space-y-1">
                     <Label className="text-sm font-bold">Other Meetings (Comma Separated)</Label>
-                    <p className="text-[10px] text-muted-foreground mb-1">These options will appear under 'Other -> Meeting' when punching in.</p>
+                    <p className="text-[10px] text-muted-foreground mb-1">These options will appear under 'Other -&gt; Meeting' when punching in.</p>
                     <input 
                       type="text" 
                       className="w-full h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold"
