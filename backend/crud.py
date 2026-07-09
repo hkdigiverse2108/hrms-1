@@ -2135,8 +2135,27 @@ async def _apply_punch_out_to_record(db, record: dict, close_dt: datetime, auto_
 
 async def auto_close_stale_open_sessions(db, employee_id: str) -> int:
     """Auto-close open attendance sessions from previous days (forgotten punch-out)."""
-    # Disabled automatic punch-out as requested by the user
-    return 0
+    closed_count = 0
+    today_str = get_now().strftime("%Y-%m-%d")
+    query_or = [{"employeeId": employee_id}]
+    if ObjectId.is_valid(employee_id):
+        query_or.append({"employeeId": ObjectId(employee_id)})
+    cursor = db.attendance.find({
+        "$or": query_or,
+        "checkOut": None,
+        "date": {"$ne": today_str}
+    })
+    async for record in cursor:
+        try:
+            default_end = parse_datetime(record["date"], "20:00:00")
+            close_dt = default_end if default_end else get_now()
+            if close_dt > get_now():
+                close_dt = get_now()
+            await _apply_punch_out_to_record(db, record, close_dt, auto_remark="Auto closed (forgotten punch-out)")
+            closed_count += 1
+        except Exception as e:
+            print(f"Error auto-closing old session for {employee_id}: {e}")
+    return closed_count
 
 
 async def get_attendance_status(db, employee_id: str):
@@ -3666,6 +3685,24 @@ async def create_task(db, task: schemas.TaskCreate):
     
     task_dict["_id"] = result.inserted_id
     await log_activity(db, "Created", performedBy, userName, f"Created a new task '{task_dict.get('title')}'", taskId=taskId)
+    
+    # Send notification to assignee(s)
+    try:
+        assignee_ids = task_dict.get("assignedToIds", [])
+        if task_dict.get("assignedToId") and task_dict["assignedToId"] not in assignee_ids:
+            assignee_ids.append(task_dict["assignedToId"])
+        for assignee_id in assignee_ids:
+            if assignee_id and assignee_id != performedBy:
+                await create_notification(db, schemas.NotificationCreate(
+                    employee_id=assignee_id,
+                    title="New Task Assigned",
+                    message=f"You have been assigned task '{task_dict.get('title')}'.",
+                    type="task",
+                    reference_id=taskId
+                ))
+    except Exception as e_notif:
+        print(f"Error notifying assignee on task create: {e_notif}")
+    
     return fix_id(task_dict)
 
 async def update_task(db, task_id: str, task: schemas.TaskUpdate):
@@ -3837,7 +3874,7 @@ async def create_wm_task(db, task: schemas.WMTaskCreate):
                 employee_id=assignee_id,
                 title="New Task Assigned",
                 message=f"You have been assigned task '{task_dict.get('title')}' in project '{task_dict.get('projectName', 'General')}'.",
-                type="task",
+                type="wm-task",
                 reference_id=taskId
             ))
     except Exception as e_notif:
@@ -4029,7 +4066,7 @@ async def update_wm_task(db, task_id: str, task_update: schemas.WMTaskUpdate):
                     employee_id=new_assignee_id,
                     title="Task Re-assigned",
                     message=f"You have been assigned task '{update_data.get('title') or (old_task.get('title') if old_task else '')}' in project '{update_data.get('projectName') or (old_task.get('projectName') if old_task else 'General')}'.",
-                    type="task",
+                    type="wm-task",
                     reference_id=task_id
                 ))
         except Exception as e_notif:
@@ -4049,7 +4086,7 @@ async def update_wm_task(db, task_id: str, task_update: schemas.WMTaskUpdate):
                         employee_id=creator_id,
                         title="Task Ready for Review",
                         message=f"{(old_task.get('assignedToName') if old_task else 'An employee')} has submitted task '{(old_task.get('title') if old_task else '')}' for your review.",
-                        type="task",
+                        type="wm-task",
                         reference_id=task_id
                     ))
         except Exception as e_notif:
@@ -5232,8 +5269,18 @@ async def get_messages(db, sender_id: str = None, receiver_id: str = None, group
     except Exception:
         employee_cache = {}
 
+    user_id = None
+    if group_id:
+        user_id = receiver_id
+    else:
+        user_id = sender_id
+    
     fixed_rows = []
     for row in rows:
+        deleted_for = row.get("deletedFor") or []
+        if user_id and str(user_id) in [str(d) for d in deleted_for]:
+            continue
+        
         fixed = fix_id(row)
         if "senderId" in fixed and fixed["senderId"]:
             fixed["senderId"] = str(fixed["senderId"])
@@ -5244,6 +5291,8 @@ async def get_messages(db, sender_id: str = None, receiver_id: str = None, group
             fixed["receiverId"] = str(fixed["receiverId"])
         if "groupId" in fixed and fixed["groupId"]:
             fixed["groupId"] = str(fixed["groupId"])
+        if "deletedFor" in fixed:
+            del fixed["deletedFor"]
         fixed_rows.append(fixed)
     return fixed_rows
 
@@ -5255,9 +5304,19 @@ async def update_message(db, message_id: str, text: str):
     doc = await db.messages.find_one({"_id": ObjectId(message_id)})
     return fix_id(doc)
 
-async def delete_message(db, message_id: str):
-    await db.messages.delete_one({"_id": ObjectId(message_id)})
-    return True
+async def delete_message(db, message_id: str, delete_for: str = "everyone", user_id: str = None):
+    if delete_for == "me" and user_id:
+        await db.messages.update_one(
+            {"_id": ObjectId(message_id)},
+            {
+                "$push": {"deletedFor": user_id},
+                "$set": {"text": "You deleted this message", "attachmentUrl": None, "attachmentName": None}
+            }
+        )
+        return {"deleted": "for_me"}
+    else:
+        await db.messages.delete_one({"_id": ObjectId(message_id)})
+        return {"deleted": "for_everyone"}
 
 async def mark_messages_as_seen(db, other_id: str, user_id: str):
     is_group = await db.chat_groups.find_one({"_id": ObjectId(other_id)}) if len(other_id) == 24 else None
