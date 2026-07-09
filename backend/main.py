@@ -1795,9 +1795,20 @@ async def update_chat_message(message_id: str, update: schemas.ChatMessageUpdate
     return updated
 
 @app.delete("/chat/messages/{message_id}")
-async def delete_chat_message(message_id: str, db=Depends(get_db)):
-    await crud.delete_message(db, message_id)
-    return {"message": "Message deleted successfully"}
+async def delete_chat_message(message_id: str, request: Request, deleteFor: str = "everyone", db=Depends(get_db)):
+    performed_by = None
+    try:
+        body = await request.json()
+        performed_by = body.get("performedBy")
+    except Exception:
+        pass
+    result = await crud.delete_message(db, message_id, delete_for=deleteFor, user_id=performed_by)
+    try:
+        from websocket import manager as ws_manager
+        await ws_manager.broadcast_all("message_deleted", {"messageId": message_id, "deleteFor": deleteFor})
+    except Exception:
+        pass
+    return result
 
 @app.post("/chat/mark-seen/{sender_id}/{receiver_id}")
 async def mark_messages_as_seen(sender_id: str, receiver_id: str, db=Depends(get_db)):
