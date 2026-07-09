@@ -1008,6 +1008,10 @@ class ClientBase(BaseModel):
     assignedApproverName: Optional[str] = None
     assignedPosterId: Optional[str] = None
     assignedPosterName: Optional[str] = None
+    assignedCaptionWriterId: Optional[str] = None
+    assignedCaptionWriterName: Optional[str] = None
+    assignedThumbnailDesignerId: Optional[str] = None
+    assignedThumbnailDesignerName: Optional[str] = None
     campaigns: Optional[RobustCampaigns] = []
 
 class ClientCreate(ClientBase):
@@ -1080,6 +1084,10 @@ class ClientUpdate(BaseModel):
     assignedApproverName: Optional[str] = None
     assignedPosterId: Optional[str] = None
     assignedPosterName: Optional[str] = None
+    assignedCaptionWriterId: Optional[str] = None
+    assignedCaptionWriterName: Optional[str] = None
+    assignedThumbnailDesignerId: Optional[str] = None
+    assignedThumbnailDesignerName: Optional[str] = None
 
 class Client(ClientBase):
     id: str

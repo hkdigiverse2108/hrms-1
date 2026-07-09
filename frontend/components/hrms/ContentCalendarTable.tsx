@@ -152,15 +152,15 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
   const tableHeaders = [
     "Posting Date", "Posting Day", "Post/Reel", "Topic", "Concept", "Reference",
     "Script Date", "Script Link", "Shoot Date", "Shoot Link", "Editing Start",
-    "Final Reel Link", "Final Post Link", "Approval by Het", "Is Approved", "Thumbnail Link",
-    "Caption", "Posting Link IG", "Actual Posting Date", "Remark", ""
+    "Final Reel Link", "Final Post Link", "Approval by Het", "Is Approved", "Thumbnail Date", "Thumbnail Link",
+    "Caption Date", "Caption", "Posting Link IG", "Actual Posting Date", "Remark", ""
   ];
 
   const fieldKeys = [
     "postingDate", "postingDay", "postReel", "topic", "concept", "reference",
     "scriptDate", "scriptLink", "shootDate", "shootLink", "editingStart",
-    "finalReelLink", "finalPostLink", "approval", "isApproved", "thumbnailLink",
-    "caption", "postingLinkOfIg", "actualPostingDate", "remark"
+    "finalReelLink", "finalPostLink", "approval", "isApproved", "thumbnailDate", "thumbnailLink",
+    "captionDate", "caption", "postingLinkOfIg", "actualPostingDate", "remark"
   ];
   
   const [selectedColumnsForPdf, setSelectedColumnsForPdf] = useState<string[]>(tableHeaders.filter(h => h !== ""));
@@ -383,6 +383,8 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
           payload.scriptDate = subtractDays(d, scriptOffset);
           payload.shootDate = subtractDays(d, shootOffset);
           payload.editingStart = subtractDays(d, editingOffset);
+          payload.captionDate = payload.editingStart;
+          payload.thumbnailDate = payload.editingStart;
           payload.approval = subtractDays(d, approvalOffset);
         }
       } catch (e) {
@@ -1432,20 +1434,28 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
                                 value={editForm[key] || ""}
                                 onChange={(e) => handleDaySelect(e.target.value)}
                               />
-                            ) : ["scriptDate", "shootDate", "editingStart", "actualPostingDate", "approval"].includes(key) ? (
-                              <Input 
-                                type="date"
-                                className="h-8 text-xs px-2 py-1 min-w-[120px]"
-                                value={editForm[key] || ""}
-                                onChange={(e) => setEditForm({ ...editForm, [key]: e.target.value })}
-                              />
+                            ) : ["scriptDate", "shootDate", "editingStart", "captionDate", "thumbnailDate", "actualPostingDate", "approval"].includes(key) ? (
+                              (key === 'thumbnailDate' && editForm.postReel === 'Post') ? (
+                                <div className="text-slate-400 text-center w-full">-</div>
+                              ) : (
+                                <Input 
+                                  type="date"
+                                  className="h-8 text-xs px-2 py-1 min-w-[120px]"
+                                  value={editForm[key] || ((key === 'captionDate' || key === 'thumbnailDate') ? (editForm.editingStart || "") : "")}
+                                  onChange={(e) => setEditForm({ ...editForm, [key]: e.target.value })}
+                                />
+                              )
                             ) : (
-                              <Input 
-                                className="h-8 text-xs px-2 py-1"
-                                value={editForm[key] || ""}
-                                onChange={(e) => setEditForm({ ...editForm, [key]: e.target.value })}
-                                placeholder={key === "reference" || key.toLowerCase().includes("link") ? "Enter link(s) separated by spaces or commas..." : ""}
-                              />
+                              (key === 'thumbnailLink' && editForm.postReel === 'Post') ? (
+                                <div className="text-slate-400 text-center w-full">-</div>
+                              ) : (
+                                <Input 
+                                  className="h-8 text-xs px-2 py-1"
+                                  value={editForm[key] || ""}
+                                  onChange={(e) => setEditForm({ ...editForm, [key]: e.target.value })}
+                                  placeholder={key === "reference" || key.toLowerCase().includes("link") ? "Enter link(s) separated by spaces or commas..." : ""}
+                                />
+                              )
                             )
                           ) : (
                              <div 
@@ -1454,6 +1464,9 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
                                title={entry[key] || ""}
                              >
                                {(() => {
+                                 if ((key === 'thumbnailDate' || key === 'thumbnailLink') && entry.postReel === 'Post') {
+                                   return <span className="text-slate-400 text-center w-full">-</span>;
+                                 }
                                  if (entry[key] && (key.toLowerCase().includes("link") || key === "reference")) {
                                    const matches = entry[key].match(/(https?:\/\/[^\s,;]+|www\.[^\s,;]+)/gi);
                                    if (matches && matches.length > 0) {
@@ -1492,7 +1505,7 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
                                  return (
                                    <>
                                      <span className="truncate flex-1">
-                                       {formatDateDisplay(entry[key]) || null}
+                                       {formatDateDisplay(entry[key] || ((key === 'captionDate' || key === 'thumbnailDate') ? entry.editingStart : null)) || null}
                                      </span>
                                      {key === "postingDate" && isDue && (
                                        <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-100 text-red-800 shrink-0">

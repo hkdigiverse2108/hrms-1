@@ -218,6 +218,8 @@ export default function CreativeClientsPage() {
   const [shooterId, setShooterId] = useState("");
   const [approverId, setApproverId] = useState("");
   const [posterId, setPosterId] = useState("");
+  const [captionWriterId, setCaptionWriterId] = useState("");
+  const [thumbnailDesignerId, setThumbnailDesignerId] = useState("");
 
   const [logsOpen, setLogsOpen] = useState(false);
   const [clientLogs, setClientLogs] = useState<any[]>([]);
@@ -659,6 +661,8 @@ export default function CreativeClientsPage() {
     const shooter = creativeEmployees.find(e => e.id === shooterId);
     const approver = creativeEmployees.find(e => e.id === approverId);
     const poster = creativeEmployees.find(e => e.id === posterId);
+    const captionWriter = creativeEmployees.find(e => e.id === captionWriterId);
+    const thumbnailDesigner = creativeEmployees.find(e => e.id === thumbnailDesignerId);
     
     try {
       const res = await fetch(`${API_URL}/projects/${project.id}`, {
@@ -677,6 +681,10 @@ export default function CreativeClientsPage() {
           assignedApproverName: approverId === "none" ? null : approver?.name || null,
           assignedPosterId: posterId === "none" ? null : posterId || null,
           assignedPosterName: posterId === "none" ? null : poster?.name || null,
+          assignedCaptionWriterId: captionWriterId === "none" ? null : captionWriterId || null,
+          assignedCaptionWriterName: captionWriterId === "none" ? null : captionWriter?.name || null,
+          assignedThumbnailDesignerId: thumbnailDesignerId === "none" ? null : thumbnailDesignerId || null,
+          assignedThumbnailDesignerName: thumbnailDesignerId === "none" ? null : thumbnailDesigner?.name || null,
           performedBy: user?.id,
           userName: user?.name || `${user?.firstName} ${user?.lastName}`,
         }),
@@ -803,7 +811,9 @@ export default function CreativeClientsPage() {
                          (p.assignedPostDesignerId || c.assignedPostDesignerId) === creativeFilter ||
                          (p.assignedShooterId || c.assignedShooterId) === creativeFilter ||
                          (p.assignedApproverId || c.assignedApproverId) === creativeFilter ||
-                         (p.assignedPosterId || c.assignedPosterId) === creativeFilter;
+                         (p.assignedPosterId || c.assignedPosterId) === creativeFilter ||
+                         (p.assignedCaptionWriterId || c.assignedCaptionWriterId) === creativeFilter ||
+                         (p.assignedThumbnailDesignerId || c.assignedThumbnailDesignerId) === creativeFilter;
       if (!isAssigned) return false;
     }
 
@@ -1290,6 +1300,8 @@ export default function CreativeClientsPage() {
                               setShooterId(p.assignedShooterId || client.assignedShooterId || "none");
                               setApproverId(p.assignedApproverId || client.assignedApproverId || "none");
                               setPosterId(p.assignedPosterId || client.assignedPosterId || "none");
+                              setCaptionWriterId(p.assignedCaptionWriterId || client.assignedCaptionWriterId || "none");
+                              setThumbnailDesignerId(p.assignedThumbnailDesignerId || client.assignedThumbnailDesignerId || "none");
                               setAssignTeamOpen(true);
                             }}>
                               <UserPlus className="w-4 h-4 mr-2" /> Assign Creative Team
@@ -1665,6 +1677,24 @@ export default function CreativeClientsPage() {
                 value={posterId} 
                 onChange={setPosterId} 
                 placeholder="Select poster..." 
+                employees={creativeEmployees} 
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Caption</Label>
+              <SearchableEmployeeSelect 
+                value={captionWriterId} 
+                onChange={setCaptionWriterId} 
+                placeholder="Select caption writer..." 
+                employees={creativeEmployees} 
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Thumbnail</Label>
+              <SearchableEmployeeSelect 
+                value={thumbnailDesignerId} 
+                onChange={setThumbnailDesignerId} 
+                placeholder="Select thumbnail designer..." 
                 employees={creativeEmployees} 
               />
             </div>
