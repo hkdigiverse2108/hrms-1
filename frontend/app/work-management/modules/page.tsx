@@ -457,6 +457,39 @@ export default function ModulesPage() {
       });
       
       if (res.ok) {
+        for (const mod of modulesToAdd) {
+          if (mod.tasks && mod.tasks.length > 0) {
+            for (const pt of mod.tasks) {
+              const taskPayload = {
+                title: pt.title,
+                description: pt.description || "",
+                projectId: selectedProject.id,
+                projectName: selectedProject.title,
+                assignedToId: mod.assignedToId || "",
+                assignedToName: mod.assignedToName || "Unassigned",
+                dueDate: mod.dueDate || null,
+                moduleName: mod.name,
+                moduleDeadline: mod.dueDate || null,
+                status: "todo",
+                priority: mod.priority || "medium",
+                estimatedHours: pt.estimatedHours || 0,
+                phase: mod.phaseName || null,
+                performedBy: user?.id || "Unknown",
+                userName: user?.name || "User"
+              };
+              try {
+                await fetch(`${API_URL}/wm-tasks`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(taskPayload)
+                });
+              } catch (e) {
+                console.error("Error creating preset module task:", e);
+              }
+            }
+          }
+        }
+        
         toast.success("Preset applied successfully!");
         setPresetModalOpen(false);
         fetchData(); 

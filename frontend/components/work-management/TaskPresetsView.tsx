@@ -118,7 +118,7 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
     } else {
       const validModules = formData.modules.filter(m => m.name.trim() !== "").map(m => ({
         ...m,
-        tasks: []
+        tasks: (m.tasks || []).filter((t: any) => t.title.trim() !== "")
       }));
       if (validModules.length === 0) return toast.error("At least one valid module is required");
       payload.modules = validModules;
@@ -559,9 +559,9 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
                             <PlusCircle className="w-3.5 h-3.5" /> Add Task
                           </Button>
                         </div>
-                        <div className="space-y-2">
+                        <div className="grid grid-cols-2 gap-3">
                           {module.tasks?.map((task: any, tIndex: number) => (
-                            <div key={tIndex} className="flex gap-2 items-start bg-white p-2 rounded border border-slate-100 relative group">
+                            <div key={tIndex} className="flex gap-2 items-center bg-white p-2 rounded border border-slate-200 relative group">
                               <Input
                                 id={`module-${mIndex}-task-${tIndex}-title`}
                                 placeholder="Task Title *"
@@ -579,13 +579,7 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
                                     }, 50);
                                   }
                                 }}
-                                className="h-8 text-xs font-medium w-1/2"
-                              />
-                              <Input
-                                placeholder="Description (optional)"
-                                value={task.description}
-                                onChange={(e) => updateModuleTask(mIndex, tIndex, "description", e.target.value)}
-                                className="h-8 text-xs bg-slate-50 flex-1"
+                                className="h-8 text-xs font-medium flex-1 bg-slate-50/50"
                               />
                               <Button variant="ghost" size="icon" onClick={() => removeTaskFromModule(mIndex, tIndex)} className="h-8 w-8 text-slate-400 hover:text-red-500 shrink-0">
                                 <X className="w-3.5 h-3.5" />
