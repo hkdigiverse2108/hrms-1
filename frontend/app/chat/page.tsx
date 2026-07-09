@@ -1024,19 +1024,20 @@ const SmartPreviewAttachment = ({ msg }: { msg: any }) => {
 const ImageWithLoader = ({ src, alt, className, imgClassName, onLoad, onClick }: { src: string; alt: string; className?: string; imgClassName?: string; onLoad?: () => void; onClick?: () => void }) => {
   const [loaded, setLoaded] = useState(false);
   return (
-    <div className={cn("overflow-hidden", className)}>
+    <div className={cn("relative overflow-hidden", className)} style={loaded ? {} : { minHeight: 180 }}>
       {!loaded && (
-        <div className="flex items-center justify-center bg-slate-100 animate-pulse rounded-lg w-full min-h-[180px]">
+        <div className="absolute inset-0 flex items-center justify-center bg-slate-100 animate-pulse rounded-lg z-10">
           <div className="w-6 h-6 border-2 border-slate-300 border-t-slate-500 rounded-full animate-spin" />
         </div>
       )}
       <img
         src={src}
         alt={alt}
-        className={cn("w-full h-full", imgClassName || "object-contain", loaded ? "block" : "hidden")}
+        className={cn("w-full h-full", imgClassName || "object-contain")}
+        style={loaded ? {} : { opacity: 0 }}
         onLoad={() => { setLoaded(true); onLoad?.(); }}
         onClick={onClick}
-        loading="lazy"
+        onError={() => setLoaded(true)}
       />
     </div>
   );
