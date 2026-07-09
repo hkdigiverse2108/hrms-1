@@ -827,6 +827,22 @@ async def login(login_data: schemas.LoginRequest, db=Depends(get_db)):
     if user.get("status", "").lower() == "inactive":
         raise HTTPException(status_code=403, detail="Your account has been deactivated. Please contact the administrator.")
     
+    # Check OTP requirements
+    settings = await db.system_settings.find_one({}) or {}
+    otp_roles = settings.get("otpRequiredRoles", [])
+    
+    raw_role = user.get("role", "").strip().lower()
+    if raw_role == "admin":
+        mapped_role = "admin"
+    elif raw_role == "hr":
+        mapped_role = "hr"
+    else:
+        mapped_role = "employee"
+        
+    if mapped_role not in otp_roles:
+        # Skip OTP and return token directly
+        return {"message": "Login successful", "user": user, "token": user["token"], "require_otp": False}
+
     # Generate 6-digit OTP
     otp = str(random.randint(100000, 999999))
     expiry = datetime.now(pytz.timezone('Asia/Kolkata')) + timedelta(minutes=5)

@@ -168,6 +168,31 @@ export default function SettingsPage() {
     }
   };
 
+  const handleToggleOtpRole = async (role: string, checked: boolean) => {
+    setIsUpdating(true);
+    try {
+      const currentRoles = settings?.otpRequiredRoles || [];
+      let newRoles = [...currentRoles];
+      if (checked && !newRoles.includes(role)) {
+        newRoles.push(role);
+      } else if (!checked && newRoles.includes(role)) {
+        newRoles = newRoles.filter(r => r !== role);
+      }
+      const res = await fetch(`${API_URL}/system-settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ otpRequiredRoles: newRoles })
+      });
+      if (res.ok) {
+        setSettings(await res.json());
+      }
+    } catch (err) {
+      console.error("Error updating settings:", err);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const handleUpdateShiftSettings = async (key: string, value: any) => {
     setIsUpdating(true);
     try {
@@ -222,7 +247,8 @@ export default function SettingsPage() {
           defaultShootDateOffset: settings?.defaultShootDateOffset !== undefined ? settings.defaultShootDateOffset : null,
           defaultEditingStartOffset: settings?.defaultEditingStartOffset !== undefined ? settings.defaultEditingStartOffset : null,
           defaultApprovalOffset: settings?.defaultApprovalOffset !== undefined ? settings.defaultApprovalOffset : null,
-          addHoldDaysToEndDate: settings?.addHoldDaysToEndDate !== undefined ? settings.addHoldDaysToEndDate : true
+          addHoldDaysToEndDate: settings?.addHoldDaysToEndDate !== undefined ? settings.addHoldDaysToEndDate : true,
+          otpRequiredRoles: settings?.otpRequiredRoles || []
         })
       });
       if (res.ok) {
@@ -439,6 +465,48 @@ export default function SettingsPage() {
                           onCheckedChange={handleToggleAutoInactiveAfterResignation}
                           disabled={isUpdating || !canEditSettings}
                         />
+                      )}
+                    </div>
+                    <div className="flex flex-col p-4 rounded-xl border border-slate-100 bg-slate-50/30 mt-4 gap-4">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <Label className="text-[14px] font-bold">Require OTP Validation on Login</Label>
+                          <Badge variant="outline" className="text-[9px] h-4 font-bold bg-white">SECURITY</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground max-w-[400px]">
+                          Select which roles require an OTP sent to their email during login.
+                        </p>
+                      </div>
+                      
+                      {isLoading ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-brand-teal" />
+                      ) : (
+                        <div className="flex flex-col gap-3 ml-2">
+                          <div className="flex items-center gap-2">
+                            <Switch 
+                              checked={settings?.otpRequiredRoles?.includes("admin") ?? false}
+                              onCheckedChange={(c) => handleToggleOtpRole("admin", c)}
+                              disabled={isUpdating || !canEditSettings}
+                            />
+                            <Label className="text-xs cursor-pointer">Admin</Label>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Switch 
+                              checked={settings?.otpRequiredRoles?.includes("hr") ?? false}
+                              onCheckedChange={(c) => handleToggleOtpRole("hr", c)}
+                              disabled={isUpdating || !canEditSettings}
+                            />
+                            <Label className="text-xs cursor-pointer">HR</Label>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Switch 
+                              checked={settings?.otpRequiredRoles?.includes("employee") ?? false}
+                              onCheckedChange={(c) => handleToggleOtpRole("employee", c)}
+                              disabled={isUpdating || !canEditSettings}
+                            />
+                            <Label className="text-xs cursor-pointer">Employee (and others)</Label>
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>

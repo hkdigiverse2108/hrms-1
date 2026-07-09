@@ -1539,6 +1539,7 @@ class SystemSettingsBase(BaseModel):
     invoiceClientDepartments: Optional[List[str]] = []
     showNamesInRemarksToAdmin: Optional[bool] = True
     autoInactiveAfterResignation: Optional[bool] = False
+    otpRequiredRoles: Optional[List[str]] = []
 
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
@@ -1576,6 +1577,7 @@ class SystemSettingsUpdate(BaseModel):
     invoiceClientDepartments: Optional[List[str]] = None
     showNamesInRemarksToAdmin: Optional[bool] = None
     autoInactiveAfterResignation: Optional[bool] = None
+    otpRequiredRoles: Optional[List[str]] = None
 
 class SystemSettings(SystemSettingsBase):
     id: str
