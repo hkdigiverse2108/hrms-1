@@ -167,6 +167,26 @@ async function main() {
       throw new Error(loginData.detail || `HTTP ${loginRes.status}: Authentication failed`);
     }
     
+    if (loginData.require_otp) {
+      console.log("OTP has been sent to your email. Please check your inbox/spam folder.");
+      const otp = await ask("Enter OTP: ");
+      console.log("\nVerifying OTP...");
+      const verifyRes = await fetch(`${apiUrl}/login/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, otp: otp.trim() })
+      });
+      const verifyText = await verifyRes.text();
+      try {
+        loginData = JSON.parse(verifyText);
+      } catch (parseErr) {
+        throw new Error(`Server returned non-JSON response: ${verifyText.substring(0, 200)}`);
+      }
+      if (!verifyRes.ok) {
+        throw new Error(loginData.detail || `HTTP ${verifyRes.status}: OTP verification failed`);
+      }
+    }
+    
     if (loginData.user?.role?.toLowerCase() !== 'admin') {
       throw new Error("Only Admin users are authorized to publish desktop releases");
     }
