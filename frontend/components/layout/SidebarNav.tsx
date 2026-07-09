@@ -117,6 +117,9 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (isAdmin || user?.role === 'HR' || user?.role === 'Team Leader' || checkPermission('creative', 'canView')) {
       workManagementChildren.push(getItem(<Link href="/work-management/smm">Social Media Management</Link>, "/work-management/smm"));
     }
+    if (isAdmin || checkPermission('research', 'canView')) {
+      workManagementChildren.push(getItem(<Link href="/work-management/research">Research</Link>, "/work-management/research"));
+    }
 
 
     const employeeChildren: MenuItem[] = [];

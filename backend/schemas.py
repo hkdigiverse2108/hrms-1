@@ -2494,3 +2494,29 @@ class Gallery(GalleryBase):
     id: str
     class Config:
         from_attributes = True
+
+# --- Research ---
+class ResearchBase(BaseModel):
+    title: str
+    description: str
+    link: Optional[str] = ''
+    createdBy: str
+    createdByName: str
+    sharedWith: List[str] = []
+    projectId: Optional[str] = ''
+
+class ResearchCreate(ResearchBase):
+    pass
+
+class ResearchUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    link: Optional[str] = None
+    sharedWith: Optional[List[str]] = None
+
+class ResearchResponse(ResearchBase):
+    id: str
+    createdAt: datetime
+    class Config:
+        from_attributes = True
+

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, File, Form, UploadFile, Request, Response, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, HTTPException, Depends, File, Form, UploadFile, Request, Response, WebSocket, WebSocketDisconnect, Query, Header
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
@@ -3759,6 +3759,30 @@ async def assign_task_preset(preset_id: str, payload: dict, db=Depends(get_db)):
             
     return {"message": "Success", "tasks_created": len(created_tasks), "tasks": created_tasks}
 
+
+# --- Research API ---
+@app.post("/research", response_model=schemas.ResearchResponse)
+async def create_research(entry: schemas.ResearchCreate, db=Depends(get_db)):
+    return await crud.create_research(db, entry.model_dump())
+
+@app.get("/research", response_model=List[schemas.ResearchResponse])
+async def get_research(user_id: str = Header(...), role: str = Header(...), db=Depends(get_db)):
+    is_admin = role.lower() == "admin"
+    return await crud.get_research(db, user_id, is_admin)
+
+@app.put("/research/{entry_id}", response_model=schemas.ResearchResponse)
+async def update_research(entry_id: str, entry: schemas.ResearchUpdate, db=Depends(get_db)):
+    updated = await crud.update_research(db, entry_id, entry.model_dump(exclude_unset=True))
+    if not updated:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return updated
+
+@app.delete("/research/{entry_id}")
+async def delete_research(entry_id: str, db=Depends(get_db)):
+    success = await crud.delete_research(db, entry_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return {"message": "Entry deleted successfully"}
 
 if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", os.environ.get("PORT", 8000)))

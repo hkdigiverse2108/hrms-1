@@ -8700,3 +8700,39 @@ async def update_task_preset(db, preset_id: str, update: dict):
 
 async def delete_task_preset(db, preset_id: str):
     return await delete_item(db, "task_presets", preset_id)
+
+# --- Research ---
+async def create_research(db, data: dict):
+    data["createdAt"] = get_now()
+    result = await db.research.insert_one(data)
+    created = await db.research.find_one({"_id": result.inserted_id})
+    return fix_id(created)
+
+async def get_research(db, user_id: str, is_admin: bool):
+    if is_admin:
+        cursor = db.research.find().sort("createdAt", -1)
+    else:
+        cursor = db.research.find({
+            "$or": [
+                {"createdBy": user_id},
+                {"sharedWith": user_id}
+            ]
+        }).sort("createdAt", -1)
+    
+    research_list = await cursor.to_list(length=None)
+    return [fix_id(r) for r in research_list]
+
+async def update_research(db, research_id: str, data: dict):
+    from bson import ObjectId
+    if not data:
+        updated = await db.research.find_one({"_id": ObjectId(research_id)})
+        return fix_id(updated) if updated else None
+    
+    await db.research.update_one({"_id": ObjectId(research_id)}, {"$set": data})
+    updated = await db.research.find_one({"_id": ObjectId(research_id)})
+    return fix_id(updated) if updated else None
+
+async def delete_research(db, research_id: str):
+    from bson import ObjectId
+    result = await db.research.delete_one({"_id": ObjectId(research_id)})
+    return result.deleted_count > 0

@@ -125,6 +125,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { moduleName: 'clients', displayName: 'Clients', tabUrl: '/work-management/clients' },
       { moduleName: 'marketing', displayName: 'Digital Marketing', tabUrl: '/work-management/digital-marketing' },
       { moduleName: 'creative', displayName: 'Social Media Management', tabUrl: '/work-management/smm' },
+      { moduleName: 'research', displayName: 'Research', tabUrl: '/work-management/research' },
     ]
   },
   {
