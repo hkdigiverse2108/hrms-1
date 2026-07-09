@@ -294,7 +294,7 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
             <Loader2 className="w-8 h-8 animate-spin text-brand-teal" />
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm flex-1 flex flex-col overflow-hidden">
             <Table>
               <TableHeader className="bg-slate-50">
                 <TableRow>

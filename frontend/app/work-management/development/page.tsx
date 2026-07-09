@@ -1285,7 +1285,7 @@ export default function TasksPage() {
                           />
                           All Employees
                         </CommandItem>
-                        {employees.map((emp) => {
+                        {employees.filter(e => e.department?.toLowerCase() === 'development').map((emp) => {
                           const fullName = `${emp.firstName} ${emp.lastName}`;
                           return (
                             <CommandItem
