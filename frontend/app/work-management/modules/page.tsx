@@ -1400,11 +1400,29 @@ export default function ModulesPage() {
                     const modules = selectedProject.modules || [];
                     
                     const renderPhaseTable = (phaseName: string | null, displayName: string) => {
+                      const stageOrder: Record<string, number> = {
+                        "in_progress": 1,
+                        "in-progress": 1,
+                        "bugs": 2,
+                        "review": 3,
+                        "todo": 4,
+                        "to_do": 4,
+                        "onhold": 5,
+                        "on_hold": 5,
+                        "completed": 6
+                      };
+
                       const phaseModules = modules.filter((m: any) => {
                         const matchPhase = phaseName === null ? !m.phaseName : m.phaseName === phaseName;
                         const matchAssignee = filterAssignee === "all" || 
                           (filterAssignee === "unassigned" ? !m.assignedToId : m.assignedToId === filterAssignee);
                         return matchPhase && matchAssignee;
+                      }).sort((a: any, b: any) => {
+                        const stageA = a.stage?.toLowerCase() || "todo";
+                        const stageB = b.stage?.toLowerCase() || "todo";
+                        const orderA = stageOrder[stageA] || 99;
+                        const orderB = stageOrder[stageB] || 99;
+                        return orderA - orderB;
                       });
 
                       // If there are no modules in this phase, and user cannot manage modules, hide the slab
