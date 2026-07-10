@@ -1448,6 +1448,14 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
                             ) : (
                               (key === 'thumbnailLink' && editForm.postReel === 'Post') ? (
                                 <div className="text-slate-400 text-center w-full">-</div>
+                              ) : key === 'caption' ? (
+                                <textarea
+                                  className="w-full text-xs p-1.5 border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-teal min-h-[60px] resize-y"
+                                  value={editForm[key] || ""}
+                                  onChange={(e) => setEditForm({ ...editForm, [key]: e.target.value })}
+                                  placeholder="Enter caption with spacing..."
+                                  rows={3}
+                                />
                               ) : (
                                 <Input 
                                   className="h-8 text-xs px-2 py-1"
@@ -1507,6 +1515,38 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
                                      <span className="truncate flex-1">
                                        {formatDateDisplay(entry[key] || ((key === 'captionDate' || key === 'thumbnailDate') ? entry.editingStart : null)) || null}
                                      </span>
+                                     {key === "caption" && entry[key] && (
+                                       <Button
+                                         variant="ghost"
+                                         size="icon"
+                                         className="h-5 w-5 ml-1 p-0 text-slate-400 hover:text-brand-teal shrink-0 bg-transparent shadow-none hover:bg-slate-100"
+                                         onClick={(e) => {
+                                           e.stopPropagation();
+                                           const rawText = String(entry[key] || "");
+                                           const plainText = rawText.replace(/\r?\n/g, "\r\n");
+                                           const htmlText = rawText.replace(/\r?\n/g, "<br>");
+                                           
+                                           try {
+                                             const clipboardItem = new ClipboardItem({
+                                               "text/plain": new Blob([plainText], { type: "text/plain" }),
+                                               "text/html": new Blob([htmlText], { type: "text/html" })
+                                             });
+                                             navigator.clipboard.write([clipboardItem]).then(() => {
+                                               toast.success("Caption copied with formatting!");
+                                             }).catch(() => {
+                                               navigator.clipboard.writeText(plainText);
+                                               toast.success("Caption copied!");
+                                             });
+                                           } catch (err) {
+                                             navigator.clipboard.writeText(plainText);
+                                             toast.success("Caption copied!");
+                                           }
+                                         }}
+                                         title="Copy Caption"
+                                       >
+                                         <Copy className="h-3 w-3" />
+                                       </Button>
+                                     )}
                                      {key === "postingDate" && isDue && (
                                        <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-100 text-red-800 shrink-0">
                                          Due
