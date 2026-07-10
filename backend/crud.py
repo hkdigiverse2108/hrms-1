@@ -2174,7 +2174,7 @@ async def get_attendance_status(db, employee_id: str):
     record = records[0] if records else None
     return fix_id(record)
 
-async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None, performed_by: str = "System", user_name: str = "System User"):
+async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None, performed_by: str = "System", user_name: str = "System User", punch_in_activity_type: Optional[str] = None, punch_in_activity_subtype: Optional[str] = None, punch_in_activity_value: Optional[str] = None, punch_in_task_id: Optional[str] = None):
     employee = await get_employee(db, employee_id)
     if not employee or employee.get("status", "").lower() == "inactive":
         return None
@@ -2311,8 +2311,69 @@ async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None, pe
         print(f"Error computing late punch-in status: {e}")
 
     if existing_record:
-        # If already active or on break, just return the record
-        if existing_record.get("status") in ["Active", "On Break"] and existing_record.get("checkOut") is None:
+        # If already active, check if there's a new activity type passed, and if so, change activity instead of just returning.
+        if existing_record.get("status") == "Active" and existing_record.get("checkOut") is None:
+            if punch_in_activity_type is not None:
+                punches = existing_record.get("punches", [])
+                if punches and punches[-1].get("punchOut") is None:
+                    punches[-1]["punchOut"] = now_time_str
+                
+                new_punch = {
+                    "punchIn": now_time_str, 
+                    "punchOut": None,
+                    "activityType": punch_in_activity_type,
+                    "activitySubtype": punch_in_activity_subtype,
+                    "activityValue": punch_in_activity_value,
+                    "taskId": punch_in_task_id
+                }
+                punches.append(new_punch)
+                
+                await db.attendance.update_one(
+                    {"_id": existing_record["_id"]},
+                    {
+                        "$set": {
+                            "punches": punches,
+                            "punchInActivityType": punch_in_activity_type,
+                            "punchInActivitySubtype": punch_in_activity_subtype,
+                            "punchInActivityValue": punch_in_activity_value,
+                            "punchInTaskId": punch_in_task_id
+                        }
+                    }
+                )
+                
+                if punch_in_activity_type == "Research" and punch_in_activity_value:
+                    try:
+                        new_task = {
+                            "title": punch_in_activity_value,
+                            "description": "-",
+                            "department": "Research",
+                            "assignedToId": employee_id,
+                            "assignedToName": employee.get("name", ""),
+                            "assignedToIds": [employee_id],
+                            "assignedToNames": [employee.get("name", "")],
+                            "assignedById": employee_id,
+                            "assignedByName": employee.get("name", ""),
+                            "status": "todo",
+                            "priority": "medium",
+                            "createdDate": today_dt_aware
+                        }
+                        await db.tasks.insert_one(new_task)
+                    except Exception as e_task:
+                        print(f"Error auto-creating Research task: {e_task}")
+
+                updated_doc = await db.attendance.find_one({"_id": existing_record["_id"]})
+                await log_activity(
+                    db=db,
+                    action="Activity Changed",
+                    performedBy=performed_by if performed_by != "System" else employee_id,
+                    userName=user_name if user_name != "System User" else employee.get("name", "Staff"),
+                    details=f"Employee changed activity to {punch_in_activity_type} at {now_time_str}.",
+                    attendanceId=str(updated_doc["_id"])
+                )
+                return fix_id(updated_doc)
+            return fix_id(existing_record)
+            
+        if existing_record.get("status") == "On Break" and existing_record.get("checkOut") is None:
             return fix_id(existing_record)
         
         # If logged out, resume this record instead of creating a new one

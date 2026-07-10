@@ -4,9 +4,11 @@ import React, { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel, SelectSeparator } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { Loader2 } from "lucide-react";
 import { API_URL } from "@/lib/config";
+import dayjs from "dayjs";
 
 interface PunchInModalProps {
   open: boolean;
@@ -69,6 +71,8 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId }: PunchInM
     } else if (activityType === "Other") {
       data.subtype = activitySubtype;
       data.value = activityValue;
+    } else if (activityType === "Research") {
+      data.value = activityValue;
     }
     onConfirm(data);
   };
@@ -79,8 +83,23 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId }: PunchInM
     if (activityType === "Other") {
       if (!activitySubtype || !activityValue) return false;
     }
+    if (activityType === "Research" && !activityValue) return false;
     return true;
   };
+
+  const today = dayjs().startOf('day');
+  const todayTasks = tasks.filter(t => {
+    const taskDate = t.dueDate || t.postingDate || t.moduleDeadline;
+    if (!taskDate) return true; // if no date, consider it today's work to bring attention
+    const dateObj = dayjs(taskDate).startOf('day');
+    return dateObj.isBefore(today) || dateObj.isSame(today, 'day');
+  });
+  
+  const upcomingTasks = tasks.filter(t => {
+    const taskDate = t.dueDate || t.postingDate || t.moduleDeadline;
+    if (!taskDate) return false;
+    return dayjs(taskDate).startOf('day').isAfter(today);
+  });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -125,13 +144,43 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId }: PunchInM
                     <SelectValue placeholder="Select a task from your board" />
                   </SelectTrigger>
                   <SelectContent>
-                    {tasks.length > 0 ? tasks.map(t => (
-                      <SelectItem key={t.id} value={t.id}>{t.title} {t.projectName ? `(${t.projectName})` : ''}</SelectItem>
-                    )) : (
+                    {tasks.length === 0 && (
                       <SelectItem value="none" disabled>No active tasks found</SelectItem>
+                    )}
+                    
+                    {todayTasks.length > 0 && (
+                      <SelectGroup>
+                        <SelectLabel className="font-bold text-brand-teal">Today's Work</SelectLabel>
+                        {todayTasks.map(t => (
+                          <SelectItem key={t.id} value={t.id}>{t.title} {t.projectName ? `(${t.projectName})` : ''}</SelectItem>
+                        ))}
+                      </SelectGroup>
+                    )}
+                    
+                    {todayTasks.length > 0 && upcomingTasks.length > 0 && <SelectSeparator />}
+                    
+                    {upcomingTasks.length > 0 && (
+                      <SelectGroup>
+                        <SelectLabel className="font-bold text-gray-500">Upcoming Work</SelectLabel>
+                        {upcomingTasks.map(t => (
+                          <SelectItem key={t.id} value={t.id}>{t.title} {t.projectName ? `(${t.projectName})` : ''}</SelectItem>
+                        ))}
+                      </SelectGroup>
                     )}
                   </SelectContent>
                 </Select>
+              </div>
+            )}
+
+            {activityType === "Research" && (
+              <div className="space-y-2">
+                <Label>Research Topic</Label>
+                <Input 
+                  placeholder="Enter research topic..." 
+                  value={activityValue}
+                  onChange={(e) => setActivityValue(e.target.value)}
+                  className="w-full"
+                />
               </div>
             )}
 
@@ -155,41 +204,25 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId }: PunchInM
 
                 {activitySubtype === "Activity" && (
                   <div className="space-y-2">
-                    <Label>Activity Option</Label>
-                    <Select value={activityValue} onValueChange={setActivityValue}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select activity" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {settings?.otherActivities?.length > 0 ? (
-                          settings.otherActivities.map((act: string) => (
-                            <SelectItem key={act} value={act}>{act}</SelectItem>
-                          ))
-                        ) : (
-                          <SelectItem value="none" disabled>No activities configured in settings</SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
+                    <Label>Activity Details</Label>
+                    <Input 
+                      placeholder="Enter activity description..." 
+                      value={activityValue}
+                      onChange={(e) => setActivityValue(e.target.value)}
+                      className="w-full"
+                    />
                   </div>
                 )}
 
                 {activitySubtype === "Meeting" && (
                   <div className="space-y-2">
-                    <Label>Meeting Option</Label>
-                    <Select value={activityValue} onValueChange={setActivityValue}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select meeting" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {settings?.otherMeetings?.length > 0 ? (
-                          settings.otherMeetings.map((meet: string) => (
-                            <SelectItem key={meet} value={meet}>{meet}</SelectItem>
-                          ))
-                        ) : (
-                          <SelectItem value="none" disabled>No meetings configured in settings</SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
+                    <Label>Meeting Details</Label>
+                    <Input 
+                      placeholder="Enter meeting description..." 
+                      value={activityValue}
+                      onChange={(e) => setActivityValue(e.target.value)}
+                      className="w-full"
+                    />
                   </div>
                 )}
               </div>

@@ -112,8 +112,23 @@ export default function DashboardPage() {
   const [allAttendance, setAllAttendance] = useState<any[]>([]);
   const [applications, setApplications] = useState<any[]>([]);
   const [assets, setAssets] = useState<any[]>([]);
+  const [activeTaskTitle, setActiveTaskTitle] = useState<string | null>(null);
 
-  
+  useEffect(() => {
+    if (attendanceStatus?.isPunchedIn && attendanceStatus.record?.punchInActivityType === "Work" && attendanceStatus.record?.punchInTaskId) {
+      fetch(`${API_URL}/wm-tasks/${attendanceStatus.record.punchInTaskId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.title) {
+            setActiveTaskTitle(data.title);
+          }
+        })
+        .catch(err => console.error("Error fetching active task:", err));
+    } else {
+      setActiveTaskTitle(null);
+    }
+  }, [attendanceStatus]);
+
   const punchCardRef = useRef<HTMLDivElement>(null);
  
   useEffect(() => {
@@ -618,6 +633,7 @@ export default function DashboardPage() {
                 getISTNow={getISTNow}
                 punchCardRef={punchCardRef}
                 showPunchCardOnly={true}
+                setIsPunchInModalOpen={setIsPunchInModalOpen}
               />
 
               {/* 3. Show Employee stats and Recent Attendance table */}
@@ -636,6 +652,7 @@ export default function DashboardPage() {
                 getISTNow={getISTNow}
                 punchCardRef={punchCardRef}
                 showStatsAndAttendanceOnly={true}
+                setIsPunchInModalOpen={setIsPunchInModalOpen}
               />
 
               {/* 4. If HR, show HR Lists (Recent Leave Requests, Upcoming Interviews) */}
@@ -1024,7 +1041,8 @@ function EmployeeView({
   punchCardRef,
   leaves,
   showPunchCardOnly = false,
-  showStatsAndAttendanceOnly = false
+  showStatsAndAttendanceOnly = false,
+  setIsPunchInModalOpen
 }: { 
   user: any, 
   attendanceStatus: any, 
@@ -1041,7 +1059,8 @@ function EmployeeView({
   punchCardRef: React.RefObject<HTMLDivElement | null>,
   leaves?: any[],
   showPunchCardOnly?: boolean,
-  showStatsAndAttendanceOnly?: boolean
+  showStatsAndAttendanceOnly?: boolean,
+  setIsPunchInModalOpen: (val: boolean) => void
 }) {
   const userName = user?.name || "Guest";
   const firstName = user?.firstName || userName.split(' ')[0];
@@ -1182,6 +1201,33 @@ function EmployeeView({
                 )}
               </Button>
             </div>
+
+            {isPunchedIn && attendanceStatus?.record?.punchInActivityType && !isOnBreak && (
+              <div className="flex items-center justify-between px-6 py-4 mb-8 bg-brand-light/40 border border-brand-teal/20 rounded-2xl shadow-sm">
+                <div>
+                  <p className="text-xs text-brand-teal/80 font-bold uppercase tracking-wider mb-1">Current Activity</p>
+                  <p className="font-black text-gray-800 text-lg">
+                    {attendanceStatus.record.punchInActivityType === "Work" ? (
+                      `Work: ${activeTaskTitle || 'Loading...'}`
+                    ) : attendanceStatus.record.punchInActivityType === "Research" ? (
+                      `Research: ${attendanceStatus.record.punchInActivityValue}`
+                    ) : attendanceStatus.record.punchInActivityType === "Other" ? (
+                      `${attendanceStatus.record.punchInActivitySubtype}: ${attendanceStatus.record.punchInActivityValue}`
+                    ) : (
+                      "Active"
+                    )}
+                  </p>
+                </div>
+                <Button 
+                  onClick={() => setIsPunchInModalOpen(true)}
+                  variant="outline" 
+                  size="sm" 
+                  className="bg-white hover:bg-gray-50 border-gray-200 text-gray-700 font-bold shadow-sm rounded-xl px-5"
+                >
+                  Change
+                </Button>
+              </div>
+            )}
  
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-0 border border-brand-teal/10 rounded-xl overflow-hidden bg-white">
                {[

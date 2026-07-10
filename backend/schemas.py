@@ -1,4 +1,4 @@
-from pydantic import BaseModel as PydanticBaseModel, model_serializer, BeforeValidator, PlainSerializer, SerializationInfo
+from pydantic import BaseModel as PydanticBaseModel, model_serializer, BeforeValidator, PlainSerializer, SerializationInfo, Field
 from typing import List, Optional, Any, Dict, Annotated, Union
 from datetime import datetime, date
 import pytz
