@@ -19,9 +19,10 @@ interface PunchInModalProps {
   initialActivitySubtype?: string;
   initialActivityValue?: string;
   initialTaskId?: string;
+  isUpdateMode?: boolean;
 }
 
-export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialActivityType, initialActivitySubtype, initialActivityValue, initialTaskId }: PunchInModalProps) {
+export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialActivityType, initialActivitySubtype, initialActivityValue, initialTaskId, isUpdateMode }: PunchInModalProps) {
   const [activityType, setActivityType] = useState<string>("");
   const [activitySubtype, setActivitySubtype] = useState<string>("");
   const [activityValue, setActivityValue] = useState<string>("");
@@ -109,7 +110,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[450px]">
         <DialogHeader>
-          <DialogTitle>Punch In Activity</DialogTitle>
+          <DialogTitle>{isUpdateMode ? "Update Activity" : "Punch In Activity"}</DialogTitle>
           <DialogDescription>
             What will you be working on right now?
           </DialogDescription>
@@ -241,7 +242,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
             disabled={!isValid() || isLoading}
             onClick={handleConfirm}
           >
-            Confirm Punch In
+            {isUpdateMode ? "Save" : "Confirm Punch In"}
           </Button>
         </DialogFooter>
       </DialogContent>

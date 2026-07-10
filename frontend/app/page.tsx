@@ -757,6 +757,7 @@ export default function DashboardPage() {
         initialActivitySubtype={attendanceStatus?.record?.punchInActivitySubtype}
         initialActivityValue={attendanceStatus?.record?.punchInActivityValue}
         initialTaskId={attendanceStatus?.record?.punchInTaskId}
+        isUpdateMode={attendanceStatus?.isPunchedIn || false}
       />
       
       {isBreakOutModalOpen && (
@@ -1280,17 +1281,7 @@ function EmployeeView({
                 )}
               </Button>
  
-              <Button 
-                onClick={handleGoingForMeeting} 
-                disabled={isPunching || !isPunchedIn || isOnBreak}
-                variant="outline"
-                className={`flex-1 py-7 text-base font-bold shadow-sm transition-all border-[#F3F4F6] rounded-xl bg-white hover:bg-gray-50 text-[#111827]`}
-              >
-                {isPunching ? <Loader2 className="w-5 h-5 animate-spin" /> : (
-                  <><CalendarIcon className="w-5 h-5 mr-3 text-indigo-500" /> Going for Meeting</>
-                )}
-              </Button>
-              
+
               <Button 
                 onClick={() => handlePunch(isPunchedIn ? 'punch-out' : 'punch-in')} 
                 disabled={isPunching || isOnBreak}
