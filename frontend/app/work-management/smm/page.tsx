@@ -466,9 +466,20 @@ export default function CreativeClientsPage() {
         const counts: Record<string, number> = {};
         entries.forEach((entry: any) => {
           let pending = 0;
-          if (entry.scriptDate && !entry.scriptLink) pending++;
-          if (entry.shootDate && !entry.shootLink) pending++;
-          if (entry.editingStart && !entry.finalReelLink) pending++;
+          const isPost = entry.postReel === 'Post';
+          
+          if (!isPost && entry.scriptDate && !entry.scriptLink) pending++;
+          if (!isPost && entry.shootDate && !entry.shootLink) pending++;
+          
+          const captionDate = entry.captionDate || entry.editingStart;
+          if (captionDate && !entry.caption) pending++;
+          
+          const thumbnailDate = entry.thumbnailDate || entry.editingStart;
+          if (!isPost && thumbnailDate && !entry.thumbnailLink) pending++;
+          
+          const isEditingPending = entry.editingStart && (isPost ? !entry.finalPostLink : !entry.finalReelLink);
+          if (isEditingPending) pending++;
+          
           if (entry.approval && entry.isApproved !== 'Yes') pending++;
           if (entry.postingDate && !entry.postingLinkOfIg) pending++;
 
