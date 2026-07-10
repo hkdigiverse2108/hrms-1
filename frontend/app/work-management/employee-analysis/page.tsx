@@ -10,6 +10,7 @@ import dayjs from 'dayjs'
 import duration from 'dayjs/plugin/duration'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useUser } from '@/hooks/useUser'
 import { Badge } from '@/components/ui/badge'
 
@@ -25,11 +26,7 @@ export default function EmployeeAnalysisPage() {
   const [selectedDate, setSelectedDate] = useState<string>(dayjs().format('YYYY-MM-DD'))
 
   useEffect(() => {
-    if (isUserLoading) return
-    if (!user || user.role?.toLowerCase() !== 'admin') {
-      router.push('/dashboard')
-      return
-    }
+    if (isUserLoading || !user) return
     fetchData()
   }, [user, isUserLoading])
 
@@ -52,10 +49,17 @@ export default function EmployeeAnalysisPage() {
   }
 
   const analysisData = useMemo(() => {
-    if (!attendance || attendance.length === 0) return []
+    if (!attendance || attendance.length === 0 || !user) return []
+    
+    const isAdmin = user.role?.toLowerCase() === 'admin'
     
     // Filter attendance by selected date
-    const dailyAttendance = attendance.filter(a => a.date === selectedDate)
+    let dailyAttendance = attendance.filter(a => a.date === selectedDate)
+    
+    // If not admin, only show own data
+    if (!isAdmin) {
+      dailyAttendance = dailyAttendance.filter(a => a.employeeId === user.id || a.employeeId === user._id)
+    }
     
     // Process punch logs for each employee
     const data = dailyAttendance.map(att => {
@@ -74,11 +78,12 @@ export default function EmployeeAnalysisPage() {
           title = `${punch.activitySubtype || 'Other'}: ${punch.activityValue || 'N/A'}`
         }
 
-        const start = dayjs(punch.punchIn)
-        const end = punch.punchOut ? dayjs(punch.punchOut) : null
+        // punch.punchIn is a time string like "11:09:28" or "11:09"
+        const start = punch.punchIn ? dayjs(`2000-01-01 ${punch.punchIn}`) : dayjs()
+        const end = punch.punchOut ? dayjs(`2000-01-01 ${punch.punchOut}`) : null
         
         let durationStr = "In Progress"
-        if (end) {
+        if (end && start.isValid() && end.isValid()) {
           const diffMins = end.diff(start, 'minutes')
           const hrs = Math.floor(diffMins / 60)
           const mins = diffMins % 60
@@ -94,8 +99,8 @@ export default function EmployeeAnalysisPage() {
           title,
           icon,
           activityType: punch.activityType,
-          startTime: start.format('hh:mm A'),
-          endTime: end ? end.format('hh:mm A') : 'Now',
+          startTime: start.isValid() ? start.format('hh:mm A') : (punch.punchIn || 'N/A'),
+          endTime: end ? (end.isValid() ? end.format('hh:mm A') : punch.punchOut) : 'Now',
           duration: durationStr,
           isInProgress: !end
         }
@@ -138,7 +143,7 @@ export default function EmployeeAnalysisPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6">
         {analysisData.length > 0 ? (
           analysisData.map((emp) => (
             <Card key={emp.employeeId} className="flex flex-col">
@@ -152,27 +157,35 @@ export default function EmployeeAnalysisPage() {
               </CardHeader>
               <CardContent className="pt-4 flex-1">
                 {emp.logs.length > 0 ? (
-                  <div className="space-y-4">
-                    {emp.logs.map((log: any) => (
-                      <div key={log.id} className="p-3 bg-white border rounded-lg shadow-sm">
-                        <div className="flex items-center font-semibold text-sm mb-2 text-gray-800">
-                          {log.icon}
-                          <span className="truncate" title={log.title}>{log.title}</span>
-                          {log.isInProgress && (
-                            <span className="ml-auto flex h-2 w-2 rounded-full bg-green-500"></span>
-                          )}
-                        </div>
-                        <div className="flex items-center justify-between text-xs text-gray-500">
-                          <div className="flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5" />
-                            <span>{log.startTime} - {log.endTime}</span>
-                          </div>
-                          <span className="font-medium bg-gray-100 px-2 py-0.5 rounded text-gray-700">
-                            {log.duration}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
+                  <div className="border rounded-md">
+                    <Table>
+                      <TableHeader className="bg-gray-50/50">
+                        <TableRow>
+                          <TableHead>Activity</TableHead>
+                          <TableHead>Start Time</TableHead>
+                          <TableHead>End Time</TableHead>
+                          <TableHead className="text-right">Duration</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {emp.logs.map((log: any) => (
+                          <TableRow key={log.id}>
+                            <TableCell>
+                              <div className="flex items-center font-medium">
+                                {log.icon}
+                                <span className="truncate max-w-[200px]" title={log.title}>{log.title}</span>
+                                {log.isInProgress && (
+                                  <span className="ml-2 flex h-2 w-2 rounded-full bg-green-500" title="In Progress"></span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-slate-500 whitespace-nowrap">{log.startTime}</TableCell>
+                            <TableCell className="text-slate-500 whitespace-nowrap">{log.endTime}</TableCell>
+                            <TableCell className="text-right font-medium text-slate-700 whitespace-nowrap">{log.duration}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
                   </div>
                 ) : (
                   <div className="h-full flex items-center justify-center text-sm text-gray-400 py-8">

@@ -15,9 +15,13 @@ interface PunchInModalProps {
   onOpenChange: (open: boolean) => void;
   onConfirm: (data: { type: string; subtype?: string; value?: string; taskId?: string }) => void;
   userId: string;
+  initialActivityType?: string;
+  initialActivitySubtype?: string;
+  initialActivityValue?: string;
+  initialTaskId?: string;
 }
 
-export function PunchInModal({ open, onOpenChange, onConfirm, userId }: PunchInModalProps) {
+export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialActivityType, initialActivitySubtype, initialActivityValue, initialTaskId }: PunchInModalProps) {
   const [activityType, setActivityType] = useState<string>("");
   const [activitySubtype, setActivitySubtype] = useState<string>("");
   const [activityValue, setActivityValue] = useState<string>("");
@@ -30,12 +34,12 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId }: PunchInM
   useEffect(() => {
     if (open && userId) {
       fetchData();
-      setActivityType("");
-      setActivitySubtype("");
-      setActivityValue("");
-      setTaskId("");
+      setActivityType(initialActivityType || "");
+      setActivitySubtype(initialActivitySubtype || "");
+      setActivityValue(initialActivityValue || "");
+      setTaskId(initialTaskId || "");
     }
-  }, [open, userId]);
+  }, [open, userId, initialActivityType, initialActivitySubtype, initialActivityValue, initialTaskId]);
 
   const fetchData = async () => {
     setIsLoading(true);

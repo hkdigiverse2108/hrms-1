@@ -2341,25 +2341,6 @@ async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None, pe
                     }
                 )
                 
-                if punch_in_activity_type == "Research" and punch_in_activity_value:
-                    try:
-                        new_task = {
-                            "title": punch_in_activity_value,
-                            "description": "-",
-                            "department": "Research",
-                            "assignedToId": employee_id,
-                            "assignedToName": employee.get("name", ""),
-                            "assignedToIds": [employee_id],
-                            "assignedToNames": [employee.get("name", "")],
-                            "assignedById": employee_id,
-                            "assignedByName": employee.get("name", ""),
-                            "status": "todo",
-                            "priority": "medium",
-                            "createdDate": today_dt_aware
-                        }
-                        await db.tasks.insert_one(new_task)
-                    except Exception as e_task:
-                        print(f"Error auto-creating Research task: {e_task}")
 
                 updated_doc = await db.attendance.find_one({"_id": existing_record["_id"]})
                 await log_activity(
@@ -2370,6 +2351,26 @@ async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None, pe
                     details=f"Employee changed activity to {punch_in_activity_type} at {now_time_str}.",
                     attendanceId=str(updated_doc["_id"])
                 )
+                
+                # Auto-create research if it doesn't exist
+                if punch_in_activity_type == "Research" and punch_in_activity_value:
+                    try:
+                        existing_res = await db.research.find_one({"title": punch_in_activity_value, "createdBy": employee_id})
+                        if not existing_res:
+                            new_research = {
+                                "title": punch_in_activity_value,
+                                "description": "",
+                                "link": "",
+                                "createdBy": employee_id,
+                                "createdByName": employee.get("name", ""),
+                                "sharedWith": [],
+                                "projectId": "",
+                                "createdAt": get_now()
+                            }
+                            await db.research.insert_one(new_research)
+                    except Exception as e_res:
+                        print(f"Error auto-creating Research: {e_res}")
+                        
                 return fix_id(updated_doc)
             return fix_id(existing_record)
             
@@ -2428,6 +2429,26 @@ async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None, pe
             details=f"Employee clocked in at {now_time_str} (Resumed existing session).",
             attendanceId=str(updated_doc["_id"])
         )
+        
+        # Auto-create research if it doesn't exist
+        if punch_in_activity_type == "Research" and punch_in_activity_value:
+            try:
+                existing_res = await db.research.find_one({"title": punch_in_activity_value, "createdBy": employee_id})
+                if not existing_res:
+                    new_research = {
+                        "title": punch_in_activity_value,
+                        "description": "",
+                        "link": "",
+                        "createdBy": employee_id,
+                        "createdByName": employee.get("name", ""),
+                        "sharedWith": [],
+                        "projectId": "",
+                        "createdAt": get_now()
+                    }
+                    await db.research.insert_one(new_research)
+            except Exception as e_res:
+                print(f"Error auto-creating Research: {e_res}")
+                
         return fix_id(updated_doc)
     
     # First punch of the day: create new record (use naive date so MongoDB stores it as exactly today's midnight UTC date)
@@ -2474,6 +2495,26 @@ async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None, pe
         details=f"Employee clocked in at {now_time_str}.",
         attendanceId=attendance_data["id"]
     )
+    
+    # Auto-create research if it doesn't exist
+    if punch_in_activity_type == "Research" and punch_in_activity_value:
+        try:
+            existing_res = await db.research.find_one({"title": punch_in_activity_value, "createdBy": employee_id})
+            if not existing_res:
+                new_research = {
+                    "title": punch_in_activity_value,
+                    "description": "",
+                    "link": "",
+                    "createdBy": employee_id,
+                    "createdByName": employee.get("name", ""),
+                    "sharedWith": [],
+                    "projectId": "",
+                    "createdAt": get_now()
+                }
+                await db.research.insert_one(new_research)
+        except Exception as e_res:
+            print(f"Error auto-creating Research: {e_res}")
+
     if "_id" in attendance_data:
         attendance_data.pop("_id")
     return attendance_data

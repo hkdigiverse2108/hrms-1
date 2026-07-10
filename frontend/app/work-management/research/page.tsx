@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { LiveTimer } from "@/components/common/LiveTimer";
 
 export default function ResearchPage() {
   const { confirm } = useConfirm();
@@ -44,6 +45,7 @@ export default function ResearchPage() {
   const [link, setLink] = useState("");
   const [sharedWith, setSharedWith] = useState<string[]>([]);
   const [projectId, setProjectId] = useState("");
+  const [attendanceStatus, setAttendanceStatus] = useState<any>(null);
 
   useEffect(() => {
     if (permissionsLoading) return;
@@ -55,7 +57,7 @@ export default function ResearchPage() {
   const fetchData = async () => {
     try {
       setIsLoading(true);
-      const [resData, empData, projData] = await Promise.all([
+      const [resData, empData, projData, attData] = await Promise.all([
         fetch(`${API_URL}/research`, {
           headers: {
             "user-id": (user?.id || user?._id) || "",
@@ -63,7 +65,8 @@ export default function ResearchPage() {
           }
         }),
         fetch(`${API_URL}/employees`),
-        fetch(`${API_URL}/projects`)
+        fetch(`${API_URL}/projects`),
+        fetch(`${API_URL}/attendance/status/${user?.id || user?._id}`)
       ]);
 
       if (resData.ok) {
@@ -78,6 +81,9 @@ export default function ResearchPage() {
           allProjects = allProjects.filter((p: any) => p.department === user.department);
         }
         setProjects(allProjects);
+      }
+      if (attData.ok) {
+        setAttendanceStatus(await attData.json());
       }
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -112,8 +118,8 @@ export default function ResearchPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !description.trim()) {
-      toast.error("Title and description are required");
+    if (!title.trim()) {
+      toast.error("Please fill in the title");
       return;
     }
 
@@ -217,10 +223,15 @@ export default function ResearchPage() {
             <Card key={research.id} className="hover:shadow-md transition-shadow">
               <CardHeader className="pb-3 border-b border-slate-100 flex flex-row items-start justify-between">
                 <div>
-                  <CardTitle className="text-lg text-brand-dark-blue flex items-center gap-2">
-                    <BookOpen className="w-4 h-4 text-brand-teal" />
-                    {research.title}
-                  </CardTitle>
+                  <div className="flex justify-between items-start">
+                    <CardTitle className="text-lg text-brand-dark-blue flex items-center gap-2">
+                      <BookOpen className="w-5 h-5 text-brand-teal" />
+                      {research.title}
+                    </CardTitle>
+                    {attendanceStatus?.isPunchedIn && attendanceStatus?.record?.punchInActivityType === 'Research' && attendanceStatus?.record?.punchInActivityValue === research.title && (
+                      <LiveTimer startTime={attendanceStatus.record.lastPunchIn} />
+                    )}
+                  </div>
                   <p className="text-xs text-slate-500 mt-1">
                     By {research.createdByName} • {new Date(research.createdAt).toLocaleDateString()}
                     {research.projectId && projects.find(p => p.id === research.projectId) && (
@@ -307,13 +318,12 @@ export default function ResearchPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Description <span className="text-red-500">*</span></Label>
+              <Label>Description</Label>
               <Textarea 
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Details about the research..."
                 className="min-h-[300px]"
-                required
               />
             </div>
             <div className="space-y-2">

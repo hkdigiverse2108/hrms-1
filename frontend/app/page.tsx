@@ -493,6 +493,7 @@ export default function DashboardPage() {
         payload.taskId = data.taskId;
       } else if (data.type === "Research") {
         payload.activityType = "Research";
+        payload.activityValue = data.value;
       } else if (data.type === "Other") {
         payload.activityType = "Other";
         payload.activitySubtype = data.subtype;
@@ -634,6 +635,7 @@ export default function DashboardPage() {
                 punchCardRef={punchCardRef}
                 showPunchCardOnly={true}
                 setIsPunchInModalOpen={setIsPunchInModalOpen}
+                activeTaskTitle={activeTaskTitle}
               />
 
               {/* 3. Show Employee stats and Recent Attendance table */}
@@ -653,6 +655,7 @@ export default function DashboardPage() {
                 punchCardRef={punchCardRef}
                 showStatsAndAttendanceOnly={true}
                 setIsPunchInModalOpen={setIsPunchInModalOpen}
+                activeTaskTitle={activeTaskTitle}
               />
 
               {/* 4. If HR, show HR Lists (Recent Leave Requests, Upcoming Interviews) */}
@@ -696,6 +699,10 @@ export default function DashboardPage() {
         onOpenChange={setIsPunchInModalOpen}
         onConfirm={handleConfirmPunchIn}
         userId={user?.id || ""}
+        initialActivityType={attendanceStatus?.record?.punchInActivityType}
+        initialActivitySubtype={attendanceStatus?.record?.punchInActivitySubtype}
+        initialActivityValue={attendanceStatus?.record?.punchInActivityValue}
+        initialTaskId={attendanceStatus?.record?.punchInTaskId}
       />
     </div>
   );
@@ -1042,7 +1049,8 @@ function EmployeeView({
   leaves,
   showPunchCardOnly = false,
   showStatsAndAttendanceOnly = false,
-  setIsPunchInModalOpen
+  setIsPunchInModalOpen,
+  activeTaskTitle
 }: { 
   user: any, 
   attendanceStatus: any, 
@@ -1060,7 +1068,8 @@ function EmployeeView({
   leaves?: any[],
   showPunchCardOnly?: boolean,
   showStatsAndAttendanceOnly?: boolean,
-  setIsPunchInModalOpen: (val: boolean) => void
+  setIsPunchInModalOpen: (val: boolean) => void,
+  activeTaskTitle?: string | null
 }) {
   const userName = user?.name || "Guest";
   const firstName = user?.firstName || userName.split(' ')[0];
