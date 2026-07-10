@@ -108,7 +108,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (isAdmin || checkPermission('sales', 'canView')) {
       workManagementChildren.push(getItem(<Link href="/work-management/sales">Sales</Link>, "/work-management/sales"));
     }
-    workManagementChildren.push(getItem(<Link href="/work-management/employee-analysis">Employee Analysis</Link>, "/work-management/employee-analysis"));
+    workManagementChildren.push(getItem(<Link href="/work-management/employee-analysis">Activity Log</Link>, "/work-management/employee-analysis"));
     if (isAdmin || checkPermission('clients', 'canView')) {
       workManagementChildren.push(getItem(<Link href="/work-management/clients">Clients</Link>, "/work-management/clients"));
     }
