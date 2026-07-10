@@ -5,7 +5,7 @@ import dayjs from "dayjs";
 import customParseFormat from "dayjs/plugin/customParseFormat";
 dayjs.extend(customParseFormat);
 
-export function LiveTimer({ startTime, className, serverTimeOffset = 0 }: { startTime: string, className?: string, serverTimeOffset?: number }) {
+export function LiveTimer({ startTime, className, serverTimeOffset = 0, accumulatedSeconds = 0 }: { startTime: string, className?: string, serverTimeOffset?: number, accumulatedSeconds?: number }) {
   const [elapsed, setElapsed] = useState<string>("00:00:00");
 
   useEffect(() => {
@@ -31,6 +31,8 @@ export function LiveTimer({ startTime, className, serverTimeOffset = 0 }: { star
       let diffSeconds = now.diff(todayStart, 'second');
       if (diffSeconds < 0) diffSeconds = 0;
 
+      diffSeconds += accumulatedSeconds;
+
       const hrs = Math.floor(diffSeconds / 3600);
       const mins = Math.floor((diffSeconds % 3600) / 60);
       const secs = diffSeconds % 60;
@@ -41,7 +43,7 @@ export function LiveTimer({ startTime, className, serverTimeOffset = 0 }: { star
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [startTime]);
+  }, [startTime, accumulatedSeconds, serverTimeOffset]);
 
   if (!startTime) return null;
 

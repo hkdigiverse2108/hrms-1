@@ -1188,6 +1188,47 @@ function EmployeeView({
   const punchInTime = formatTime12h(punchInTimeRaw);
   const punchOutTime = formatTime12h(punchOutTimeRaw);
 
+  let accumulatedSeconds = 0;
+  if (attendanceStatus?.record?.punches) {
+    const currentType = attendanceStatus.record.punchInActivityType;
+    const currentTaskId = attendanceStatus.record.punchInTaskId;
+    const currentValue = attendanceStatus.record.punchInActivityValue;
+    const currentSubtype = attendanceStatus.record.punchInActivitySubtype;
+    
+    const parseTimeSafe = (timeStr: string) => {
+      if (!timeStr) return NaN;
+      if (timeStr.includes('AM') || timeStr.includes('PM')) {
+        const [time, modifier] = timeStr.trim().split(' ');
+        let [hours, minutes, seconds] = time.split(':');
+        if (hours === '12') hours = '00';
+        if (modifier === 'PM') hours = String(parseInt(hours, 10) + 12);
+        return new Date(`2000/01/01 ${hours}:${minutes}:${seconds || '00'}`).getTime();
+      }
+      return new Date(`2000/01/01 ${timeStr}`).getTime();
+    };
+
+    attendanceStatus.record.punches.forEach((p: any) => {
+      // Only count completed punches for this same activity
+      if (p.punchOut && p.punchIn) {
+        let isSame = false;
+        if (currentType === "Work") {
+          isSame = (p.activityType === "Work" && String(p.taskId) === String(currentTaskId));
+        } else if (currentType === "Research") {
+          isSame = (p.activityType === "Research" && p.activityValue === currentValue);
+        } else if (currentType === "Other") {
+          isSame = (p.activityType === "Other" && p.activitySubtype === currentSubtype && p.activityValue === currentValue);
+        }
+
+        if (isSame) {
+          const inTime = parseTimeSafe(p.punchIn);
+          const outTime = parseTimeSafe(p.punchOut);
+          if (!isNaN(inTime) && !isNaN(outTime)) {
+            accumulatedSeconds += Math.max(0, Math.floor((outTime - inTime) / 1000));
+          }
+        }
+      }
+    });
+  }
   const getFormattedWorkedTime = () => {
     if (!workTime || workTime === "00:00:00") return "Not Started";
     const parts = workTime.split(':');
@@ -1322,8 +1363,16 @@ function EmployeeView({
                         "Active"
                       )}
                     </span>
-                    {attendanceStatus.record.lastPunchIn && (
-                      <LiveTimer startTime={attendanceStatus.record.lastPunchIn} serverTimeOffset={serverTimeOffset} />
+                    {attendanceStatus.record.lastPunchIn && !isOnBreak && (
+                      <LiveTimer startTime={attendanceStatus.record.lastPunchIn} serverTimeOffset={serverTimeOffset} accumulatedSeconds={accumulatedSeconds} />
+                    )}
+                    {isOnBreak && (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-50 text-orange-600 border border-orange-100 text-[11px] font-bold font-mono tracking-wider shadow-sm">
+                        <span className="relative flex h-1.5 w-1.5">
+                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-orange-500"></span>
+                        </span>
+                        PAUSED
+                      </span>
                     )}
                   </div>
                 </div>

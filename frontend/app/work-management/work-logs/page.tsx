@@ -115,7 +115,7 @@ export default function WorkLogsPage() {
 
   // ── parse a single attendance row into logs ─────────────────────────────────
   const parseLogs = (att: any) => {
-    return (att.punches || []).map((punch: any) => {
+    const rawLogs = (att.punches || []).map((punch: any) => {
       const actType = punch.activityType || 'Work'
       let title = 'Unknown Activity'
 
@@ -151,6 +151,25 @@ export default function WorkLogsPage() {
         employeeName:  att.employeeName,
         checkIn:       att.checkIn,
       }
+    })
+
+    const grouped: Record<string, any> = {}
+    rawLogs.forEach((log: any) => {
+      if (!grouped[log.title]) {
+        grouped[log.title] = { ...log }
+      } else {
+        grouped[log.title].durationMins += log.durationMins
+        grouped[log.title].startTime = log.startTime
+        grouped[log.title].endTime = log.endTime
+        grouped[log.title].isInProgress = grouped[log.title].isInProgress || log.isInProgress
+        grouped[log.title].durationStr = grouped[log.title].isInProgress ? 'In Progress' : fmtMins(grouped[log.title].durationMins)
+      }
+    })
+
+    return Object.values(grouped).sort((a: any, b: any) => {
+      if (a.isInProgress && !b.isInProgress) return -1
+      if (!a.isInProgress && b.isInProgress) return 1
+      return 0
     })
   }
 
