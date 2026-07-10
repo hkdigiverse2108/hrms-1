@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/common/PageHeader";
+import { LiveTimer } from "@/components/common/LiveTimer";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
@@ -1297,17 +1298,22 @@ function EmployeeView({
               <div className="flex items-center justify-between px-6 py-4 mb-8 bg-brand-light/40 border border-brand-teal/20 rounded-2xl shadow-sm">
                 <div>
                   <p className="text-xs text-brand-teal/80 font-bold uppercase tracking-wider mb-1">Current Activity</p>
-                  <p className="font-black text-gray-800 text-lg">
-                    {attendanceStatus.record.punchInActivityType === "Work" ? (
-                      `Work: ${activeTaskTitle || 'Loading...'}`
-                    ) : attendanceStatus.record.punchInActivityType === "Research" ? (
-                      `Research: ${attendanceStatus.record.punchInActivityValue}`
-                    ) : attendanceStatus.record.punchInActivityType === "Other" ? (
-                      `${attendanceStatus.record.punchInActivitySubtype}: ${attendanceStatus.record.punchInActivityValue}`
-                    ) : (
-                      "Active"
+                  <div className="font-black text-gray-800 text-lg flex items-center gap-3">
+                    <span>
+                      {attendanceStatus.record.punchInActivityType === "Work" ? (
+                        `Work: ${activeTaskTitle || 'Loading...'}`
+                      ) : attendanceStatus.record.punchInActivityType === "Research" ? (
+                        `Research: ${attendanceStatus.record.punchInActivityValue}`
+                      ) : attendanceStatus.record.punchInActivityType === "Other" ? (
+                        `${attendanceStatus.record.punchInActivitySubtype}: ${attendanceStatus.record.punchInActivityValue}`
+                      ) : (
+                        "Active"
+                      )}
+                    </span>
+                    {attendanceStatus.record.lastPunchIn && (
+                      <LiveTimer startTime={attendanceStatus.record.lastPunchIn} />
                     )}
-                  </p>
+                  </div>
                 </div>
                 {!isOnBreak && (
                   <Button 

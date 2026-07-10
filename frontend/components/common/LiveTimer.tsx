@@ -5,7 +5,7 @@ import dayjs from "dayjs";
 import customParseFormat from "dayjs/plugin/customParseFormat";
 dayjs.extend(customParseFormat);
 
-export function LiveTimer({ startTime }: { startTime: string }) {
+export function LiveTimer({ startTime, className }: { startTime: string, className?: string }) {
   const [elapsed, setElapsed] = useState<string>("00:00:00");
 
   useEffect(() => {
@@ -46,10 +46,9 @@ export function LiveTimer({ startTime }: { startTime: string }) {
   if (!startTime) return null;
 
   return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100 text-xs font-bold font-mono tracking-wider animate-pulse shadow-sm">
-      <span className="relative flex h-2 w-2">
-        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+    <span className={className || "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100 text-[11px] font-bold font-mono tracking-wider shadow-sm"}>
+      <span className="relative flex h-1.5 w-1.5">
+        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
       </span>
       {elapsed}
     </span>

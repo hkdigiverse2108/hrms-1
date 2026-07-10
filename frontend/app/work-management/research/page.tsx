@@ -337,10 +337,7 @@ export default function ResearchPage() {
                             <div className="flex items-center gap-2 mb-1">
                               <p className="font-semibold text-slate-800 text-[13px] leading-tight line-clamp-1">{research.title}</p>
                               {attendanceStatus?.isPunchedIn && attendanceStatus?.record?.punchInActivityType === 'Research' && attendanceStatus?.record?.punchInActivityValue === research.title && (
-                                <div className="bg-green-500/10 text-green-700 px-1.5 py-0.5 rounded text-[9px] font-bold flex items-center gap-1 animate-pulse border border-green-500/20 shrink-0">
-                                  <div className="w-1 h-1 bg-green-500 rounded-full" />
-                                  <LiveTimer startTime={attendanceStatus.record.lastPunchIn} />
-                                </div>
+                                <LiveTimer startTime={attendanceStatus.record.lastPunchIn} />
                               )}
                             </div>
                             <p className="text-[11px] text-slate-500 line-clamp-1 leading-relaxed mb-2 max-w-[300px]" title={research.description}>{research.description}</p>
