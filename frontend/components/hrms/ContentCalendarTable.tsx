@@ -1435,7 +1435,7 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
                                 onChange={(e) => handleDaySelect(e.target.value)}
                               />
                             ) : ["scriptDate", "shootDate", "editingStart", "captionDate", "thumbnailDate", "actualPostingDate", "approval"].includes(key) ? (
-                              (key === 'thumbnailDate' && editForm.postReel === 'Post') ? (
+                              ( (key === 'thumbnailDate' || key === 'shootDate') && editForm.postReel === 'Post') ? (
                                 <div className="text-slate-400 text-center w-full">-</div>
                               ) : (
                                 <Input 
@@ -1446,7 +1446,7 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
                                 />
                               )
                             ) : (
-                              (key === 'thumbnailLink' && editForm.postReel === 'Post') ? (
+                              ( (key === 'thumbnailLink' || key === 'shootLink') && editForm.postReel === 'Post') ? (
                                 <div className="text-slate-400 text-center w-full">-</div>
                               ) : key === 'caption' ? (
                                 <textarea
@@ -1472,7 +1472,7 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
                                title={entry[key] || ""}
                              >
                                {(() => {
-                                 if ((key === 'thumbnailDate' || key === 'thumbnailLink') && entry.postReel === 'Post') {
+                                 if (['thumbnailDate', 'thumbnailLink', 'shootDate', 'shootLink'].includes(key) && entry.postReel === 'Post') {
                                    return <span className="text-slate-400 text-center w-full">-</span>;
                                  }
                                  if (entry[key] && (key.toLowerCase().includes("link") || key === "reference")) {

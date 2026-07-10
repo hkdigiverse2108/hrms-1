@@ -8410,6 +8410,10 @@ async def get_content_calendar_entries(db, client_id: str, month_year: str = Non
 
 async def create_content_calendar_entry(db, entry_data: dict):
     updated_by = entry_data.pop("updatedBy", "Unknown User")
+    
+    if entry_data.get("postReel") == "Post" and not entry_data.get("shootLink"):
+        entry_data["shootLink"] = "-"
+        
     entry_data["logs"] = [{
         "timestamp": datetime.now(IST).isoformat(),
         "action": "Row created",
@@ -8430,6 +8434,10 @@ async def update_content_calendar_entry(db, entry_id: str, update_data: dict):
         
     changes = []
     updated_by = update_data.get("updatedBy", "Unknown User")
+    if update_data.get("postReel") == "Post" or (existing.get("postReel") == "Post" and "postReel" not in update_data):
+        if not update_data.get("shootLink") and not existing.get("shootLink"):
+            update_data["shootLink"] = "-"
+            
     for key, val in update_data.items():
         if key not in ["logs", "clientId", "monthYear", "id", "_id", "updated_at", "created_at", "updatedAt", "createdAt", "updatedBy"]:
             old_val = existing.get(key)

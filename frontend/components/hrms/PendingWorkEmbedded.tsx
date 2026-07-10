@@ -14,8 +14,8 @@ import { toast } from 'sonner';
 import { useConfirm } from "@/context/ConfirmContext";
 
 const isStageSubsequentOrEqual = (stageName: string, remarkStageName: string, postReel?: string) => {
-  const reelStages = ['Script', 'Shoot', 'Editing', 'Approval', 'Posting'];
-  const postStages = ['Post/Graphics', 'Approval', 'Posting'];
+  const reelStages = ['Script', 'Shoot', 'Editing', 'Caption', 'Thumbnail', 'Approval', 'Posting'];
+  const postStages = ['Post/Graphics', 'Caption', 'Approval', 'Posting'];
   
   const stages = postReel === 'Post' ? postStages : reelStages;
   const remarkIdx = stages.findIndex(s => s.toLowerCase() === remarkStageName.toLowerCase());

@@ -119,7 +119,7 @@ async function main() {
   console.log("\n=== HRMS Desktop App Release Publisher ===");
   
   // 1. Load Env to get default BACKEND_URL
-  let defaultApiUrl = "https://new1-hrms.hkdigiverse.com/api";
+  let defaultApiUrl = "https://hrms.hkdigiverse.com/api";
   try {
     const envPath = path.join(__dirname, '..', '.env.server');
     if (fs.existsSync(envPath)) {
