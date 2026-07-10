@@ -1,11 +1,11 @@
 {
-  "url": "http://127.0.0.1:8002/content-calendar?limit=50",
+  "url": "http://127.0.0.1:8002/research",
   "errors": [
     {
       "type": "missing",
       "loc": [
-        "query",
-        "clientId"
+        "header",
+        "user-id"
       ],
       "msg": "Field required",
       "input": null

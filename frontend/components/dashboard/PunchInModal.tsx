@@ -40,6 +40,8 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
   
   const [tasks, setTasks] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>(null);
+  const [pastResearch, setPastResearch] = useState<string[]>([]);
+  const [isNewResearch, setIsNewResearch] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -49,19 +51,37 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
       setActivitySubtype(initialActivitySubtype || "");
       setActivityValue(initialActivityValue || "");
       setTaskId(initialTaskId || "");
+      if (initialActivityType === "Research" && initialActivityValue) {
+        setIsNewResearch(true); // Default to input if there's an initial value to be safe, or we can check later
+      }
     }
   }, [open, userId, initialActivityType, initialActivitySubtype, initialActivityValue, initialTaskId]);
 
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [tasksRes, settingsRes] = await Promise.all([
+      const [tasksRes, settingsRes, attRes] = await Promise.all([
         fetch(`${API_URL}/wm-tasks`),
-        fetch(`${API_URL}/system-settings`)
+        fetch(`${API_URL}/system-settings`),
+        fetch(`${API_URL}/attendance`)
       ]);
 
       if (settingsRes.ok) {
         setSettings(await settingsRes.json());
+      }
+      if (attRes.ok) {
+        const allAtt = await attRes.json();
+        const uniqueTitles = new Set<string>();
+        allAtt.forEach((a: any) => {
+          if (a.employeeId === userId && Array.isArray(a.punches)) {
+            a.punches.forEach((punch: any) => {
+              if (punch.activityType === "Research" && punch.activityValue) {
+                uniqueTitles.add(punch.activityValue);
+              }
+            });
+          }
+        });
+        setPastResearch(Array.from(uniqueTitles));
       }
       if (tasksRes.ok) {
         const allTasks = await tasksRes.json();
@@ -228,6 +248,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                 setActivitySubtype("");
                 setActivityValue("");
                 setTaskId("");
+                setIsNewResearch(false);
               }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select activity type" />
@@ -279,14 +300,58 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
             )}
 
             {activityType === "Research" && (
-              <div className="space-y-2">
-                <Label>Research Topic</Label>
-                <Input 
-                  placeholder="Enter research topic..." 
-                  value={activityValue}
-                  onChange={(e) => setActivityValue(e.target.value)}
-                  className="w-full"
-                />
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Research Topic</Label>
+                  {pastResearch.length > 0 && !isNewResearch ? (
+                    <div className="flex gap-2">
+                      <Select value={activityValue} onValueChange={(val) => {
+                        if (val === "ADD_NEW_RESEARCH_TOPIC") {
+                          setIsNewResearch(true);
+                          setActivityValue("");
+                        } else {
+                          setActivityValue(val);
+                        }
+                      }}>
+                        <SelectTrigger className="flex-1">
+                          <SelectValue placeholder="Select previous research topic" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {pastResearch.map(topic => (
+                            <SelectItem key={topic} value={topic}>{topic}</SelectItem>
+                          ))}
+                          <SelectSeparator />
+                          <SelectItem value="ADD_NEW_RESEARCH_TOPIC" className="text-brand-teal font-medium">
+                            + Add New Research Topic
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <Input 
+                          placeholder="Enter new research topic..." 
+                          value={activityValue}
+                          onChange={(e) => setActivityValue(e.target.value)}
+                          className="flex-1"
+                          autoFocus
+                        />
+                        {pastResearch.length > 0 && (
+                          <Button 
+                            variant="outline" 
+                            onClick={() => {
+                              setIsNewResearch(false);
+                              setActivityValue("");
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
