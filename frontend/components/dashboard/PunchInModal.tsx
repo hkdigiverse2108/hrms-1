@@ -55,11 +55,82 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
       }
       if (tasksRes.ok) {
         const allTasks = await tasksRes.json();
-        const myTasks = allTasks.filter((t: any) => {
+        let myTasks = allTasks.filter((t: any) => {
           if (t.assignedToId !== userId) return false;
           if (t.status === "completed" || t.status === "pending" || t.status === "onhold") return false;
           return true;
         });
+
+        // Fetch SMM tasks if applicable
+        try {
+          const userStr = localStorage.getItem("user");
+          const userObj = userStr ? JSON.parse(userStr) : null;
+          const userDept = userObj?.department?.toLowerCase() || "";
+          const isSmmUser = ["smm", "digital marketing", "creative", "graphics", "social media marketing"].includes(userDept);
+
+          if (isSmmUser) {
+            const [ccRes, owRes, projRes, clientRes] = await Promise.all([
+              fetch(`${API_URL}/content-calendar/all`),
+              fetch(`${API_URL}/other-work/all`),
+              fetch(`${API_URL}/projects`),
+              fetch(`${API_URL}/clients`)
+            ]);
+            
+            if (ccRes.ok && owRes.ok && projRes.ok && clientRes.ok) {
+              const [ccList, owList, projList, clientList] = await Promise.all([ccRes.json(), owRes.json(), projRes.json(), clientRes.json()]);
+              const smmTasks: any[] = [];
+              
+              const myOw = owList.filter((o: any) => o.assigneeId === userId && o.status !== 'Approved' && o.status !== 'Completed');
+              myOw.forEach((o: any) => {
+                smmTasks.push({
+                  id: o.id,
+                  title: o.taskName || 'Other Work Task',
+                  projectName: "",
+                  dueDate: o.deadline,
+                  status: o.status
+                });
+              });
+              
+              ccList.forEach((entry: any) => {
+                const client = clientList.find((c: any) => c.id === entry.clientId);
+                const project = projList.find((p: any) => p.id === entry.projectId);
+                const cName = client?.companyName || client?.clientName || "Unknown Client";
+                
+                const checkStage = (stageName: string, idField: string, dateField: string, linkField: string, linkCheck?: (e:any)=>boolean) => {
+                  const assigneeId = entry[idField] || project?.[idField] || client?.[idField];
+                  const isDone = linkCheck ? linkCheck(entry) : !!entry[linkField];
+                  if (assigneeId === userId && !isDone && entry[dateField]) {
+                    smmTasks.push({
+                      id: `${entry.id}-${stageName}`,
+                      title: `${stageName} - ${cName}`,
+                      projectName: project?.projectName || "",
+                      dueDate: entry[dateField],
+                      status: "pending"
+                    });
+                  }
+                };
+                
+                const isPost = entry.postReel === "Post";
+                if (!isPost) checkStage('Script', 'assignedScriptwriterId', 'scriptDate', 'scriptLink');
+                if (!isPost) checkStage('Shoot', 'assignedShooterId', 'shootDate', 'shootLink');
+                checkStage('Caption', 'assignedCaptionWriterId', 'captionDate', 'caption');
+                if (!isPost) checkStage('Thumbnail', 'assignedThumbnailDesignerId', 'thumbnailDate', 'thumbnailLink');
+                
+                const editIdField = isPost ? 'assignedPostDesignerId' : 'assignedReelEditorId';
+                const editLinkField = isPost ? 'finalPostLink' : 'finalReelLink';
+                checkStage('Editing', editIdField, 'editingStart', editLinkField);
+                
+                checkStage('Approval', 'assignedApproverId', 'approval', 'isApproved', (e) => e.isApproved === 'Yes');
+                checkStage('Posting', 'assignedPosterId', 'postingDate', 'postingLinkOfIg');
+              });
+              
+              myTasks = [...myTasks, ...smmTasks];
+            }
+          }
+        } catch (e) {
+          console.error("Error fetching SMM tasks", e);
+        }
+
         setTasks(myTasks);
       }
     } catch (err) {
@@ -73,6 +144,10 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
     const data: any = { type: activityType };
     if (activityType === "Work") {
       data.taskId = taskId;
+      const selectedTask = tasks.find(t => t.id === taskId);
+      if (selectedTask) {
+        data.value = selectedTask.projectName ? `${selectedTask.title} (${selectedTask.projectName})` : selectedTask.title;
+      }
     } else if (activityType === "Other") {
       data.subtype = activitySubtype;
       data.value = activityValue;

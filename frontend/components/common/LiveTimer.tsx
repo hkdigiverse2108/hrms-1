@@ -5,7 +5,7 @@ import dayjs from "dayjs";
 import customParseFormat from "dayjs/plugin/customParseFormat";
 dayjs.extend(customParseFormat);
 
-export function LiveTimer({ startTime, className }: { startTime: string, className?: string }) {
+export function LiveTimer({ startTime, className, serverTimeOffset = 0 }: { startTime: string, className?: string, serverTimeOffset?: number }) {
   const [elapsed, setElapsed] = useState<string>("00:00:00");
 
   useEffect(() => {
@@ -23,7 +23,7 @@ export function LiveTimer({ startTime, className }: { startTime: string, classNa
       ]);
       if (!start.isValid()) return;
 
-      const now = dayjs();
+      const now = dayjs(Date.now() + serverTimeOffset);
       
       // Calculate diff assuming both are today for simplicity in this display
       const todayStart = dayjs().hour(start.hour()).minute(start.minute()).second(start.second());

@@ -105,6 +105,7 @@ export default function DashboardPage() {
   const [workTime, setWorkTime] = useState("00:00:00");
   const [totalBreakTime, setTotalBreakTime] = useState("0h 0m");
   const [currentTime, setCurrentTime] = useState(getISTNow());
+  const serverTimeOffset = getISTNow().getTime() - Date.now();
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
   const [isPunchInModalOpen, setIsPunchInModalOpen] = useState(false);
   const [isBreakOutModalOpen, setIsBreakOutModalOpen] = useState(false);
@@ -123,9 +124,16 @@ export default function DashboardPage() {
         .then(data => {
           if (data && data.title) {
             setActiveTaskTitle(data.title);
+          } else if (attendanceStatus.record?.punchInActivityValue) {
+            setActiveTaskTitle(attendanceStatus.record.punchInActivityValue);
           }
         })
-        .catch(err => console.error("Error fetching active task:", err));
+        .catch(err => {
+          console.error("Error fetching active task:", err);
+          if (attendanceStatus.record?.punchInActivityValue) {
+            setActiveTaskTitle(attendanceStatus.record.punchInActivityValue);
+          }
+        });
     } else {
       setActiveTaskTitle(null);
     }
@@ -675,6 +683,7 @@ export default function DashboardPage() {
             <div className="lg:col-span-2 space-y-6">
               {/* 2. Show Employee Punch Card Box */}
               <EmployeeView 
+                serverTimeOffset={serverTimeOffset}
                 user={user} 
                 attendanceStatus={attendanceStatus} 
                 handlePunch={handlePunch} 
@@ -695,6 +704,7 @@ export default function DashboardPage() {
 
               {/* 3. Show Employee stats and Recent Attendance table */}
               <EmployeeView 
+                serverTimeOffset={serverTimeOffset}
                 user={user} 
                 attendanceStatus={attendanceStatus} 
                 handlePunch={handlePunch} 
@@ -1143,7 +1153,8 @@ function EmployeeView({
   showPunchCardOnly = false,
   showStatsAndAttendanceOnly = false,
   setIsPunchInModalOpen,
-  activeTaskTitle
+  activeTaskTitle,
+  serverTimeOffset
 }: { 
   user: any, 
   attendanceStatus: any, 
@@ -1162,7 +1173,8 @@ function EmployeeView({
   showPunchCardOnly?: boolean,
   showStatsAndAttendanceOnly?: boolean,
   setIsPunchInModalOpen: (val: boolean) => void,
-  activeTaskTitle?: string | null
+  activeTaskTitle?: string | null,
+  serverTimeOffset?: number
 }) {
   const userName = user?.name || "Guest";
   const firstName = user?.firstName || userName.split(' ')[0];
@@ -1311,7 +1323,7 @@ function EmployeeView({
                       )}
                     </span>
                     {attendanceStatus.record.lastPunchIn && (
-                      <LiveTimer startTime={attendanceStatus.record.lastPunchIn} />
+                      <LiveTimer startTime={attendanceStatus.record.lastPunchIn} serverTimeOffset={serverTimeOffset} />
                     )}
                   </div>
                 </div>

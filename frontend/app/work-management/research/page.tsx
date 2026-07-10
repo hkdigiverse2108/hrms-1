@@ -44,6 +44,7 @@ export default function ResearchPage() {
   const [logsModalOpen, setLogsModalOpen] = useState(false);
   const [selectedLogs, setSelectedLogs] = useState<any[]>([]);
   const [selectedResearchTitle, setSelectedResearchTitle] = useState("");
+  const [serverTimeOffset, setServerTimeOffset] = useState(0);
   
   // Filter State
   const [filterEmployee, setFilterEmployee] = useState("all");
@@ -100,6 +101,10 @@ export default function ResearchPage() {
         setProjects(allProjects);
       }
       if (attData.ok) {
+        const serverDateStr = attData.headers.get("Date");
+        if (serverDateStr) {
+           setServerTimeOffset(new Date(serverDateStr).getTime() - Date.now());
+        }
         setAttendanceStatus(await attData.json());
       }
     } catch (error) {
@@ -337,7 +342,10 @@ export default function ResearchPage() {
                             <div className="flex items-center gap-2 mb-1">
                               <p className="font-semibold text-slate-800 text-[13px] leading-tight line-clamp-1">{research.title}</p>
                               {attendanceStatus?.isPunchedIn && attendanceStatus?.record?.punchInActivityType === 'Research' && attendanceStatus?.record?.punchInActivityValue === research.title && (
-                                <LiveTimer startTime={attendanceStatus.record.lastPunchIn} />
+                                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-50 border border-green-100">
+                                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                                  <LiveTimer startTime={attendanceStatus.record.lastPunchIn} serverTimeOffset={serverTimeOffset} />
+                                </div>
                               )}
                             </div>
                             <p className="text-[11px] text-slate-500 line-clamp-1 leading-relaxed mb-2 max-w-[300px]" title={research.description}>{research.description}</p>
