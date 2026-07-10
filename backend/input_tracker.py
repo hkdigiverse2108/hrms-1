@@ -3,8 +3,19 @@ import time
 import asyncio
 import platform
 from datetime import datetime
-from pynput import mouse, keyboard
-from pynput.keyboard import Controller, Key
+try:
+    from pynput import mouse, keyboard
+    from pynput.keyboard import Controller, Key
+    _keyboard_controller = Controller()
+    _pynput_available = True
+except Exception as e:
+    _pynput_available = False
+    _keyboard_controller = None
+    mouse = None
+    keyboard = None
+    Controller = None
+    Key = None
+    print(f"[Tracker] WARNING: pynput failed to import ({e}). Input tracking will be disabled.", flush=True)
 import pytz
 from bson import ObjectId
 import socket
@@ -276,6 +287,10 @@ def on_press(key):
         _last_global_activity_time = time.time()
 
 def _run_listener():
+    if not _pynput_available:
+        while not _stop_event.is_set():
+            time.sleep(1)
+        return
     mouse_listener = None
     try:
         mouse_listener = mouse.Listener(on_move=on_move, on_click=on_click)
@@ -449,6 +464,9 @@ def kill_process(pid: int):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def close_active_tab():
+    if not _pynput_available or not _keyboard_controller:
+        print("[Tracker Restrictions] pynput not available, skipping close tab", flush=True)
+        return
     try:
         if PLATFORM == "Darwin":
             # macOS: Cmd+W

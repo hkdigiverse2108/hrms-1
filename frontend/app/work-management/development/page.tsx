@@ -830,7 +830,7 @@ export default function TasksPage() {
           {isRealAdmin && activeTab === "tasks" && (
             <Button onClick={() => setActiveTab("analytics")} variant="outline" className="gap-2 border-brand-teal text-brand-teal hover:bg-brand-teal/10 font-bold">
               <User className="w-4 h-4" />
-              Employee Analysis
+              Activity Log
             </Button>
           )}
 

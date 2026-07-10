@@ -41,6 +41,7 @@ const DEFAULT_MODULES = [
   { moduleName: 'tasks', displayName: 'Development', tabUrl: '/work-management/development' },
   { moduleName: 'personal-tasks', displayName: 'Tasks', tabUrl: '/tasks' },
   { moduleName: 'daily-progress', displayName: 'Daily Progress', tabUrl: '/work-management/daily-progress' },
+  { moduleName: 'work-logs', displayName: 'Work Logs', tabUrl: '/work-management/work-logs' },
   { moduleName: 'marketing', displayName: 'Digital Marketing', tabUrl: '/work-management/digital-marketing' },
   { moduleName: 'creative', displayName: 'Social Media Management', tabUrl: '/work-management/smm' },
   { moduleName: 'remarks', displayName: 'Penalty', tabUrl: '/penalty' },

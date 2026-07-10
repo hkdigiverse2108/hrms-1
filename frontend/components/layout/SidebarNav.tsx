@@ -108,6 +108,9 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (isAdmin || checkPermission('sales', 'canView')) {
       workManagementChildren.push(getItem(<Link href="/work-management/sales">Sales</Link>, "/work-management/sales"));
     }
+    if (isAdmin || checkPermission('work-logs', 'canView')) {
+      workManagementChildren.push(getItem(<Link href="/work-management/work-logs">Work Logs</Link>, "/work-management/work-logs"));
+    }
     if (isAdmin || checkPermission('clients', 'canView')) {
       workManagementChildren.push(getItem(<Link href="/work-management/clients">Clients</Link>, "/work-management/clients"));
     }
@@ -116,6 +119,9 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     }
     if (isAdmin || user?.role === 'HR' || user?.role === 'Team Leader' || checkPermission('creative', 'canView')) {
       workManagementChildren.push(getItem(<Link href="/work-management/smm">Social Media Management</Link>, "/work-management/smm"));
+    }
+    if (isAdmin || checkPermission('research', 'canView')) {
+      workManagementChildren.push(getItem(<Link href="/work-management/research">Research</Link>, "/work-management/research"));
     }
 
 

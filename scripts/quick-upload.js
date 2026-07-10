@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 async function uploadRelease() {
-  const apiUrl = 'https://new1-hrms.hkdigiverse.com/api';
+  const apiUrl = 'https://hrms.hkdigiverse.com/api';
   const email = 'pramitmangukiya602@gmail.com';
   const password = 'Pramit@2580';
 
@@ -69,7 +69,7 @@ async function uploadRelease() {
     console.log('\n==============================================');
     console.log('SUCCESS: Desktop release published!');
     console.log(`Version: ${newVersion}`);
-    console.log(`Download: https://new1-hrms.hkdigiverse.com${data.release.downloadUrl}`);
+    console.log(`Download: https://hrms.hkdigiverse.com${data.release.downloadUrl}`);
     console.log('==============================================');
   } else {
     const errText = await uploadRes.text();

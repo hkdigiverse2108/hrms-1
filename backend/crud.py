@@ -2174,7 +2174,7 @@ async def get_attendance_status(db, employee_id: str):
     record = records[0] if records else None
     return fix_id(record)
 
-async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None, performed_by: str = "System", user_name: str = "System User"):
+async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None, performed_by: str = "System", user_name: str = "System User", punch_in_activity_type: Optional[str] = None, punch_in_activity_subtype: Optional[str] = None, punch_in_activity_value: Optional[str] = None, punch_in_task_id: Optional[str] = None):
     employee = await get_employee(db, employee_id)
     if not employee or employee.get("status", "").lower() == "inactive":
         return None
@@ -2311,16 +2311,89 @@ async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None, pe
         print(f"Error computing late punch-in status: {e}")
 
     if existing_record:
-        # If already active or on break, just return the record
-        if existing_record.get("status") in ["Active", "On Break"] and existing_record.get("checkOut") is None:
+        # If already active, check if there's a new activity type passed, and if so, change activity instead of just returning.
+        if existing_record.get("status") == "Active" and existing_record.get("checkOut") is None:
+            if punch_in_activity_type is not None:
+                punches = existing_record.get("punches", [])
+                if punches and punches[-1].get("punchOut") is None:
+                    punches[-1]["punchOut"] = now_time_str
+                
+                new_punch = {
+                    "punchIn": now_time_str, 
+                    "punchOut": None,
+                    "activityType": punch_in_activity_type,
+                    "activitySubtype": punch_in_activity_subtype,
+                    "activityValue": punch_in_activity_value,
+                    "taskId": punch_in_task_id
+                }
+                punches.append(new_punch)
+                
+                await db.attendance.update_one(
+                    {"_id": existing_record["_id"]},
+                    {
+                        "$set": {
+                            "punches": punches,
+                            "punchInActivityType": punch_in_activity_type,
+                            "punchInActivitySubtype": punch_in_activity_subtype,
+                            "punchInActivityValue": punch_in_activity_value,
+                            "punchInTaskId": punch_in_task_id
+                        }
+                    }
+                )
+                
+
+                updated_doc = await db.attendance.find_one({"_id": existing_record["_id"]})
+                await log_activity(
+                    db=db,
+                    action="Activity Changed",
+                    performedBy=performed_by if performed_by != "System" else employee_id,
+                    userName=user_name if user_name != "System User" else employee.get("name", "Staff"),
+                    details=f"Employee changed activity to {punch_in_activity_type} at {now_time_str}.",
+                    attendanceId=str(updated_doc["_id"])
+                )
+                
+                # Auto-create research if it doesn't exist
+                if punch_in_activity_type == "Research" and punch_in_activity_value:
+                    try:
+                        existing_res = await db.research.find_one({"title": punch_in_activity_value, "createdBy": employee_id})
+                        if not existing_res:
+                            new_research = {
+                                "title": punch_in_activity_value,
+                                "description": "",
+                                "link": "",
+                                "createdBy": employee_id,
+                                "createdByName": employee.get("name", ""),
+                                "sharedWith": [],
+                                "projectId": "",
+                                "createdAt": get_now()
+                            }
+                            await db.research.insert_one(new_research)
+                    except Exception as e_res:
+                        print(f"Error auto-creating Research: {e_res}")
+                        
+                return fix_id(updated_doc)
+            return fix_id(existing_record)
+            
+        if existing_record.get("status") == "On Break" and existing_record.get("checkOut") is None:
             return fix_id(existing_record)
         
         # If logged out, resume this record instead of creating a new one
-        new_punch = {"punchIn": now_time_str, "punchOut": None}
+        new_punch = {
+            "punchIn": now_time_str, 
+            "punchOut": None,
+            "activityType": punch_in_activity_type,
+            "activitySubtype": punch_in_activity_subtype,
+            "activityValue": punch_in_activity_value,
+            "taskId": punch_in_task_id
+        }
         set_values = {
             "status": "Active",
             "checkOut": None,
-            "lastPunchIn": now_time_str
+            "lastPunchIn": now_time_str,
+            "punchInActivityType": punch_in_activity_type,
+            "punchInActivitySubtype": punch_in_activity_subtype,
+            "punchInActivityValue": punch_in_activity_value,
+            "punchInTaskId": punch_in_task_id
         }
         # If the existing checkIn is a placeholder or empty, set it to the actual first punch-in time!
         if existing_record.get("checkIn") in [None, "--", "--:--", "", "-"]:
@@ -2356,6 +2429,26 @@ async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None, pe
             details=f"Employee clocked in at {now_time_str} (Resumed existing session).",
             attendanceId=str(updated_doc["_id"])
         )
+        
+        # Auto-create research if it doesn't exist
+        if punch_in_activity_type == "Research" and punch_in_activity_value:
+            try:
+                existing_res = await db.research.find_one({"title": punch_in_activity_value, "createdBy": employee_id})
+                if not existing_res:
+                    new_research = {
+                        "title": punch_in_activity_value,
+                        "description": "",
+                        "link": "",
+                        "createdBy": employee_id,
+                        "createdByName": employee.get("name", ""),
+                        "sharedWith": [],
+                        "projectId": "",
+                        "createdAt": get_now()
+                    }
+                    await db.research.insert_one(new_research)
+            except Exception as e_res:
+                print(f"Error auto-creating Research: {e_res}")
+                
         return fix_id(updated_doc)
     
     # First punch of the day: create new record (use naive date so MongoDB stores it as exactly today's midnight UTC date)
@@ -2369,9 +2462,20 @@ async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None, pe
         "status": "Active",
         "workHours": None,
         "accumulatedWorkSeconds": 0,
-        "punches": [{"punchIn": now_time_str, "punchOut": None}],
+        "punches": [{
+            "punchIn": now_time_str, 
+            "punchOut": None,
+            "activityType": punch_in_activity_type,
+            "activitySubtype": punch_in_activity_subtype,
+            "activityValue": punch_in_activity_value,
+            "taskId": punch_in_task_id
+        }],
         "remarks": f"On Leave: {half_day_type}" if half_day_type else "-",
-        "isLate": is_late_punch
+        "isLate": is_late_punch,
+        "punchInActivityType": punch_in_activity_type,
+        "punchInActivitySubtype": punch_in_activity_subtype,
+        "punchInActivityValue": punch_in_activity_value,
+        "punchInTaskId": punch_in_task_id
     }
     
     # If late, insert the remark
@@ -2391,6 +2495,26 @@ async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None, pe
         details=f"Employee clocked in at {now_time_str}.",
         attendanceId=attendance_data["id"]
     )
+    
+    # Auto-create research if it doesn't exist
+    if punch_in_activity_type == "Research" and punch_in_activity_value:
+        try:
+            existing_res = await db.research.find_one({"title": punch_in_activity_value, "createdBy": employee_id})
+            if not existing_res:
+                new_research = {
+                    "title": punch_in_activity_value,
+                    "description": "",
+                    "link": "",
+                    "createdBy": employee_id,
+                    "createdByName": employee.get("name", ""),
+                    "sharedWith": [],
+                    "projectId": "",
+                    "createdAt": get_now()
+                }
+                await db.research.insert_one(new_research)
+        except Exception as e_res:
+            print(f"Error auto-creating Research: {e_res}")
+
     if "_id" in attendance_data:
         attendance_data.pop("_id")
     return attendance_data
@@ -2545,23 +2669,34 @@ async def break_in(db, employee_id: str):
     if not status or status.get("status") == "On Break":
         return None
     
+    now_str = get_now().strftime("%H:%M:%S")
     new_break = {
-        "startTime": get_now().strftime("%H:%M:%S"),
+        "startTime": now_str,
         "endTime": None,
         "duration": None
     }
     
+    update_data = {
+        "$push": {"breaks": new_break},
+        "$set": {"status": "On Break"}
+    }
+    
+    # Close the current punch so its time stops
+    if status.get("punches") and len(status["punches"]) > 0:
+        last_punch_idx = len(status["punches"]) - 1
+        last_punch = status["punches"][last_punch_idx]
+        if not last_punch.get("punchOut"):
+            update_data["$set"] = update_data.get("$set", {})
+            update_data["$set"][f"punches.{last_punch_idx}.punchOut"] = now_str
+            
     await db.attendance.update_one(
         {"_id": ObjectId(status["id"])},
-        {
-            "$push": {"breaks": new_break},
-            "$set": {"status": "On Break"}
-        }
+        update_data
     )
     result = await db.attendance.find_one({"_id": ObjectId(status["id"])})
     return fix_id(result)
 
-async def break_out(db, employee_id: str):
+async def break_out(db, employee_id: str, resume_task: bool = False):
     await auto_close_stale_open_sessions(db, employee_id)
     query_or = [{"employeeId": employee_id}]
     if ObjectId.is_valid(employee_id):
@@ -2592,15 +2727,22 @@ async def break_out(db, employee_id: str):
     minutes = int(duration_delta.total_seconds()) // 60
     duration_str = f"{minutes}m"
     
+    update_data = {
+        "$set": {
+            f"breaks.{last_break_idx}.endTime": now.strftime("%H:%M:%S"),
+            f"breaks.{last_break_idx}.duration": duration_str,
+            "status": "Active"
+        }
+    }
+    
+    if resume_task and record.get("punches") and len(record["punches"]) > 0:
+        # Find the last punch and remove its punchOut so it continues
+        last_punch_idx = len(record["punches"]) - 1
+        update_data["$set"][f"punches.{last_punch_idx}.punchOut"] = None
+
     await db.attendance.update_one(
         {"_id": ObjectId(record["_id"])},
-        {
-            "$set": {
-                f"breaks.{last_break_idx}.endTime": now.strftime("%H:%M:%S"),
-                f"breaks.{last_break_idx}.duration": duration_str,
-                "status": "Active"
-            }
-        }
+        update_data
     )
     result = await db.attendance.find_one({"_id": ObjectId(record["_id"])})
     return fix_id(result)
@@ -3304,7 +3446,9 @@ async def get_projects(db, userId: str = None, role: str = None, skip: int = 0, 
                 {"assignedPostDesignerId": userId},
                 {"assignedShooterId": userId},
                 {"assignedApproverId": userId},
-                {"assignedPosterId": userId}
+                {"assignedPosterId": userId},
+                {"assignedCaptionWriterId": userId},
+                {"assignedThumbnailDesignerId": userId}
             ]
             if project_ids:
                 project_ids_as_obj = []
@@ -3769,6 +3913,14 @@ async def delete_task(db, task_id: str):
     return True
 
 # Work Management Task CRUD
+async def get_wm_task(db, task_id: str):
+    from bson.objectid import ObjectId
+    try:
+        task = await db.wm_tasks.find_one({"_id": ObjectId(task_id)})
+        return fix_id(task) if task else None
+    except Exception:
+        return None
+
 async def get_wm_tasks(db, userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 1000):
     query = {}
     if userId and not await user_has_full_entity_access(db, userId, role, "wm-tasks"):
@@ -4637,6 +4789,7 @@ async def get_system_settings(db):
             "inactivityTimeoutMins": 5,
             "allowedMonthlyPaidLeaves": 1,
             "companyGstin": "24AAXFN3372M1ZK",
+            "otherCategories": ["Activity", "Meeting"],
             "companyAddress": "FLAT-204, 2nd FLOOR, RS NO-67/1, WING-A, HARIKRUSHANA COMPLEX, OPP. BHAGAT NAGAR, VED, GURUKULROAD, KATARGAM, SURAT- 395004, GUJARAT, INDIA.",
             "companyPhone": "+91 87805 64463",
             "companyEmail": "billing@hkdigiverse.com",
@@ -8294,6 +8447,10 @@ async def get_content_calendar_entries(db, client_id: str, month_year: str = Non
 
 async def create_content_calendar_entry(db, entry_data: dict):
     updated_by = entry_data.pop("updatedBy", "Unknown User")
+    
+    if entry_data.get("postReel") == "Post" and not entry_data.get("shootLink"):
+        entry_data["shootLink"] = "-"
+        
     entry_data["logs"] = [{
         "timestamp": datetime.now(IST).isoformat(),
         "action": "Row created",
@@ -8314,6 +8471,10 @@ async def update_content_calendar_entry(db, entry_id: str, update_data: dict):
         
     changes = []
     updated_by = update_data.get("updatedBy", "Unknown User")
+    if update_data.get("postReel") == "Post" or (existing.get("postReel") == "Post" and "postReel" not in update_data):
+        if not update_data.get("shootLink") and not existing.get("shootLink"):
+            update_data["shootLink"] = "-"
+            
     for key, val in update_data.items():
         if key not in ["logs", "clientId", "monthYear", "id", "_id", "updated_at", "created_at", "updatedAt", "createdAt", "updatedBy"]:
             old_val = existing.get(key)
@@ -8710,3 +8871,59 @@ async def update_task_preset(db, preset_id: str, update: dict):
 
 async def delete_task_preset(db, preset_id: str):
     return await delete_item(db, "task_presets", preset_id)
+
+# --- Research ---
+async def create_research(db, data: dict):
+    now = get_now()
+    data["createdAt"] = now
+    data["logs"] = [{
+        "action": "Created",
+        "byUserId": data.get("createdBy", "Unknown"),
+        "byUserName": data.get("createdByName", "Unknown"),
+        "timestamp": now
+    }]
+    result = await db.research.insert_one(data)
+    created = await db.research.find_one({"_id": result.inserted_id})
+    return fix_id(created)
+
+async def get_research(db, user_id: str, is_admin: bool):
+    if is_admin:
+        cursor = db.research.find().sort("createdAt", -1)
+    else:
+        cursor = db.research.find({
+            "$or": [
+                {"createdBy": user_id},
+                {"sharedWith": user_id}
+            ]
+        }).sort("createdAt", -1)
+    
+    research_list = await cursor.to_list(length=None)
+    return [fix_id(r) for r in research_list]
+
+async def update_research(db, research_id: str, data: dict):
+    from bson import ObjectId
+    if not data:
+        updated = await db.research.find_one({"_id": ObjectId(research_id)})
+        return fix_id(updated) if updated else None
+    
+    updatedBy = data.pop("updatedBy", "Unknown")
+    updatedByName = data.pop("updatedByName", "Unknown")
+    
+    log_entry = {
+        "action": "Updated",
+        "byUserId": updatedBy,
+        "byUserName": updatedByName,
+        "timestamp": get_now()
+    }
+    
+    await db.research.update_one(
+        {"_id": ObjectId(research_id)}, 
+        {"$set": data, "$push": {"logs": log_entry}}
+    )
+    updated = await db.research.find_one({"_id": ObjectId(research_id)})
+    return fix_id(updated) if updated else None
+
+async def delete_research(db, research_id: str):
+    from bson import ObjectId
+    result = await db.research.delete_one({"_id": ObjectId(research_id)})
+    return result.deleted_count > 0

@@ -29,6 +29,8 @@ function getRequiredModuleForPath(pathname: string): string | null {
   if (pathname.startsWith("/work-management/clients")) return "clients";
   if (pathname.startsWith("/work-management/digital-marketing")) return "marketing";
   if (pathname.startsWith("/work-management/smm")) return "creative";
+  if (pathname.startsWith("/work-management/work-logs")) return "work-logs";
+  if (pathname.startsWith("/work-management/research")) return "research";
   
   if (pathname.startsWith("/employees/organization")) return "org-structure";
   if (pathname.startsWith("/employees/attendance")) return "employee-attendance";

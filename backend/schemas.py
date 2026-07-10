@@ -1,4 +1,4 @@
-from pydantic import BaseModel as PydanticBaseModel, model_serializer, BeforeValidator, PlainSerializer, SerializationInfo
+from pydantic import BaseModel as PydanticBaseModel, model_serializer, BeforeValidator, PlainSerializer, SerializationInfo, Field
 from typing import List, Optional, Any, Dict, Annotated, Union
 from datetime import datetime, date
 import pytz
@@ -338,6 +338,10 @@ class Break(BaseModel):
 class PunchLog(BaseModel):
     punchIn: str
     punchOut: Optional[str] = None
+    activityType: Optional[str] = None
+    activitySubtype: Optional[str] = None
+    activityValue: Optional[str] = None
+    taskId: Optional[str] = None
  
 class AttendanceBase(BaseModel):
     employeeId: str
@@ -352,6 +356,10 @@ class AttendanceBase(BaseModel):
     punches: List[PunchLog] = []
     remarks: Optional[str] = None
     isLate: Optional[bool] = False
+    punchInActivityType: Optional[str] = None
+    punchInActivitySubtype: Optional[str] = None
+    punchInActivityValue: Optional[str] = None
+    punchInTaskId: Optional[str] = None
  
 class Attendance(AttendanceBase):
     id: str
@@ -377,6 +385,10 @@ class PunchRequest(BaseModel):
 
 class PunchInRequest(BaseModel):
     punch_in_time: Optional[str] = None
+    activityType: Optional[str] = None
+    activitySubtype: Optional[str] = None
+    activityValue: Optional[str] = None
+    taskId: Optional[str] = None
 
 class PunchOutRequest(BaseModel):
     punch_out_time: Optional[str] = None
@@ -1008,6 +1020,10 @@ class ClientBase(BaseModel):
     assignedApproverName: Optional[str] = None
     assignedPosterId: Optional[str] = None
     assignedPosterName: Optional[str] = None
+    assignedCaptionWriterId: Optional[str] = None
+    assignedCaptionWriterName: Optional[str] = None
+    assignedThumbnailDesignerId: Optional[str] = None
+    assignedThumbnailDesignerName: Optional[str] = None
     campaigns: Optional[RobustCampaigns] = []
 
 class ClientCreate(ClientBase):
@@ -1080,6 +1096,10 @@ class ClientUpdate(BaseModel):
     assignedApproverName: Optional[str] = None
     assignedPosterId: Optional[str] = None
     assignedPosterName: Optional[str] = None
+    assignedCaptionWriterId: Optional[str] = None
+    assignedCaptionWriterName: Optional[str] = None
+    assignedThumbnailDesignerId: Optional[str] = None
+    assignedThumbnailDesignerName: Optional[str] = None
 
 class Client(ClientBase):
     id: str
@@ -1139,11 +1159,21 @@ class ProjectBase(BaseModel):
     postRequired: Optional[str] = "No"
     reelRequired: Optional[str] = "No"
     assignedScriptwriterId: Optional[str] = None
+    assignedScriptwriterName: Optional[str] = None
     assignedReelEditorId: Optional[str] = None
+    assignedReelEditorName: Optional[str] = None
     assignedPostDesignerId: Optional[str] = None
+    assignedPostDesignerName: Optional[str] = None
     assignedShooterId: Optional[str] = None
+    assignedShooterName: Optional[str] = None
     assignedApproverId: Optional[str] = None
+    assignedApproverName: Optional[str] = None
     assignedPosterId: Optional[str] = None
+    assignedPosterName: Optional[str] = None
+    assignedCaptionWriterId: Optional[str] = None
+    assignedCaptionWriterName: Optional[str] = None
+    assignedThumbnailDesignerId: Optional[str] = None
+    assignedThumbnailDesignerName: Optional[str] = None
     
     # Phase Wise Project Fields
     isPhaseWise: Optional[bool] = False
@@ -1210,11 +1240,21 @@ class ProjectUpdate(BaseModel):
     postRequired: Optional[str] = None
     reelRequired: Optional[str] = None
     assignedScriptwriterId: Optional[str] = None
+    assignedScriptwriterName: Optional[str] = None
     assignedReelEditorId: Optional[str] = None
+    assignedReelEditorName: Optional[str] = None
     assignedPostDesignerId: Optional[str] = None
+    assignedPostDesignerName: Optional[str] = None
     assignedShooterId: Optional[str] = None
+    assignedShooterName: Optional[str] = None
     assignedApproverId: Optional[str] = None
+    assignedApproverName: Optional[str] = None
     assignedPosterId: Optional[str] = None
+    assignedPosterName: Optional[str] = None
+    assignedCaptionWriterId: Optional[str] = None
+    assignedCaptionWriterName: Optional[str] = None
+    assignedThumbnailDesignerId: Optional[str] = None
+    assignedThumbnailDesignerName: Optional[str] = None
     
     # Phase Wise Project Fields
     isPhaseWise: Optional[bool] = None
@@ -1514,6 +1554,9 @@ class SystemSettingsBase(BaseModel):
     inactivityTimeoutMins: Optional[int] = 5
     allowedMonthlyPaidLeaves: Optional[int] = 1
     companyGstin: Optional[str] = "24AAXFN3372M1ZK"
+    otherActivities: Optional[List[str]] = Field(default_factory=list)
+    otherMeetings: Optional[List[str]] = Field(default_factory=list)
+    otherCategories: Optional[List[str]] = ["Activity", "Meeting"]
     companyAddress: Optional[str] = "FLAT-204, 2nd FLOOR, RS NO-67/1, WING-A, HARIKRUSHANA COMPLEX, OPP. BHAGAT NAGAR, VED, GURUKULROAD, KATARGAM, SURAT- 395004, GUJARAT, INDIA."
     companyPhone: Optional[str] = "+91 87805 64463"
     companyEmail: Optional[str] = "billing@hkdigiverse.com"
@@ -1552,6 +1595,7 @@ class SystemSettingsUpdate(BaseModel):
     inactivityTimeoutMins: Optional[int] = None
     allowedMonthlyPaidLeaves: Optional[int] = None
     companyGstin: Optional[str] = None
+    otherCategories: Optional[List[str]] = None
     companyAddress: Optional[str] = None
     companyPhone: Optional[str] = None
     companyEmail: Optional[str] = None
@@ -2494,3 +2538,33 @@ class Gallery(GalleryBase):
     id: str
     class Config:
         from_attributes = True
+
+# --- Research ---
+class ResearchBase(BaseModel):
+    title: str
+    description: str
+    link: Optional[str] = ''
+    createdBy: str
+    createdByName: str
+    sharedWith: List[str] = []
+    projectId: Optional[str] = ''
+    logs: Optional[List[dict]] = []
+
+class ResearchCreate(ResearchBase):
+    pass
+
+class ResearchUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    link: Optional[str] = None
+    sharedWith: Optional[List[str]] = None
+    projectId: Optional[str] = None
+    updatedBy: Optional[str] = None
+    updatedByName: Optional[str] = None
+
+class ResearchResponse(ResearchBase):
+    id: str
+    createdAt: datetime
+    class Config:
+        from_attributes = True
+

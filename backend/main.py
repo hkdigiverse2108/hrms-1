@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, File, Form, UploadFile, Request, Response, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, HTTPException, Depends, File, Form, UploadFile, Request, Response, WebSocket, WebSocketDisconnect, Query, Header
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
@@ -954,7 +954,17 @@ async def get_attendance_status(employee_id: str, db=Depends(get_db)):
 async def punch_in(employee_id: str, request: Request, payload: Optional[schemas.PunchInRequest] = None, db=Depends(get_db)):
     punch_in_time = payload.punch_in_time if payload else None
     performed_by, user_name = await get_actor_from_request(request, db)
-    result = await crud.punch_in(db, employee_id, punch_in_time=punch_in_time, performed_by=performed_by, user_name=user_name)
+    result = await crud.punch_in(
+        db, 
+        employee_id, 
+        punch_in_time=punch_in_time, 
+        performed_by=performed_by, 
+        user_name=user_name,
+        punch_in_activity_type=payload.activityType if payload else None,
+        punch_in_activity_subtype=payload.activitySubtype if payload else None,
+        punch_in_activity_value=payload.activityValue if payload else None,
+        punch_in_task_id=payload.taskId if payload else None
+    )
     if not result:
         raise HTTPException(status_code=400, detail="Punch in failed")
     return result
@@ -1007,8 +1017,8 @@ async def break_in(employee_id: str, db=Depends(get_db)):
     return result
 
 @app.post("/attendance/break-out/{employee_id}")
-async def break_out(employee_id: str, db=Depends(get_db)):
-    result = await crud.break_out(db, employee_id)
+async def break_out(employee_id: str, resume_task: bool = False, db=Depends(get_db)):
+    result = await crud.break_out(db, employee_id, resume_task=resume_task)
     if not result:
         raise HTTPException(status_code=400, detail="Break out failed")
     return result
@@ -1076,6 +1086,10 @@ async def read_analytics_overview(months: int = 6, db=Depends(get_db)):
 async def read_payroll(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_payroll(db, skip=skip, limit=limit)
 
+@app.post("/payroll", response_model=schemas.Payroll)
+async def create_payroll(payroll: schemas.PayrollBase, db=Depends(get_db)):
+    return await crud.create_item(db, "payroll", payroll.dict())
+    
 @app.post("/payroll/process")
 async def process_payroll(request: dict, request_obj: Request, db=Depends(get_db)):
     # request should contain month and year
@@ -1588,6 +1602,13 @@ async def read_task_activities(task_id: str, db=Depends(get_db)):
 @app.get("/wm-tasks", response_model=List[schemas.WMTask])
 async def read_wm_tasks(userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_wm_tasks(db, userId=userId, role=role, skip=skip, limit=limit)
+
+@app.get("/wm-tasks/{task_id}", response_model=schemas.WMTask)
+async def read_wm_task(task_id: str, db=Depends(get_db)):
+    task = await crud.get_wm_task(db, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
 
 @app.post("/wm-tasks", response_model=schemas.WMTask)
 async def create_wm_task(task: schemas.WMTaskCreate, db=Depends(get_db)):
@@ -3760,7 +3781,31 @@ async def assign_task_preset(preset_id: str, payload: dict, db=Depends(get_db)):
     return {"message": "Success", "tasks_created": len(created_tasks), "tasks": created_tasks}
 
 
+# --- Research API ---
+@app.post("/research", response_model=schemas.ResearchResponse)
+async def create_research(entry: schemas.ResearchCreate, db=Depends(get_db)):
+    return await crud.create_research(db, entry.model_dump())
+
+@app.get("/research", response_model=List[schemas.ResearchResponse])
+async def get_research(user_id: str = Header(...), role: str = Header(...), db=Depends(get_db)):
+    is_admin = role.lower() == "admin"
+    return await crud.get_research(db, user_id, is_admin)
+
+@app.put("/research/{entry_id}", response_model=schemas.ResearchResponse)
+async def update_research(entry_id: str, entry: schemas.ResearchUpdate, db=Depends(get_db)):
+    updated = await crud.update_research(db, entry_id, entry.model_dump(exclude_unset=True))
+    if not updated:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return updated
+
+@app.delete("/research/{entry_id}")
+async def delete_research(entry_id: str, db=Depends(get_db)):
+    success = await crud.delete_research(db, entry_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return {"message": "Entry deleted successfully"}
+
 if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", os.environ.get("PORT", 8000)))
     print(f"Starting HRMS Backend on http://127.0.0.1:{port}")
-    uvicorn.run("main:app", host="127.0.0.1", port=port, reload=False)
+    uvicorn.run(app, host="127.0.0.1", port=port, reload=False)

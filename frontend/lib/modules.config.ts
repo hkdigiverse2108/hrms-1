@@ -121,10 +121,12 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { moduleName: 'tasks', displayName: 'Development', tabUrl: '/work-management/development' },
       { moduleName: 'personal-tasks', displayName: 'Tasks', tabUrl: '/tasks' },
       { moduleName: 'daily-progress', displayName: 'Daily Progress', tabUrl: '/work-management/daily-progress' },
+      { moduleName: 'work-logs', displayName: 'Work Logs', tabUrl: '/work-management/work-logs' },
       { moduleName: 'sales', displayName: 'Sales', tabUrl: '/work-management/sales' },  
       { moduleName: 'clients', displayName: 'Clients', tabUrl: '/work-management/clients' },
       { moduleName: 'marketing', displayName: 'Digital Marketing', tabUrl: '/work-management/digital-marketing' },
       { moduleName: 'creative', displayName: 'Social Media Management', tabUrl: '/work-management/smm' },
+      { moduleName: 'research', displayName: 'Research', tabUrl: '/work-management/research' },
     ]
   },
   {
