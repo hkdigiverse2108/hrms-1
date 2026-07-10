@@ -28,6 +28,16 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
   const [activityValue, setActivityValue] = useState<string>("");
   const [taskId, setTaskId] = useState<string>("");
   
+  let userDept = "";
+  if (typeof window !== "undefined") {
+    const userStr = localStorage.getItem("user");
+    if (userStr) {
+      try {
+        userDept = (JSON.parse(userStr).department || "").toLowerCase();
+      } catch (e) {}
+    }
+  }
+  
   const [tasks, setTasks] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -91,38 +101,52 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                 });
               });
               
-              ccList.forEach((entry: any) => {
-                const client = clientList.find((c: any) => c.id === entry.clientId);
-                const project = projList.find((p: any) => p.id === entry.projectId);
-                const cName = client?.companyName || client?.clientName || "Unknown Client";
-                
-                const checkStage = (stageName: string, idField: string, dateField: string, linkField: string, linkCheck?: (e:any)=>boolean) => {
-                  const assigneeId = entry[idField] || project?.[idField] || client?.[idField];
-                  const isDone = linkCheck ? linkCheck(entry) : !!entry[linkField];
-                  if (assigneeId === userId && !isDone && entry[dateField]) {
-                    smmTasks.push({
-                      id: `${entry.id}-${stageName}`,
-                      title: `${stageName} - ${cName}`,
-                      projectName: project?.projectName || "",
-                      dueDate: entry[dateField],
-                      status: "pending"
-                    });
-                  }
-                };
-                
-                const isPost = entry.postReel === "Post";
-                if (!isPost) checkStage('Script', 'assignedScriptwriterId', 'scriptDate', 'scriptLink');
-                if (!isPost) checkStage('Shoot', 'assignedShooterId', 'shootDate', 'shootLink');
-                checkStage('Caption', 'assignedCaptionWriterId', 'captionDate', 'caption');
-                if (!isPost) checkStage('Thumbnail', 'assignedThumbnailDesignerId', 'thumbnailDate', 'thumbnailLink');
-                
-                const editIdField = isPost ? 'assignedPostDesignerId' : 'assignedReelEditorId';
-                const editLinkField = isPost ? 'finalPostLink' : 'finalReelLink';
-                checkStage('Editing', editIdField, 'editingStart', editLinkField);
-                
-                checkStage('Approval', 'assignedApproverId', 'approval', 'isApproved', (e) => e.isApproved === 'Yes');
-                checkStage('Posting', 'assignedPosterId', 'postingDate', 'postingLinkOfIg');
-              });
+              if (userDept === "digital marketing" || userDept === "marketing") {
+                const myProjects = projList.filter((p: any) => p.assignedEmployeeId === userId && p.status !== 'Completed');
+                myProjects.forEach((p: any) => {
+                  const client = clientList.find((c: any) => String(c.id) === String(p.clientId));
+                  const cName = client?.companyName || client?.clientName || p.clientName || "Unknown Client";
+                  smmTasks.push({
+                    id: p.id,
+                    title: cName,
+                    projectName: p.projectName || p.title || "",
+                    dueDate: p.endDate || p.deadline || "",
+                    status: "pending"
+                  });
+                });
+              } else {
+                ccList.forEach((entry: any) => {
+                  const client = clientList.find((c: any) => c.id === entry.clientId);
+                  const project = projList.find((p: any) => p.id === entry.projectId);
+                  const cName = client?.companyName || client?.clientName || "Unknown Client";
+                  
+                  const checkStage = (stageName: string, idField: string, dateField: string, linkField: string, linkCheck?: (e:any)=>boolean) => {
+                    const assigneeId = entry[idField] || project?.[idField] || client?.[idField];
+                    const isDone = linkCheck ? linkCheck(entry) : !!entry[linkField];
+                    if (assigneeId === userId && !isDone && entry[dateField]) {
+                      smmTasks.push({
+                        id: `${entry.id}-${stageName}`,
+                        title: `${stageName} - ${cName}`,
+                        projectName: project?.projectName || "",
+                        dueDate: entry[dateField],
+                        status: "pending"
+                      });
+                    }
+                  };
+                  
+                  const isPost = entry.postReel === "Post";
+                  if (!isPost) checkStage('Script', 'assignedScriptwriterId', 'scriptDate', 'scriptLink');
+                  if (!isPost) checkStage('Shoot', 'assignedShooterId', 'shootDate', 'shootLink');
+                  checkStage('Caption', 'assignedCaptionWriterId', 'captionDate', 'caption');
+                  if (!isPost) checkStage('Thumbnail', 'assignedThumbnailDesignerId', 'thumbnailDate', 'thumbnailLink');
+                  
+                  const editIdField = isPost ? 'assignedPostDesignerId' : 'assignedReelEditorId';
+                  const editLinkField = isPost ? 'finalPostLink' : 'finalReelLink';
+                  checkStage('Editing', editIdField, 'editingStart', editLinkField);
+                  checkStage('Approval', 'assignedApproverId', 'approval', 'isApproved', (e) => e.isApproved === 'Yes');
+                  checkStage('Posting', 'assignedPosterId', 'postingDate', 'postingLinkOfIg');
+                });
+              }
               
               myTasks = [...myTasks, ...smmTasks];
             }
@@ -209,7 +233,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                   <SelectValue placeholder="Select activity type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Work">Work (Tasks)</SelectItem>
+                  <SelectItem value="Work">Work</SelectItem>
                   <SelectItem value="Research">Research</SelectItem>
                   <SelectItem value="Other">Other</SelectItem>
                 </SelectContent>
@@ -218,10 +242,10 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
 
             {activityType === "Work" && (
               <div className="space-y-2">
-                <Label>Select Task</Label>
+                <Label>{userDept === 'digital marketing' || userDept === 'marketing' ? 'Select Brand' : 'Select Task'}</Label>
                 <Select value={taskId} onValueChange={setTaskId}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select a task from your board" />
+                    <SelectValue placeholder={userDept === 'digital marketing' || userDept === 'marketing' ? 'Select a brand' : 'Select a task from your board'} />
                   </SelectTrigger>
                   <SelectContent>
                     {tasks.length === 0 && (
