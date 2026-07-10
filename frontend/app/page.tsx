@@ -106,6 +106,7 @@ export default function DashboardPage() {
   const [currentTime, setCurrentTime] = useState(getISTNow());
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
   const [isPunchInModalOpen, setIsPunchInModalOpen] = useState(false);
+  const [isBreakOutModalOpen, setIsBreakOutModalOpen] = useState(false);
   const [leaveRequests, setLeaveRequests] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [interns, setInterns] = useState<any[]>([]);
@@ -458,6 +459,11 @@ export default function DashboardPage() {
       setIsPunchInModalOpen(true);
       return;
     }
+    
+    if (type === 'break-out') {
+      setIsBreakOutModalOpen(true);
+      return;
+    }
 
     setIsPunching(true);
     try {
@@ -477,6 +483,38 @@ export default function DashboardPage() {
       }
     } catch (err) {
       console.error("Punch error:", err);
+      toast.error("Failed to connect to the server. Please ensure the backend is running.");
+    } finally {
+      setIsPunching(false);
+    }
+  };
+
+  const handleBreakOutConfirm = async (action: 'continue' | 'change') => {
+    setIsBreakOutModalOpen(false);
+    setIsPunching(true);
+    
+    try {
+      const resumeTask = action === 'continue';
+      const breakOutRes = await fetch(`${API_URL}/attendance/break-out/${user?.id}?resume_task=${resumeTask}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      
+      if (breakOutRes.ok) {
+        if (action === 'change') {
+          setIsPunchInModalOpen(true);
+        }
+        
+        await fetchStatus();
+        await fetchHistory();
+        window.dispatchEvent(new Event("attendance-update"));
+      } else {
+        const errorData = await breakOutRes.json().catch(() => ({}));
+        toast.error(`Action failed: ${errorData.detail || 'Server error'}`);
+      }
+    } catch (err) {
+      console.error("Break out error:", err);
       toast.error("Failed to connect to the server. Please ensure the backend is running.");
     } finally {
       setIsPunching(false);
@@ -704,6 +742,43 @@ export default function DashboardPage() {
         initialActivityValue={attendanceStatus?.record?.punchInActivityValue}
         initialTaskId={attendanceStatus?.record?.punchInTaskId}
       />
+      
+      {isBreakOutModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] relative">
+            <div className="p-6">
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Resume Work</h2>
+              <p className="text-sm text-gray-500 mb-6">
+                Are you sure you want to continue the previous task or want to change the task?
+              </p>
+              
+              <div className="flex gap-3">
+                <Button 
+                  onClick={() => handleBreakOutConfirm('continue')}
+                  className="flex-1 bg-brand-teal hover:bg-brand-teal/90 text-white font-bold"
+                  disabled={isPunching}
+                >
+                  Continue Previous
+                </Button>
+                <Button 
+                  onClick={() => handleBreakOutConfirm('change')}
+                  variant="outline"
+                  className="flex-1 bg-white hover:bg-gray-50 text-gray-700 font-bold border-gray-200"
+                  disabled={isPunching}
+                >
+                  Change Task
+                </Button>
+              </div>
+            </div>
+            <button 
+              onClick={() => setIsBreakOutModalOpen(false)}
+              className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1211,7 +1286,7 @@ function EmployeeView({
               </Button>
             </div>
 
-            {isPunchedIn && attendanceStatus?.record?.punchInActivityType && !isOnBreak && (
+            {isPunchedIn && attendanceStatus?.record?.punchInActivityType && (
               <div className="flex items-center justify-between px-6 py-4 mb-8 bg-brand-light/40 border border-brand-teal/20 rounded-2xl shadow-sm">
                 <div>
                   <p className="text-xs text-brand-teal/80 font-bold uppercase tracking-wider mb-1">Current Activity</p>
@@ -1227,14 +1302,16 @@ function EmployeeView({
                     )}
                   </p>
                 </div>
-                <Button 
-                  onClick={() => setIsPunchInModalOpen(true)}
-                  variant="outline" 
-                  size="sm" 
-                  className="bg-white hover:bg-gray-50 border-gray-200 text-gray-700 font-bold shadow-sm rounded-xl px-5"
-                >
-                  Change
-                </Button>
+                {!isOnBreak && (
+                  <Button 
+                    onClick={() => setIsPunchInModalOpen(true)}
+                    variant="outline" 
+                    size="sm" 
+                    className="bg-white hover:bg-gray-50 border-gray-200 text-gray-700 font-bold shadow-sm rounded-xl px-5"
+                  >
+                    Change
+                  </Button>
+                )}
               </div>
             )}
  

@@ -2669,23 +2669,34 @@ async def break_in(db, employee_id: str):
     if not status or status.get("status") == "On Break":
         return None
     
+    now_str = get_now().strftime("%H:%M:%S")
     new_break = {
-        "startTime": get_now().strftime("%H:%M:%S"),
+        "startTime": now_str,
         "endTime": None,
         "duration": None
     }
     
+    update_data = {
+        "$push": {"breaks": new_break},
+        "$set": {"status": "On Break"}
+    }
+    
+    # Close the current punch so its time stops
+    if status.get("punches") and len(status["punches"]) > 0:
+        last_punch_idx = len(status["punches"]) - 1
+        last_punch = status["punches"][last_punch_idx]
+        if not last_punch.get("punchOut"):
+            update_data["$set"] = update_data.get("$set", {})
+            update_data["$set"][f"punches.{last_punch_idx}.punchOut"] = now_str
+            
     await db.attendance.update_one(
         {"_id": ObjectId(status["id"])},
-        {
-            "$push": {"breaks": new_break},
-            "$set": {"status": "On Break"}
-        }
+        update_data
     )
     result = await db.attendance.find_one({"_id": ObjectId(status["id"])})
     return fix_id(result)
 
-async def break_out(db, employee_id: str):
+async def break_out(db, employee_id: str, resume_task: bool = False):
     await auto_close_stale_open_sessions(db, employee_id)
     query_or = [{"employeeId": employee_id}]
     if ObjectId.is_valid(employee_id):
@@ -2716,15 +2727,22 @@ async def break_out(db, employee_id: str):
     minutes = int(duration_delta.total_seconds()) // 60
     duration_str = f"{minutes}m"
     
+    update_data = {
+        "$set": {
+            f"breaks.{last_break_idx}.endTime": now.strftime("%H:%M:%S"),
+            f"breaks.{last_break_idx}.duration": duration_str,
+            "status": "Active"
+        }
+    }
+    
+    if resume_task and record.get("punches") and len(record["punches"]) > 0:
+        # Find the last punch and remove its punchOut so it continues
+        last_punch_idx = len(record["punches"]) - 1
+        update_data["$set"][f"punches.{last_punch_idx}.punchOut"] = None
+
     await db.attendance.update_one(
         {"_id": ObjectId(record["_id"])},
-        {
-            "$set": {
-                f"breaks.{last_break_idx}.endTime": now.strftime("%H:%M:%S"),
-                f"breaks.{last_break_idx}.duration": duration_str,
-                "status": "Active"
-            }
-        }
+        update_data
     )
     result = await db.attendance.find_one({"_id": ObjectId(record["_id"])})
     return fix_id(result)
@@ -3895,6 +3913,14 @@ async def delete_task(db, task_id: str):
     return True
 
 # Work Management Task CRUD
+async def get_wm_task(db, task_id: str):
+    from bson.objectid import ObjectId
+    try:
+        task = await db.wm_tasks.find_one({"_id": ObjectId(task_id)})
+        return fix_id(task) if task else None
+    except Exception:
+        return None
+
 async def get_wm_tasks(db, userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 1000):
     query = {}
     if userId and not await user_has_full_entity_access(db, userId, role, "wm-tasks"):

@@ -24,6 +24,7 @@ export default function EmployeeAnalysisPage() {
   const [tasks, setTasks] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState<string>(dayjs().format('YYYY-MM-DD'))
+  const [filterActivity, setFilterActivity] = useState<string>('All')
 
   useEffect(() => {
     if (isUserLoading || !user) return
@@ -63,28 +64,35 @@ export default function EmployeeAnalysisPage() {
     
     // Process punch logs for each employee
     const data = dailyAttendance.map(att => {
-      const logs = (att.punches || []).map((punch: any) => {
+      let logs = (att.punches || []).map((punch: any) => {
         let title = "Unknown Activity"
         let icon = <Activity className="w-4 h-4 mr-2" />
         
-        if (punch.activityType === "Work") {
+        const actType = punch.activityType || "Work" // Fallback for old punches
+        
+        if (actType === "Work") {
           const task = tasks.find(t => t.id === punch.taskId)
-          title = task ? `Task: ${task.title}` : 'Work (Unknown Task)'
+          title = task ? `Work: ${task.title}` : (punch.taskId ? 'Work: Unknown Task' : 'Work')
           icon = <Briefcase className="w-4 h-4 mr-2" />
-        } else if (punch.activityType === "Research") {
-          title = "Research"
+        } else if (actType === "Research") {
+          title = "Research" + (punch.activityValue ? `: ${punch.activityValue}` : "")
           icon = <MonitorPlay className="w-4 h-4 mr-2" />
-        } else if (punch.activityType === "Other") {
+        } else if (actType === "Other") {
           title = `${punch.activitySubtype || 'Other'}: ${punch.activityValue || 'N/A'}`
         }
 
-        // punch.punchIn is a time string like "11:09:28" or "11:09"
-        const start = punch.punchIn ? dayjs(`2000-01-01 ${punch.punchIn}`) : dayjs()
-        const end = punch.punchOut ? dayjs(`2000-01-01 ${punch.punchOut}`) : null
+        // Use selectedDate to parse time so we get accurate day diffs
+        const start = punch.punchIn ? dayjs(`${selectedDate} ${punch.punchIn}`) : dayjs()
+        const end = punch.punchOut ? dayjs(`${selectedDate} ${punch.punchOut}`) : null
         
+        let diffMins = 0
+        const actualEnd = (end && end.isValid()) ? end : dayjs()
+        if (start.isValid()) {
+          diffMins = Math.max(0, actualEnd.diff(start, 'minutes'))
+        }
+
         let durationStr = "In Progress"
         if (end && start.isValid() && end.isValid()) {
-          const diffMins = end.diff(start, 'minutes')
           const hrs = Math.floor(diffMins / 60)
           const mins = diffMins % 60
           if (hrs > 0) {
@@ -99,23 +107,35 @@ export default function EmployeeAnalysisPage() {
           title,
           icon,
           activityType: punch.activityType,
+          activityGroup: actType,
           startTime: start.isValid() ? start.format('hh:mm A') : (punch.punchIn || 'N/A'),
           endTime: end ? (end.isValid() ? end.format('hh:mm A') : punch.punchOut) : 'Now',
           duration: durationStr,
+          durationMins: diffMins,
           isInProgress: !end
         }
       })
+
+      if (filterActivity !== 'All') {
+        logs = logs.filter((log: any) => log.activityGroup === filterActivity)
+      }
+
+      const totalMins = logs.reduce((acc: number, log: any) => acc + (log.durationMins || 0), 0)
+      const totalHrs = Math.floor(totalMins / 60)
+      const remMins = totalMins % 60
+      const totalDurationStr = totalHrs > 0 ? `${totalHrs}h ${remMins}m` : `${remMins}m`
 
       return {
         employeeName: att.employeeName,
         employeeId: att.employeeId,
         checkIn: att.checkIn,
-        logs: logs
+        logs: logs,
+        totalDurationStr
       }
     })
 
     return data.sort((a, b) => a.employeeName.localeCompare(b.employeeName))
-  }, [attendance, tasks, selectedDate])
+  }, [attendance, tasks, selectedDate, filterActivity])
 
   if (isUserLoading || loading) {
     return (
@@ -132,14 +152,26 @@ export default function EmployeeAnalysisPage() {
           title="Employee Analysis" 
           subtitle="Analyze employee activities, tasks, and meetings with time tracking" 
         />
-        <div className="flex items-center gap-2">
-          <CalendarIcon className="w-5 h-5 text-gray-500" />
-          <Input 
-            type="date" 
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="w-40"
-          />
+        <div className="flex items-center gap-3">
+          <select 
+            value={filterActivity} 
+            onChange={e => setFilterActivity(e.target.value)}
+            className="border border-input bg-background rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            <option value="All">All Activities</option>
+            <option value="Work">Work</option>
+            <option value="Research">Research</option>
+            <option value="Other">Other</option>
+          </select>
+          <div className="flex items-center gap-2">
+            <CalendarIcon className="w-5 h-5 text-gray-500" />
+            <Input 
+              type="date" 
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="w-40"
+            />
+          </div>
         </div>
       </div>
 
@@ -186,6 +218,9 @@ export default function EmployeeAnalysisPage() {
                         ))}
                       </TableBody>
                     </Table>
+                    <div className="bg-gray-50/50 p-3 border-t flex justify-end items-center text-sm font-semibold text-gray-700">
+                      Total Time: {emp.totalDurationStr}
+                    </div>
                   </div>
                 ) : (
                   <div className="h-full flex items-center justify-center text-sm text-gray-400 py-8">

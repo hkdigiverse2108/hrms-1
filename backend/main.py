@@ -1017,8 +1017,8 @@ async def break_in(employee_id: str, db=Depends(get_db)):
     return result
 
 @app.post("/attendance/break-out/{employee_id}")
-async def break_out(employee_id: str, db=Depends(get_db)):
-    result = await crud.break_out(db, employee_id)
+async def break_out(employee_id: str, resume_task: bool = False, db=Depends(get_db)):
+    result = await crud.break_out(db, employee_id, resume_task=resume_task)
     if not result:
         raise HTTPException(status_code=400, detail="Break out failed")
     return result
@@ -1602,6 +1602,13 @@ async def read_task_activities(task_id: str, db=Depends(get_db)):
 @app.get("/wm-tasks", response_model=List[schemas.WMTask])
 async def read_wm_tasks(userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_wm_tasks(db, userId=userId, role=role, skip=skip, limit=limit)
+
+@app.get("/wm-tasks/{task_id}", response_model=schemas.WMTask)
+async def read_wm_task(task_id: str, db=Depends(get_db)):
+    task = await crud.get_wm_task(db, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
 
 @app.post("/wm-tasks", response_model=schemas.WMTask)
 async def create_wm_task(task: schemas.WMTaskCreate, db=Depends(get_db)):
