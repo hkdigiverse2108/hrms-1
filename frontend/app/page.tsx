@@ -491,21 +491,22 @@ export default function DashboardPage() {
 
   const handleBreakOutConfirm = async (action: 'continue' | 'change') => {
     setIsBreakOutModalOpen(false);
+    
+    if (action === 'change') {
+      setIsPunchInModalOpen(true);
+      return;
+    }
+
     setIsPunching(true);
     
     try {
-      const resumeTask = action === 'continue';
-      const breakOutRes = await fetch(`${API_URL}/attendance/break-out/${user?.id}?resume_task=${resumeTask}`, {
+      const breakOutRes = await fetch(`${API_URL}/attendance/break-out/${user?.id}?resume_task=true`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({})
       });
       
       if (breakOutRes.ok) {
-        if (action === 'change') {
-          setIsPunchInModalOpen(true);
-        }
-        
         await fetchStatus();
         await fetchHistory();
         window.dispatchEvent(new Event("attendance-update"));
@@ -536,6 +537,21 @@ export default function DashboardPage() {
         payload.activityType = "Other";
         payload.activitySubtype = data.subtype;
         payload.activityValue = data.value;
+      }
+
+      // If user is currently on break, break-out first before starting new activity
+      const isOnBreak = attendanceStatus?.record?.status === "On Break";
+      if (isOnBreak) {
+        const breakOutRes = await fetch(`${API_URL}/attendance/break-out/${user?.id}?resume_task=false`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
+        if (!breakOutRes.ok) {
+          toast.error("Failed to break out before changing activity");
+          setIsPunching(false);
+          return;
+        }
       }
 
       const res = await fetch(`${API_URL}/attendance/punch-in/${user?.id}`, {
