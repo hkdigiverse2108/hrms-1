@@ -1,0 +1,15 @@
+{
+  "url": "http://127.0.0.1:8002/content-calendar?limit=50",
+  "errors": [
+    {
+      "type": "missing",
+      "loc": [
+        "query",
+        "clientId"
+      ],
+      "msg": "Field required",
+      "input": null
+    }
+  ],
+  "body": ""
+}

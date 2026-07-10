@@ -3326,7 +3326,9 @@ async def get_projects(db, userId: str = None, role: str = None, skip: int = 0, 
                 {"assignedPostDesignerId": userId},
                 {"assignedShooterId": userId},
                 {"assignedApproverId": userId},
-                {"assignedPosterId": userId}
+                {"assignedPosterId": userId},
+                {"assignedCaptionWriterId": userId},
+                {"assignedThumbnailDesignerId": userId}
             ]
             if project_ids:
                 project_ids_as_obj = []

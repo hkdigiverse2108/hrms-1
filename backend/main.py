@@ -1086,6 +1086,10 @@ async def read_analytics_overview(months: int = 6, db=Depends(get_db)):
 async def read_payroll(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_payroll(db, skip=skip, limit=limit)
 
+@app.post("/payroll", response_model=schemas.Payroll)
+async def create_payroll(payroll: schemas.PayrollBase, db=Depends(get_db)):
+    return await crud.create_item(db, "payroll", payroll.dict())
+    
 @app.post("/payroll/process")
 async def process_payroll(request: dict, request_obj: Request, db=Depends(get_db)):
     # request should contain month and year

@@ -401,6 +401,8 @@ export function PendingWorkEmbedded({
         
         if (stage === 'Script') assigneeId = entry.assignedScriptwriterId || project.assignedScriptwriterId || client?.assignedScriptwriterId;
         if (stage === 'Shoot') assigneeId = entry.assignedShooterId || project.assignedShooterId || client?.assignedShooterId;
+        if (stage === 'Caption') assigneeId = entry.assignedCaptionWriterId || project.assignedCaptionWriterId || client?.assignedCaptionWriterId;
+        if (stage === 'Thumbnail') assigneeId = entry.assignedThumbnailDesignerId || project.assignedThumbnailDesignerId || client?.assignedThumbnailDesignerId;
         if (stage === 'Editing') {
           if (entry.postReel === 'Post') {
             assigneeId = entry.assignedPostDesignerId || project.assignedPostDesignerId || client?.assignedPostDesignerId;
@@ -437,6 +439,8 @@ export function PendingWorkEmbedded({
         
         if (stage === 'Script') return (entry.assignedScriptwriterId || project.assignedScriptwriterId || client?.assignedScriptwriterId) === uId;
         if (stage === 'Shoot') return (entry.assignedShooterId || project.assignedShooterId || client?.assignedShooterId) === uId;
+        if (stage === 'Caption') return (entry.assignedCaptionWriterId || project.assignedCaptionWriterId || client?.assignedCaptionWriterId) === uId;
+        if (stage === 'Thumbnail') return (entry.assignedThumbnailDesignerId || project.assignedThumbnailDesignerId || client?.assignedThumbnailDesignerId) === uId;
         if (stage === 'Editing') {
           if (entry.postReel === 'Post') {
             return (entry.assignedPostDesignerId || project.assignedPostDesignerId || client?.assignedPostDesignerId) === uId;
@@ -452,6 +456,13 @@ export function PendingWorkEmbedded({
 
       if (entry.postReel !== 'Post' && entry.scriptDate && !entry.scriptLink && canSeeTask('Script')) tasks.push(enrich('Script', entry.scriptDate, 'scripts'));
       if (entry.postReel !== 'Post' && entry.shootDate && !entry.shootLink && canSeeTask('Shoot')) tasks.push(enrich('Shoot', entry.shootDate, 'shoots'));
+      
+      const captionDate = entry.captionDate || entry.editingStart;
+      if (captionDate && !entry.caption && canSeeTask('Caption')) tasks.push(enrich('Caption', captionDate, 'captions'));
+
+      const thumbnailDate = entry.thumbnailDate || entry.editingStart;
+      if (entry.postReel !== 'Post' && thumbnailDate && !entry.thumbnailLink && canSeeTask('Thumbnail')) tasks.push(enrich('Thumbnail', thumbnailDate, 'thumbnails'));
+
       const isEditingPending = entry.editingStart && (entry.postReel === 'Post' ? !entry.finalPostLink : !entry.finalReelLink);
       if (isEditingPending && canSeeTask('Editing')) tasks.push(enrich('Editing', entry.editingStart, 'edits'));
       if (entry.approval && entry.isApproved !== 'Yes' && canSeeTask('Approval')) tasks.push(enrich('Approval', entry.approval, 'approvals'));
@@ -600,7 +611,7 @@ export function PendingWorkEmbedded({
   }, [preFilteredTasks, filterStage]);
 
   const availableStages = useMemo(() => {
-    const defaultStages = ['script', 'shoot', 'editing', 'post/graphics', 'approval', 'posting'];
+    const defaultStages = ['script', 'shoot', 'caption', 'thumbnail', 'editing', 'post/graphics', 'approval', 'posting'];
     if (isAdminOrTL) {
       return defaultStages;
     }
@@ -918,6 +929,8 @@ export function PendingWorkEmbedded({
                   <SelectItem value="all">All Stages</SelectItem>
                   {availableStages.includes('script') && <SelectItem value="script">Script</SelectItem>}
                   {availableStages.includes('shoot') && <SelectItem value="shoot">Shoot</SelectItem>}
+                  {availableStages.includes('caption') && <SelectItem value="caption">Caption</SelectItem>}
+                  {availableStages.includes('thumbnail') && <SelectItem value="thumbnail">Thumbnail</SelectItem>}
                   {availableStages.includes('editing') && <SelectItem value="editing">Editing</SelectItem>}
                   {availableStages.includes('post/graphics') && <SelectItem value="post/graphics">Post/Graphics</SelectItem>}
                   {availableStages.includes('approval') && <SelectItem value="approval">Approval</SelectItem>}

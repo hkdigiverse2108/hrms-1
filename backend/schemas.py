@@ -1020,6 +1020,10 @@ class ClientBase(BaseModel):
     assignedApproverName: Optional[str] = None
     assignedPosterId: Optional[str] = None
     assignedPosterName: Optional[str] = None
+    assignedCaptionWriterId: Optional[str] = None
+    assignedCaptionWriterName: Optional[str] = None
+    assignedThumbnailDesignerId: Optional[str] = None
+    assignedThumbnailDesignerName: Optional[str] = None
     campaigns: Optional[RobustCampaigns] = []
 
 class ClientCreate(ClientBase):
@@ -1092,6 +1096,10 @@ class ClientUpdate(BaseModel):
     assignedApproverName: Optional[str] = None
     assignedPosterId: Optional[str] = None
     assignedPosterName: Optional[str] = None
+    assignedCaptionWriterId: Optional[str] = None
+    assignedCaptionWriterName: Optional[str] = None
+    assignedThumbnailDesignerId: Optional[str] = None
+    assignedThumbnailDesignerName: Optional[str] = None
 
 class Client(ClientBase):
     id: str
@@ -1151,11 +1159,21 @@ class ProjectBase(BaseModel):
     postRequired: Optional[str] = "No"
     reelRequired: Optional[str] = "No"
     assignedScriptwriterId: Optional[str] = None
+    assignedScriptwriterName: Optional[str] = None
     assignedReelEditorId: Optional[str] = None
+    assignedReelEditorName: Optional[str] = None
     assignedPostDesignerId: Optional[str] = None
+    assignedPostDesignerName: Optional[str] = None
     assignedShooterId: Optional[str] = None
+    assignedShooterName: Optional[str] = None
     assignedApproverId: Optional[str] = None
+    assignedApproverName: Optional[str] = None
     assignedPosterId: Optional[str] = None
+    assignedPosterName: Optional[str] = None
+    assignedCaptionWriterId: Optional[str] = None
+    assignedCaptionWriterName: Optional[str] = None
+    assignedThumbnailDesignerId: Optional[str] = None
+    assignedThumbnailDesignerName: Optional[str] = None
     
     # Phase Wise Project Fields
     isPhaseWise: Optional[bool] = False
@@ -1222,11 +1240,21 @@ class ProjectUpdate(BaseModel):
     postRequired: Optional[str] = None
     reelRequired: Optional[str] = None
     assignedScriptwriterId: Optional[str] = None
+    assignedScriptwriterName: Optional[str] = None
     assignedReelEditorId: Optional[str] = None
+    assignedReelEditorName: Optional[str] = None
     assignedPostDesignerId: Optional[str] = None
+    assignedPostDesignerName: Optional[str] = None
     assignedShooterId: Optional[str] = None
+    assignedShooterName: Optional[str] = None
     assignedApproverId: Optional[str] = None
+    assignedApproverName: Optional[str] = None
     assignedPosterId: Optional[str] = None
+    assignedPosterName: Optional[str] = None
+    assignedCaptionWriterId: Optional[str] = None
+    assignedCaptionWriterName: Optional[str] = None
+    assignedThumbnailDesignerId: Optional[str] = None
+    assignedThumbnailDesignerName: Optional[str] = None
     
     # Phase Wise Project Fields
     isPhaseWise: Optional[bool] = None

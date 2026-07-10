@@ -120,9 +120,17 @@ export default function PendingWorkPage() {
         type
       });
 
-      if (entry.postReel !== 'Post' && entry.scriptDate && !entry.scriptLink) clientsMap[clientId].tasks.push(enrich('Script', entry.scriptDate, 'scripts'));
-      if (entry.postReel !== 'Post' && entry.shootDate && !entry.shootLink) clientsMap[clientId].tasks.push(enrich('Shoot', entry.shootDate, 'shoots'));
-      const isEditingPending = entry.editingStart && (entry.postReel === 'Post' ? !entry.finalPostLink : !entry.finalReelLink);
+      const isPost = entry.postReel === 'Post';
+      if (!isPost && entry.scriptDate && !entry.scriptLink) clientsMap[clientId].tasks.push(enrich('Script', entry.scriptDate, 'scripts'));
+      if (!isPost && entry.shootDate && !entry.shootLink) clientsMap[clientId].tasks.push(enrich('Shoot', entry.shootDate, 'shoots'));
+      
+      const captionDate = entry.captionDate || entry.editingStart;
+      if (captionDate && !entry.caption) clientsMap[clientId].tasks.push(enrich('Caption', captionDate, 'captions'));
+      
+      const thumbnailDate = entry.thumbnailDate || entry.editingStart;
+      if (!isPost && thumbnailDate && !entry.thumbnailLink) clientsMap[clientId].tasks.push(enrich('Thumbnail', thumbnailDate, 'thumbnails'));
+      
+      const isEditingPending = entry.editingStart && (isPost ? !entry.finalPostLink : !entry.finalReelLink);
       if (isEditingPending) clientsMap[clientId].tasks.push(enrich('Editing', entry.editingStart, 'edits'));
       if (entry.approval && entry.isApproved !== 'Yes') clientsMap[clientId].tasks.push(enrich('Approval', entry.approval, 'approvals'));
       if (entry.postingDate && !entry.postingLinkOfIg) clientsMap[clientId].tasks.push(enrich('Posting', entry.postingDate, 'posts'));
