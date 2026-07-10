@@ -8863,7 +8863,14 @@ async def delete_task_preset(db, preset_id: str):
 
 # --- Research ---
 async def create_research(db, data: dict):
-    data["createdAt"] = get_now()
+    now = get_now()
+    data["createdAt"] = now
+    data["logs"] = [{
+        "action": "Created",
+        "byUserId": data.get("createdBy", "Unknown"),
+        "byUserName": data.get("createdByName", "Unknown"),
+        "timestamp": now
+    }]
     result = await db.research.insert_one(data)
     created = await db.research.find_one({"_id": result.inserted_id})
     return fix_id(created)
@@ -8888,7 +8895,20 @@ async def update_research(db, research_id: str, data: dict):
         updated = await db.research.find_one({"_id": ObjectId(research_id)})
         return fix_id(updated) if updated else None
     
-    await db.research.update_one({"_id": ObjectId(research_id)}, {"$set": data})
+    updatedBy = data.pop("updatedBy", "Unknown")
+    updatedByName = data.pop("updatedByName", "Unknown")
+    
+    log_entry = {
+        "action": "Updated",
+        "byUserId": updatedBy,
+        "byUserName": updatedByName,
+        "timestamp": get_now()
+    }
+    
+    await db.research.update_one(
+        {"_id": ObjectId(research_id)}, 
+        {"$set": data, "$push": {"logs": log_entry}}
+    )
     updated = await db.research.find_one({"_id": ObjectId(research_id)})
     return fix_id(updated) if updated else None
 

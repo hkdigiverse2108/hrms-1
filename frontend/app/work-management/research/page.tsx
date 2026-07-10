@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
-import { Plus, Loader2, Link as LinkIcon, BookOpen, Trash2, Edit2 } from "lucide-react";
+import { Plus, Loader2, Link as LinkIcon, BookOpen, Trash2, Edit2, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,6 +19,7 @@ import { MultiSelect } from "@/components/ui/multi-select";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LiveTimer } from "@/components/common/LiveTimer";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 export default function ResearchPage() {
   const { confirm } = useConfirm();
@@ -39,6 +40,15 @@ export default function ResearchPage() {
   const [editingResearch, setEditingResearch] = useState<any>(null);
   const [projects, setProjects] = useState<any[]>([]);
   
+  // Logs State
+  const [logsModalOpen, setLogsModalOpen] = useState(false);
+  const [selectedLogs, setSelectedLogs] = useState<any[]>([]);
+  const [selectedResearchTitle, setSelectedResearchTitle] = useState("");
+  
+  // Filter State
+  const [filterEmployee, setFilterEmployee] = useState("all");
+  const [filterDate, setFilterDate] = useState("");
+  
   // Form State
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -46,6 +56,13 @@ export default function ResearchPage() {
   const [sharedWith, setSharedWith] = useState<string[]>([]);
   const [projectId, setProjectId] = useState("");
   const [attendanceStatus, setAttendanceStatus] = useState<any>(null);
+
+  const formatName = (fullName: string) => {
+    if (!fullName) return "";
+    const parts = fullName.trim().split(' ');
+    if (parts.length <= 2) return fullName;
+    return `${parts[0]} ${parts[parts.length - 1]}`;
+  };
 
   useEffect(() => {
     if (permissionsLoading) return;
@@ -131,7 +148,10 @@ export default function ResearchPage() {
         link,
         sharedWith,
         projectId,
-        ...(editingResearch ? {} : {
+        ...(editingResearch ? {
+          updatedBy: (user?.id || user?._id),
+          updatedByName: `${user?.firstName} ${user?.lastName}`
+        } : {
           createdBy: (user?.id || user?._id),
           createdByName: `${user?.firstName} ${user?.lastName}`
         })
@@ -211,78 +231,203 @@ export default function ResearchPage() {
         )}
       </PageHeader>
 
+      <div className="flex flex-wrap gap-4 items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+        <div className="space-y-1.5 flex-1 min-w-[200px] max-w-[250px]">
+          <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Created By</Label>
+          <Select value={filterEmployee} onValueChange={setFilterEmployee}>
+            <SelectTrigger className="w-full bg-slate-50/50 border-slate-200 focus:ring-brand-teal">
+              <SelectValue placeholder="All Employees" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Employees</SelectItem>
+              {employees.map(emp => (
+                <SelectItem key={emp.id || emp._id} value={emp.id || emp._id}>
+                  {formatName(`${emp.firstName} ${emp.lastName}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5 flex-1 min-w-[200px] max-w-[250px]">
+          <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Date</Label>
+          <Input 
+            type="date" 
+            value={filterDate} 
+            onChange={(e) => setFilterDate(e.target.value)} 
+            className="w-full bg-slate-50/50 border-slate-200 focus:ring-brand-teal text-slate-600"
+          />
+        </div>
+        {(filterEmployee !== 'all' || filterDate) && (
+          <div className="pt-5">
+            <Button 
+              variant="ghost" 
+              onClick={() => { setFilterEmployee('all'); setFilterDate(''); }}
+              className="text-slate-400 hover:text-brand-teal hover:bg-brand-teal/10"
+            >
+              Clear Filters
+            </Button>
+          </div>
+        )}
+      </div>
+
       {researchList.length === 0 ? (
-        <Card className="flex flex-col items-center justify-center py-12 text-slate-500 bg-slate-50/50 border-dashed">
-          <BookOpen className="w-12 h-12 mb-4 text-slate-300" />
-          <p>No research found.</p>
-          {canAdd && <Button variant="link" onClick={() => handleOpenModal()}>Add your first research</Button>}
+        <Card className="flex flex-col items-center justify-center py-16 text-slate-500 bg-white/50 backdrop-blur border-dashed border-2 border-slate-200 shadow-sm rounded-2xl">
+          <div className="p-4 bg-brand-teal/10 rounded-full mb-4">
+            <BookOpen className="w-10 h-10 text-brand-teal" />
+          </div>
+          <h3 className="text-lg font-semibold text-slate-700 mb-1">No research found</h3>
+          <p className="text-sm text-slate-500 mb-4">You haven't added any research documents yet.</p>
+          {canAdd && <Button onClick={() => handleOpenModal()} className="bg-brand-teal hover:bg-brand-teal/90 shadow-md hover:shadow-lg transition-all">Add your first research</Button>}
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {researchList.map((research) => (
-            <Card key={research.id} className="hover:shadow-md transition-shadow">
-              <CardHeader className="pb-3 border-b border-slate-100 flex flex-row items-start justify-between">
-                <div>
-                  <div className="flex justify-between items-start">
-                    <CardTitle className="text-lg text-brand-dark-blue flex items-center gap-2">
-                      <BookOpen className="w-5 h-5 text-brand-teal" />
-                      {research.title}
-                    </CardTitle>
-                    {attendanceStatus?.isPunchedIn && attendanceStatus?.record?.punchInActivityType === 'Research' && attendanceStatus?.record?.punchInActivityValue === research.title && (
-                      <LiveTimer startTime={attendanceStatus.record.lastPunchIn} />
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-500 mt-1">
-                    By {research.createdByName} • {new Date(research.createdAt).toLocaleDateString()}
-                    {research.projectId && projects.find(p => p.id === research.projectId) && (
-                      <span className="ml-2 text-brand-teal bg-brand-teal/10 px-1.5 py-0.5 rounded">
-                        Project: {projects.find(p => p.id === research.projectId)?.title}
-                      </span>
-                    )}
-                  </p>
-                </div>
-                {(canEdit || canDelete) && (isAdmin || research.createdBy === (user?.id || user?._id)) && (
-                  <div className="flex gap-2">
-                    {canEdit && (
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-brand-teal" onClick={() => handleOpenModal(research)}>
-                        <Edit2 className="w-4 h-4" />
-                      </Button>
-                    )}
-                    {canDelete && (
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-500" onClick={() => handleDelete(research.id)}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    )}
-                  </div>
-                )}
-              </CardHeader>
-              <CardContent className="pt-4 space-y-4">
-                <p className="text-sm text-slate-600 whitespace-pre-wrap line-clamp-3">{research.description}</p>
-                
-                {research.link && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <LinkIcon className="w-4 h-4 text-brand-teal" />
-                    <a href={research.link.startsWith('http') ? research.link : `https://${research.link}`} target="_blank" rel="noopener noreferrer" className="text-brand-teal hover:underline truncate">
-                      {research.link}
-                    </a>
-                  </div>
-                )}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader className="bg-slate-50 border-b border-slate-200">
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="w-[30%] text-slate-600 font-semibold h-11">Research Details</TableHead>
+                  <TableHead className="text-slate-600 font-semibold h-11">Date</TableHead>
+                  <TableHead className="text-slate-600 font-semibold h-11">Created By</TableHead>
+                  <TableHead className="text-slate-600 font-semibold h-11">Shared With</TableHead>
+                  <TableHead className="text-slate-600 font-semibold h-11">Link</TableHead>
+                  <TableHead className="text-right text-slate-600 font-semibold h-11 pr-4">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(() => {
+                  const filteredResearchList = researchList.filter(r => {
+                    let matchesEmp = true;
+                    if (filterEmployee !== 'all') {
+                      matchesEmp = r.createdBy === filterEmployee;
+                    }
+                    let matchesDate = true;
+                    if (filterDate) {
+                      const rDate = new Date(r.createdAt).toISOString().split('T')[0];
+                      matchesDate = rDate === filterDate;
+                    }
+                    return matchesEmp && matchesDate;
+                  });
 
-                {research.sharedWith && research.sharedWith.length > 0 && (
-                  <div className="pt-2">
-                    <p className="text-xs text-slate-400 mb-1.5">Shared With:</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {research.sharedWith.map((id: string) => (
-                        <Badge key={id} variant="secondary" className="text-[10px] font-normal bg-slate-100 text-slate-600 hover:bg-slate-200">
-                          {getEmployeeName(id)}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                  if (filteredResearchList.length === 0) {
+                    return (
+                      <TableRow>
+                        <TableCell colSpan={6} className="h-32 text-center text-slate-500">
+                          No research found matching your filters.
+                        </TableCell>
+                      </TableRow>
+                    );
+                  }
+
+                  return filteredResearchList.map((research) => {
+                    const currentUserId = user?.id || user?._id;
+                    const isCreator = research.createdBy === currentUserId;
+                    const isShared = research.sharedWith?.includes(currentUserId);
+                    const canUserEdit = canEdit && (isAdmin || isCreator || isShared);
+                    const canUserDelete = canDelete && (isAdmin || isCreator);
+                    const lastUpdate = research.logs?.slice().reverse().find((l: any) => l.action === 'Updated');
+
+                  return (
+                    <TableRow key={research.id} className="group hover:bg-slate-50/50 transition-colors">
+                      <TableCell className="align-top py-4">
+                        <div className="flex items-start gap-3">
+                          <div className="mt-0.5 p-1.5 rounded-lg bg-brand-teal/10 text-brand-teal shrink-0">
+                            <BookOpen className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="font-semibold text-slate-800 text-[13px] leading-tight line-clamp-1">{research.title}</p>
+                              {attendanceStatus?.isPunchedIn && attendanceStatus?.record?.punchInActivityType === 'Research' && attendanceStatus?.record?.punchInActivityValue === research.title && (
+                                <div className="bg-green-500/10 text-green-700 px-1.5 py-0.5 rounded text-[9px] font-bold flex items-center gap-1 animate-pulse border border-green-500/20 shrink-0">
+                                  <div className="w-1 h-1 bg-green-500 rounded-full" />
+                                  <LiveTimer startTime={attendanceStatus.record.lastPunchIn} />
+                                </div>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-slate-500 line-clamp-1 leading-relaxed mb-2 max-w-[300px]" title={research.description}>{research.description}</p>
+                            {research.projectId && projects.find(p => p.id === research.projectId) && (
+                              <Badge variant="outline" className="text-[9px] font-medium text-brand-teal border-brand-teal/20 bg-brand-teal/5 py-0 px-1.5">
+                                {projects.find(p => p.id === research.projectId)?.title}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="align-top py-4">
+                        <span className="text-[12px] font-medium text-slate-600">
+                          {new Date(research.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                      </TableCell>
+                      <TableCell className="align-top py-4">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[12px] font-medium text-slate-700">{formatName(research.createdByName)}</span>
+                          {lastUpdate && (
+                            <span className="text-[10px] text-amber-600 italic mt-1 leading-tight flex items-center gap-1">
+                              <span className="w-1 h-1 rounded-full bg-amber-500" />
+                              Edited by {formatName(lastUpdate.byUserName)}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="align-top py-4">
+                        {research.sharedWith && research.sharedWith.length > 0 ? (
+                          <div className="flex flex-wrap gap-1 max-w-[180px]">
+                            {research.sharedWith.map((id: string) => (
+                              <span key={id} className="text-[10px] bg-slate-100 border border-slate-200/60 text-slate-600 py-0.5 px-1.5 rounded font-medium">
+                                {formatName(getEmployeeName(id))}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 italic">None</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="align-top py-4">
+                        {research.link ? (
+                          <a 
+                            href={research.link.startsWith('http') ? research.link : `https://${research.link}`} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="inline-flex items-center gap-1.5 text-[11px] font-medium text-brand-teal hover:underline bg-brand-teal/5 hover:bg-brand-teal/10 px-2.5 py-1 rounded border border-brand-teal/10 transition-colors max-w-[150px]"
+                          >
+                            <LinkIcon className="w-3 h-3 shrink-0 text-brand-teal/70" />
+                            <span className="truncate">{research.link.replace(/^https?:\/\//, '')}</span>
+                          </a>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 italic">No link</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="align-top py-4 text-right pr-4">
+                        <div className="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-500 hover:text-brand-teal hover:bg-brand-teal/10 rounded" onClick={() => {
+                            setSelectedLogs(research.logs ? [...research.logs].reverse() : []);
+                            setSelectedResearchTitle(research.title);
+                            setLogsModalOpen(true);
+                          }}>
+                            <History className="w-3.5 h-3.5" />
+                          </Button>
+                          {(canUserEdit || canUserDelete) && (
+                            <>
+                              {canUserEdit && (
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-500 hover:text-brand-teal hover:bg-brand-teal/10 rounded" onClick={() => handleOpenModal(research)}>
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
+                              {canUserDelete && (
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-500 hover:text-red-500 hover:bg-red-50 rounded" onClick={() => handleDelete(research.id)}>
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                  });
+                })()}
+              </TableBody>
+            </Table>
+          </div>
         </div>
       )}
 
@@ -351,6 +496,39 @@ export default function ResearchPage() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={logsModalOpen} onOpenChange={setLogsModalOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-brand-dark-blue flex items-center gap-2">
+              <History className="w-5 h-5 text-brand-teal" />
+              Activity Logs
+            </DialogTitle>
+            <p className="text-sm text-slate-500">History for: <span className="font-semibold text-slate-700">{selectedResearchTitle}</span></p>
+          </DialogHeader>
+          <div className="pt-4 max-h-[60vh] overflow-y-auto space-y-3 custom-scrollbar">
+            {selectedLogs.length > 0 ? (
+              selectedLogs.map((log: any, i: number) => (
+                <div key={i} className="flex gap-4 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                  <div className="mt-1">
+                    <div className="w-2 h-2 rounded-full bg-brand-teal ring-4 ring-brand-teal/10" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm text-slate-700">
+                      <span className="font-semibold">{formatName(log.byUserName)}</span> {log.action.toLowerCase()} this research
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      {new Date(log.timestamp).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-slate-500 text-center py-4">No activity logs found.</p>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

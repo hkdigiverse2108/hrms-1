@@ -2546,6 +2546,7 @@ class ResearchBase(BaseModel):
     createdByName: str
     sharedWith: List[str] = []
     projectId: Optional[str] = ''
+    logs: Optional[List[dict]] = []
 
 class ResearchCreate(ResearchBase):
     pass
@@ -2555,6 +2556,9 @@ class ResearchUpdate(BaseModel):
     description: Optional[str] = None
     link: Optional[str] = None
     sharedWith: Optional[List[str]] = None
+    projectId: Optional[str] = None
+    updatedBy: Optional[str] = None
+    updatedByName: Optional[str] = None
 
 class ResearchResponse(ResearchBase):
     id: str
