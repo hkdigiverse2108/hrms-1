@@ -228,52 +228,46 @@ export default function ResearchPage() {
         title="Research"
         description="Manage and share research documents and links"
       >
-        {canAdd && (
-          <Button onClick={() => handleOpenModal()} className="bg-brand-teal hover:bg-brand-teal/90">
-            <Plus className="w-4 h-4 mr-2" />
-            Add Research
-          </Button>
-        )}
+        <div className="flex items-center gap-3 flex-wrap">
+          {isAdmin && (
+            <Select value={filterEmployee} onValueChange={setFilterEmployee}>
+              <SelectTrigger className="w-[170px] bg-white border-slate-200 text-sm">
+                <SelectValue placeholder="All Employees" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Employees</SelectItem>
+                {employees.map(emp => (
+                  <SelectItem key={emp.id || emp._id} value={emp.id || emp._id}>
+                    {formatName(`${emp.firstName} ${emp.lastName}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Input
+            type="date"
+            value={filterDate}
+            onChange={(e) => setFilterDate(e.target.value)}
+            className="w-[160px] bg-white border-slate-200 text-slate-600 text-sm"
+          />
+          {(filterEmployee !== 'all' || filterDate) && (
+            <Button
+              variant="ghost"
+              onClick={() => { setFilterEmployee('all'); setFilterDate(''); }}
+              className="text-slate-400 hover:text-brand-teal hover:bg-brand-teal/10 text-sm"
+            >
+              Clear
+            </Button>
+          )}
+          {canAdd && (
+            <Button onClick={() => handleOpenModal()} className="bg-brand-teal hover:bg-brand-teal/90">
+              <Plus className="w-4 h-4 mr-2" />
+              Add Research
+            </Button>
+          )}
+        </div>
       </PageHeader>
 
-      <div className="flex flex-wrap gap-4 items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-        <div className="space-y-1.5 flex-1 min-w-[200px] max-w-[250px]">
-          <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Created By</Label>
-          <Select value={filterEmployee} onValueChange={setFilterEmployee}>
-            <SelectTrigger className="w-full bg-slate-50/50 border-slate-200 focus:ring-brand-teal">
-              <SelectValue placeholder="All Employees" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Employees</SelectItem>
-              {employees.map(emp => (
-                <SelectItem key={emp.id || emp._id} value={emp.id || emp._id}>
-                  {formatName(`${emp.firstName} ${emp.lastName}`)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5 flex-1 min-w-[200px] max-w-[250px]">
-          <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Date</Label>
-          <Input 
-            type="date" 
-            value={filterDate} 
-            onChange={(e) => setFilterDate(e.target.value)} 
-            className="w-full bg-slate-50/50 border-slate-200 focus:ring-brand-teal text-slate-600"
-          />
-        </div>
-        {(filterEmployee !== 'all' || filterDate) && (
-          <div className="pt-5">
-            <Button 
-              variant="ghost" 
-              onClick={() => { setFilterEmployee('all'); setFilterDate(''); }}
-              className="text-slate-400 hover:text-brand-teal hover:bg-brand-teal/10"
-            >
-              Clear Filters
-            </Button>
-          </div>
-        )}
-      </div>
 
       {researchList.length === 0 ? (
         <Card className="flex flex-col items-center justify-center py-16 text-slate-500 bg-white/50 backdrop-blur border-dashed border-2 border-slate-200 shadow-sm rounded-2xl">

@@ -190,7 +190,7 @@ export default function EmployeeAnalysisPage() {
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
         <PageHeader 
-          title="Activity Log" 
+          title="Work Logs" 
           subtitle="Analyze employee activities, tasks, and meetings with time tracking" 
         />
         <div className="flex flex-wrap items-center gap-3">
