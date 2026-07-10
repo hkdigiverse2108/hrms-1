@@ -1556,6 +1556,7 @@ class SystemSettingsBase(BaseModel):
     companyGstin: Optional[str] = "24AAXFN3372M1ZK"
     otherActivities: Optional[List[str]] = Field(default_factory=list)
     otherMeetings: Optional[List[str]] = Field(default_factory=list)
+    otherCategories: Optional[List[str]] = ["Activity", "Meeting"]
     companyAddress: Optional[str] = "FLAT-204, 2nd FLOOR, RS NO-67/1, WING-A, HARIKRUSHANA COMPLEX, OPP. BHAGAT NAGAR, VED, GURUKULROAD, KATARGAM, SURAT- 395004, GUJARAT, INDIA."
     companyPhone: Optional[str] = "+91 87805 64463"
     companyEmail: Optional[str] = "billing@hkdigiverse.com"
@@ -1594,6 +1595,7 @@ class SystemSettingsUpdate(BaseModel):
     inactivityTimeoutMins: Optional[int] = None
     allowedMonthlyPaidLeaves: Optional[int] = None
     companyGstin: Optional[str] = None
+    otherCategories: Optional[List[str]] = None
     companyAddress: Optional[str] = None
     companyPhone: Optional[str] = None
     companyEmail: Optional[str] = None

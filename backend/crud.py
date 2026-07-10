@@ -4789,6 +4789,7 @@ async def get_system_settings(db):
             "inactivityTimeoutMins": 5,
             "allowedMonthlyPaidLeaves": 1,
             "companyGstin": "24AAXFN3372M1ZK",
+            "otherCategories": ["Activity", "Meeting"],
             "companyAddress": "FLAT-204, 2nd FLOOR, RS NO-67/1, WING-A, HARIKRUSHANA COMPLEX, OPP. BHAGAT NAGAR, VED, GURUKULROAD, KATARGAM, SURAT- 395004, GUJARAT, INDIA.",
             "companyPhone": "+91 87805 64463",
             "companyEmail": "billing@hkdigiverse.com",

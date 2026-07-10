@@ -233,7 +233,9 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                   <SelectValue placeholder="Select activity type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Work">Work</SelectItem>
+                  {userDept !== 'hr' && userDept !== 'sales' && (
+                    <SelectItem value="Work">Work</SelectItem>
+                  )}
                   <SelectItem value="Research">Research</SelectItem>
                   <SelectItem value="Other">Other</SelectItem>
                 </SelectContent>
@@ -300,29 +302,18 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                       <SelectValue placeholder="Select category" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Activity">Activity</SelectItem>
-                      <SelectItem value="Meeting">Meeting</SelectItem>
+                      {(settings?.otherCategories || ["Activity", "Meeting"]).map((cat: string) => (
+                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
 
-                {activitySubtype === "Activity" && (
+                {activitySubtype && (
                   <div className="space-y-2">
-                    <Label>Activity Details</Label>
+                    <Label>{activitySubtype} Details</Label>
                     <Input 
-                      placeholder="Enter activity description..." 
-                      value={activityValue}
-                      onChange={(e) => setActivityValue(e.target.value)}
-                      className="w-full"
-                    />
-                  </div>
-                )}
-
-                {activitySubtype === "Meeting" && (
-                  <div className="space-y-2">
-                    <Label>Meeting Details</Label>
-                    <Input 
-                      placeholder="Enter meeting description..." 
+                      placeholder={`Enter ${activitySubtype.toLowerCase()} description...`} 
                       value={activityValue}
                       onChange={(e) => setActivityValue(e.target.value)}
                       className="w-full"
