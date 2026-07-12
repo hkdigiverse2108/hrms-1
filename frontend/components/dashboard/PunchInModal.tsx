@@ -117,11 +117,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
             if (ccRes.ok && owRes.ok && projRes.ok && clientRes.ok) {
               const [ccList, owList, projList, clientList] = await Promise.all([ccRes.json(), owRes.json(), projRes.json(), clientRes.json()]);
               const smmTasks: any[] = [];
-              const myOw = owList.filter((o: any) => {
-                const isAssignee = String(o.assigneeId).trim() === String(userId).trim();
-                const isAssigner = String(o.assignerId).trim() === String(userId).trim();
-                return (isAssignee || isAssigner) && o.status !== 'Approved';
-              });
+              const myOw = owList.filter((o: any) => String(o.assigneeId).trim() === String(userId).trim() && o.status !== 'Approved');
               myOw.forEach((o: any) => {
                 const client = clientList.find((c: any) => String(c.id || c._id).trim() === String(o.clientId).trim());
                 const project = projList.find((p: any) => String(p.id || p._id).trim() === String(o.projectId).trim());
@@ -153,27 +149,44 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                 });
               } else {
                 ccList.forEach((entry: any) => {
-                  const client = clientList.find((c: any) => String(c.id || c._id) === String(entry.clientId));
-                  const project = projList.find((p: any) => String(p.id || p._id) === String(entry.projectId));
+                  const client = clientList.find((c: any) => String(c.id || c._id).trim() === String(entry.clientId).trim());
+                  // In SMM, CC tasks use the client's Creative project
+                  const project = projList.find((p: any) => String(p.clientId).trim() === String(entry.clientId).trim() && p.department === 'Creative');
+                  if (!project) return; // Only show if active creative project (matching SMM)
+                  
                   const cName = client?.companyName || client?.clientName || "Unknown Client";
                   
                   const checkStage = (stageName: string, idField: string, dateField: string, linkField: string, linkCheck?: (e:any)=>boolean) => {
                     const assigneeId = entry[idField] || project?.[idField] || client?.[idField];
                     const isDone = linkCheck ? linkCheck(entry) : !!entry[linkField];
                     
+                    const hasApplicableRemark = entry.remark && entry.remark.trim() !== '' && (
+                      !entry.remarkStage || 
+                      (() => {
+                        const stages = ['Script', 'Shoot', 'Caption', 'Thumbnail', 'Editing', 'Post/Graphics', 'Approval', 'Posting'];
+                        const idx1 = stages.indexOf(stageName === 'Editing' && entry.postReel === 'Post' ? 'Post/Graphics' : stageName);
+                        const idx2 = stages.indexOf(entry.remarkStage);
+                        return idx1 >= idx2;
+                      })()
+                    );
+                    const isClientIssue = hasApplicableRemark && entry.remark.startsWith('[CLIENT ISSUE] ');
+                    if (isClientIssue) return; // SMM moves these to Pending Work
+
                     if (String(assigneeId).trim() === String(userId).trim() && !isDone) {
                       let dateStr = entry[dateField];
                       if (!dateStr && (stageName === 'Caption' || stageName === 'Thumbnail')) {
                         dateStr = entry.editingStart;
                       }
                       
+                      if (!dateStr) return; // SMM strictly requires a date for CC tasks
+
                       const taskName = entry.concept || entry.topic || (entry.postReel ? `${entry.postReel} Content` : `Task for ${entry.postingDate || entry.monthYear || 'Unknown Date'}`);
                       
                       smmTasks.push({
                         id: `${entry.id || entry._id}-${stageName}`,
                         title: taskName,
                         projectName: `${stageName} - ${cName}`,
-                        dueDate: dateStr || "",
+                        dueDate: dateStr,
                         status: "pending"
                       });
                     }
@@ -277,9 +290,13 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
 
   const todayTasks = tasks.filter(t => {
     const taskDate = t.dueDate || t.postingDate || t.moduleDeadline;
-    if (!taskDate) return true; // if no date, consider it today's work to bring attention
+    if (!taskDate) return false;
     const dateObj = parseLocalDate(taskDate);
     return dateObj <= todayDate;
+  }).sort((a, b) => {
+    const dateA = parseLocalDate(a.dueDate || a.postingDate || a.moduleDeadline);
+    const dateB = parseLocalDate(b.dueDate || b.postingDate || b.moduleDeadline);
+    return dateA.getTime() - dateB.getTime();
   });
   
   const upcomingTasks = tasks.filter(t => {
@@ -287,6 +304,10 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
     if (!taskDate) return false;
     const dateObj = parseLocalDate(taskDate);
     return dateObj > todayDate;
+  }).sort((a, b) => {
+    const dateA = parseLocalDate(a.dueDate || a.postingDate || a.moduleDeadline);
+    const dateB = parseLocalDate(b.dueDate || b.postingDate || b.moduleDeadline);
+    return dateA.getTime() - dateB.getTime();
   });
 
   return (
