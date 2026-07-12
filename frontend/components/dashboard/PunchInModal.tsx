@@ -117,18 +117,21 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
             if (ccRes.ok && owRes.ok && projRes.ok && clientRes.ok) {
               const [ccList, owList, projList, clientList] = await Promise.all([ccRes.json(), owRes.json(), projRes.json(), clientRes.json()]);
               const smmTasks: any[] = [];
-              
-              const myOw = owList.filter((o: any) => String(o.assigneeId) === String(userId) && o.status !== 'Approved' && o.status !== 'Completed');
+              const myOw = owList.filter((o: any) => {
+                const isAssignee = String(o.assigneeId).trim() === String(userId).trim();
+                const isAssigner = String(o.assignerId).trim() === String(userId).trim();
+                return (isAssignee || isAssigner) && o.status !== 'Approved';
+              });
               myOw.forEach((o: any) => {
-                const client = clientList.find((c: any) => String(c.id) === String(o.clientId));
-                const project = projList.find((p: any) => String(p.id) === String(o.projectId));
+                const client = clientList.find((c: any) => String(c.id || c._id).trim() === String(o.clientId).trim());
+                const project = projList.find((p: any) => String(p.id || p._id).trim() === String(o.projectId).trim());
                 let displayName = "Other Work";
                 if (o.taskType === 'digital-marketing') displayName = 'Digital Marketing';
                 else if (client) displayName = project ? `${client.companyName || client.clientName} (${project.projectName})` : (client.companyName || client.clientName);
 
                 smmTasks.push({
-                  id: o.id,
-                  title: o.taskName || 'Other Work Task',
+                  id: o.id || o._id,
+                  title: o.title || o.taskName || 'Other Work Task',
                   projectName: displayName,
                   dueDate: o.deadline || "",
                   status: o.status
@@ -136,12 +139,12 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
               });
               
               if (userDept === "digital marketing" || userDept === "marketing") {
-                const myProjects = projList.filter((p: any) => p.assignedEmployeeId === userId && p.status !== 'Completed');
+                const myProjects = projList.filter((p: any) => String(p.assignedEmployeeId).trim() === String(userId).trim() && p.status !== 'Completed');
                 myProjects.forEach((p: any) => {
-                  const client = clientList.find((c: any) => String(c.id) === String(p.clientId));
+                  const client = clientList.find((c: any) => String(c.id || c._id) === String(p.clientId));
                   const cName = client?.companyName || client?.clientName || p.clientName || "Unknown Client";
                   smmTasks.push({
-                    id: p.id,
+                    id: p.id || p._id,
                     title: cName,
                     projectName: p.projectName || p.title || "",
                     dueDate: p.endDate || p.deadline || "",
@@ -150,15 +153,15 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                 });
               } else {
                 ccList.forEach((entry: any) => {
-                  const client = clientList.find((c: any) => String(c.id) === String(entry.clientId));
-                  const project = projList.find((p: any) => String(p.id) === String(entry.projectId));
+                  const client = clientList.find((c: any) => String(c.id || c._id) === String(entry.clientId));
+                  const project = projList.find((p: any) => String(p.id || p._id) === String(entry.projectId));
                   const cName = client?.companyName || client?.clientName || "Unknown Client";
                   
                   const checkStage = (stageName: string, idField: string, dateField: string, linkField: string, linkCheck?: (e:any)=>boolean) => {
                     const assigneeId = entry[idField] || project?.[idField] || client?.[idField];
                     const isDone = linkCheck ? linkCheck(entry) : !!entry[linkField];
                     
-                    if (String(assigneeId) === String(userId) && !isDone) {
+                    if (String(assigneeId).trim() === String(userId).trim() && !isDone) {
                       let dateStr = entry[dateField];
                       if (!dateStr && (stageName === 'Caption' || stageName === 'Thumbnail')) {
                         dateStr = entry.editingStart;
@@ -167,7 +170,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                       const taskName = entry.concept || entry.topic || (entry.postReel ? `${entry.postReel} Content` : `Task for ${entry.postingDate || entry.monthYear || 'Unknown Date'}`);
                       
                       smmTasks.push({
-                        id: `${entry.id}-${stageName}`,
+                        id: `${entry.id || entry._id}-${stageName}`,
                         title: taskName,
                         projectName: `${stageName} - ${cName}`,
                         dueDate: dateStr || "",
@@ -325,7 +328,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                 {(selectedTab === "today_work" || selectedTab === "upcoming_work") && (
                   <div className="space-y-3">
                     <Label className="text-base">{userDept === 'digital marketing' || userDept === 'marketing' ? 'Select Brand' : 'Select Task'}</Label>
-                    <div className="max-h-[500px] overflow-y-scroll flex flex-col gap-1.5 pr-2" style={{ scrollbarWidth: 'thin' }}>
+                    <div className="max-h-[500px] overflow-y-scroll flex flex-col gap-1.5 pr-2 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-slate-100/50 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-brand-teal/30 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-brand-teal/50 transition-colors" style={{ scrollbarWidth: 'thin', scrollbarColor: '#09A08A4D transparent' }}>
                       {(() => {
                         const activeTasks = selectedTab === "today_work" ? todayTasks : upcomingTasks;
                         
