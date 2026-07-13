@@ -433,7 +433,7 @@ export default function WorkLogsPage() {
                               <TableRow key={log.id}>
                                 <TableCell>
                                   <div className="flex items-center gap-2 font-medium">
-                                    <span className="truncate max-w-[220px]" title={log.title}>{log.title}</span>
+                                    <span title={log.title}>{log.title}</span>
                                     {log.isInProgress && <span className="flex h-2 w-2 rounded-full bg-green-500 animate-pulse" title="In Progress" />}
                                   </div>
                                 </TableCell>
@@ -584,7 +584,7 @@ export default function WorkLogsPage() {
                                       <TableRow key={log.id} className="hover:bg-slate-50/50">
                                         <TableCell>
                                           <div className="flex items-center gap-2">
-                                            <span className="text-sm font-medium truncate max-w-[240px]" title={log.title}>{log.title}</span>
+                                            <span className="text-sm font-medium" title={log.title}>{log.title}</span>
                                             {log.isInProgress && (
                                               <span className="flex h-2 w-2 rounded-full bg-green-500 animate-pulse" title="In Progress" />
                                             )}

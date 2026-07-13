@@ -542,6 +542,7 @@ export default function DashboardPage() {
       if (data.type === "Work") {
         payload.activityType = "Work";
         payload.taskId = data.taskId;
+        payload.activityValue = data.value;
       } else if (data.type === "Research") {
         payload.activityType = "Research";
         payload.activityValue = data.value;
