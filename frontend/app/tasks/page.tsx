@@ -51,6 +51,7 @@ const getStatusBadge = (status: string) => {
     case "on hold":
     case "pending": 
     case "review": return "bg-amber-100/50 text-amber-700 border-amber-200";
+    case "rejected": return "bg-red-50 text-red-600 border-red-200";
     case "to do": 
     case "todo": return "bg-gray-100 text-gray-700 border-gray-200";
     case "complete": 
@@ -68,6 +69,7 @@ const getStatusDot = (status: string) => {
     case "on hold":
     case "pending": 
     case "review": return "bg-amber-500";
+    case "rejected": return "bg-red-500";
     case "to do": 
     case "todo": return "bg-slate-400";
     case "complete": 
@@ -110,6 +112,8 @@ export default function TaskManagementPage() {
   const [editTaskDesc, setEditTaskDesc] = useState("");
   const [assigneeSearch, setAssigneeSearch] = useState("");
   const [adminViewAllUsers, setAdminViewAllUsers] = useState(false);
+  const [rejectingTaskId, setRejectingTaskId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
 
   // Form State
   const [newTask, setNewTask] = useState<{
@@ -245,13 +249,17 @@ export default function TaskManagementPage() {
     });
   };
 
-  const handleUpdateField = async (taskId: string, field: string, value: string) => {
+  const handleUpdateField = async (taskId: string, field: string, value: string, extraReason?: string) => {
     try {
       const payload: any = { 
         [field]: value,
         performedBy: user?.id,
         userName: user?.name
       };
+
+      if (extraReason) {
+        payload.rejectReason = extraReason;
+      }
 
       if (field === 'status' && value === 'on-hold') {
         payload.dueDate = null;
@@ -282,6 +290,9 @@ export default function TaskManagementPage() {
             const updatedTask = { ...t, [field]: value };
             if (field === 'status' && value === 'on-hold') {
               updatedTask.dueDate = null as any;
+            }
+            if (extraReason) {
+              updatedTask.rejectReason = extraReason;
             }
             return updatedTask;
           }
@@ -666,6 +677,7 @@ export default function TaskManagementPage() {
                         { value: "todo", label: "To do" },
                         { value: "on-hold", label: "On Hold" },
                         { value: "in-progress", label: "In progress" },
+                        { value: "rejected", label: "Rejected" },
                         { value: "completed", label: "Completed" }
                       ].map(status => {
                         const isChecked = savedStatuses.includes(status.value);
@@ -873,6 +885,12 @@ export default function TaskManagementPage() {
                               In progress
                             </div>
                           </SelectItem>
+                          <SelectItem value="rejected">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                              Rejected
+                            </div>
+                          </SelectItem>
                           <SelectItem value="completed">
                             <div className="flex items-center gap-2">
                               <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
@@ -1045,6 +1063,48 @@ export default function TaskManagementPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+
+          {/* Reject Reason Modal */}
+          <Dialog open={!!rejectingTaskId} onOpenChange={(open) => {
+            if (!open) {
+              setRejectingTaskId(null);
+              setRejectReason("");
+            }
+          }}>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>Reason for Rejection</DialogTitle>
+              </DialogHeader>
+              <div className="py-4">
+                <Textarea 
+                  value={rejectReason} 
+                  onChange={e => setRejectReason(e.target.value)} 
+                  placeholder="Please provide a reason for rejecting this task..." 
+                  className="min-h-[100px] resize-none"
+                  autoFocus
+                />
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => {
+                  setRejectingTaskId(null);
+                  setRejectReason("");
+                }}>Cancel</Button>
+                <Button 
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                  onClick={() => {
+                    if (!rejectReason.trim()) return toast.error("Reason is required to reject a task.");
+                    if (rejectingTaskId) {
+                      handleUpdateField(rejectingTaskId, 'status', 'rejected', rejectReason);
+                    }
+                    setRejectingTaskId(null);
+                    setRejectReason("");
+                  }}
+                >
+                  Submit Rejection
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </PageHeader>
 
@@ -1054,7 +1114,7 @@ export default function TaskManagementPage() {
           { title: "To do", count: statsTasks.filter(t => t.status === 'todo').length.toString().padStart(2, '0'), desc: "New tasks waiting to be picked up.", dot: "bg-slate-400" },
           { title: "On Hold", count: statsTasks.filter(t => t.status === 'on-hold' || t.status === 'pending').length.toString().padStart(2, '0'), desc: "Tasks paused for approval or feedback.", dot: "bg-amber-400" },
           { title: "In progress", count: statsTasks.filter(t => t.status === 'in-progress').length.toString().padStart(2, '0'), desc: "Active work items currently being handled.", dot: "bg-brand-teal" },
-          { title: "Due Tasks", count: statsTasks.filter(t => t.dueDate && t.status !== 'completed' && t.dueDate <= todayStr).length.toString().padStart(2, '0'), desc: "Tasks that are due today or overdue.", dot: "bg-red-500", highlight: true },
+          { title: "Due Tasks", count: statsTasks.filter(t => t.dueDate && t.status !== 'completed' && t.status !== 'rejected' && t.dueDate <= todayStr).length.toString().padStart(2, '0'), desc: "Tasks that are due today or overdue.", dot: "bg-red-500", highlight: true },
           { title: "Completed", count: statsTasks.filter(t => t.status === 'completed').length.toString().padStart(2, '0'), desc: "Completed tasks reviewed and closed.", dot: "bg-emerald-600" },
         ].map((stat, i) => (
           <div key={i} className={`bg-white border ${stat.highlight ? 'border-red-200 bg-red-50/30' : 'border-border'} rounded-xl p-4 shadow-sm flex flex-col h-full`}>
@@ -1081,6 +1141,7 @@ export default function TaskManagementPage() {
                     { value: "todo", label: "To do", dot: "bg-slate-400" },
                     { value: "on-hold", label: "On Hold", dot: "bg-amber-400" },
                     { value: "in-progress", label: "In progress", dot: "bg-brand-teal" },
+                    { value: "rejected", label: "Rejected", dot: "bg-red-500" },
                     { value: "completed", label: "Completed", dot: "bg-emerald-600" }
                   ].map(status => {
                     const isActive = activeStatuses.includes(status.value);
@@ -1411,6 +1472,13 @@ export default function TaskManagementPage() {
                           {task.description || task.desc || <span className="italic text-gray-400">Add a description...</span>}
                         </div>
                       )}
+
+                      {task.status === 'rejected' && task.rejectReason && (
+                        <div className="text-[11px] text-red-600 mt-1.5 font-medium flex items-start gap-1 bg-red-50 p-1.5 rounded-md border border-red-100 max-w-xs">
+                          <span className="shrink-0 mt-0.5">⚠️</span> 
+                          <span className="line-clamp-2">Reason: {task.rejectReason}</span>
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                       {canEdit ? (
@@ -1594,7 +1662,17 @@ export default function TaskManagementPage() {
                       </Select>
                     </td>
                     <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
-                      <Select disabled={!canEdit} defaultValue={task.status} onValueChange={(val) => handleUpdateField(task.id, 'status', val)}>
+                      <Select 
+                        disabled={!canEdit} 
+                        value={task.status} 
+                        onValueChange={(val) => {
+                          if (val === 'rejected') {
+                            setRejectingTaskId(task.id);
+                          } else {
+                            handleUpdateField(task.id, 'status', val);
+                          }
+                        }}
+                      >
                         <SelectTrigger className={`h-8 w-[120px] px-2.5 py-1 rounded-md text-xs font-semibold capitalize border focus:ring-0 focus:ring-offset-0 ${getStatusBadge(task.status)}`}>
                           <SelectValue />
                         </SelectTrigger>
@@ -1615,6 +1693,12 @@ export default function TaskManagementPage() {
                             <div className="flex items-center gap-2">
                               <span className="w-2 h-2 rounded-full bg-brand-teal"></span>
                               In progress
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="rejected">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                              Rejected
                             </div>
                           </SelectItem>
                           <SelectItem value="completed">

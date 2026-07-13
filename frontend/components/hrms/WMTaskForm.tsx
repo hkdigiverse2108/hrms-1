@@ -461,6 +461,7 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
               <SelectItem value="bugs">Bugs</SelectItem>
               <SelectItem value="onhold">On Hold</SelectItem>
               <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="rejected">Rejected</SelectItem>
               <SelectItem value="completed">Completed</SelectItem>
             </SelectContent>
           </Select>
@@ -492,6 +493,19 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
             placeholder="Required: Why is this task pending?"
             value={formData.reasonForPending ?? ""}
             onChange={(e) => handleChange("reasonForPending", e.target.value)}
+            required
+          />
+        </div>
+      )}
+
+      {formData.status === "rejected" && (
+        <div className="space-y-2">
+          <Label htmlFor="rejectReason" className="after:content-['_*'] after:text-red-500">Reason for Rejection</Label>
+          <Input
+            id="rejectReason"
+            placeholder="Required: Why is this task rejected?"
+            value={formData.rejectReason ?? ""}
+            onChange={(e) => handleChange("rejectReason", e.target.value)}
             required
           />
         </div>
