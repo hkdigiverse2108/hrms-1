@@ -249,7 +249,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
     let type = "Work";
     let subtype = "";
 
-    if (selectedTab === "today_work" || selectedTab === "upcoming_work") {
+    if (selectedTab === "today_work" || selectedTab === "upcoming_work" || selectedTab === "assigned_brands") {
       type = "Work";
     } else if (selectedTab === "research") {
       type = "Research";
@@ -275,7 +275,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
   };
 
   const isValid = () => {
-    if (selectedTab === "today_work" || selectedTab === "upcoming_work") {
+    if (selectedTab === "today_work" || selectedTab === "upcoming_work" || selectedTab === "assigned_brands") {
       return !!taskId;
     }
     if (selectedTab === "research") {
