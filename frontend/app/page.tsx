@@ -288,7 +288,10 @@ export default function DashboardPage() {
 
       const runTimer = () => {
         const istNow = getISTNow();
-        const lastPunchInStr = attendanceStatus.record.lastPunchIn || attendanceStatus.record.checkIn;
+        let lastPunchInStr = attendanceStatus.record.lastPunchIn || attendanceStatus.record.checkIn;
+        if (!attendanceStatus.record.accumulatedWorkSeconds) {
+          lastPunchInStr = attendanceStatus.record.checkIn;
+        }
         if (!lastPunchInStr) return;
 
         const normalizeDate = (d: Date) => {
@@ -1363,8 +1366,15 @@ function EmployeeView({
                         "Active"
                       )}
                     </span>
-                    {attendanceStatus.record.lastPunchIn && !isOnBreak && (
-                      <LiveTimer startTime={attendanceStatus.record.lastPunchIn} serverTimeOffset={serverTimeOffset} accumulatedSeconds={accumulatedSeconds} />
+                    {(attendanceStatus.record.lastPunchIn || isOnBreak) && (
+                      <LiveTimer 
+                        startTime={attendanceStatus.record.punches && attendanceStatus.record.punches.length > 0 
+                                      ? attendanceStatus.record.punches[attendanceStatus.record.punches.length - 1].punchIn 
+                                      : attendanceStatus.record.lastPunchIn} 
+                        serverTimeOffset={serverTimeOffset} 
+                        accumulatedSeconds={accumulatedSeconds} 
+                        isPaused={isOnBreak} 
+                      />
                     )}
                     {isOnBreak && (
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-50 text-orange-600 border border-orange-100 text-[11px] font-bold font-mono tracking-wider shadow-sm">

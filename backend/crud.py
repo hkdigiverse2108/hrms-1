@@ -2336,8 +2336,7 @@ async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None, pe
                             "punchInActivityType": punch_in_activity_type,
                             "punchInActivitySubtype": punch_in_activity_subtype,
                             "punchInActivityValue": punch_in_activity_value,
-                            "punchInTaskId": punch_in_task_id,
-                            "lastPunchIn": now_time_str
+                            "punchInTaskId": punch_in_task_id
                         }
                     }
                 )
