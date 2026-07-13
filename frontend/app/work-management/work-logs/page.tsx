@@ -171,12 +171,22 @@ export default function WorkLogsPage() {
 
     const grouped: Record<string, any> = {}
     rawLogs.forEach((log: any) => {
+      const session = {
+        startTime: log.startTime,
+        endTime: log.endTime,
+        durationStr: log.durationStr,
+        durationMins: log.durationMins,
+        isInProgress: log.isInProgress
+      }
+      
       if (!grouped[log.title]) {
-        grouped[log.title] = { ...log }
+        grouped[log.title] = { 
+          ...log,
+          sessions: [session]
+        }
       } else {
+        grouped[log.title].sessions.push(session)
         grouped[log.title].durationMins += log.durationMins
-        grouped[log.title].startTime = log.startTime
-        grouped[log.title].endTime = log.endTime
         grouped[log.title].isInProgress = grouped[log.title].isInProgress || log.isInProgress
         grouped[log.title].durationStr = grouped[log.title].isInProgress ? 'In Progress' : fmtMins(grouped[log.title].durationMins)
       }
@@ -418,12 +428,31 @@ export default function WorkLogsPage() {
                                 <TableCell>
                                   <div className="flex items-center gap-2 font-medium">
                                     <span className="truncate max-w-[220px]" title={log.title}>{log.title}</span>
-                                    {log.isInProgress && <span className="flex h-2 w-2 rounded-full bg-green-500" title="In Progress" />}
+                                    {log.isInProgress && <span className="flex h-2 w-2 rounded-full bg-green-500 animate-pulse" title="In Progress" />}
                                   </div>
                                 </TableCell>
-                                <TableCell className="text-slate-500 whitespace-nowrap">{log.startTime}</TableCell>
-                                <TableCell className="text-slate-500 whitespace-nowrap">{log.endTime}</TableCell>
-                                <TableCell className="text-right font-medium text-slate-700 whitespace-nowrap">{log.durationStr}</TableCell>
+                                <TableCell className="text-slate-500 whitespace-nowrap align-top py-3">
+                                  <div className="flex flex-col gap-1.5">
+                                    {log.sessions.map((s: any, idx: number) => <span key={idx}>{s.startTime}</span>)}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-slate-500 whitespace-nowrap align-top py-3">
+                                  <div className="flex flex-col gap-1.5">
+                                    {log.sessions.map((s: any, idx: number) => <span key={idx}>{s.endTime}</span>)}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-right font-medium text-slate-700 whitespace-nowrap align-top py-3">
+                                  <div className="flex flex-col gap-1.5">
+                                    {log.sessions.map((s: any, idx: number) => (
+                                      <span key={idx} className={s.isInProgress ? 'text-green-600' : ''}>{s.durationStr}</span>
+                                    ))}
+                                  </div>
+                                  {log.sessions.length > 1 && (
+                                    <div className="mt-2 pt-1.5 border-t text-sm font-bold text-slate-900">
+                                      {log.durationStr}
+                                    </div>
+                                  )}
+                                </TableCell>
                               </TableRow>
                             ))}
                           </TableBody>
@@ -555,14 +584,31 @@ export default function WorkLogsPage() {
                                             )}
                                           </div>
                                         </TableCell>
-                                        <TableCell>
+                                        <TableCell className="align-top py-3">
                                           <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${ACTIVITY_META[log.activityGroup]?.bg} ${ACTIVITY_META[log.activityGroup]?.color} border ${ACTIVITY_META[log.activityGroup]?.border}`}>
                                             {log.activityGroup}
                                           </span>
                                         </TableCell>
-                                        <TableCell className="text-slate-500 whitespace-nowrap text-sm">{log.startTime}</TableCell>
-                                        <TableCell className="text-slate-500 whitespace-nowrap text-sm">{log.endTime}</TableCell>
-                                        <TableCell className="text-right font-semibold text-slate-700 whitespace-nowrap text-sm">{log.durationStr}</TableCell>
+                                        <TableCell className="text-slate-500 whitespace-nowrap text-sm align-top py-3">
+                                          <div className="flex flex-col gap-1.5">
+                                            {log.sessions.map((s: any, idx: number) => <span key={idx}>{s.startTime}</span>)}
+                                          </div>
+                                        </TableCell>
+                                        <TableCell className="text-slate-500 whitespace-nowrap text-sm align-top py-3">
+                                          <div className="flex flex-col gap-1.5">
+                                            {log.sessions.map((s: any, idx: number) => <span key={idx}>{s.endTime}</span>)}
+                                          </div>
+                                        </TableCell>
+                                        <TableCell className="text-right font-semibold text-slate-700 whitespace-nowrap text-sm align-top py-3">
+                                          <div className="flex flex-col gap-1.5 font-normal text-slate-600">
+                                            {log.sessions.map((s: any, idx: number) => <span key={idx}>{s.durationStr}</span>)}
+                                          </div>
+                                          {log.sessions.length > 1 && (
+                                            <div className="mt-1.5 pt-1.5 border-t border-slate-200 text-slate-800">
+                                              {log.durationStr}
+                                            </div>
+                                          )}
+                                        </TableCell>
                                       </TableRow>
                                     ))}
                                   </TableBody>
@@ -678,13 +724,30 @@ export default function WorkLogsPage() {
                                           <TableCell>
                                             <div className="flex items-center gap-2">
                                               <span className="truncate max-w-[200px] text-sm font-medium" title={log.title}>{log.title}</span>
-                                              {log.isInProgress && <span className="flex h-2 w-2 rounded-full bg-green-500" />}
+                                              {log.isInProgress && <span className="flex h-2 w-2 rounded-full bg-green-500 animate-pulse" />}
                                             </div>
                                           </TableCell>
-                                          <TableCell className="text-slate-500 text-sm">{log.employeeName}</TableCell>
-                                          <TableCell className="text-slate-500 whitespace-nowrap text-sm">{log.startTime}</TableCell>
-                                          <TableCell className="text-slate-500 whitespace-nowrap text-sm">{log.endTime}</TableCell>
-                                          <TableCell className="text-right font-medium text-slate-700 whitespace-nowrap text-sm">{log.durationStr}</TableCell>
+                                          <TableCell className="text-slate-500 text-sm align-top py-3">{log.employeeName}</TableCell>
+                                          <TableCell className="text-slate-500 whitespace-nowrap text-sm align-top py-3">
+                                            <div className="flex flex-col gap-1.5">
+                                              {log.sessions.map((s: any, idx: number) => <span key={idx}>{s.startTime}</span>)}
+                                            </div>
+                                          </TableCell>
+                                          <TableCell className="text-slate-500 whitespace-nowrap text-sm align-top py-3">
+                                            <div className="flex flex-col gap-1.5">
+                                              {log.sessions.map((s: any, idx: number) => <span key={idx}>{s.endTime}</span>)}
+                                            </div>
+                                          </TableCell>
+                                          <TableCell className="text-right font-medium text-slate-700 whitespace-nowrap text-sm align-top py-3">
+                                            <div className="flex flex-col gap-1.5">
+                                              {log.sessions.map((s: any, idx: number) => <span key={idx}>{s.durationStr}</span>)}
+                                            </div>
+                                            {log.sessions.length > 1 && (
+                                              <div className="mt-1.5 pt-1.5 border-t border-slate-200 text-slate-800 font-bold">
+                                                {log.durationStr}
+                                              </div>
+                                            )}
+                                          </TableCell>
                                         </TableRow>
                                       ))}
                                     </TableBody>
