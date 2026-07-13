@@ -25,6 +25,17 @@ interface PunchInModalProps {
 
 export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialActivityType, initialActivitySubtype, initialActivityValue, initialTaskId, isUpdateMode }: PunchInModalProps) {
   const [selectedTab, setSelectedTab] = useState<string>("today_work");
+  
+  useEffect(() => {
+    if (open) {
+      const userStr = localStorage.getItem("user");
+      const userObj = userStr ? JSON.parse(userStr) : null;
+      const dept = userObj?.department?.toLowerCase() || "";
+      if (['hr', 'sales'].includes(dept)) setSelectedTab("research");
+      else if (['digital marketing', 'dm'].includes(dept)) setSelectedTab("assigned_brands");
+      else setSelectedTab("today_work");
+    }
+  }, [open]);
   const [activityValue, setActivityValue] = useState<string>("");
   const [taskId, setTaskId] = useState<string>("");
   
@@ -104,9 +115,10 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
           const userStr = localStorage.getItem("user");
           const userObj = userStr ? JSON.parse(userStr) : null;
           const userDept = userObj?.department?.toLowerCase() || "";
-          const isSmmUser = ["smm", "digital marketing", "creative", "graphics", "social media marketing"].includes(userDept);
+          const isCreativeUser = ['creative', 'smm', 'social media marketing', 'graphics'].includes(userDept);
+          const isDigitalMarketingUser = ['digital marketing', 'dm'].includes(userDept);
 
-          if (isSmmUser) {
+          if (isCreativeUser || isDigitalMarketingUser) {
             const [ccRes, owRes, projRes, clientRes] = await Promise.all([
               fetch(`${API_URL}/content-calendar/all`),
               fetch(`${API_URL}/other-work/all`),
@@ -117,24 +129,26 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
             if (ccRes.ok && owRes.ok && projRes.ok && clientRes.ok) {
               const [ccList, owList, projList, clientList] = await Promise.all([ccRes.json(), owRes.json(), projRes.json(), clientRes.json()]);
               const smmTasks: any[] = [];
-              const myOw = owList.filter((o: any) => String(o.assigneeId).trim() === String(userId).trim() && o.status !== 'Approved');
-              myOw.forEach((o: any) => {
-                const client = clientList.find((c: any) => String(c.id || c._id).trim() === String(o.clientId).trim());
-                const project = projList.find((p: any) => String(p.id || p._id).trim() === String(o.projectId).trim());
-                let displayName = "Other Work";
-                if (o.taskType === 'digital-marketing') displayName = 'Digital Marketing';
-                else if (client) displayName = project ? `${client.companyName || client.clientName} (${project.projectName})` : (client.companyName || client.clientName);
+              if (isCreativeUser) {
+                const myOw = owList.filter((o: any) => String(o.assigneeId).trim() === String(userId).trim() && o.status !== 'Approved');
+                myOw.forEach((o: any) => {
+                  const client = clientList.find((c: any) => String(c.id || c._id).trim() === String(o.clientId).trim());
+                  const project = projList.find((p: any) => String(p.id || p._id).trim() === String(o.projectId).trim());
+                  let displayName = "Other Work";
+                  if (o.taskType === 'digital-marketing') displayName = 'Digital Marketing';
+                  else if (client) displayName = project ? `${client.companyName || client.clientName} (${project.projectName})` : (client.companyName || client.clientName);
 
-                smmTasks.push({
-                  id: o.id || o._id,
-                  title: o.title || o.taskName || 'Other Work Task',
-                  projectName: displayName,
-                  dueDate: o.deadline || "",
-                  status: o.status
+                  smmTasks.push({
+                    id: o.id || o._id,
+                    title: o.title || o.taskName || 'Other Work Task',
+                    projectName: displayName,
+                    dueDate: o.deadline || "",
+                    status: o.status
+                  });
                 });
-              });
+              }
               
-              if (userDept === "digital marketing" || userDept === "marketing") {
+              if (isDigitalMarketingUser) {
                 const myProjects = projList.filter((p: any) => String(p.assignedEmployeeId).trim() === String(userId).trim() && p.status !== 'Completed');
                 myProjects.forEach((p: any) => {
                   const client = clientList.find((c: any) => String(c.id || c._id) === String(p.clientId));
@@ -333,11 +347,14 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
               setIsNewResearch(false);
             }} className="w-full">
               <TabsList className="w-full flex flex-wrap h-auto gap-1 p-1 bg-muted/50 rounded-lg justify-start">
-                {userDept !== 'hr' && userDept !== 'sales' && (
+                {userDept !== 'hr' && userDept !== 'sales' && !['digital marketing', 'dm'].includes(userDept) && (
                   <>
                     <TabsTrigger value="today_work" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Today's Work</TabsTrigger>
                     <TabsTrigger value="upcoming_work" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Upcoming Work</TabsTrigger>
                   </>
+                )}
+                {['digital marketing', 'dm'].includes(userDept) && (
+                  <TabsTrigger value="assigned_brands" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Projects</TabsTrigger>
                 )}
                 <TabsTrigger value="research" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Research</TabsTrigger>
                 {(settings?.otherCategories || ["Activity", "Meeting"]).map((cat: string) => (
@@ -346,17 +363,22 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
               </TabsList>
 
               <div className="mt-6">
-                {(selectedTab === "today_work" || selectedTab === "upcoming_work") && (
+                {(selectedTab === "today_work" || selectedTab === "upcoming_work" || selectedTab === "assigned_brands") && (
                   <div className="space-y-3">
-                    <Label className="text-base">{userDept === 'digital marketing' || userDept === 'marketing' ? 'Select Brand' : 'Select Task'}</Label>
+                    <Label className="text-base">{selectedTab === "assigned_brands" ? 'Select Brand' : 'Select Task'}</Label>
                     <div className="max-h-[500px] overflow-y-scroll flex flex-col gap-1.5 pr-2 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-slate-100/50 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-brand-teal/30 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-brand-teal/50 transition-colors" style={{ scrollbarWidth: 'thin', scrollbarColor: '#09A08A4D transparent' }}>
                       {(() => {
-                        const activeTasks = selectedTab === "today_work" ? todayTasks : upcomingTasks;
+                        let activeTasks = [];
+                        if (selectedTab === "assigned_brands") {
+                          activeTasks = tasks; // All active projects are shown regardless of date
+                        } else {
+                          activeTasks = selectedTab === "today_work" ? todayTasks : upcomingTasks;
+                        }
                         
                         if (activeTasks.length === 0) {
                           return (
                             <div className="col-span-full py-8 text-center text-muted-foreground bg-muted/20 rounded-lg border border-dashed">
-                              No {selectedTab === "today_work" ? "tasks for today" : "upcoming tasks"}
+                              No {selectedTab === "assigned_brands" ? "assigned brands" : selectedTab === "today_work" ? "tasks for today" : "upcoming tasks"}
                             </div>
                           );
                         }
