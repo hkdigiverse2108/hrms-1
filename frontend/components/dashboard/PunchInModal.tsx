@@ -114,7 +114,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
         try {
           const userStr = localStorage.getItem("user");
           const userObj = userStr ? JSON.parse(userStr) : null;
-          const userDept = userObj?.department?.toLowerCase() || "";
+          const userDept = (userObj?.department || "").toLowerCase().trim();
           const isCreativeUser = ['creative', 'smm', 'social media marketing', 'graphics'].includes(userDept);
           const isDigitalMarketingUser = ['digital marketing', 'dm'].includes(userDept);
 
@@ -161,11 +161,13 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                     status: "pending"
                   });
                 });
-              } else {
+              }
+              
+              if (isCreativeUser) {
                 ccList.forEach((entry: any) => {
                   const client = clientList.find((c: any) => String(c.id || c._id).trim() === String(entry.clientId).trim());
                   // In SMM, CC tasks use the client's Creative project
-                  const project = projList.find((p: any) => String(p.clientId).trim() === String(entry.clientId).trim() && p.department === 'Creative');
+                  const project = projList.find((p: any) => String(p.clientId).trim() === String(entry.clientId).trim() && p.department?.toLowerCase().trim() === 'creative');
                   if (!project) return; // Only show if active creative project (matching SMM)
                   
                   const cName = client?.companyName || client?.clientName || "Unknown Client";
