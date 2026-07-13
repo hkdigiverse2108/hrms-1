@@ -433,7 +433,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                 {['digital marketing', 'dm'].includes(userDept) && (
                   <>
                     <TabsTrigger value="assigned_brands" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Projects</TabsTrigger>
-                    <TabsTrigger value="dm_other_work" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Other Work</TabsTrigger>
+                    <TabsTrigger value="dm_other_work" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Work</TabsTrigger>
                   </>
                 )}
                 {['hr', 'sales'].includes(userDept) && (
