@@ -1137,7 +1137,7 @@ export function PendingWorkEmbedded({
                       <div className="flex justify-end items-center gap-2">
                         {item.isOtherWork ? (
                           <>
-                            {item.status === 'Pending' && (
+                            {item.status === 'Pending' && item.description !== 'Custom task created from Punch-In' && (
                               <Button 
                                 size="sm" 
                                 className="bg-brand-teal hover:bg-brand-teal/90 text-white text-xs h-7"
@@ -1146,7 +1146,7 @@ export function PendingWorkEmbedded({
                                 Submit for Review
                               </Button>
                             )}
-                            {item.status === 'Ready for Review' && (
+                            {item.status === 'Ready for Review' && item.description !== 'Custom task created from Punch-In' && (
                               <>
                                 <Button 
                                   size="sm" 

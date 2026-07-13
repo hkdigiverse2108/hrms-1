@@ -28,6 +28,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
   
   const [activityValue, setActivityValue] = useState<string>("");
   const [taskId, setTaskId] = useState<string>("");
+  const [customTaskName, setCustomTaskName] = useState<string>("");
   
   let userDept = "";
   if (typeof window !== "undefined") {
@@ -245,7 +246,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
     }
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     let type = "Work";
     let subtype = "";
 
@@ -260,10 +261,53 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
 
     const data: any = { type };
     if (type === "Work") {
-      data.taskId = taskId;
-      const selectedTask = tasks.find(t => t.id === taskId);
-      if (selectedTask) {
-        data.value = selectedTask.projectName ? `${selectedTask.title} (${selectedTask.projectName})` : selectedTask.title;
+      if (taskId === "custom") {
+        setIsLoading(true);
+        try {
+          const userStr = localStorage.getItem("user");
+          const userObj = userStr ? JSON.parse(userStr) : {};
+          const userName = userObj.name || (userObj.firstName ? `${userObj.firstName} ${userObj.lastName || ''}`.trim() : "Unknown User");
+          
+          const payload = {
+            title: customTaskName,
+            description: "Custom task created from Punch-In",
+            assigneeId: userId,
+            assigneeName: userName,
+            assignerId: userId,
+            assignerName: userName,
+            deadline: new Date().toISOString().split('T')[0],
+            status: "Pending",
+            taskType: "other-work"
+          };
+          
+          const res = await fetch(`${API_URL}/other-work`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          
+          if (res.ok) {
+            const newWork = await res.json();
+            data.taskId = newWork.id || newWork._id;
+            data.value = customTaskName;
+          } else {
+            console.error("Failed to create custom task");
+            data.taskId = "custom";
+            data.value = customTaskName;
+          }
+        } catch (err) {
+          console.error("Error creating custom task:", err);
+          data.taskId = "custom";
+          data.value = customTaskName;
+        } finally {
+          setIsLoading(false);
+        }
+      } else {
+        data.taskId = taskId;
+        const selectedTask = tasks.find(t => t.id === taskId);
+        if (selectedTask) {
+          data.value = selectedTask.projectName ? `${selectedTask.title} (${selectedTask.projectName})` : selectedTask.title;
+        }
       }
     } else if (type === "Other") {
       data.subtype = subtype;
@@ -271,11 +315,18 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
     } else if (type === "Research") {
       data.value = activityValue;
     }
-    onConfirm(data);
+    
+    if (taskId !== "custom" || data.taskId !== "custom") {
+      onConfirm(data);
+    } else {
+      // Fallback if creating failed, still punch in
+      onConfirm(data);
+    }
   };
 
   const isValid = () => {
     if (selectedTab === "today_work" || selectedTab === "upcoming_work" || selectedTab === "assigned_brands") {
+      if (taskId === "custom") return !!customTaskName.trim();
       return !!taskId;
     }
     if (selectedTab === "research") {
@@ -384,37 +435,69 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                           activeTasks = selectedTab === "today_work" ? todayTasks : upcomingTasks;
                         }
                         
+                        const elements = [];
+                        
                         if (activeTasks.length === 0) {
-                          return (
-                            <div className="col-span-full py-8 text-center text-muted-foreground bg-muted/20 rounded-lg border border-dashed">
+                          elements.push(
+                            <div key="empty" className="col-span-full py-8 text-center text-muted-foreground bg-muted/20 rounded-lg border border-dashed">
                               No {selectedTab === "assigned_brands" ? "assigned brands" : selectedTab === "today_work" ? "tasks for today" : "upcoming tasks"}
+                            </div>
+                          );
+                        } else {
+                          elements.push(...activeTasks.map(t => (
+                            <div 
+                              key={t.id} 
+                              onClick={() => setTaskId(t.id)}
+                              className={`px-3 py-1.5 rounded-lg cursor-pointer border transition-all duration-200 flex items-center justify-between min-h-[38px] ${
+                                taskId === t.id 
+                                  ? 'border-brand-teal bg-brand-teal/10 shadow-sm ring-1 ring-brand-teal' 
+                                  : 'border-border/50 hover:border-brand-teal/50 hover:bg-muted/30'
+                              }`}
+                            >
+                              <div className="font-medium text-sm line-clamp-1 flex-1 flex items-center gap-2">
+                                <span className="truncate">{t.title}</span>
+                                {t.dueDate && (
+                                  <span className="text-[10px] font-semibold bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap">
+                                    {typeof t.dueDate === 'string' && t.dueDate.includes('T') ? t.dueDate.split('T')[0] : String(t.dueDate)}
+                                  </span>
+                                )}
+                              </div>
+                              {t.projectName && <div className="text-[11px] text-muted-foreground ml-3 bg-muted/40 px-1.5 py-0.5 rounded flex-shrink-0 max-w-[35%] line-clamp-1">{t.projectName}</div>}
+                            </div>
+                          )));
+                        }
+                        
+                        if (selectedTab === "today_work" && (userDept === 'creative' || userDept === 'development')) {
+                          elements.push(
+                            <div 
+                              key="custom" 
+                              onClick={() => setTaskId('custom')}
+                              className={`px-3 py-1.5 mt-2 rounded-lg cursor-pointer border transition-all duration-200 flex items-center justify-between min-h-[38px] border-dashed ${
+                                taskId === 'custom' 
+                                  ? 'border-brand-teal bg-brand-teal/10 shadow-sm ring-1 ring-brand-teal' 
+                                  : 'border-slate-300 hover:border-brand-teal/50 hover:bg-muted/30'
+                              }`}
+                            >
+                              <div className="font-medium text-sm line-clamp-1 flex-1 flex items-center gap-2 text-brand-teal">
+                                <span>+ Add Custom Work (Not Listed)</span>
+                              </div>
                             </div>
                           );
                         }
                         
-                        return activeTasks.map(t => (
-                          <div 
-                            key={t.id} 
-                            onClick={() => setTaskId(t.id)}
-                            className={`px-3 py-1.5 rounded-lg cursor-pointer border transition-all duration-200 flex items-center justify-between min-h-[38px] ${
-                              taskId === t.id 
-                                ? 'border-brand-teal bg-brand-teal/10 shadow-sm ring-1 ring-brand-teal' 
-                                : 'border-border/50 hover:border-brand-teal/50 hover:bg-muted/30'
-                            }`}
-                          >
-                            <div className="font-medium text-sm line-clamp-1 flex-1 flex items-center gap-2">
-                              <span className="truncate">{t.title}</span>
-                              {t.dueDate && (
-                                <span className="text-[10px] font-semibold bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap">
-                                  {typeof t.dueDate === 'string' && t.dueDate.includes('T') ? t.dueDate.split('T')[0] : String(t.dueDate)}
-                                </span>
-                              )}
-                            </div>
-                            {t.projectName && <div className="text-[11px] text-muted-foreground ml-3 bg-muted/40 px-1.5 py-0.5 rounded flex-shrink-0 max-w-[35%] line-clamp-1">{t.projectName}</div>}
-                          </div>
-                        ));
+                        return elements;
                       })()}
                     </div>
+                    {taskId === "custom" && (
+                      <div className="space-y-2 mt-4 animate-in fade-in zoom-in duration-200">
+                        <Label>Custom Task Name</Label>
+                        <Input 
+                          placeholder="Enter task name (e.g., Client meeting, Quick revision)" 
+                          value={customTaskName}
+                          onChange={e => setCustomTaskName(e.target.value)}
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
 
