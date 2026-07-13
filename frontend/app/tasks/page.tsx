@@ -11,7 +11,8 @@ import {
   Loader2,
   Trash2,
   History,
-  ChevronDown
+  ChevronDown,
+  ClipboardCheck
 } from "lucide-react";
 import { exportToCSV } from "@/lib/export-utils";
 import { toast } from "sonner";
@@ -101,6 +102,7 @@ export default function TaskManagementPage() {
   const [isMounted, setIsMounted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [approvalModalOpen, setApprovalModalOpen] = useState(false);
   const [logsModalOpen, setLogsModalOpen] = useState(false);
   const [selectedTaskLogs, setSelectedTaskLogs] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -740,6 +742,21 @@ export default function TaskManagementPage() {
             </div>
           )}
 
+          {/* Approval Requests Button */}
+          <Button 
+            variant="outline"
+            onClick={() => setApprovalModalOpen(true)}
+            className="border-brand-teal text-brand-teal hover:bg-brand-teal/10 font-medium shadow-sm"
+          >
+            <ClipboardCheck className="w-4 h-4 mr-2" />
+            Approval Requests
+            {tasks.filter(t => t.status === 'review' && (isAdmin || t.assignedBy === user?.id || t.assignedById === user?.id || t.createdBy === user?.id || t.performedBy === user?.id)).length > 0 && (
+              <span className="ml-2 bg-brand-teal text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                {tasks.filter(t => t.status === 'review' && (isAdmin || t.assignedBy === user?.id || t.assignedById === user?.id || t.createdBy === user?.id || t.performedBy === user?.id)).length}
+              </span>
+            )}
+          </Button>
+
           {/* Create Task Modal */}
           {canAdd && (
           <Dialog open={createModalOpen} onOpenChange={(val) => {
@@ -1103,6 +1120,63 @@ export default function TaskManagementPage() {
                   Submit Rejection
                 </Button>
               </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          
+          {/* Approval Requests Modal */}
+          <Dialog open={approvalModalOpen} onOpenChange={setApprovalModalOpen}>
+            <DialogContent className="sm:max-w-[600px]">
+              <DialogHeader>
+                <DialogTitle className="text-xl font-bold flex items-center gap-2">
+                  <ClipboardCheck className="w-5 h-5 text-amber-500" />
+                  Approval Requests
+                </DialogTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Tasks waiting for your review and approval.
+                </p>
+              </DialogHeader>
+              <div className="max-h-[60vh] overflow-y-auto pr-2 mt-4 space-y-3">
+                {tasks.filter(t => t.status === 'review' && (isAdmin || t.assignedBy === user?.id || t.assignedById === user?.id || t.createdBy === user?.id || t.performedBy === user?.id)).length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <ClipboardCheck className="w-12 h-12 mx-auto text-slate-200 mb-3" />
+                    <p>No approval requests at the moment.</p>
+                  </div>
+                ) : (
+                  tasks.filter(t => t.status === 'review' && (isAdmin || t.assignedBy === user?.id || t.assignedById === user?.id || t.createdBy === user?.id || t.performedBy === user?.id)).map(task => (
+                    <div key={task.id} className="bg-white border border-border rounded-lg p-4 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center shadow-sm">
+                      <div className="space-y-1">
+                        <h4 className="font-semibold text-sm text-foreground">{task.title}</h4>
+                        <p className="text-xs text-muted-foreground">
+                          Assigned to: {(task.assignedToNames && task.assignedToNames[0]) || task.assignedToName || task.assignee || 'Unassigned'}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="w-full sm:w-auto text-xs text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                          onClick={() => {
+                            setRejectingTaskId(task.id);
+                            setApprovalModalOpen(false);
+                          }}
+                        >
+                          Reject
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          className="w-full sm:w-auto text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                          onClick={() => {
+                            handleUpdateField(task.id, 'status', 'completed');
+                            toast.success("Task approved and marked as completed!");
+                          }}
+                        >
+                          Approve
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </DialogContent>
           </Dialog>
         </div>
@@ -1664,16 +1738,25 @@ export default function TaskManagementPage() {
                     <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                       <Select 
                         disabled={!canEdit} 
-                        value={task.status} 
+                        value={task.status === 'review' ? 'completed' : task.status} 
                         onValueChange={(val) => {
                           if (val === 'rejected') {
                             setRejectingTaskId(task.id);
+                          } else if (val === 'completed') {
+                            const isAssigner = (task.assignedBy === user?.id || task.assignedById === user?.id || task.performedBy === user?.id || task.createdBy === user?.id);
+                            const isAdminUser = isAdmin || user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'hr';
+                            if (isAssigner || isAdminUser) {
+                              handleUpdateField(task.id, 'status', 'completed');
+                            } else {
+                              handleUpdateField(task.id, 'status', 'review');
+                              toast.success("Task sent for review to the assigner.");
+                            }
                           } else {
                             handleUpdateField(task.id, 'status', val);
                           }
                         }}
                       >
-                        <SelectTrigger className={`h-8 w-[120px] px-2.5 py-1 rounded-md text-xs font-semibold capitalize border focus:ring-0 focus:ring-offset-0 ${getStatusBadge(task.status)}`}>
+                        <SelectTrigger className={`h-8 w-[120px] px-2.5 py-1 rounded-md text-xs font-semibold capitalize border focus:ring-0 focus:ring-offset-0 ${getStatusBadge(task.status === 'review' ? 'completed' : task.status)}`}>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -1709,6 +1792,9 @@ export default function TaskManagementPage() {
                           </SelectItem>
                         </SelectContent>
                       </Select>
+                      {task.status === 'review' && (
+                        <div className="text-[10px] text-amber-600 font-bold text-center mt-1 bg-amber-50 rounded-md py-0.5 border border-amber-200">Review Pending</div>
+                      )}
                     </td>
                     <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                       <Select disabled={!canEdit} defaultValue={task.priority} onValueChange={(val) => handleUpdateField(task.id, 'priority', val)}>
