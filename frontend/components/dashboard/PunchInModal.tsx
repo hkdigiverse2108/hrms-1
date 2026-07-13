@@ -26,16 +26,6 @@ interface PunchInModalProps {
 export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialActivityType, initialActivitySubtype, initialActivityValue, initialTaskId, isUpdateMode }: PunchInModalProps) {
   const [selectedTab, setSelectedTab] = useState<string>("today_work");
   
-  useEffect(() => {
-    if (open) {
-      const userStr = localStorage.getItem("user");
-      const userObj = userStr ? JSON.parse(userStr) : null;
-      const dept = userObj?.department?.toLowerCase() || "";
-      if (['hr', 'sales'].includes(dept)) setSelectedTab("research");
-      else if (['digital marketing', 'dm'].includes(dept)) setSelectedTab("assigned_brands");
-      else setSelectedTab("today_work");
-    }
-  }, [open]);
   const [activityValue, setActivityValue] = useState<string>("");
   const [taskId, setTaskId] = useState<string>("");
   
@@ -44,7 +34,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
     const userStr = localStorage.getItem("user");
     if (userStr) {
       try {
-        userDept = (JSON.parse(userStr).department || "").toLowerCase();
+        userDept = (JSON.parse(userStr).department || "").toLowerCase().trim();
       } catch (e) {}
     }
   }
@@ -58,23 +48,32 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
   useEffect(() => {
     if (open && userId) {
       fetchData();
+      
       let initialTab = "today_work";
-      if (initialActivityType === "Work") {
-        initialTab = "today_work";
-      } else if (initialActivityType === "Research") {
-        initialTab = "research";
-      } else if (initialActivityType === "Other" && initialActivitySubtype) {
-        initialTab = `other_${initialActivitySubtype}`;
+      const isDigitalMarketing = ['digital marketing', 'dm'].includes(userDept);
+      
+      if (isUpdateMode && initialActivityType) {
+        if (initialActivityType === "Work") {
+          initialTab = isDigitalMarketing ? "assigned_brands" : "today_work";
+        } else if (initialActivityType === "Research") {
+          initialTab = "research";
+        } else if (initialActivityType === "Other" && initialActivitySubtype) {
+          initialTab = `other_${initialActivitySubtype}`;
+        }
+      } else {
+        if (['hr', 'sales'].includes(userDept)) initialTab = "research";
+        else if (isDigitalMarketing) initialTab = "assigned_brands";
       }
+      
       setSelectedTab(initialTab);
       
       setActivityValue(initialActivityValue || "");
       setTaskId(initialTaskId || "");
       if (initialActivityType === "Research" && initialActivityValue) {
-        setIsNewResearch(true); // Default to input if there's an initial value to be safe, or we can check later
+        setIsNewResearch(true);
       }
     }
-  }, [open, userId, initialActivityType, initialActivitySubtype, initialActivityValue, initialTaskId]);
+  }, [open, userId, initialActivityType, initialActivitySubtype, initialActivityValue, initialTaskId, isUpdateMode, userDept]);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -119,15 +118,17 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
           const isDigitalMarketingUser = ['digital marketing', 'dm'].includes(userDept);
 
           if (isCreativeUser || isDigitalMarketingUser) {
-            const [ccRes, owRes, projRes, clientRes] = await Promise.all([
+            const [ccRes, owRes, projRes, clientRes, transferRes] = await Promise.all([
               fetch(`${API_URL}/content-calendar/all`),
               fetch(`${API_URL}/other-work/all`),
               fetch(`${API_URL}/projects`),
-              fetch(`${API_URL}/clients`)
+              fetch(`${API_URL}/clients`),
+              fetch(`${API_URL}/work-transfer-requests?taskType=digital-marketing`)
             ]);
             
             if (ccRes.ok && owRes.ok && projRes.ok && clientRes.ok) {
-              const [ccList, owList, projList, clientList] = await Promise.all([ccRes.json(), owRes.json(), projRes.json(), clientRes.json()]);
+              const [ccList, owList, projList, clientList, transferListRaw] = await Promise.all([ccRes.json(), owRes.json(), projRes.json(), clientRes.json(), transferRes.ok ? transferRes.json() : []]);
+              const acceptedTransfers = (Array.isArray(transferListRaw) ? transferListRaw : []).filter((r: any) => r.status === 'Accepted');
               const smmTasks: any[] = [];
               if (isCreativeUser) {
                 const myOw = owList.filter((o: any) => String(o.assigneeId).trim() === String(userId).trim() && o.status !== 'Approved');
@@ -149,7 +150,13 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
               }
               
               if (isDigitalMarketingUser) {
-                const myProjects = projList.filter((p: any) => String(p.assignedEmployeeId).trim() === String(userId).trim() && p.status !== 'Completed');
+                const dmProjects = projList.filter((p: any) => p.department && p.department.trim().toLowerCase() === 'digital marketing' && p.status !== 'on-hold' && p.status !== 'Completed');
+                const myProjects = dmProjects.filter((p: any) => {
+                  const isOriginalAssignee = String(p.assignedEmployeeId).trim() === String(userId).trim();
+                  const isTransferredToMe = acceptedTransfers.some((t: any) => String(t.taskId) === String(p.id || p._id) && String(t.receiverId) === String(userId));
+                  return isOriginalAssignee || isTransferredToMe;
+                });
+                
                 myProjects.forEach((p: any) => {
                   const client = clientList.find((c: any) => String(c.id || c._id) === String(p.clientId));
                   const cName = client?.companyName || client?.clientName || p.clientName || "Unknown Client";
