@@ -293,10 +293,27 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
             taskType: "other-work"
           };
           
-          const res = await fetch(`${API_URL}/other-work`, {
+          const isDev = userDept === 'development';
+          const url = isDev ? `${API_URL}/wm-tasks` : `${API_URL}/other-work`;
+          const bodyPayload = isDev ? {
+            title: customTaskName,
+            description: "Custom task created from Punch-In",
+            projectId: "custom",
+            projectName: "Custom Task",
+            assignedToId: userId,
+            assignedToName: userName,
+            department: "Development",
+            dueDate: new Date().toISOString().split('T')[0],
+            status: "todo",
+            priority: "medium",
+            performedBy: userId,
+            userName: userName
+          } : payload;
+          
+          const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(bodyPayload)
           });
           
           if (res.ok) {
