@@ -121,7 +121,13 @@ export default function WorkLogsPage() {
 
       if (actType === 'Work') {
         const task = tasks.find(t => t.id === punch.taskId)
-        title = task ? `Work: ${task.title}` : (punch.taskId ? 'Work: Unknown Task' : 'Work')
+        if (task) {
+          title = `Work: ${task.title}`
+        } else if (punch.activityValue) {
+          title = `Work: ${punch.activityValue}`
+        } else {
+          title = punch.taskId ? 'Work: Unknown Task' : 'Work'
+        }
       } else if (actType === 'Research') {
         title = 'Research' + (punch.activityValue ? `: ${punch.activityValue}` : '')
       } else if (actType === 'Other') {
