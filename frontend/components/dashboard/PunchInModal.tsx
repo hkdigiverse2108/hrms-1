@@ -43,7 +43,9 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
   const [tasks, setTasks] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>(null);
   const [pastResearch, setPastResearch] = useState<string[]>([]);
+  const [pastWorkTasks, setPastWorkTasks] = useState<string[]>([]);
   const [isNewResearch, setIsNewResearch] = useState(false);
+  const [isNewWorkTask, setIsNewWorkTask] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -55,14 +57,18 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
       
       if (isUpdateMode && initialActivityType) {
         if (initialActivityType === "Work") {
-          initialTab = isDigitalMarketing ? "assigned_brands" : "today_work";
+          if (['hr', 'sales'].includes(userDept)) {
+            initialTab = "hr_sales_work";
+          } else {
+            initialTab = isDigitalMarketing ? "assigned_brands" : "today_work";
+          }
         } else if (initialActivityType === "Research") {
           initialTab = "research";
         } else if (initialActivityType === "Other" && initialActivitySubtype) {
           initialTab = `other_${initialActivitySubtype}`;
         }
       } else {
-        if (['hr', 'sales'].includes(userDept)) initialTab = "research";
+        if (['hr', 'sales'].includes(userDept)) initialTab = "hr_sales_work";
         else if (isDigitalMarketing) initialTab = "assigned_brands";
       }
       
@@ -91,16 +97,20 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
       if (attRes.ok) {
         const allAtt = await attRes.json();
         const uniqueTitles = new Set<string>();
+        const uniqueWorkTitles = new Set<string>();
         allAtt.forEach((a: any) => {
           if (a.employeeId === userId && Array.isArray(a.punches)) {
             a.punches.forEach((punch: any) => {
               if (punch.activityType === "Research" && punch.activityValue) {
                 uniqueTitles.add(punch.activityValue);
+              } else if (punch.activityType === "Work" && punch.activityValue && !punch.taskId) {
+                uniqueWorkTitles.add(punch.activityValue);
               }
             });
           }
         });
         setPastResearch(Array.from(uniqueTitles));
+        setPastWorkTasks(Array.from(uniqueWorkTitles));
       }
       if (tasksRes.ok) {
         const allTasks = await tasksRes.json();
@@ -250,7 +260,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
     let type = "Work";
     let subtype = "";
 
-    if (selectedTab === "today_work" || selectedTab === "upcoming_work" || selectedTab === "assigned_brands") {
+    if (selectedTab === "today_work" || selectedTab === "upcoming_work" || selectedTab === "assigned_brands" || selectedTab === "hr_sales_work" || selectedTab === "dm_other_work") {
       type = "Work";
     } else if (selectedTab === "research") {
       type = "Research";
@@ -261,7 +271,10 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
 
     const data: any = { type };
     if (type === "Work") {
-      if (taskId === "custom") {
+      if (selectedTab === "hr_sales_work" || selectedTab === "dm_other_work") {
+        data.taskId = undefined;
+        data.value = activityValue;
+      } else if (taskId === "custom") {
         setIsLoading(true);
         try {
           const userStr = localStorage.getItem("user");
@@ -328,6 +341,9 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
     if (selectedTab === "today_work" || selectedTab === "upcoming_work" || selectedTab === "assigned_brands") {
       if (taskId === "custom") return !!customTaskName.trim();
       return !!taskId;
+    }
+    if (selectedTab === "hr_sales_work" || selectedTab === "dm_other_work") {
+      return !!activityValue;
     }
     if (selectedTab === "research") {
       return !!activityValue;
@@ -405,6 +421,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
               setTaskId("");
               setActivityValue("");
               setIsNewResearch(false);
+              setIsNewWorkTask(false);
             }} className="w-full">
               <TabsList className="w-full flex flex-wrap h-auto gap-1 p-1 bg-muted/50 rounded-lg justify-start">
                 {userDept !== 'hr' && userDept !== 'sales' && !['digital marketing', 'dm'].includes(userDept) && (
@@ -414,7 +431,13 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                   </>
                 )}
                 {['digital marketing', 'dm'].includes(userDept) && (
-                  <TabsTrigger value="assigned_brands" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Projects</TabsTrigger>
+                  <>
+                    <TabsTrigger value="assigned_brands" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Projects</TabsTrigger>
+                    <TabsTrigger value="dm_other_work" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Other Work</TabsTrigger>
+                  </>
+                )}
+                {['hr', 'sales'].includes(userDept) && (
+                  <TabsTrigger value="hr_sales_work" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Work</TabsTrigger>
                 )}
                 <TabsTrigger value="research" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Research</TabsTrigger>
                 {(settings?.otherCategories || ["Activity", "Meeting"]).map((cat: string) => (
@@ -495,6 +518,61 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                           placeholder="Enter task name (e.g., Client meeting, Quick revision)" 
                           value={customTaskName}
                           onChange={e => setCustomTaskName(e.target.value)}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {(selectedTab === "hr_sales_work" || selectedTab === "dm_other_work") && (
+                  <div className="space-y-3">
+                    <Label className="text-base">Select Task</Label>
+                    <div className="max-h-[500px] overflow-y-scroll flex flex-col gap-1.5 pr-2 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-slate-100/50 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-brand-teal/30 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-brand-teal/50 transition-colors" style={{ scrollbarWidth: 'thin', scrollbarColor: '#09A08A4D transparent' }}>
+                      {pastWorkTasks.map(topic => (
+                        <div 
+                          key={topic} 
+                          onClick={() => {
+                            setIsNewWorkTask(false);
+                            setActivityValue(topic);
+                          }}
+                          className={`px-3 py-1.5 rounded-lg cursor-pointer border transition-all duration-200 flex items-center justify-between min-h-[38px] ${
+                            activityValue === topic && !isNewWorkTask
+                              ? 'border-brand-teal bg-brand-teal/10 shadow-sm ring-1 ring-brand-teal' 
+                              : 'border-border/50 hover:border-brand-teal/50 hover:bg-muted/30'
+                          }`}
+                        >
+                          <div className="font-medium text-sm line-clamp-1 flex-1 flex items-center gap-2">
+                            <span className="truncate">{topic}</span>
+                          </div>
+                        </div>
+                      ))}
+                      
+                      <div 
+                        key="custom_work" 
+                        onClick={() => {
+                          setIsNewWorkTask(true);
+                          setActivityValue("");
+                        }}
+                        className={`px-3 py-1.5 mt-2 rounded-lg cursor-pointer border transition-all duration-200 flex items-center justify-between min-h-[38px] border-dashed ${
+                          isNewWorkTask 
+                            ? 'border-brand-teal bg-brand-teal/10 shadow-sm ring-1 ring-brand-teal' 
+                            : 'border-slate-300 hover:border-brand-teal/50 hover:bg-muted/30'
+                        }`}
+                      >
+                        <div className="font-medium text-sm line-clamp-1 flex-1 flex items-center gap-2 text-brand-teal">
+                          <span>+ Add New Work Task</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {isNewWorkTask && (
+                      <div className="space-y-2 mt-4 animate-in fade-in zoom-in duration-200">
+                        <Label>New Task Name</Label>
+                        <Input 
+                          placeholder="Enter new work task..." 
+                          value={activityValue}
+                          onChange={e => setActivityValue(e.target.value)}
+                          autoFocus
                         />
                       </div>
                     )}

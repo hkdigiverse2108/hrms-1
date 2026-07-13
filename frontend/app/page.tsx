@@ -134,6 +134,8 @@ export default function DashboardPage() {
             setActiveTaskTitle(attendanceStatus.record.punchInActivityValue);
           }
         });
+    } else if (attendanceStatus?.isPunchedIn && attendanceStatus.record?.punchInActivityType === "Work") {
+      setActiveTaskTitle(attendanceStatus.record?.punchInActivityValue || null);
     } else {
       setActiveTaskTitle(null);
     }
@@ -589,7 +591,11 @@ export default function DashboardPage() {
         await fetchStatus();
         await fetchHistory();
         window.dispatchEvent(new Event("attendance-update"));
-        toast.success("Successfully punched in!");
+        if (attendanceStatus?.isPunchedIn) {
+          toast.success("Activity changed successfully!");
+        } else {
+          toast.success("Successfully punched in!");
+        }
       } else {
         const errorData = await res.json().catch(() => ({}));
         toast.error(`Punch in failed: ${errorData.detail || 'Server error'}`);
@@ -1217,7 +1223,11 @@ function EmployeeView({
       if (p.punchOut && p.punchIn) {
         let isSame = false;
         if (currentType === "Work") {
-          isSame = (p.activityType === "Work" && String(p.taskId) === String(currentTaskId));
+          if (currentTaskId && currentTaskId !== "undefined") {
+            isSame = (p.activityType === "Work" && String(p.taskId) === String(currentTaskId));
+          } else {
+            isSame = (p.activityType === "Work" && p.activityValue === currentValue);
+          }
         } else if (currentType === "Research") {
           isSame = (p.activityType === "Research" && p.activityValue === currentValue);
         } else if (currentType === "Other") {
