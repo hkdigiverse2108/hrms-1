@@ -457,6 +457,35 @@ export function PendingWorkEmbedded({
       if (entry.postReel !== 'Post' && entry.scriptDate && !entry.scriptLink && canSeeTask('Script')) tasks.push(enrich('Script', entry.scriptDate, 'scripts'));
       if (entry.postReel !== 'Post' && entry.shootDate && !entry.shootLink && canSeeTask('Shoot')) tasks.push(enrich('Shoot', entry.shootDate, 'shoots'));
       
+      if (entry.assignedBrandPersonIds && (!entry.shootLink || entry.shootLink === '-')) {
+        const bpIdsRaw = entry.assignedBrandPersonIds;
+        const bpIds = Array.isArray(bpIdsRaw) ? bpIdsRaw : (typeof bpIdsRaw === 'string' ? bpIdsRaw.split(',').map((id: string) => id.trim()).filter(Boolean) : []);
+        bpIds.forEach((bpId: string) => {
+          const isAssignedToMe = user?.id === bpId;
+          if (!isEmployeeOrIntern || isAssignedToMe) {
+             const assignerId = project.teamLeaderId || client?.teamLeaderId;
+             const assigner = employees.find((e: any) => e.id === assignerId);
+             const assignee = employees.find((e: any) => e.id === bpId);
+             
+             const taskDeadline = entry.shootDate || entry.postingDate || (entry.monthYear ? `${entry.monthYear}-28` : new Date().toISOString().split('T')[0]);
+             
+             tasks.push({
+               ...entry,
+               clientDisplayName: displayName,
+               clientId: entry.clientId,
+               stage: 'Brand Person',
+               deadline: taskDeadline,
+               type: 'brand-person',
+               taskName: entry.concept || entry.topic || (entry.postReel ? `${entry.postReel} Content` : `Task for ${entry.postingDate || entry.monthYear || 'Unknown Date'}`),
+               assigneeName: assignee ? (assignee.name || `${assignee.firstName} ${assignee.lastName}`) : null,
+               assignerName: assigner ? (assigner.name || `${assigner.firstName} ${assigner.lastName}`) : null,
+               assigneeId: bpId,
+               assignerId: assignerId,
+             });
+          }
+        });
+      }
+
       const captionDate = entry.captionDate || entry.editingStart;
       if (captionDate && !entry.caption && canSeeTask('Caption')) tasks.push(enrich('Caption', captionDate, 'captions'));
 
@@ -611,7 +640,7 @@ export function PendingWorkEmbedded({
   }, [preFilteredTasks, filterStage]);
 
   const availableStages = useMemo(() => {
-    const defaultStages = ['script', 'shoot', 'caption', 'thumbnail', 'editing', 'post/graphics', 'approval', 'posting'];
+    const defaultStages = ['script', 'shoot', 'brand person', 'caption', 'thumbnail', 'editing', 'post/graphics', 'approval', 'posting'];
     if (isAdminOrTL) {
       return defaultStages;
     }
@@ -929,6 +958,7 @@ export function PendingWorkEmbedded({
                   <SelectItem value="all">All Stages</SelectItem>
                   {availableStages.includes('script') && <SelectItem value="script">Script</SelectItem>}
                   {availableStages.includes('shoot') && <SelectItem value="shoot">Shoot</SelectItem>}
+                  {availableStages.includes('brand person') && <SelectItem value="brand person">Brand Person</SelectItem>}
                   {availableStages.includes('caption') && <SelectItem value="caption">Caption</SelectItem>}
                   {availableStages.includes('thumbnail') && <SelectItem value="thumbnail">Thumbnail</SelectItem>}
                   {availableStages.includes('editing') && <SelectItem value="editing">Editing</SelectItem>}

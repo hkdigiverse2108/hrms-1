@@ -2400,6 +2400,7 @@ class ContentCalendarEntryBase(BaseModel):
     logs: Optional[List[dict]] = None
     remark: Optional[str] = None
     remarkStage: Optional[str] = None
+    assignedBrandPersonIds: Optional[List[str]] = None
     assignedScriptwriterId: Optional[str] = None
     assignedShooterId: Optional[str] = None
     assignedReelEditorId: Optional[str] = None
@@ -2436,6 +2437,7 @@ class ContentCalendarEntryUpdate(BaseModel):
     remarkStage: Optional[str] = None
     assignedScriptwriterId: Optional[str] = None
     assignedShooterId: Optional[str] = None
+    assignedBrandPersonIds: Optional[List[str]] = None
     assignedReelEditorId: Optional[str] = None
     assignedPostDesignerId: Optional[str] = None
     assignedApproverId: Optional[str] = None
