@@ -5,7 +5,7 @@ import dayjs from "dayjs";
 import customParseFormat from "dayjs/plugin/customParseFormat";
 dayjs.extend(customParseFormat);
 
-export function LiveTimer({ startTime, className, serverTimeOffset = 0, accumulatedSeconds = 0, isPaused = false }: { startTime?: string, className?: string, serverTimeOffset?: number, accumulatedSeconds?: number, isPaused?: boolean }) {
+export function LiveTimer({ startTime, className, serverTimeOffset = 0, accumulatedSeconds = 0, isPaused = false, breaks = [] }: { startTime?: string, className?: string, serverTimeOffset?: number, accumulatedSeconds?: number, isPaused?: boolean, breaks?: any[] }) {
   const [elapsed, setElapsed] = useState<string>("00:00:00");
 
   useEffect(() => {
@@ -39,6 +39,33 @@ export function LiveTimer({ startTime, className, serverTimeOffset = 0, accumula
       let diffSeconds = now.diff(todayStart, 'second');
       if (diffSeconds < 0) diffSeconds = 0;
 
+      if (Array.isArray(breaks) && breaks.length > 0) {
+        breaks.forEach((b: any) => {
+          if (b.startTime && b.endTime) {
+            const bStart = dayjs(`2000-01-01 ${b.startTime}`, [
+              'YYYY-MM-DD hh:mm A', 'YYYY-MM-DD HH:mm:ss', 'YYYY-MM-DD HH:mm',
+              'YYYY-MM-DD h:mm A', 'hh:mm A', 'HH:mm:ss', 'HH:mm'
+            ]);
+            const bEnd = dayjs(`2000-01-01 ${b.endTime}`, [
+              'YYYY-MM-DD hh:mm A', 'YYYY-MM-DD HH:mm:ss', 'YYYY-MM-DD HH:mm',
+              'YYYY-MM-DD h:mm A', 'hh:mm A', 'HH:mm:ss', 'HH:mm'
+            ]);
+            if (bStart.isValid() && bEnd.isValid()) {
+              const todayBStart = dayjs().hour(bStart.hour()).minute(bStart.minute()).second(bStart.second());
+              const todayBEnd = dayjs().hour(bEnd.hour()).minute(bEnd.minute()).second(bEnd.second());
+              if (todayBEnd.isAfter(todayStart) && todayBEnd.isAfter(todayBStart)) {
+                const overlapStart = todayBStart.isAfter(todayStart) ? todayBStart : todayStart;
+                const overlapEnd = todayBEnd.isBefore(now) ? todayBEnd : now;
+                if (overlapEnd.isAfter(overlapStart)) {
+                  diffSeconds -= overlapEnd.diff(overlapStart, 'second');
+                }
+              }
+            }
+          }
+        });
+      }
+      if (diffSeconds < 0) diffSeconds = 0;
+
       diffSeconds += accumulatedSeconds;
 
       const hrs = Math.floor(diffSeconds / 3600);
@@ -57,7 +84,7 @@ export function LiveTimer({ startTime, className, serverTimeOffset = 0, accumula
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [startTime, accumulatedSeconds, serverTimeOffset, isPaused]);
+  }, [startTime, accumulatedSeconds, serverTimeOffset, isPaused, breaks]);
 
   if (!startTime && !isPaused) return null;
 

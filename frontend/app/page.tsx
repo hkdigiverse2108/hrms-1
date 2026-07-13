@@ -1210,6 +1210,7 @@ function EmployeeView({
       return new Date(`2000/01/01 ${timeStr}`).getTime();
     };
 
+    const breaksList = attendanceStatus.record.breaks || [];
     attendanceStatus.record.punches.forEach((p: any) => {
       // Only count completed punches for this same activity
       if (p.punchOut && p.punchIn) {
@@ -1225,8 +1226,24 @@ function EmployeeView({
         if (isSame) {
           const inTime = parseTimeSafe(p.punchIn);
           const outTime = parseTimeSafe(p.punchOut);
-          if (!isNaN(inTime) && !isNaN(outTime)) {
-            accumulatedSeconds += Math.max(0, Math.floor((outTime - inTime) / 1000));
+          if (!isNaN(inTime) && !isNaN(outTime) && outTime > inTime) {
+            let durationSec = Math.floor((outTime - inTime) / 1000);
+            
+            breaksList.forEach((b: any) => {
+              if (b.startTime && b.endTime) {
+                const bIn = parseTimeSafe(b.startTime);
+                const bOut = parseTimeSafe(b.endTime);
+                if (!isNaN(bIn) && !isNaN(bOut) && bOut > bIn) {
+                  const overlapStart = Math.max(inTime, bIn);
+                  const overlapEnd = Math.min(outTime, bOut);
+                  if (overlapEnd > overlapStart) {
+                    durationSec -= Math.floor((overlapEnd - overlapStart) / 1000);
+                  }
+                }
+              }
+            });
+
+            accumulatedSeconds += Math.max(0, durationSec);
           }
         }
       }
@@ -1374,6 +1391,7 @@ function EmployeeView({
                         serverTimeOffset={serverTimeOffset} 
                         accumulatedSeconds={accumulatedSeconds} 
                         isPaused={isOnBreak} 
+                        breaks={attendanceStatus.record.breaks}
                       />
                     )}
                     {isOnBreak && (

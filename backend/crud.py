@@ -2736,9 +2736,22 @@ async def break_out(db, employee_id: str, resume_task: bool = False):
     }
     
     if resume_task and record.get("punches") and len(record["punches"]) > 0:
-        # Find the last punch and remove its punchOut so it continues
-        last_punch_idx = len(record["punches"]) - 1
-        update_data["$set"][f"punches.{last_punch_idx}.punchOut"] = None
+        last_punch = record["punches"][-1]
+        now_time_str = now.strftime("%H:%M:%S")
+        new_punch = {
+            "punchIn": now_time_str,
+            "punchOut": None,
+            "activityType": last_punch.get("activityType"),
+            "activitySubtype": last_punch.get("activitySubtype"),
+            "activityValue": last_punch.get("activityValue"),
+            "taskId": last_punch.get("taskId")
+        }
+        update_data["$push"] = update_data.get("$push", {})
+        update_data["$push"]["punches"] = new_punch
+        update_data["$set"]["punchInActivityType"] = last_punch.get("activityType")
+        update_data["$set"]["punchInActivitySubtype"] = last_punch.get("activitySubtype")
+        update_data["$set"]["punchInActivityValue"] = last_punch.get("activityValue")
+        update_data["$set"]["punchInTaskId"] = last_punch.get("taskId")
 
     await db.attendance.update_one(
         {"_id": ObjectId(record["_id"])},

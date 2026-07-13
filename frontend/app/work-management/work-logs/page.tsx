@@ -136,6 +136,22 @@ export default function WorkLogsPage() {
       if (start.isValid()) {
         const actualEnd = end?.isValid() ? end : dayjs()
         diffMins = Math.max(0, actualEnd.diff(start, 'minutes'))
+
+        if (att.breaks && Array.isArray(att.breaks)) {
+          att.breaks.forEach((b: any) => {
+            if (b.startTime && b.endTime) {
+              const bStart = dayjs(`${dateStr} ${b.startTime}`)
+              const bEnd = dayjs(`${dateStr} ${b.endTime}`)
+              if (bStart.isValid() && bEnd.isValid() && bEnd.isAfter(bStart)) {
+                const overlapStart = bStart.isAfter(start) ? bStart : start
+                const overlapEnd = bEnd.isBefore(actualEnd) ? bEnd : actualEnd
+                if (overlapEnd.isAfter(overlapStart)) {
+                  diffMins = Math.max(0, diffMins - overlapEnd.diff(overlapStart, 'minutes'))
+                }
+              }
+            }
+          })
+        }
       }
 
       return {
