@@ -289,6 +289,14 @@ export default function WorkLogsPage() {
 
   const isSingleDay = ['today', 'yesterday', 'custom'].includes(dateFilterPreset)
 
+  const activeEmployeeCount = useMemo(() => {
+    const ids = new Set<string>()
+    filteredAttendance.forEach(a => {
+      if (a.employeeId) ids.add(a.employeeId)
+    })
+    return ids.size || 1
+  }, [filteredAttendance])
+
   if (isUserLoading || loading) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -377,8 +385,15 @@ export default function WorkLogsPage() {
                       <div className={`p-2 rounded-lg ${meta.bg} ${meta.color}`}>{meta.icon}</div>
                       <span className={`text-sm font-semibold ${meta.color}`}>{meta.label}</span>
                     </div>
-                    <div>
+                    <div className="flex items-center gap-3">
                       <p className="text-3xl font-bold text-slate-800 tracking-tight">{fmtMins(data.totalMins)}</p>
+                      {filterEmployee === 'All' && data.totalMins > 0 && (
+                        <div className="flex items-center px-2.5 py-1 rounded-md bg-slate-100 border border-slate-200 shadow-sm mt-1">
+                          <span className="text-sm font-bold text-slate-700">
+                            Avg: {fmtMins(Math.round(data.totalMins / activeEmployeeCount))}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )
@@ -659,8 +674,15 @@ export default function WorkLogsPage() {
                         <div className={`p-2 rounded-lg ${meta.bg} ${meta.color}`}>{meta.icon}</div>
                         <span className={`text-sm font-semibold ${meta.color}`}>{meta.label}</span>
                       </div>
-                      <div>
+                      <div className="flex items-center gap-3">
                         <p className="text-3xl font-bold text-slate-800 tracking-tight">{fmtMins(data.totalMins)}</p>
+                        {data.totalMins > 0 && (
+                          <div className="flex items-center px-2.5 py-1 rounded-md bg-slate-100 border border-slate-200 shadow-sm mt-1">
+                            <span className="text-sm font-bold text-slate-700">
+                              Avg: {fmtMins(Math.round(data.totalMins / activeEmployeeCount))}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )
