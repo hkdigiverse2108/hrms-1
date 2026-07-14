@@ -22,6 +22,7 @@ import {
   ChevronRight,
   Building2,
   Calendar,
+  BookOpen,
 } from 'lucide-react'
 
 import { useUserContext } from '@/context/UserContext'
@@ -199,6 +200,16 @@ import { useUserContext } from '@/context/UserContext'
        { title: 'Attendance Report', href: '/reports/attendance' },
        { title: 'Payroll Report', href: '/reports/payroll' },
        { title: 'Employee Report', href: '/reports/employees' },
+     ],
+   },
+   {
+     title: 'Training & Courses',
+     href: '/training',
+     icon: BookOpen,
+     moduleName: 'training',
+     children: [
+       { title: 'Course Library', href: '/training' },
+       { title: 'Manage Courses', href: '/admin/courses' },
      ],
    },
  ]

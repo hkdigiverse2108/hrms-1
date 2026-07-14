@@ -238,3 +238,33 @@ export interface WMTask {
   priority: 'low' | 'medium' | 'high' | 'urgent'
   createdDate?: string
 }
+
+export interface Course {
+  id: string;
+  title: string;
+  description: string;
+  image_url: string;
+  createdAt?: string;
+  modules?: CourseModule[];
+}
+
+export interface CourseModule {
+  id: string;
+  course_id: string;
+  title: string;
+  description?: string;
+  image_url?: string;
+  order: number;
+  lectures?: CourseLecture[];
+}
+
+export interface CourseLecture {
+  id: string;
+  module_id: string;
+  title: string;
+  description?: string;
+  url: string;
+  image_url?: string;
+  type: string;
+  order: number;
+}

@@ -2570,3 +2570,75 @@ class ResearchResponse(ResearchBase):
     class Config:
         from_attributes = True
 
+# --- Courses ---
+class CourseBase(BaseModel):
+    title: str
+    description: Optional[str] = ''
+    image_url: Optional[str] = ''
+
+class CourseCreate(CourseBase):
+    pass
+
+class CourseUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+
+class CourseResponse(CourseBase):
+    id: str
+    createdAt: Optional[datetime] = None
+    updatedAt: Optional[datetime] = None
+    class Config:
+        from_attributes = True
+
+# --- Course Modules ---
+class CourseModuleBase(BaseModel):
+    course_id: str
+    title: str
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    order: int
+
+class CourseModuleCreate(CourseModuleBase):
+    pass
+
+class CourseModuleUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    order: Optional[int] = None
+
+class CourseModuleResponse(CourseModuleBase):
+    id: str
+    createdAt: Optional[datetime] = None
+    updatedAt: Optional[datetime] = None
+    class Config:
+        from_attributes = True
+
+# --- Course Lectures ---
+class CourseLectureBase(BaseModel):
+    module_id: str
+    title: str
+    description: Optional[str] = ''
+    url: Optional[str] = ''
+    image_url: Optional[str] = None
+    type: Optional[str] = 'video' # video, document, link
+    order: int = 0
+
+class CourseLectureCreate(CourseLectureBase):
+    pass
+
+class CourseLectureUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    url: Optional[str] = None
+    image_url: Optional[str] = None
+    type: Optional[str] = None
+    order: Optional[int] = None
+
+class CourseLectureResponse(CourseLectureBase):
+    id: str
+    createdAt: Optional[datetime] = None
+    updatedAt: Optional[datetime] = None
+    class Config:
+        from_attributes = True

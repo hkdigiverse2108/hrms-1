@@ -8935,3 +8935,99 @@ async def delete_research(db, research_id: str):
     from bson import ObjectId
     result = await db.research.delete_one({"_id": ObjectId(research_id)})
     return result.deleted_count > 0
+
+# --- Courses CRUD ---
+async def create_course(db, course: schemas.CourseCreate):
+    course_dict = course.dict()
+    course_dict["createdAt"] = get_now()
+    course_dict["updatedAt"] = get_now()
+    result = await db.courses.insert_one(course_dict)
+    doc = await db.courses.find_one({"_id": result.inserted_id})
+    return fix_id(doc)
+
+async def get_courses(db):
+    cursor = db.courses.find().sort("createdAt", -1)
+    docs = await cursor.to_list(length=None)
+    return [fix_id(d) for d in docs]
+
+async def get_course(db, course_id: str):
+    from bson import ObjectId
+    doc = await db.courses.find_one({"_id": ObjectId(course_id)})
+    return fix_id(doc)
+
+async def update_course(db, course_id: str, course_update: schemas.CourseUpdate):
+    from bson import ObjectId
+    update_data = course_update.dict(exclude_unset=True)
+    if not update_data:
+        return await get_course(db, course_id)
+    update_data["updatedAt"] = get_now()
+    await db.courses.update_one({"_id": ObjectId(course_id)}, {"$set": update_data})
+    return await get_course(db, course_id)
+
+async def delete_course(db, course_id: str):
+    from bson import ObjectId
+    # Cascade delete modules and lectures
+    modules = await db.course_modules.find({"course_id": course_id}).to_list(length=None)
+    for module in modules:
+        await db.course_lectures.delete_many({"module_id": str(module["_id"])})
+    await db.course_modules.delete_many({"course_id": course_id})
+    result = await db.courses.delete_one({"_id": ObjectId(course_id)})
+    return result.deleted_count > 0
+
+# --- Course Modules CRUD ---
+async def create_course_module(db, module: schemas.CourseModuleCreate):
+    module_dict = module.dict()
+    module_dict["createdAt"] = get_now()
+    module_dict["updatedAt"] = get_now()
+    result = await db.course_modules.insert_one(module_dict)
+    doc = await db.course_modules.find_one({"_id": result.inserted_id})
+    return fix_id(doc)
+
+async def get_course_modules(db, course_id: str):
+    cursor = db.course_modules.find({"course_id": course_id}).sort("order", 1)
+    docs = await cursor.to_list(length=None)
+    return [fix_id(d) for d in docs]
+
+async def update_course_module(db, module_id: str, module_update: schemas.CourseModuleUpdate):
+    from bson import ObjectId
+    update_data = module_update.dict(exclude_unset=True)
+    if update_data:
+        update_data["updatedAt"] = get_now()
+        await db.course_modules.update_one({"_id": ObjectId(module_id)}, {"$set": update_data})
+    doc = await db.course_modules.find_one({"_id": ObjectId(module_id)})
+    return fix_id(doc)
+
+async def delete_course_module(db, module_id: str):
+    from bson import ObjectId
+    # Cascade delete lectures
+    await db.course_lectures.delete_many({"module_id": module_id})
+    result = await db.course_modules.delete_one({"_id": ObjectId(module_id)})
+    return result.deleted_count > 0
+
+# --- Course Lectures CRUD ---
+async def create_course_lecture(db, lecture: schemas.CourseLectureCreate):
+    lecture_dict = lecture.dict()
+    lecture_dict["createdAt"] = get_now()
+    lecture_dict["updatedAt"] = get_now()
+    result = await db.course_lectures.insert_one(lecture_dict)
+    doc = await db.course_lectures.find_one({"_id": result.inserted_id})
+    return fix_id(doc)
+
+async def get_course_lectures(db, module_id: str):
+    cursor = db.course_lectures.find({"module_id": module_id}).sort("order", 1)
+    docs = await cursor.to_list(length=None)
+    return [fix_id(d) for d in docs]
+
+async def update_course_lecture(db, lecture_id: str, lecture_update: schemas.CourseLectureUpdate):
+    from bson import ObjectId
+    update_data = lecture_update.dict(exclude_unset=True)
+    if update_data:
+        update_data["updatedAt"] = get_now()
+        await db.course_lectures.update_one({"_id": ObjectId(lecture_id)}, {"$set": update_data})
+    doc = await db.course_lectures.find_one({"_id": ObjectId(lecture_id)})
+    return fix_id(doc)
+
+async def delete_course_lecture(db, lecture_id: str):
+    from bson import ObjectId
+    result = await db.course_lectures.delete_one({"_id": ObjectId(lecture_id)})
+    return result.deleted_count > 0
