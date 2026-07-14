@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useUser } from '@/hooks/useUser'
 import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 dayjs.extend(duration)
 
@@ -38,6 +39,7 @@ export default function WorkLogsPage() {
   const [dateFilterPreset, setDateFilterPreset] = useState<string>('today')
   const [selectedDate, setSelectedDate]         = useState<string>(dayjs().format('YYYY-MM-DD'))
   const [filterEmployee, setFilterEmployee]     = useState<string>('All')
+  const [viewMode, setViewMode]                 = useState<string>('current')
 
   // expanded state for single-day cards AND multi-day category sections
   const [expandedCards, setExpandedCards]       = useState<Record<string, boolean>>({})
@@ -215,9 +217,9 @@ export default function WorkLogsPage() {
         return {
           date: att.date,
           employeeName: att.employeeName,
-          employeeId:   att.employeeId,
           checkIn:      att.checkIn,
           logs,
+          rawBreaks:    att.breaks || [],
           totalDurationStr: fmtMins(totalMins),
         }
       })
@@ -285,6 +287,45 @@ export default function WorkLogsPage() {
       })
     })
     return categories
+  }, [singleDayData])
+
+  const currentActivities = useMemo(() => {
+    return singleDayData.map(emp => {
+      const activeLog = emp.logs.find((l:any) => l.isInProgress);
+      const activeBreak = emp.rawBreaks?.find((b:any) => b.startTime && !b.endTime);
+
+      let currentActivity = 'Offline / Idle';
+      let isOnline = false;
+      let isBreak = false;
+      let startedAt = '-';
+      let activeDurationStr = '-';
+
+      if (activeBreak) {
+        currentActivity = 'Break In';
+        isOnline = true; // Technically active/on-clock
+        isBreak = true;
+        startedAt = activeBreak.startTime;
+        activeDurationStr = 'In Progress';
+      } else if (activeLog) {
+        currentActivity = activeLog.title;
+        isOnline = true;
+        startedAt = activeLog.startTime;
+        activeDurationStr = activeLog.durationStr;
+      }
+
+      return {
+        ...emp,
+        currentActivity,
+        startedAt,
+        activeDurationStr,
+        isOnline,
+        isBreak,
+      }
+    }).sort((a, b) => {
+      if (a.isOnline && !b.isOnline) return -1;
+      if (!a.isOnline && b.isOnline) return 1;
+      return a.employeeName.localeCompare(b.employeeName);
+    });
   }, [singleDayData])
 
   const isSingleDay = ['today', 'yesterday', 'custom'].includes(dateFilterPreset)
@@ -401,9 +442,62 @@ export default function WorkLogsPage() {
             </div>
           )}
 
-          {/* Employee detail cards */}
-          <div className="grid grid-cols-1 gap-4">
-          {singleDayData.length > 0 ? singleDayData.map((emp, idx) => {
+          {/* Employee Activity Header & Toggle */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2 mt-6">
+            <h3 className="text-lg font-bold text-slate-800">Employee Activity</h3>
+            {user?.role?.toLowerCase() === 'admin' && dateFilterPreset === 'today' && (
+              <Tabs value={viewMode} onValueChange={setViewMode} className="w-full sm:w-[300px]">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="current" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Current Activity</TabsTrigger>
+                  <TabsTrigger value="all" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">All Activities</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            )}
+          </div>
+
+          {/* Activity Views */}
+          {user?.role?.toLowerCase() === 'admin' && dateFilterPreset === 'today' && viewMode === 'current' ? (
+            <Card className="overflow-hidden border border-slate-200 shadow-sm">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      <TableHead>Employee</TableHead>
+                      <TableHead>Current Activity</TableHead>
+                      <TableHead>Started At</TableHead>
+                      <TableHead className="text-right">Duration</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {currentActivities.length > 0 ? currentActivities.map((emp: any, idx: number) => (
+                      <TableRow key={idx} className="hover:bg-slate-50/50">
+                        <TableCell className="font-bold text-slate-800 whitespace-nowrap">
+                          {emp.employeeName}
+                        </TableCell>
+                        <TableCell className="font-medium text-slate-700 max-w-[300px] truncate" title={emp.currentActivity}>
+                          {emp.currentActivity}
+                        </TableCell>
+                        <TableCell className="text-slate-500 whitespace-nowrap">
+                          {emp.startedAt}
+                        </TableCell>
+                        <TableCell className="text-right font-bold text-brand-teal whitespace-nowrap">
+                          {emp.activeDurationStr}
+                        </TableCell>
+                      </TableRow>
+                    )) : (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-gray-500 py-10">
+                          No active employees found.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 gap-4">
+            {singleDayData.length > 0 ? singleDayData.map((emp, idx) => {
             const key = `${emp.employeeId}-${emp.date}-${idx}`
             const open = !!expandedCards[key]
             return (
@@ -494,7 +588,8 @@ export default function WorkLogsPage() {
               No records found for the selected period.
             </div>
           )}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
