@@ -8868,10 +8868,19 @@ async def delete_gallery(db, gallery_id: str):
     return await delete_item(db, "gallery", gallery_id)
 
 # --- Company Finance CRUD ---
-async def get_next_expense_number(db):
+async def get_next_expense_number(db, date_str: str = None):
     try:
-        now = datetime.now(pytz.timezone('Asia/Kolkata'))
-        prefix = now.strftime("%y%m")  # e.g., "2509" or "2607"
+        if date_str:
+            try:
+                # Support "YYYY-MM-DD" or similar ISO strings
+                dt = datetime.strptime(date_str.split("T")[0], "%Y-%m-%d")
+                prefix = dt.strftime("%y%m")
+            except Exception:
+                now = datetime.now(pytz.timezone('Asia/Kolkata'))
+                prefix = now.strftime("%y%m")
+        else:
+            now = datetime.now(pytz.timezone('Asia/Kolkata'))
+            prefix = now.strftime("%y%m")
         
         # Find highest expenseNo starting with this prefix
         cursor = db.company_finance_transactions.find({"expenseNo": {"$regex": f"^{prefix}"}})
@@ -8891,7 +8900,9 @@ async def get_next_expense_number(db):
     except Exception as e:
         print(f"Error generating expense number: {e}")
         import random
-        return f"EXP-{random.randint(10000, 99999)}"
+        now = datetime.now(pytz.timezone('Asia/Kolkata'))
+        prefix = now.strftime("%y%m")
+        return f"{prefix}{random.randint(100, 999)}"
 
 async def get_finance_transactions(db, payment_method: str = None, type_filter: str = None, search: str = None):
     transactions = []
@@ -8979,12 +8990,12 @@ async def get_finance_transactions(db, payment_method: str = None, type_filter: 
     return transactions
 
 async def create_finance_transaction(db, tx_data: dict):
-    if tx_data.get("type") == "debit" and not tx_data.get("expenseNo"):
-        tx_data["expenseNo"] = await get_next_expense_number(db)
-        
     if not tx_data.get("date"):
         now = datetime.now(pytz.timezone('Asia/Kolkata'))
         tx_data["date"] = now.strftime("%Y-%m-%d")
+
+    if tx_data.get("type") == "debit" and (not tx_data.get("expenseNo") or str(tx_data.get("expenseNo")).strip() == ""):
+        tx_data["expenseNo"] = await get_next_expense_number(db, tx_data.get("date"))
         
     result = await db.company_finance_transactions.insert_one(tx_data)
     created = await db.company_finance_transactions.find_one({"_id": result.inserted_id})
