@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Map, Layout, Sparkles, Package, Plus, Trash2, Calendar } from "lucide-react";
+import { Map, Package, Plus, Trash2, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApi } from "@/hooks/useApi";
 import { useUser } from "@/hooks/useUser";
@@ -302,8 +302,6 @@ const sanitizeDesks = (desks: any[]): Desk[] => {
 export default function SeatingArrangementPage() {
   const { data, isLoading } = useApi();
   const { user } = useUser();
-  const [viewMode, setViewMode] = useState<"standard" | "custom">("standard");
-  const [customImage, setCustomImage] = useState<string | null>(null);
   const [desksState, setDesksState] = useState<Desk[]>(sanitizeDesks(defaultDesks));
 
   // Layout Editor states
@@ -354,11 +352,6 @@ export default function SeatingArrangementPage() {
   const isAdminOrHR = user?.role?.toLowerCase() === "admin" || user?.role?.toLowerCase() === "hr";
 
   useEffect(() => {
-    const saved = localStorage.getItem("workspace_custom_layout");
-    if (saved) {
-      setCustomImage(saved);
-    }
-
     // Fetch seating arrangement from global database for all-employee sync
     const fetchSeatingArrangement = async () => {
       // Pause updating state if admin has selection/modal active or editing layout
@@ -703,30 +696,8 @@ export default function SeatingArrangementPage() {
 
   return (
     <div className="space-y-6 h-[calc(100vh-8rem)] flex flex-col">
-      {/* View Toggle */}
       <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-lg border border-border w-fit">
-          <Button
-            variant={viewMode === "standard" ? "default" : "ghost"}
-            size="sm"
-            onClick={() => setViewMode("standard")}
-            className={cn("gap-2", viewMode === "standard" && "bg-brand-teal hover:bg-brand-teal-light")}
-          >
-            <Map className="w-4 h-4" />
-            Standard Map
-          </Button>
-          <Button
-            variant={viewMode === "custom" ? "default" : "ghost"}
-            size="sm"
-            onClick={() => setViewMode("custom")}
-            className={cn("gap-2", viewMode === "custom" && "bg-brand-teal hover:bg-brand-teal-light")}
-          >
-            <Layout className="w-4 h-4" />
-            Custom Layout
-          </Button>
-        </div>
-
-        {isAdminOrHR && viewMode === "standard" && (
+        {isAdminOrHR && (
           <div className="flex items-center gap-3">
             <Button
               variant={isLayoutEditMode ? "default" : "outline"}
@@ -774,13 +745,6 @@ export default function SeatingArrangementPage() {
             )}
           </div>
         )}
-
-        {viewMode === "custom" && customImage && (
-          <div className="flex items-center gap-2 text-brand-teal font-medium text-sm bg-brand-light px-3 py-1.5 rounded-full animate-pulse">
-            <Sparkles className="w-4 h-4" />
-            Live from Blank Canvas
-          </div>
-        )}
       </div>
 
       <div className="flex-1 bg-[#e4dfcd] rounded-xl overflow-hidden shadow-sm relative min-h-[600px] border border-border">
@@ -791,7 +755,7 @@ export default function SeatingArrangementPage() {
               <p className="text-slate-600 font-bold text-sm">Loading Seating Layout...</p>
             </div>
           </div>
-        ) : viewMode === "standard" ? (
+        ) : (
           <>
             {/* Legend */}
             <div className="absolute top-4 right-6 bg-white/90 backdrop-blur-md px-3 py-2 rounded-lg shadow-md flex flex-col gap-2 z-[100] text-sm font-medium border border-border/50">
@@ -1175,29 +1139,6 @@ export default function SeatingArrangementPage() {
               </div>
             </div>
           </>
-        ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center bg-white overflow-auto p-8">
-            {customImage ? (
-              <div className="relative group max-w-full">
-                <img 
-                  src={customImage} 
-                  alt="Custom Workspace Layout" 
-                  className="shadow-2xl rounded-lg border border-border max-w-full h-auto"
-                />
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors pointer-events-none rounded-lg" />
-              </div>
-            ) : (
-              <div className="text-center space-y-4">
-                <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto text-slate-300">
-                  <Layout className="w-10 h-10" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-slate-800">No Custom Layout Found</h3>
-                  <p className="text-slate-500 max-w-xs mx-auto">Create and publish your layout from the Blank Canvas to see it here.</p>
-                </div>
-              </div>
-            )}
-          </div>
         )}
       </div>
 
