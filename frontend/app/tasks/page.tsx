@@ -750,9 +750,9 @@ export default function TaskManagementPage() {
           >
             <ClipboardCheck className="w-4 h-4 mr-2" />
             Approval Requests
-            {tasks.filter(t => t.status === 'review' && (isAdmin || t.assignedBy === user?.id || t.assignedById === user?.id || t.createdBy === user?.id || t.performedBy === user?.id)).length > 0 && (
+            {tasks.filter(t => t.status === 'review' && (t.assignedBy === user?.id || t.assignedById === user?.id || t.createdBy === user?.id)).length > 0 && (
               <span className="ml-2 bg-brand-teal text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                {tasks.filter(t => t.status === 'review' && (isAdmin || t.assignedBy === user?.id || t.assignedById === user?.id || t.createdBy === user?.id || t.performedBy === user?.id)).length}
+                {tasks.filter(t => t.status === 'review' && (t.assignedBy === user?.id || t.assignedById === user?.id || t.createdBy === user?.id)).length}
               </span>
             )}
           </Button>
@@ -1135,14 +1135,14 @@ export default function TaskManagementPage() {
                   Tasks waiting for your review and approval.
                 </p>
               </DialogHeader>
-              <div className="max-h-[60vh] overflow-y-auto pr-2 mt-4 space-y-3">
-                {tasks.filter(t => t.status === 'review' && (isAdmin || t.assignedBy === user?.id || t.assignedById === user?.id || t.createdBy === user?.id || t.performedBy === user?.id)).length === 0 ? (
+              <div className="max-h-[60vh] overflow-y-auto pr-2 space-y-4">
+                {tasks.filter(t => t.status === 'review' && (t.assignedBy === user?.id || t.assignedById === user?.id || t.createdBy === user?.id)).length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
                     <ClipboardCheck className="w-12 h-12 mx-auto text-slate-200 mb-3" />
                     <p>No approval requests at the moment.</p>
                   </div>
                 ) : (
-                  tasks.filter(t => t.status === 'review' && (isAdmin || t.assignedBy === user?.id || t.assignedById === user?.id || t.createdBy === user?.id || t.performedBy === user?.id)).map(task => (
+                  tasks.filter(t => t.status === 'review' && (t.assignedBy === user?.id || t.assignedById === user?.id || t.createdBy === user?.id)).map(task => (
                     <div key={task.id} className="bg-white border border-border rounded-lg p-4 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center shadow-sm">
                       <div className="space-y-1">
                         <h4 className="font-semibold text-sm text-foreground">{task.title}</h4>
