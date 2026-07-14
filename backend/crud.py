@@ -1206,37 +1206,92 @@ async def run_payroll_processing(db, month: str, year: int, performed_by: str = 
         
         remark_query = {
             "employeeId": emp_id,
-            "isDeleted": {"$nin": [True, "true", "True"]},
-            "$or": [
-                {"date": {"$gte": rem_start_dt_naive, "$lte": rem_end_dt_naive}},
-                {"date": {"$gte": rem_start_dt_aware, "$lte": rem_end_dt_aware}}
-            ]
+            "isDeleted": {"$nin": [True, "true", "True"]}
         }
-        remarks_cursor = db.remarks.find(remark_query)
-        emp_remarks = await remarks_cursor.to_list(length=100)
+        all_emp_remarks = await db.remarks.find(remark_query).to_list(length=1000)
+        
+        emp_remarks = []
+        for mr in all_emp_remarks:
+            mr_dt = mr.get("date")
+            mr_m = None
+            mr_y = None
+            if mr_dt:
+                try:
+                    if isinstance(mr_dt, datetime):
+                        mr_m = mr_dt.month
+                        mr_y = mr_dt.year
+                    elif isinstance(mr_dt, str):
+                        if "T" in mr_dt or "-" in mr_dt:
+                            parts = mr_dt.split("T")[0].split("-")
+                            if len(parts[0]) == 4:
+                                mr_y = int(parts[0])
+                                mr_m = int(parts[1])
+                            else:
+                                mr_y = int(parts[2])
+                                mr_m = int(parts[1])
+                        else:
+                            date_parts = mr_dt.split(" ")
+                            r_month_name = date_parts[0].replace(",", "")
+                            mr_y = int(date_parts[-1])
+                            try:
+                                mr_m = list(calendar.month_abbr).index(r_month_name)
+                            except ValueError:
+                                mr_m = list(calendar.month_name).index(r_month_name)
+                except Exception:
+                    pass
             
+            if mr_m == rem_month_num and mr_y == year:
+                # Normalize date for sorting
+                if isinstance(mr_dt, str):
+                    try:
+                        if "-" in mr_dt and len(mr_dt.split("-")[0]) != 4:
+                            mr["_sort_date"] = datetime.strptime(mr_dt, "%d-%m-%Y")
+                        else:
+                            from dateutil.parser import parse
+                            mr["_sort_date"] = parse(mr_dt)
+                    except:
+                        mr["_sort_date"] = datetime.min
+                elif isinstance(mr_dt, datetime):
+                    mr["_sort_date"] = mr_dt
+                else:
+                    mr["_sort_date"] = datetime.min
+                emp_remarks.append(mr)
+                
+        # Sort by parsed date
+        emp_remarks.sort(key=lambda x: x["_sort_date"])
+            
+        penalty_count = 0
+        
         for r in emp_remarks:
             remark_type = r.get("type")
             r_date_val = r.get("date")
             r_date_str = r_date_val.strftime("%d-%m-%Y") if isinstance(r_date_val, (date, datetime)) else str(r_date_val)
             
-            if remark_type == "Late Punch-in":
-                if late_punch_deduction_enabled:
-                    if per_day_gross > 0:
-                        penalty_total += per_day_gross
-                        deduction_details.append(f"Late Punch-in ({r_date_str}): ₹{round(per_day_gross, 2)}")
+            try:
+                r_amount = float(r.get("amount", 0) or 0)
+            except:
+                r_amount = 0
+                
+            is_penalty = r_amount > 0 or remark_type in [p["name"] for p in penalty_types] or remark_type == "Late Punch-in"
+            
+            if is_penalty:
+                if remark_type == "Late Punch-in" and not late_punch_deduction_enabled:
+                    continue
+                    
+                penalty_count += 1
+                amount_to_deduct = r_amount
+                if amount_to_deduct <= 0:
+                    amount_to_deduct = next((p["amount"] for p in penalty_types if p["name"] == remark_type), 0)
+                
+                if remark_type == "Late Punch-in" and amount_to_deduct <= 0:
+                    amount_to_deduct = per_day_gross if per_day_gross > 0 else 0
+                
+                if amount_to_deduct > 0:
+                    if penalty_count <= 3:
+                        deduction_details.append(f"Warning: {remark_type} ({r_date_str})")
                     else:
-                        # Salary is 0, so deduct the penalty given in penalty_types for Late Punch-in
-                        p_amount = next((p["amount"] for p in penalty_types if p["name"] == remark_type), 0)
-                        if p_amount > 0:
-                            penalty_total += p_amount
-                            deduction_details.append(f"Late Punch-in ({r_date_str}): ₹{p_amount}")
-                continue
-
-            p_amount = next((p["amount"] for p in penalty_types if p["name"] == remark_type), 0)
-            if p_amount > 0:
-                penalty_total += p_amount
-                deduction_details.append(f"{r['type']} ({r_date_str}): ₹{p_amount}")
+                        penalty_total += amount_to_deduct
+                        deduction_details.append(f"{remark_type} ({r_date_str}): ₹{round(amount_to_deduct, 2)}")
         
         # Fetch existing payroll to preserve custom security deposit and return amounts
         existing_payroll = await db.payroll.find_one({"employeeId": emp_id, "month": month, "year": year})
@@ -1882,51 +1937,52 @@ async def get_remarks(db, skip: int = 0, limit: int = 100):
     
     # Cache salary structures to avoid repeated DB calls
     salary_cache = {}
-    
+    # Cache for employee month remarks to compute warnings
+    emp_month_remarks_cache = {}
+
     for item in items:
         p_amount = next((p["amount"] for p in penalty_types if p["name"] == item.get("type")), 0)
         
+        month_num = None
+        r_year = None
+        emp_id = item.get("employeeId")
+        
+        # Parse date to find month and year
+        itm_date = item.get("date")
+        if itm_date:
+            try:
+                if isinstance(itm_date, datetime):
+                    month_num = itm_date.month
+                    r_year = itm_date.year
+                elif isinstance(itm_date, str):
+                    if "T" in itm_date or "-" in itm_date:
+                        parts = itm_date.split("T")[0].split("-")
+                        if len(parts[0]) == 4:
+                            r_year = int(parts[0])
+                            month_num = int(parts[1])
+                        else:
+                            r_year = int(parts[2])
+                            month_num = int(parts[1])
+                    else:
+                        date_parts = itm_date.split(" ")
+                        r_month_name = date_parts[0].replace(",", "")
+                        r_year = int(date_parts[-1])
+                        try:
+                            month_num = list(calendar.month_abbr).index(r_month_name)
+                        except ValueError:
+                            month_num = list(calendar.month_name).index(r_month_name)
+            except Exception:
+                pass
+
         # Calculate one-day salary for Late Punch-in if amount is 0
-        if item.get("type") == "Late Punch-in" and p_amount == 0:
-            emp_id = item.get("employeeId")
+        if item.get("type") == "Late Punch-in" and p_amount == 0 and month_num and r_year:
             if emp_id not in salary_cache:
                 salary_cache[emp_id] = await get_salary_structure_by_employee(db, emp_id)
             
             salary_struct = salary_cache[emp_id]
             if salary_struct:
                 try:
-                    itm_date = item.get("date")
-                    if isinstance(itm_date, datetime):
-                        month_num = itm_date.month
-                        r_year = itm_date.year
-                    elif isinstance(itm_date, str):
-                        if "T" in itm_date or "-" in itm_date:
-                            try:
-                                parts = itm_date.split("T")[0].split("-")
-                                if len(parts[0]) == 4:
-                                    r_year = int(parts[0])
-                                    month_num = int(parts[1])
-                                else:
-                                    r_year = int(parts[2])
-                                    month_num = int(parts[1])
-                            except Exception:
-                                from dateutil.parser import parse
-                                parsed_dt = parse(itm_date)
-                                month_num = parsed_dt.month
-                                r_year = parsed_dt.year
-                        else:
-                            date_parts = itm_date.split(" ")
-                            r_month_name = date_parts[0].replace(",", "")
-                            r_year = int(date_parts[-1])
-                            try:
-                                month_num = list(calendar.month_abbr).index(r_month_name)
-                            except ValueError:
-                                month_num = list(calendar.month_name).index(r_month_name)
-                    else:
-                        raise ValueError("Unknown date type")
-
                     _, num_days = calendar.monthrange(r_year, month_num)
-                    
                     sundays = sum(1 for d in range(1, num_days + 1) if calendar.weekday(r_year, month_num, d) == 6)
                     total_working_days = max(1, num_days - sundays)
                     p_amount = round(salary_struct["monthlyGross"] / total_working_days, 2)
@@ -1934,7 +1990,98 @@ async def get_remarks(db, skip: int = 0, limit: int = 100):
                     print(f"Error calculating p_amount in remarks list: {e}")
                     p_amount = round(salary_struct["monthlyGross"] / 30, 2)
         
+        is_warning = False
+        remark_type = item.get("type")
+        pt_names = [p["name"] for p in penalty_types]
+        is_in_penalty_types = remark_type in pt_names
+        is_penalty = p_amount > 0 or is_in_penalty_types or remark_type == "Late Punch-in"
+        
+        if is_in_penalty_types and month_num and r_year and emp_id:
+            cache_key = (str(emp_id), month_num, r_year, remark_type)
+            if cache_key not in emp_month_remarks_cache:
+                _, num_days = calendar.monthrange(r_year, month_num)
+                r_start_dt_naive = datetime(r_year, month_num, 1)
+                r_end_dt_naive = datetime(r_year, month_num, num_days, 23, 59, 59)
+                r_start_dt_aware = r_start_dt_naive.replace(tzinfo=IST)
+                r_end_dt_aware = r_end_dt_naive.replace(tzinfo=IST)
+                
+                try:
+                    emp_obj_id = ObjectId(str(emp_id))
+                except:
+                    emp_obj_id = str(emp_id)
+
+                q = {
+                    "employeeId": {"$in": [str(emp_id), emp_obj_id]},
+                    "type": remark_type,
+                    "isDeleted": {"$nin": [True, "true", "True"]}
+                }
+                all_remarks = await db.remarks.find(q).to_list(length=1000)
+                
+                # Filter by month and year in python
+                month_remarks = []
+                for mr in all_remarks:
+                    mr_dt = mr.get("date")
+                    mr_m = None
+                    mr_y = None
+                    if mr_dt:
+                        try:
+                            if isinstance(mr_dt, datetime):
+                                mr_m = mr_dt.month
+                                mr_y = mr_dt.year
+                            elif isinstance(mr_dt, str):
+                                if "T" in mr_dt or "-" in mr_dt:
+                                    parts = mr_dt.split("T")[0].split("-")
+                                    if len(parts[0]) == 4:
+                                        mr_y = int(parts[0])
+                                        mr_m = int(parts[1])
+                                    else:
+                                        mr_y = int(parts[2])
+                                        mr_m = int(parts[1])
+                                else:
+                                    date_parts = mr_dt.split(" ")
+                                    r_month_name = date_parts[0].replace(",", "")
+                                    mr_y = int(date_parts[-1])
+                                    try:
+                                        mr_m = list(calendar.month_abbr).index(r_month_name)
+                                    except ValueError:
+                                        mr_m = list(calendar.month_name).index(r_month_name)
+                        except Exception:
+                            pass
+                    
+                    if mr_m == month_num and mr_y == r_year:
+                        # Normalize date for sorting
+                        if isinstance(mr_dt, str):
+                            try:
+                                if "-" in mr_dt and len(mr_dt.split("-")[0]) != 4:
+                                    mr["_sort_date"] = datetime.strptime(mr_dt, "%d-%m-%Y")
+                                else:
+                                    from dateutil.parser import parse
+                                    mr["_sort_date"] = parse(mr_dt)
+                            except:
+                                mr["_sort_date"] = datetime.min
+                        elif isinstance(mr_dt, datetime):
+                            mr["_sort_date"] = mr_dt
+                        else:
+                            mr["_sort_date"] = datetime.min
+                        month_remarks.append(mr)
+                
+                # Sort by parsed date
+                month_remarks.sort(key=lambda x: x["_sort_date"])
+                emp_month_remarks_cache[cache_key] = [str(r["_id"]) for r in month_remarks]
+                
+            month_remark_ids = emp_month_remarks_cache[cache_key]
+            try:
+                item_id = item.get("id") or item.get("_id")
+                rank = month_remark_ids.index(str(item_id)) + 1
+            except ValueError:
+                rank = 999
+                
+            if rank <= 3:
+                is_warning = True
+
         item["amount"] = p_amount
+        item["computedAmount"] = 0 if is_warning else p_amount
+        item["isWarning"] = is_warning
         
     return items
 async def create_remark(db, remark: schemas.RemarkCreate, performed_by: str = "System", user_name: str = "System User"): 

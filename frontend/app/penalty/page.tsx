@@ -133,7 +133,7 @@ export default function RemarksPage() {
       const empId = r.employeeId;
       if (!empId) return;
       
-      const penaltyAmount = r.amount || getPenaltyAmount(r.type);
+      const penaltyAmount = r.computedAmount !== undefined ? r.computedAmount : (r.amount || getPenaltyAmount(r.type));
       
       if (!counts[empId]) {
         counts[empId] = {
@@ -418,7 +418,7 @@ export default function RemarksPage() {
         r.type || "",
         (r.details || "").replace(/₹/g, "Rs."),
         r.addedBy || "",
-        `Rs. ${r.amount || getPenaltyAmount(r.type)}`
+        r.isWarning ? "Warning" : `Rs. ${Number((r.computedAmount !== undefined ? r.computedAmount : (r.amount || getPenaltyAmount(r.type))).toFixed(2))}`
       ])
 
       if (rows.length > 0) {
@@ -539,7 +539,7 @@ export default function RemarksPage() {
     currentPage * itemsPerPage
   );
 
-  const totalPenalty = tabRemarks.reduce((sum, r) => sum + (r.amount || getPenaltyAmount(r.type)), 0);
+  const totalPenalty = Number(tabRemarks.reduce((sum, r) => sum + (r.computedAmount !== undefined ? r.computedAmount : (r.amount || getPenaltyAmount(r.type))), 0).toFixed(2));
 
   if (permissionsLoading) {
     return (
@@ -719,7 +719,7 @@ export default function RemarksPage() {
                     </div>
                     <div className="text-right">
                       <span className="text-[9px] text-muted-foreground uppercase font-extrabold tracking-wider block">Penalties</span>
-                      <span className="font-black text-red-600 text-sm">₹{item.totalAmount}</span>
+                      <span className="font-black text-red-600 text-sm">₹{Number(item.totalAmount.toFixed(2))}</span>
                     </div>
                   </div>
                 </div>
@@ -971,8 +971,17 @@ export default function RemarksPage() {
                     <td className="px-6 py-4 font-medium text-slate-600">
                       {remark.addedBy}
                     </td>
-                    <td className="px-6 py-4 text-right font-bold text-red-600">
-                      ₹{remark.amount || getPenaltyAmount(remark.type)}
+                    <td className="px-6 py-4 text-right font-bold">
+                      {remark.isWarning ? (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-bold tracking-wide uppercase bg-amber-50 text-amber-600 border border-amber-200">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+                          Warning
+                        </span>
+                      ) : (
+                        <span className="text-red-600">
+                          ₹{Number((remark.computedAmount !== undefined ? remark.computedAmount : (remark.amount || getPenaltyAmount(remark.type))).toFixed(2))}
+                        </span>
+                      )}
                     </td>
                     {(canEditRemarks || canDeleteRemarks) && (
                       <td className="px-6 py-4 text-right">
