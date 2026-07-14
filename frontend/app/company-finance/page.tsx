@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { API_URL } from "@/lib/config";
@@ -114,6 +114,19 @@ export default function CompanyFinanceTransactionsPage() {
 
   const [showCreditCatDropdown, setShowCreditCatDropdown] = useState(false);
   const [showDebitCatDropdown, setShowDebitCatDropdown] = useState(false);
+  const [showFilterCatDropdown, setShowFilterCatDropdown] = useState(false);
+  const [filterCatSearch, setFilterCatSearch] = useState("");
+  const filterDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (filterDropdownRef.current && !filterDropdownRef.current.contains(event.target as Node)) {
+        setShowFilterCatDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Invoices for auto-completion in Credit modal
   const [invoicesList, setInvoicesList] = useState<any[]>([]);
@@ -671,20 +684,88 @@ export default function CompanyFinanceTransactionsPage() {
           </div>
 
           {/* Category Filter */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 relative" ref={filterDropdownRef}>
             <span className="text-xs font-semibold text-slate-500">Category:</span>
-            <select
-              value={filterCategory}
-              onChange={(e) => setFilterCategory(e.target.value)}
-              className="h-9 min-w-[140px] bg-white border border-slate-200/80 rounded-xl text-xs px-2.5 focus:outline-none focus:ring-1 focus:ring-slate-400 text-slate-700"
-            >
-              <option value="all">All Categories</option>
-              {categories.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowFilterCatDropdown(!showFilterCatDropdown)}
+                className="h-9 min-w-[140px] max-w-[200px] bg-white border border-slate-200/80 rounded-xl text-xs px-2.5 flex items-center justify-between text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                <span className="truncate">{filterCategory === "all" ? "All Categories" : filterCategory}</span>
+                <span className="text-[10px] ml-1 text-slate-400">▼</span>
+              </button>
+
+              {showFilterCatDropdown && (
+                <div className="absolute z-50 left-0 mt-1 w-[220px] bg-white border border-slate-200 rounded-xl shadow-lg p-2 space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
+                  <div className="relative">
+                    <Input
+                      placeholder="Search category..."
+                      value={filterCatSearch}
+                      onChange={(e) => setFilterCatSearch(e.target.value)}
+                      className="h-8 text-xs pr-6"
+                      autoFocus
+                    />
+                    {filterCatSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setFilterCatSearch("")}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="max-h-48 overflow-y-auto divide-y divide-slate-100 no-scrollbar">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFilterCategory("all");
+                        setShowFilterCatDropdown(false);
+                        setFilterCatSearch("");
+                      }}
+                      className={`w-full px-2.5 py-1.5 text-left text-xs rounded-lg transition-colors ${
+                        filterCategory === "all"
+                          ? "bg-slate-100 text-slate-900 font-bold"
+                          : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                      }`}
+                    >
+                      All Categories
+                    </button>
+                    {categories
+                      .filter((cat) =>
+                        cat.toLowerCase().includes(filterCatSearch.toLowerCase())
+                      )
+                      .map((cat) => (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => {
+                            setFilterCategory(cat);
+                            setShowFilterCatDropdown(false);
+                            setFilterCatSearch("");
+                          }}
+                          className={`w-full px-2.5 py-1.5 text-left text-xs rounded-lg transition-colors ${
+                            filterCategory === cat
+                              ? "bg-slate-100 text-slate-900 font-bold"
+                              : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                          }`}
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    {categories.filter((cat) =>
+                      cat.toLowerCase().includes(filterCatSearch.toLowerCase())
+                    ).length === 0 && (
+                      <div className="px-2.5 py-1.5 text-[11px] text-slate-400 text-center">
+                        No matches found
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Synced status filter */}
