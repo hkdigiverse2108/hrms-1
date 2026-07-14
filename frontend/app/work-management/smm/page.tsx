@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/common/PageHeader";
 import { 
@@ -211,6 +211,7 @@ export default function CreativeClientsPage() {
   // Creative Team Assignment
   const [creativeEmployees, setCreativeEmployees] = useState<any[]>([]);
   const [assignTeamClient, setAssignTeamClient] = useState<any>(null);
+  const [assignTeamProject, setAssignTeamProject] = useState<any>(null);
   const [assignTeamOpen, setAssignTeamOpen] = useState(false);
   const [scriptwriterId, setScriptwriterId] = useState("");
   const [reelEditorId, setReelEditorId] = useState("");
@@ -236,6 +237,7 @@ export default function CreativeClientsPage() {
   const [reviewClient, setReviewClient] = useState<any>(null);
 
   const [followupConfigClient, setFollowupConfigClient] = useState<any>(null);
+  const [followupConfigProject, setFollowupConfigProject] = useState<any>(null);
   const [followupTypeInput, setFollowupTypeInput] = useState("Interval");
   const [followupIntervalInput, setFollowupIntervalInput] = useState("");
   const [followupDaysOfWeekInput, setFollowupDaysOfWeekInput] = useState<number[]>([]);
@@ -244,6 +246,7 @@ export default function CreativeClientsPage() {
 
   const [followupRemarkOpen, setFollowupRemarkOpen] = useState(false);
   const [followupRemarkClient, setFollowupRemarkClient] = useState<any>(null);
+  const [followupRemarkProject, setFollowupRemarkProject] = useState<any>(null);
   const [followupRemarkText, setFollowupRemarkText] = useState("");
 
   const [followupHistoryLogs, setFollowupHistoryLogs] = useState<any[]>([]);
@@ -264,10 +267,10 @@ export default function CreativeClientsPage() {
   const [editingRemarkId, setEditingRemarkId] = useState<string | null>(null);
   const [editingRemarkText, setEditingRemarkText] = useState("");
 
-  const fetchFollowupHistory = async (client: any) => {
+  const fetchFollowupHistory = async (client: any, project: any = null) => {
     setIsLoadingFollowupHistory(true);
     try {
-      const proj = clientProjects[client.id];
+      const proj = project || followupConfigProject || (clientProjects[client.id] && clientProjects[client.id][0]);
       if (!proj) {
         setFollowupHistoryLogs([]);
         setIsLoadingFollowupHistory(false);
@@ -290,7 +293,7 @@ export default function CreativeClientsPage() {
     if (!followupConfigClient || !newRemarkText.trim()) return;
     setIsAddingRemark(true);
     try {
-      const proj = clientProjects[followupConfigClient.id];
+      const proj = followupConfigProject;
       const res = await fetch(`${API_URL}/task-logs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -306,10 +309,10 @@ export default function CreativeClientsPage() {
       if (res.ok) {
         toast.success("Remark added");
         setNewRemarkText("");
-        fetchFollowupHistory(followupConfigClient);
+        fetchFollowupHistory(followupConfigClient, proj);
         
         const today = new Date().toISOString().split('T')[0];
-        const projectId = clientProjects[followupConfigClient.id]?.id;
+        const projectId = proj?.id;
         
         if (projectId) {
           await fetch(`${API_URL}/projects/${projectId}`, {
@@ -345,7 +348,7 @@ export default function CreativeClientsPage() {
       if (res.ok) {
         toast.success("Remark updated");
         setEditingRemarkId(null);
-        fetchFollowupHistory(followupConfigClient);
+        fetchFollowupHistory(followupConfigClient, followupConfigProject);
       } else {
         toast.error("Failed to update remark");
       }
@@ -360,7 +363,7 @@ export default function CreativeClientsPage() {
       const res = await fetch(`${API_URL}/task-logs/${logId}`, { method: "DELETE" });
       if (res.ok) {
         toast.success("Remark deleted");
-        fetchFollowupHistory(followupConfigClient);
+        fetchFollowupHistory(followupConfigClient, followupConfigProject);
       } else {
         toast.error("Failed to delete remark");
       }
@@ -369,12 +372,12 @@ export default function CreativeClientsPage() {
     }
   };
 
-  const fetchLogs = async (client: any) => {
+  const fetchLogs = async (client: any, project: any = null) => {
     setIsLoadingLogs(true);
     setLogsOpen(true);
     setActiveClient(client);
     try {
-      const proj = clientProjects[client.id];
+      const proj = project || (clientProjects[client.id] && clientProjects[client.id][0]);
       if (!proj) {
         setClientLogs([]);
         setIsLoadingLogs(false);
@@ -421,7 +424,7 @@ export default function CreativeClientsPage() {
 
   const [pendingCounts, setPendingCounts] = useState<Record<string, number>>({});
   const [clientMaxDates, setClientMaxDates] = useState<Record<string, Date>>({});
-  const [clientProjects, setClientProjects] = useState<Record<string, any>>({});
+  const [clientProjects, setClientProjects] = useState<Record<string, any[]>>({});
   const [calendarSettings, setCalendarSettings] = useState<Record<string, any>>({});
   const currentMonthYear = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
 
@@ -511,10 +514,13 @@ export default function CreativeClientsPage() {
 
       if (pRes.ok) {
         const projects = await pRes.json();
-        const projectMap: Record<string, any> = {};
+        const projectMap: Record<string, any[]> = {};
         projects.forEach((p: any) => {
           if (p.clientId && p.department === 'Creative') {
-            projectMap[p.clientId] = p;
+            if (!projectMap[p.clientId]) {
+              projectMap[p.clientId] = [];
+            }
+            projectMap[p.clientId].push(p);
           }
         });
         setClientProjects(projectMap);
@@ -613,7 +619,7 @@ export default function CreativeClientsPage() {
   const handleFollowupCompleteWithRemark = async () => {
     if (!followupRemarkClient) return;
     try {
-      const proj = clientProjects[followupRemarkClient.id];
+      const proj = followupRemarkProject;
       if (followupRemarkText.trim()) {
         await fetch(`${API_URL}/task-logs`, {
           method: "POST",
@@ -630,7 +636,7 @@ export default function CreativeClientsPage() {
       }
       
       const today = new Date().toISOString().split('T')[0];
-      const projectId = clientProjects[followupRemarkClient.id]?.id;
+      const projectId = proj?.id;
       
       if (projectId) {
         const res = await fetch(`${API_URL}/projects/${projectId}`, {
@@ -660,7 +666,7 @@ export default function CreativeClientsPage() {
 
   const handleSaveTeamAssignment = async () => {
     if (!assignTeamClient) return;
-    const project = clientProjects[assignTeamClient.id];
+    const project = assignTeamProject;
     if (!project) {
       toast.error("No creative project found for this client");
       return;
@@ -772,70 +778,88 @@ export default function CreativeClientsPage() {
     }
   };
 
-  const filteredClients = clients.filter(c => {
-    if (isEmployeeOrIntern && user?.id) {
-      const p = clientProjects[c.id] || {};
-      const isAssigned = (p.assignedScriptwriterId || c.assignedScriptwriterId) === user.id || 
-                         (p.assignedReelEditorId || c.assignedReelEditorId) === user.id ||
-                         (p.assignedPostDesignerId || c.assignedPostDesignerId) === user.id ||
-                         (p.assignedShooterId || c.assignedShooterId) === user.id ||
-                         (p.assignedApproverId || c.assignedApproverId) === user.id ||
-                         (p.assignedPosterId || c.assignedPosterId) === user.id;
-      if (!isAssigned) return false;
-    }
+  const clientProjectRows = useMemo(() => {
+    const rows: Array<{ client: any; project: any }> = [];
+    clients.forEach((client) => {
+      const projs = clientProjects[client.id] || [];
+      if (projs.length === 0) {
+        rows.push({ client, project: null });
+      } else {
+        projs.forEach((project) => {
+          rows.push({ client, project });
+        });
+      }
+    });
+    return rows;
+  }, [clients, clientProjects]);
 
-    const matchesSearch = c.companyName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.email.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredRows = useMemo(() => {
+    return clientProjectRows.filter(({ client: c, project: p }: { client: any; project: any }) => {
+      if (isEmployeeOrIntern && user?.id) {
+        const proj = p || {};
+        const isAssigned = (proj.assignedScriptwriterId || c.assignedScriptwriterId) === user.id || 
+                           (proj.assignedReelEditorId || c.assignedReelEditorId) === user.id ||
+                           (proj.assignedPostDesignerId || c.assignedPostDesignerId) === user.id ||
+                           (proj.assignedShooterId || c.assignedShooterId) === user.id ||
+                           (proj.assignedApproverId || c.assignedApproverId) === user.id ||
+                           (proj.assignedPosterId || c.assignedPosterId) === user.id;
+        if (!isAssigned) return false;
+      }
+
+      const matchesSearch = c.companyName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        c.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (p && p.title.toLowerCase().includes(searchTerm.toLowerCase()));
+        
+      if (!matchesSearch) return false;
+
+      const projectStatus = p?.status || "";
+      const isOnHold = projectStatus.toLowerCase() === "on-hold";
+      const isFollowupDue = p?.nextFollowupDate && new Date(p.nextFollowupDate) <= new Date();
       
-    if (!matchesSearch) return false;
+      const hasPendingWork = pendingCounts[c.id] > 0;
 
-    const projectStatus = clientProjects[c.id]?.status || "";
-    const isOnHold = projectStatus.toLowerCase() === "on-hold";
-    const isFollowupDue = clientProjects[c.id]?.nextFollowupDate && new Date(clientProjects[c.id].nextFollowupDate) <= new Date();
-    
-    const hasPendingWork = pendingCounts[c.id] > 0;
+      switch(masterFilter) {
+        case 'whatsapp-submitted': return !!c.whatsappGroup;
+        case 'whatsapp-pending': return !c.whatsappGroup;
+        case 'greetings-sent': return !!c.greetingsMsgSent;
+        case 'greetings-pending': return !c.greetingsMsgSent;
+        case 'followup-due': return !!isFollowupDue;
+        case 'active': return p ? !isOnHold : true;
+        case 'on-hold': return isOnHold;
+        case 'festival-post': return (p?.festivalPost === "Yes") || c.festivalPost === "Yes";
+        case 'pending-work': return hasPendingWork;
+        case 'meeting-done': return c.meetings && c.meetings.length > 0;
+        case 'meeting-not-done': return !c.meetings || c.meetings.length === 0;
+        case 'approval-pending': return !calendarSettings[c.id]?.approvalStatus || calendarSettings[c.id]?.approvalStatus === "Pending";
+        case 'approval-approved': return calendarSettings[c.id]?.approvalStatus === "Approved by Client";
+        case 'approval-changes': return calendarSettings[c.id]?.approvalStatus === "Changes Requested";
+        case 'approval-rejected': return calendarSettings[c.id]?.approvalStatus === "Rejected";
+        default: return true;
+      }
+    }).filter(({ client: c, project: p }: { client: any; project: any }) => {
+      if (creativeFilter !== "all") {
+        const proj = p || {};
+        const isAssigned = (proj.assignedScriptwriterId || c.assignedScriptwriterId) === creativeFilter || 
+                           (proj.assignedReelEditorId || c.assignedReelEditorId) === creativeFilter ||
+                           (proj.assignedPostDesignerId || c.assignedPostDesignerId) === creativeFilter ||
+                           (proj.assignedShooterId || c.assignedShooterId) === creativeFilter ||
+                           (proj.assignedApproverId || c.assignedApproverId) === creativeFilter ||
+                           (proj.assignedPosterId || c.assignedPosterId) === creativeFilter ||
+                           (proj.assignedCaptionWriterId || c.assignedCaptionWriterId) === creativeFilter ||
+                           (proj.assignedThumbnailDesignerId || c.assignedThumbnailDesignerId) === creativeFilter;
+        if (!isAssigned) return false;
+      }
 
-    switch(masterFilter) {
-      case 'whatsapp-submitted': return !!c.whatsappGroup;
-      case 'whatsapp-pending': return !c.whatsappGroup;
-      case 'greetings-sent': return !!c.greetingsMsgSent;
-      case 'greetings-pending': return !c.greetingsMsgSent;
-      case 'followup-due': return !!isFollowupDue;
-      case 'active': return !isOnHold;
-      case 'on-hold': return isOnHold;
-      case 'festival-post': return (clientProjects[c.id]?.festivalPost === "Yes") || c.festivalPost === "Yes";
-      case 'pending-work': return hasPendingWork;
-      case 'meeting-done': return c.meetings && c.meetings.length > 0;
-      case 'meeting-not-done': return !c.meetings || c.meetings.length === 0;
-      case 'approval-pending': return !calendarSettings[c.id]?.approvalStatus || calendarSettings[c.id]?.approvalStatus === "Pending";
-      case 'approval-approved': return calendarSettings[c.id]?.approvalStatus === "Approved by Client";
-      case 'approval-changes': return calendarSettings[c.id]?.approvalStatus === "Changes Requested";
-      case 'approval-rejected': return calendarSettings[c.id]?.approvalStatus === "Rejected";
-      default: return true;
-    }
-  }).filter(c => {
-    if (creativeFilter !== "all") {
-      const p = clientProjects[c.id] || {};
-      const isAssigned = (p.assignedScriptwriterId || c.assignedScriptwriterId) === creativeFilter || 
-                         (p.assignedReelEditorId || c.assignedReelEditorId) === creativeFilter ||
-                         (p.assignedPostDesignerId || c.assignedPostDesignerId) === creativeFilter ||
-                         (p.assignedShooterId || c.assignedShooterId) === creativeFilter ||
-                         (p.assignedApproverId || c.assignedApproverId) === creativeFilter ||
-                         (p.assignedPosterId || c.assignedPosterId) === creativeFilter ||
-                         (p.assignedCaptionWriterId || c.assignedCaptionWriterId) === creativeFilter ||
-                         (p.assignedThumbnailDesignerId || c.assignedThumbnailDesignerId) === creativeFilter;
-      if (!isAssigned) return false;
-    }
+      if (calendarFilterStatus === "created") {
+        if (!calendarSettings[c.id]) return false;
+      } else if (calendarFilterStatus === "not-created") {
+        if (calendarSettings[c.id]) return false;
+      }
 
-    if (calendarFilterStatus === "created") {
-      if (!calendarSettings[c.id]) return false;
-    } else if (calendarFilterStatus === "not-created") {
-      if (calendarSettings[c.id]) return false;
-    }
-
-    return true;
-  });
+      return true;
+    });
+  }, [clientProjectRows, isEmployeeOrIntern, user, searchTerm, masterFilter, creativeFilter, calendarFilterStatus, pendingCounts, calendarSettings]);
 
   return (
     <div className="space-y-6">
@@ -1108,7 +1132,7 @@ export default function CreativeClientsPage() {
         />
       ) : masterFilter === 'reviews' ? (
         <FeedbackReviewsEmbedded />
-      ) : filteredClients.length > 0 ? (
+      ) : filteredRows.length > 0 ? (
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-md min-h-[calc(100vh-260px)]" data-slot="table-container">
           <div className="overflow-x-auto no-scrollbar">
             <table className="w-full text-left text-sm text-slate-600">
@@ -1126,16 +1150,16 @@ export default function CreativeClientsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredClients.map((client) => (
-                  <tr key={client.id} className="hover:bg-slate-50/50 transition-colors group">
+                {filteredRows.map(({ client, project }: { client: any; project: any }) => (
+                  <tr key={`${client.id}-${project?.id || 'no-project'}`} className="hover:bg-slate-50/50 transition-colors group">
                     <td className="px-6 py-4 whitespace-normal sticky left-0 z-10 bg-white group-hover:bg-slate-50 shadow-[1px_0_0_0_#e2e8f0] transition-colors min-w-[250px] w-[250px] max-w-[250px] overflow-hidden">
                       <div className="flex flex-col gap-1.5 items-start">
                         <div className="flex items-center gap-3">
                           <div 
                             className="font-semibold text-brand-teal text-base underline underline-offset-2 hover:text-brand-teal/80 transition-colors cursor-pointer pl-2"
-                            onClick={() => router.push(`/work-management/smm/${client.id}`)}
+                            onClick={() => router.push(`/work-management/smm/${client.id}${project ? `?projectId=${project.id}` : ''}`)}
                           >
-                            {client.companyName || "N/A"}
+                            {project?.title ? `${project.title} — ${client.companyName}` : (client.companyName || "N/A")}
                           </div>
                           {pendingCounts[client.id] > 0 && (
                             <Badge 
@@ -1175,9 +1199,9 @@ export default function CreativeClientsPage() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex flex-col items-start gap-1">
                         <span className="text-slate-700 text-sm font-medium">
-                          {clientProjects[client.id]?.title || <span className="text-slate-400 italic font-normal">No active project</span>}
+                          {project?.title || <span className="text-slate-400 italic font-normal">No active project</span>}
                         </span>
-                        {clientProjects[client.id]?.status?.toLowerCase() === "on-hold" && (
+                        {project?.status?.toLowerCase() === "on-hold" && (
                           <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200 px-1 py-0 shadow-none font-semibold">ON HOLD</Badge>
                         )}
                       </div>
@@ -1227,9 +1251,9 @@ export default function CreativeClientsPage() {
                           className={`line-clamp-2 max-w-[220px] font-medium text-slate-700 ${!isEmployeeOrIntern ? 'cursor-pointer hover:text-brand-teal transition-colors' : ''}`}
                           onClick={() => !isEmployeeOrIntern && setInlineEditing({ id: client.id, field: 'services' })}
                         >
-                          {clientProjects[client.id]?.services || client.services || "N/A"}
+                          {project?.services || client.services || "N/A"}
                         </div>
-                        {(clientProjects[client.id]?.festivalPost === "Yes" || client.festivalPost === "Yes") && (
+                        {(project?.festivalPost === "Yes" || client.festivalPost === "Yes") && (
                           <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200/60 font-medium px-2 py-0.5 shadow-sm">
                             Festival Post
                           </Badge>
@@ -1239,7 +1263,7 @@ export default function CreativeClientsPage() {
                     <td className="px-6 py-4 text-center whitespace-nowrap">
                       <div className="flex items-center justify-center gap-2.5">
                         {(() => {
-                          const projectStatus = clientProjects[client.id]?.status || "";
+                          const projectStatus = project?.status || "";
                           const isOnHold = projectStatus.toLowerCase() === "on-hold";
                           const displayText = isOnHold ? "ON HOLD" : "ACTIVE";
                           return (
@@ -1248,12 +1272,13 @@ export default function CreativeClientsPage() {
                             </Badge>
                           );
                         })()}
-                        {clientProjects[client.id]?.nextFollowupDate && new Date(clientProjects[client.id].nextFollowupDate) <= new Date() && (
+                        {project?.nextFollowupDate && new Date(project.nextFollowupDate) <= new Date() && (
                           <Badge 
                             className="bg-rose-50 text-rose-600 border-rose-200/60 animate-pulse flex items-center gap-1.5 shadow-sm cursor-pointer hover:bg-rose-100 hover:text-rose-700 transition-colors"
                             onClick={(e) => {
                               e.stopPropagation();
                               setFollowupRemarkClient(client);
+                              setFollowupRemarkProject(project);
                               setFollowupRemarkText("");
                               setFollowupRemarkOpen(true);
                             }}
@@ -1304,7 +1329,8 @@ export default function CreativeClientsPage() {
                             <DropdownMenuItem onClick={(e) => {
                               e.stopPropagation();
                               setAssignTeamClient(client);
-                              const p = clientProjects[client.id] || {};
+                              setAssignTeamProject(project);
+                              const p = project || {};
                               setScriptwriterId(p.assignedScriptwriterId || client.assignedScriptwriterId || "none");
                               setReelEditorId(p.assignedReelEditorId || client.assignedReelEditorId || "none");
                               setPostDesignerId(p.assignedPostDesignerId || client.assignedPostDesignerId || "none");
@@ -1320,19 +1346,20 @@ export default function CreativeClientsPage() {
                             <DropdownMenuItem onClick={(e) => {
                               e.stopPropagation();
                               setFollowupConfigClient(client);
-                              setFollowupTypeInput(client.followupType || "Interval");
-                              setFollowupIntervalInput(client.followupIntervalDays ? String(client.followupIntervalDays) : "");
-                              setFollowupDaysOfWeekInput(client.followupDaysOfWeek || []);
-                              setFollowupDatesOfMonthInput(client.followupDatesOfMonth || []);
-                              setFollowupLastDateInput(client.lastFollowupDate || "");
+                              setFollowupConfigProject(project);
+                              setFollowupTypeInput(project?.followupType || client.followupType || "Interval");
+                              setFollowupIntervalInput(project?.followupIntervalDays ? String(project.followupIntervalDays) : (client.followupIntervalDays ? String(client.followupIntervalDays) : ""));
+                              setFollowupDaysOfWeekInput(project?.followupDaysOfWeek || client.followupDaysOfWeek || []);
+                              setFollowupDatesOfMonthInput(project?.followupDatesOfMonth || client.followupDatesOfMonth || []);
+                              setFollowupLastDateInput(project?.lastFollowupDate || client.lastFollowupDate || "");
                               setFollowupConfigOpen(true);
-                              fetchFollowupHistory(client);
+                              fetchFollowupHistory(client, project);
                             }}>
                               <CalendarClock className="w-4 h-4 mr-2" /> Follow-ups
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={(e) => {
                               e.stopPropagation();
-                              const p = clientProjects[client.id];
+                              const p = project;
                               if (p) {
                                 setFeedbackConfigProject(p);
                                 setFeedbackTypeInput(p.feedbackType || "Interval");
@@ -1357,14 +1384,14 @@ export default function CreativeClientsPage() {
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={(e) => {
                               e.stopPropagation();
-                              router.push(`/work-management/smm/${client.id}/feedback`);
+                              router.push(`/work-management/smm/${client.id}/feedback${project ? `?projectId=${project.id}` : ''}`);
                             }}>
                               <ClipboardList className="w-4 h-4 mr-2 text-indigo-600" /> View Forms & Feedback
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={(e) => {
                               e.stopPropagation();
-                              fetchLogs(client);
+                              fetchLogs(client, project);
                             }}>
                               <History className="w-4 h-4 mr-2" /> Activity Logs
                             </DropdownMenuItem>
