@@ -2059,7 +2059,14 @@ export default function MarketingReportsPage() {
                   {employees
                     .filter((emp: any) => {
                       if (emp.id === user?.id) return false;
-                      return emp.department?.trim().toLowerCase() === 'digital marketing';
+                      const empDept = emp.department?.trim().toLowerCase();
+                      if (!empDept) return false;
+                      
+                      if (transferringProject?.department) {
+                        const projDepts = transferringProject.department.toLowerCase().split(',').map((d: string) => d.trim());
+                        return projDepts.includes(empDept);
+                      }
+                      return empDept === 'digital marketing';
                     })
                     .map((emp: any) => {
                       const name = `${emp.firstName} ${emp.lastName || ''}`.trim();

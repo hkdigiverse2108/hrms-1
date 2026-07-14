@@ -53,7 +53,6 @@ function getRequiredModuleForPath(pathname: string): string | null {
   if (pathname.startsWith("/attendance")) return "attendance";
   if (pathname.startsWith("/leave")) return "leave";
   
-  if (pathname.startsWith("/workspace/blank-canvas")) return "blank-canvas";
   if (pathname.startsWith("/workspace/seating")) return "seating-arrangement";
   if (pathname.startsWith("/workspace/resource")) return "resource-management";
   

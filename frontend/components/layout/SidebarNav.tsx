@@ -214,9 +214,6 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
 
     
     const workspaceChildren: MenuItem[] = [];
-    if (isAdmin || checkPermission('blank-canvas', 'canView')) {
-      workspaceChildren.push(getItem(<Link href="/workspace/blank-canvas">Blank Canvas</Link>, "/workspace/blank-canvas"));
-    }
     if (isAdmin || checkPermission('seating-arrangement', 'canView')) {
       workspaceChildren.push(getItem(<Link href="/workspace/seating">Seating Arrangement</Link>, "/workspace/seating"));
     }

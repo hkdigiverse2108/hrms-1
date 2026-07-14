@@ -81,7 +81,6 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     name: 'Workspace',
     icon: MonitorPlay,
     modules: [
-      { moduleName: 'blank-canvas', displayName: 'Blank Canvas', tabUrl: '/workspace/blank-canvas' },
       { moduleName: 'seating-arrangement', displayName: 'Seating Arrangement', tabUrl: '/workspace/seating' },
       { moduleName: 'resource-management', displayName: 'Resource Management', tabUrl: '/workspace/resource' },
     ]

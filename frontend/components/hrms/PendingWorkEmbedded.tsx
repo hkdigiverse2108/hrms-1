@@ -1394,6 +1394,15 @@ export function PendingWorkEmbedded({
                   {(() => {
                     const getTaskDepartment = () => {
                       if (!transferringTask) return "";
+                      
+                      // Prioritize the assignee's department since the task is assigned to them
+                      if (transferringTask.assigneeId) {
+                        const assignee = employees.find((e: any) => e.id === transferringTask.assigneeId);
+                        if (assignee && assignee.department) {
+                          return assignee.department;
+                        }
+                      }
+
                       if (!transferringTask.isOtherWork) return "Creative";
                       const tType = transferringTask.type?.toLowerCase();
                       if (tType === 'development') return "Development";
