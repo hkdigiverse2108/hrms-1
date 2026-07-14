@@ -1580,6 +1580,7 @@ class SystemSettingsBase(BaseModel):
     defaultApprovalOffset: Optional[int] = None
     addHoldDaysToEndDate: Optional[bool] = True
     invoiceClientDepartments: Optional[List[str]] = []
+    invoiceCategories: Optional[List[str]] = Field(default_factory=list)
     showNamesInRemarksToAdmin: Optional[bool] = True
     autoInactiveAfterResignation: Optional[bool] = False
     otpRequiredRoles: Optional[List[str]] = []
@@ -1619,6 +1620,7 @@ class SystemSettingsUpdate(BaseModel):
     defaultApprovalOffset: Optional[int] = None
     addHoldDaysToEndDate: Optional[bool] = None
     invoiceClientDepartments: Optional[List[str]] = None
+    invoiceCategories: Optional[List[str]] = None
     showNamesInRemarksToAdmin: Optional[bool] = None
     autoInactiveAfterResignation: Optional[bool] = None
     otpRequiredRoles: Optional[List[str]] = None
@@ -2128,6 +2130,7 @@ class InvoiceBase(BaseModel):
     incentives: Optional[List[InvoiceIncentive]] = []
     previousStatus: Optional[str] = None
     logs: Optional[List[InvoiceLog]] = []
+    category: Optional[str] = None
 
 class InvoiceCreate(InvoiceBase):
     pass
@@ -2167,6 +2170,7 @@ class InvoiceUpdate(BaseModel):
     incentives: Optional[List[InvoiceIncentive]] = None
     previousStatus: Optional[str] = None
     logs: Optional[List[InvoiceLog]] = None
+    category: Optional[str] = None
 
 class Invoice(InvoiceBase):
     id: str

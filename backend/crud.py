@@ -8954,7 +8954,7 @@ async def get_finance_transactions(db, payment_method: str = None, type_filter: 
                     "descriptions": descriptions,
                     "amount": float(inv.get("total", 0.0) or 0.0),
                     "type": "credit",
-                    "category": inv.get("clientName", "General"),
+                    "category": inv.get("clientDepartment") or inv.get("category") or inv.get("clientName", "General"),
                     "paymentMethod": inv_payment_method,
                     "date": inv.get("issueDate", "") or inv.get("timestamp", ""),
                     "invoiceNumber": inv.get("invoiceNumber", f"INV-{inv_id[:6]}"),
