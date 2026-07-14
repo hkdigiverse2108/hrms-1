@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Edit, History, Building2, MapPin, Mail, Phone, Link as LinkIcon, Loader2, ClipboardList, Calendar, Palette, Layout, Film, Hash, Activity } from "lucide-react";
@@ -28,6 +28,7 @@ const noScrollbarStyle = `
 export default function ClientDetailsPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [client, setClient] = useState<any>(null);
   const [project, setProject] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -62,7 +63,10 @@ export default function ClientDetailsPage() {
       }
       if (pRes.ok) {
         const projs = await pRes.json();
-        const creativeProj = projs.find((p: any) => p.clientId === params.id && p.department === "Creative" && p.status !== "completed");
+        const qProjectId = searchParams.get("projectId");
+        const creativeProj = qProjectId 
+          ? projs.find((p: any) => p.id === qProjectId)
+          : projs.find((p: any) => p.clientId === params.id && p.department === "Creative" && p.status !== "completed");
         if (creativeProj) setProject(creativeProj);
       }
     } catch (err) {
