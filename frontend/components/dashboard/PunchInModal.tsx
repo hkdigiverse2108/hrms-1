@@ -179,6 +179,18 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                     status: "pending"
                   });
                 });
+                
+                const myOw = owList.filter((o: any) => String(o.assigneeId).trim() === String(userId).trim() && o.status !== 'Approved' && o.taskType === 'dm-other-work');
+                myOw.forEach((o: any) => {
+                  smmTasks.push({
+                    id: o.id || o._id,
+                    title: o.title || o.taskName || 'Other Work Task',
+                    projectName: 'Other Work',
+                    dueDate: o.deadline || "",
+                    status: o.status,
+                    isDmOtherWork: true
+                  });
+                });
               }
               
               if (isCreativeUser) {
@@ -271,18 +283,28 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
 
     const data: any = { type };
     if (type === "Work") {
-      if (selectedTab === "hr_sales_work" || selectedTab === "dm_other_work") {
+      if (selectedTab === "hr_sales_work") {
         data.taskId = undefined;
         data.value = activityValue;
-      } else if (taskId === "custom") {
+      } else if (selectedTab === "dm_other_work" && !isNewWorkTask) {
+        data.taskId = taskId;
+        const selectedTask = tasks.find(t => t.id === taskId);
+        if (selectedTask) {
+          data.value = selectedTask.title;
+        } else {
+          data.value = activityValue || "Other Work";
+        }
+      } else if (taskId === "custom" || (selectedTab === "dm_other_work" && isNewWorkTask)) {
         setIsLoading(true);
         try {
           const userStr = localStorage.getItem("user");
           const userObj = userStr ? JSON.parse(userStr) : {};
           const userName = userObj.name || (userObj.firstName ? `${userObj.firstName} ${userObj.lastName || ''}`.trim() : "Unknown User");
           
+          const titleToUse = selectedTab === "dm_other_work" ? activityValue : customTaskName;
+          
           const payload = {
-            title: customTaskName,
+            title: titleToUse,
             description: "Custom task created from Punch-In",
             assigneeId: userId,
             assigneeName: userName,
@@ -290,13 +312,13 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
             assignerName: userName,
             deadline: new Date().toISOString().split('T')[0],
             status: "Pending",
-            taskType: "other-work"
+            taskType: selectedTab === "dm_other_work" ? "dm-other-work" : "other-work"
           };
           
           const isDev = userDept === 'development';
-          const url = isDev ? `${API_URL}/wm-tasks` : `${API_URL}/other-work`;
-          const bodyPayload = isDev ? {
-            title: customTaskName,
+          const url = isDev && selectedTab !== "dm_other_work" ? `${API_URL}/wm-tasks` : `${API_URL}/other-work`;
+          const bodyPayload = isDev && selectedTab !== "dm_other_work" ? {
+            title: titleToUse,
             description: "Custom task created from Punch-In",
             projectId: "custom",
             projectName: "Custom Task",
@@ -319,16 +341,16 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
           if (res.ok) {
             const newWork = await res.json();
             data.taskId = newWork.id || newWork._id;
-            data.value = customTaskName;
+            data.value = titleToUse;
           } else {
             console.error("Failed to create custom task");
-            data.taskId = "custom";
-            data.value = customTaskName;
+            data.taskId = selectedTab === "dm_other_work" ? undefined : "custom";
+            data.value = titleToUse;
           }
         } catch (err) {
           console.error("Error creating custom task:", err);
-          data.taskId = "custom";
-          data.value = customTaskName;
+          data.taskId = selectedTab === "dm_other_work" ? undefined : "custom";
+          data.value = selectedTab === "dm_other_work" ? activityValue : customTaskName;
         } finally {
           setIsLoading(false);
         }
@@ -346,7 +368,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
       data.value = activityValue;
     }
     
-    if (taskId !== "custom" || data.taskId !== "custom") {
+    if ((taskId !== "custom" && !isNewWorkTask) || (data.taskId !== "custom" && data.taskId !== undefined)) {
       onConfirm(data);
     } else {
       // Fallback if creating failed, still punch in
@@ -359,8 +381,12 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
       if (taskId === "custom") return !!customTaskName.trim();
       return !!taskId;
     }
-    if (selectedTab === "hr_sales_work" || selectedTab === "dm_other_work") {
+    if (selectedTab === "hr_sales_work") {
       return !!activityValue;
+    }
+    if (selectedTab === "dm_other_work") {
+      if (isNewWorkTask) return !!activityValue;
+      return !!taskId;
     }
     if (selectedTab === "research") {
       return !!activityValue;
@@ -470,7 +496,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                       {(() => {
                         let activeTasks = [];
                         if (selectedTab === "assigned_brands") {
-                          activeTasks = tasks; // All active projects are shown regardless of date
+                          activeTasks = tasks.filter(t => !t.isDmOtherWork); // All active projects are shown regardless of date
                         } else {
                           activeTasks = selectedTab === "today_work" ? todayTasks : upcomingTasks;
                         }
@@ -541,7 +567,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                   </div>
                 )}
 
-                {(selectedTab === "hr_sales_work" || selectedTab === "dm_other_work") && (
+                {selectedTab === "hr_sales_work" && (
                   <div className="space-y-3">
                     <Label className="text-base">Select Task</Label>
                     <div className="max-h-[500px] overflow-y-scroll flex flex-col gap-1.5 pr-2 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-slate-100/50 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-brand-teal/30 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-brand-teal/50 transition-colors" style={{ scrollbarWidth: 'thin', scrollbarColor: '#09A08A4D transparent' }}>
@@ -568,6 +594,67 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                         key="custom_work" 
                         onClick={() => {
                           setIsNewWorkTask(true);
+                          setActivityValue("");
+                        }}
+                        className={`px-3 py-1.5 mt-2 rounded-lg cursor-pointer border transition-all duration-200 flex items-center justify-between min-h-[38px] border-dashed ${
+                          isNewWorkTask 
+                            ? 'border-brand-teal bg-brand-teal/10 shadow-sm ring-1 ring-brand-teal' 
+                            : 'border-slate-300 hover:border-brand-teal/50 hover:bg-muted/30'
+                        }`}
+                      >
+                        <div className="font-medium text-sm line-clamp-1 flex-1 flex items-center gap-2 text-brand-teal">
+                          <span>+ Add New Work Task</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {isNewWorkTask && (
+                      <div className="space-y-2 mt-4 animate-in fade-in zoom-in duration-200">
+                        <Label>New Task Name</Label>
+                        <Input 
+                          placeholder="Enter new work task..." 
+                          value={activityValue}
+                          onChange={e => setActivityValue(e.target.value)}
+                          autoFocus
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {selectedTab === "dm_other_work" && (
+                  <div className="space-y-3">
+                    <Label className="text-base">Select Work Task</Label>
+                    <div className="max-h-[500px] overflow-y-scroll flex flex-col gap-1.5 pr-2 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-slate-100/50 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-brand-teal/30 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-brand-teal/50 transition-colors" style={{ scrollbarWidth: 'thin', scrollbarColor: '#09A08A4D transparent' }}>
+                      {tasks.filter(t => t.isDmOtherWork).map(t => (
+                        <div 
+                          key={t.id} 
+                          onClick={() => {
+                            setIsNewWorkTask(false);
+                            setTaskId(t.id);
+                          }}
+                          className={`px-3 py-1.5 rounded-lg cursor-pointer border transition-all duration-200 flex items-center justify-between min-h-[38px] ${
+                            taskId === t.id && !isNewWorkTask
+                              ? 'border-brand-teal bg-brand-teal/10 shadow-sm ring-1 ring-brand-teal' 
+                              : 'border-border/50 hover:border-brand-teal/50 hover:bg-muted/30'
+                          }`}
+                        >
+                          <div className="font-medium text-sm line-clamp-1 flex-1 flex items-center gap-2">
+                            <span className="truncate">{t.title}</span>
+                          </div>
+                        </div>
+                      ))}
+                      {tasks.filter(t => t.isDmOtherWork).length === 0 && (
+                        <div className="col-span-full py-4 text-center text-sm text-muted-foreground bg-muted/20 rounded-lg border border-dashed">
+                          No pending work tasks
+                        </div>
+                      )}
+                      
+                      <div 
+                        key="custom_work" 
+                        onClick={() => {
+                          setIsNewWorkTask(true);
+                          setTaskId("");
                           setActivityValue("");
                         }}
                         className={`px-3 py-1.5 mt-2 rounded-lg cursor-pointer border transition-all duration-200 flex items-center justify-between min-h-[38px] border-dashed ${

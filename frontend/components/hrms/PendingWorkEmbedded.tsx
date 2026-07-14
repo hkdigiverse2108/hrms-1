@@ -548,11 +548,13 @@ export function PendingWorkEmbedded({
     // Apply Task Type Filter
     if (filterTaskType !== 'all') {
       if (filterTaskType === 'other-work') {
-        filteredTasks = filteredTasks.filter(t => t.isOtherWork && t.type !== 'digital-marketing');
+        filteredTasks = filteredTasks.filter(t => t.isOtherWork && t.type !== 'digital-marketing' && t.type !== 'dm-other-work');
       } else if (filterTaskType === 'content-calendar') {
-        filteredTasks = filteredTasks.filter(t => !t.isOtherWork && t.type !== 'digital-marketing');
+        filteredTasks = filteredTasks.filter(t => !t.isOtherWork && t.type !== 'digital-marketing' && t.type !== 'dm-other-work');
       } else if (filterTaskType === 'digital-marketing') {
         filteredTasks = filteredTasks.filter(t => t.type === 'digital-marketing');
+      } else if (filterTaskType === 'dm-other-work') {
+        filteredTasks = filteredTasks.filter(t => t.type === 'dm-other-work');
       }
     }
 
