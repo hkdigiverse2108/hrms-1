@@ -217,9 +217,9 @@ export default function WorkLogsPage() {
         return {
           date: att.date,
           employeeName: att.employeeName,
-          employeeId:   att.employeeId,
           checkIn:      att.checkIn,
           logs,
+          rawBreaks:    att.breaks || [],
           totalDurationStr: fmtMins(totalMins),
         }
       })
@@ -292,12 +292,34 @@ export default function WorkLogsPage() {
   const currentActivities = useMemo(() => {
     return singleDayData.map(emp => {
       const activeLog = emp.logs.find((l:any) => l.isInProgress);
+      const activeBreak = emp.rawBreaks?.find((b:any) => b.startTime && !b.endTime);
+
+      let currentActivity = 'Offline / Idle';
+      let isOnline = false;
+      let isBreak = false;
+      let startedAt = '-';
+      let activeDurationStr = '-';
+
+      if (activeBreak) {
+        currentActivity = 'Break In';
+        isOnline = true; // Technically active/on-clock
+        isBreak = true;
+        startedAt = activeBreak.startTime;
+        activeDurationStr = 'In Progress';
+      } else if (activeLog) {
+        currentActivity = activeLog.title;
+        isOnline = true;
+        startedAt = activeLog.startTime;
+        activeDurationStr = activeLog.durationStr;
+      }
+
       return {
         ...emp,
-        currentActivity: activeLog ? activeLog.title : 'Offline / Idle',
-        startedAt: activeLog ? activeLog.startTime : '-',
-        activeDurationStr: activeLog ? activeLog.durationStr : '-',
-        isOnline: !!activeLog,
+        currentActivity,
+        startedAt,
+        activeDurationStr,
+        isOnline,
+        isBreak,
       }
     }).sort((a, b) => {
       if (a.isOnline && !b.isOnline) return -1;
