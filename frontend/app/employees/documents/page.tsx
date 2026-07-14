@@ -1047,7 +1047,14 @@ export default function EmployeeDocumentsPage() {
   const requestColumns = [
     { key: 'employeeName' as const, header: 'Employee' },
     { key: 'documentType' as const, header: 'Letter Type' },
-    { key: 'reason' as const, header: 'Reason' },
+    { key: 'reason' as const, header: 'Reason', render: (record: any) => (
+      <span 
+        className="block truncate max-w-[250px] text-slate-600 hover:text-slate-900 cursor-help" 
+        title={record.reason}
+      >
+        {record.reason || "-"}
+      </span>
+    )},
     { key: 'requestDate' as const, header: 'Date Requested' },
     { key: 'status' as const, header: 'Status', render: (record: any) => (
       <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
@@ -1357,7 +1364,14 @@ export default function EmployeeDocumentsPage() {
               data={documentRequests}
               columns={isAdminOrHR ? requestColumns : [
                 { key: 'documentType' as const, header: 'Letter Type' },
-                { key: 'reason' as const, header: 'Reason' },
+                { key: 'reason' as const, header: 'Reason', render: (record: any) => (
+                  <span 
+                    className="block truncate max-w-[250px] text-slate-600 hover:text-slate-900 cursor-help" 
+                    title={record.reason}
+                  >
+                    {record.reason || "-"}
+                  </span>
+                )},
                 { key: 'requestDate' as const, header: 'Requested Date' },
                 { key: 'status' as const, header: 'Status', render: (record: any) => (
                   <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
