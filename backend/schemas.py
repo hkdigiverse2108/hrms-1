@@ -2507,6 +2507,8 @@ class OtherWorkBase(BaseModel):
     deadline: str
     status: str = "Pending"
     taskType: Optional[str] = "other-work"
+    remark: Optional[str] = None
+    remarkStage: Optional[str] = None
     logs: Optional[List[dict]] = None
 
 class OtherWorkCreate(OtherWorkBase):
@@ -2519,6 +2521,9 @@ class OtherWorkUpdate(BaseModel):
     assigneeName: Optional[str] = None
     deadline: Optional[str] = None
     status: Optional[str] = None
+    remark: Optional[str] = None
+    remarkStage: Optional[str] = None
+    updatedBy: Optional[str] = None
     logs: Optional[List[dict]] = None
 
 class OtherWork(OtherWorkBase):

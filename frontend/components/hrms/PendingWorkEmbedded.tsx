@@ -14,8 +14,8 @@ import { toast } from 'sonner';
 import { useConfirm } from "@/context/ConfirmContext";
 
 const isStageSubsequentOrEqual = (stageName: string, remarkStageName: string, postReel?: string) => {
-  const reelStages = ['Script', 'Shoot', 'Editing', 'Caption', 'Thumbnail', 'Approval', 'Posting'];
-  const postStages = ['Post/Graphics', 'Caption', 'Approval', 'Posting'];
+  const reelStages = ['Script', 'Shoot', 'Brand Person', 'Editing', 'Caption', 'Thumbnail', 'Approval', 'Posting'];
+  const postStages = ['Post/Graphics', 'Brand Person', 'Caption', 'Approval', 'Posting'];
   
   const stages = postReel === 'Post' ? postStages : reelStages;
   const remarkIdx = stages.findIndex(s => s.toLowerCase() === remarkStageName.toLowerCase());
@@ -128,7 +128,7 @@ export function PendingWorkEmbedded({
     setLogsDialogOpen(true);
   };
 
-  const handleSaveRemark = async (id: string, stage: string) => {
+  const handleSaveRemark = async (id: string, stage: string, isOtherWork?: boolean) => {
     try {
       const storedUser = localStorage.getItem('user');
       const user = storedUser ? JSON.parse(storedUser) : null;
@@ -136,17 +136,31 @@ export function PendingWorkEmbedded({
 
       const finalRemark = editingIsClientIssue ? `[CLIENT ISSUE] ${editingRemarkValue}` : editingRemarkValue;
 
-      const response = await fetch(`${API_URL}/content-calendar/${id}`, {
+      const endpoint = isOtherWork ? `${API_URL}/other-work/${id}` : `${API_URL}/content-calendar/${id}`;
+      const payload = isOtherWork 
+        ? { remark: finalRemark, remarkStage: stage, updatedBy: userName } 
+        : { remark: finalRemark, remarkStage: stage, updatedBy: userName };
+
+      const response = await fetch(endpoint, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ remark: finalRemark, updatedBy: userName, remarkStage: stage }),
+        body: JSON.stringify(payload),
       });
       if (response.ok) {
-        setEntries(entries.map(e => e.id === id ? { ...e, remark: finalRemark, remarkStage: stage } : e));
+        if (isOtherWork) {
+          setOtherWorkEntries(otherWorkEntries.map(e => e.id === id ? { ...e, remark: finalRemark, remarkStage: stage } : e));
+          setEntries(entries.map(e => e.id === id ? { ...e, remark: finalRemark, remarkStage: stage } : e)); 
+        } else {
+          setEntries(entries.map(e => e.id === id ? { ...e, remark: finalRemark, remarkStage: stage } : e));
+        }
         setEditingRemarkId(null);
+        toast.success("Remark saved successfully");
+      } else {
+        toast.error("Failed to save remark");
       }
     } catch (err) {
       console.error(err);
+      toast.error("Failed to save remark");
     }
   };
 
@@ -1097,7 +1111,7 @@ export function PendingWorkEmbedded({
                     </td>
                     <td className="px-6 py-4 text-slate-600 max-w-[200px]">
                       {(() => {
-                        const isApplicable = !item.remarkStage || isStageSubsequentOrEqual(item.stage, item.remarkStage, item.postReel);
+                        const isApplicable = !item.remarkStage || (item.isOtherWork ? item.stage === item.remarkStage : isStageSubsequentOrEqual(item.stage, item.remarkStage, item.postReel));
                         const displayRemark = isApplicable ? item.remark : null;
 
                         return editingRemarkId === `${item.id}-${item.stage}` ? (
@@ -1110,11 +1124,11 @@ export function PendingWorkEmbedded({
                                 autoFocus
                                 placeholder="Type reason..."
                                 onKeyDown={(e) => {
-                                  if (e.key === 'Enter') handleSaveRemark(item.id, item.stage);
+                                  if (e.key === 'Enter') handleSaveRemark(item.id, item.stage, item.isOtherWork);
                                   if (e.key === 'Escape') setEditingRemarkId(null);
                                 }}
                               />
-                              <button onClick={() => handleSaveRemark(item.id, item.stage)} className="text-green-600 hover:bg-green-50 p-1.5 rounded transition-colors" title="Save">
+                              <button onClick={() => handleSaveRemark(item.id, item.stage, item.isOtherWork)} className="text-green-600 hover:bg-green-50 p-1.5 rounded transition-colors" title="Save">
                                 <Check className="w-4 h-4" />
                               </button>
                               <button onClick={() => setEditingRemarkId(null)} className="text-slate-400 hover:bg-slate-100 p-1.5 rounded transition-colors" title="Cancel">
