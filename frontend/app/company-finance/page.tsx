@@ -29,6 +29,7 @@ import {
   Sparkles,
   ArrowRight,
   Upload,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1170,14 +1171,25 @@ export default function CompanyFinanceTransactionsPage() {
               {activeTab === "bank" && (
                 <div className="space-y-1.5 relative">
                   <label className="text-xs font-bold text-slate-700">Category / Client Name</label>
-                  <Input
-                    placeholder="e.g. HK DigiVerse LLP"
-                    value={creditForm.category}
-                    onChange={(e) => setCreditForm({ ...creditForm, category: e.target.value })}
-                    onFocus={() => setShowCreditCatDropdown(true)}
-                    onBlur={() => setTimeout(() => setShowCreditCatDropdown(false), 200)}
-                    className="h-9 text-xs"
-                  />
+                  <div className="relative">
+                    <Input
+                      placeholder="e.g. HK DigiVerse LLP"
+                      value={creditForm.category}
+                      onChange={(e) => setCreditForm({ ...creditForm, category: e.target.value })}
+                      onFocus={() => setShowCreditCatDropdown(true)}
+                      onBlur={() => setTimeout(() => setShowCreditCatDropdown(false), 200)}
+                      className="h-9 text-xs pr-8"
+                    />
+                    {creditForm.category && (
+                      <button
+                        type="button"
+                        onClick={() => setCreditForm({ ...creditForm, category: "" })}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                   {showCreditCatDropdown && (
                     <div className="absolute z-50 w-full mt-1 max-h-40 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg divide-y divide-slate-100">
                       {creditForm.category && !allExistingCategories.includes(creditForm.category) && (
@@ -1316,14 +1328,25 @@ export default function CompanyFinanceTransactionsPage() {
               {activeTab === "bank" && (
                 <div className="space-y-1.5 relative">
                   <label className="text-xs font-bold text-slate-700">Category</label>
-                  <Input
-                    placeholder="e.g. Office Rent, Hardware"
-                    value={debitForm.category}
-                    onChange={(e) => setDebitForm({ ...debitForm, category: e.target.value })}
-                    onFocus={() => setShowDebitCatDropdown(true)}
-                    onBlur={() => setTimeout(() => setShowDebitCatDropdown(false), 200)}
-                    className="h-9 text-xs"
-                  />
+                  <div className="relative">
+                    <Input
+                      placeholder="e.g. Office Rent, Hardware"
+                      value={debitForm.category}
+                      onChange={(e) => setDebitForm({ ...debitForm, category: e.target.value })}
+                      onFocus={() => setShowDebitCatDropdown(true)}
+                      onBlur={() => setTimeout(() => setShowDebitCatDropdown(false), 200)}
+                      className="h-9 text-xs pr-8"
+                    />
+                    {debitForm.category && (
+                      <button
+                        type="button"
+                        onClick={() => setDebitForm({ ...debitForm, category: "" })}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                   {showDebitCatDropdown && (
                     <div className="absolute z-50 w-full mt-1 max-h-40 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg divide-y divide-slate-100">
                       {debitForm.category && !allExistingCategories.includes(debitForm.category) && (
