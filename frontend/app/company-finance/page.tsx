@@ -117,6 +117,8 @@ export default function CompanyFinanceTransactionsPage() {
   const [showFilterCatDropdown, setShowFilterCatDropdown] = useState(false);
   const [filterCatSearch, setFilterCatSearch] = useState("");
   const filterDropdownRef = useRef<HTMLDivElement>(null);
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -130,6 +132,26 @@ export default function CompanyFinanceTransactionsPage() {
 
   // Invoices for auto-completion in Credit modal
   const [invoicesList, setInvoicesList] = useState<any[]>([]);
+
+  const handleSort = (columnName: string) => {
+    if (sortColumn === columnName) {
+      if (sortDirection === "asc") {
+        setSortDirection("desc");
+      } else {
+        // Clear/Reset sorting to default
+        setSortColumn(null);
+        setSortDirection("desc");
+      }
+    } else {
+      setSortColumn(columnName);
+      setSortDirection("asc");
+    }
+  };
+
+  const renderSortIndicator = (columnName: string) => {
+    if (sortColumn !== columnName) return <span className="text-slate-300 ml-1">↕</span>;
+    return sortDirection === "asc" ? <span className="text-slate-700 font-bold ml-1">↑</span> : <span className="text-slate-700 font-bold ml-1">↓</span>;
+  };
 
   // Modals state
   const [isCreditModalOpen, setIsCreditModalOpen] = useState(false);
@@ -258,11 +280,35 @@ export default function CompanyFinanceTransactionsPage() {
         return true;
       })
       .sort((a, b) => {
+        if (sortColumn) {
+          let valA: any = "";
+          let valB: any = "";
+
+          if (sortColumn === "invoice") {
+            valA = a.invoiceNumber || a.expenseNo || "";
+            valB = b.invoiceNumber || b.expenseNo || "";
+          } else if (sortColumn === "date") {
+            valA = a.date ? new Date(a.date).getTime() : 0;
+            valB = b.date ? new Date(b.date).getTime() : 0;
+          } else if (sortColumn === "amount") {
+            valA = Number(a.amount) || 0;
+            valB = Number(b.amount) || 0;
+          } else if (sortColumn === "category") {
+            valA = a.category || "";
+            valB = b.category || "";
+          }
+
+          if (valA < valB) return sortDirection === "asc" ? -1 : 1;
+          if (valA > valB) return sortDirection === "asc" ? 1 : -1;
+          return 0;
+        }
+
+        // Default sort: date desc
         const dateA = a.date ? new Date(a.date).getTime() : 0;
         const dateB = b.date ? new Date(b.date).getTime() : 0;
         return dateB - dateA;
       });
-  }, [transactions, activeTab, searchTerm, filterCategory, filterStartDate, filterEndDate, filterSynced]);
+  }, [transactions, activeTab, searchTerm, filterCategory, filterStartDate, filterEndDate, filterSynced, sortColumn, sortDirection]);
 
   const creditTransactions = useMemo(() => {
     return currentTransactions.filter((t) => t.type === "credit");
@@ -923,10 +969,22 @@ export default function CompanyFinanceTransactionsPage() {
               <table className="w-full text-xs text-left whitespace-nowrap">
                 <thead className="bg-slate-50/80 text-slate-500 font-extrabold uppercase tracking-wider border-b border-slate-200/80">
                   <tr>
-                    {activeTab === "bank" && <th className="px-3.5 py-3">Invoice</th>}
-                    <th className="px-3.5 py-3">Date</th>
-                    <th className="px-3.5 py-3 text-right">Amount</th>
-                    {activeTab === "bank" && <th className="px-3.5 py-3">Category</th>}
+                    {activeTab === "bank" && (
+                      <th className="px-3.5 py-3 cursor-pointer hover:bg-slate-100 select-none transition-colors" onClick={() => handleSort("invoice")}>
+                        Invoice {renderSortIndicator("invoice")}
+                      </th>
+                    )}
+                    <th className="px-3.5 py-3 cursor-pointer hover:bg-slate-100 select-none transition-colors" onClick={() => handleSort("date")}>
+                      Date {renderSortIndicator("date")}
+                    </th>
+                    <th className="px-3.5 py-3 text-right cursor-pointer hover:bg-slate-100 select-none transition-colors" onClick={() => handleSort("amount")}>
+                      Amount {renderSortIndicator("amount")}
+                    </th>
+                    {activeTab === "bank" && (
+                      <th className="px-3.5 py-3 cursor-pointer hover:bg-slate-100 select-none transition-colors" onClick={() => handleSort("category")}>
+                        Category {renderSortIndicator("category")}
+                      </th>
+                    )}
                     <th className="px-3.5 py-3">Descriptions</th>
                     <th className="px-3.5 py-3">Services</th>
                     <th className="px-3.5 py-3">Remarks</th>
@@ -1050,10 +1108,20 @@ export default function CompanyFinanceTransactionsPage() {
               <table className="w-full text-xs text-left whitespace-nowrap">
                 <thead className="bg-slate-50/80 text-slate-500 font-extrabold uppercase tracking-wider border-b border-slate-200/80">
                   <tr>
-                    <th className="px-3.5 py-3">Expense No.</th>
-                    <th className="px-3.5 py-3">Date</th>
-                    <th className="px-3.5 py-3 text-right">Amount</th>
-                    {activeTab === "bank" && <th className="px-3.5 py-3">Category</th>}
+                    <th className="px-3.5 py-3 cursor-pointer hover:bg-slate-100 select-none transition-colors" onClick={() => handleSort("invoice")}>
+                      Expense No. {renderSortIndicator("invoice")}
+                    </th>
+                    <th className="px-3.5 py-3 cursor-pointer hover:bg-slate-100 select-none transition-colors" onClick={() => handleSort("date")}>
+                      Date {renderSortIndicator("date")}
+                    </th>
+                    <th className="px-3.5 py-3 text-right cursor-pointer hover:bg-slate-100 select-none transition-colors" onClick={() => handleSort("amount")}>
+                      Amount {renderSortIndicator("amount")}
+                    </th>
+                    {activeTab === "bank" && (
+                      <th className="px-3.5 py-3 cursor-pointer hover:bg-slate-100 select-none transition-colors" onClick={() => handleSort("category")}>
+                        Category {renderSortIndicator("category")}
+                      </th>
+                    )}
                     <th className="px-3.5 py-3">Things</th>
                     <th className="px-3.5 py-3">Narrative</th>
                     <th className="px-3.5 py-3">Bill Attachment</th>
