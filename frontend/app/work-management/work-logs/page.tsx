@@ -121,7 +121,13 @@ export default function WorkLogsPage() {
 
       if (actType === 'Work') {
         const task = tasks.find(t => t.id === punch.taskId)
-        title = task ? `Work: ${task.title}` : (punch.taskId ? 'Work: Unknown Task' : 'Work')
+        if (task) {
+          title = `Work: ${task.title}`
+        } else if (punch.activityValue) {
+          title = `Work: ${punch.activityValue}`
+        } else {
+          title = punch.taskId ? 'Work: Unknown Task' : 'Work'
+        }
       } else if (actType === 'Research') {
         title = 'Research' + (punch.activityValue ? `: ${punch.activityValue}` : '')
       } else if (actType === 'Other') {
@@ -283,6 +289,14 @@ export default function WorkLogsPage() {
 
   const isSingleDay = ['today', 'yesterday', 'custom'].includes(dateFilterPreset)
 
+  const activeEmployeeCount = useMemo(() => {
+    const ids = new Set<string>()
+    filteredAttendance.forEach(a => {
+      if (a.employeeId) ids.add(a.employeeId)
+    })
+    return ids.size || 1
+  }, [filteredAttendance])
+
   if (isUserLoading || loading) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -371,8 +385,15 @@ export default function WorkLogsPage() {
                       <div className={`p-2 rounded-lg ${meta.bg} ${meta.color}`}>{meta.icon}</div>
                       <span className={`text-sm font-semibold ${meta.color}`}>{meta.label}</span>
                     </div>
-                    <div>
+                    <div className="flex items-center gap-3">
                       <p className="text-3xl font-bold text-slate-800 tracking-tight">{fmtMins(data.totalMins)}</p>
+                      {filterEmployee === 'All' && data.totalMins > 0 && (
+                        <div className="flex items-center px-2.5 py-1 rounded-md bg-slate-100 border border-slate-200 shadow-sm mt-1">
+                          <span className="text-sm font-bold text-slate-700">
+                            Avg: {fmtMins(Math.round(data.totalMins / activeEmployeeCount))}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )
@@ -427,7 +448,7 @@ export default function WorkLogsPage() {
                               <TableRow key={log.id}>
                                 <TableCell>
                                   <div className="flex items-center gap-2 font-medium">
-                                    <span className="truncate max-w-[220px]" title={log.title}>{log.title}</span>
+                                    <span title={log.title}>{log.title}</span>
                                     {log.isInProgress && <span className="flex h-2 w-2 rounded-full bg-green-500 animate-pulse" title="In Progress" />}
                                   </div>
                                 </TableCell>
@@ -578,7 +599,7 @@ export default function WorkLogsPage() {
                                       <TableRow key={log.id} className="hover:bg-slate-50/50">
                                         <TableCell>
                                           <div className="flex items-center gap-2">
-                                            <span className="text-sm font-medium truncate max-w-[240px]" title={log.title}>{log.title}</span>
+                                            <span className="text-sm font-medium" title={log.title}>{log.title}</span>
                                             {log.isInProgress && (
                                               <span className="flex h-2 w-2 rounded-full bg-green-500 animate-pulse" title="In Progress" />
                                             )}
@@ -653,8 +674,15 @@ export default function WorkLogsPage() {
                         <div className={`p-2 rounded-lg ${meta.bg} ${meta.color}`}>{meta.icon}</div>
                         <span className={`text-sm font-semibold ${meta.color}`}>{meta.label}</span>
                       </div>
-                      <div>
+                      <div className="flex items-center gap-3">
                         <p className="text-3xl font-bold text-slate-800 tracking-tight">{fmtMins(data.totalMins)}</p>
+                        {data.totalMins > 0 && (
+                          <div className="flex items-center px-2.5 py-1 rounded-md bg-slate-100 border border-slate-200 shadow-sm mt-1">
+                            <span className="text-sm font-bold text-slate-700">
+                              Avg: {fmtMins(Math.round(data.totalMins / activeEmployeeCount))}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )

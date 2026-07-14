@@ -134,6 +134,8 @@ export default function DashboardPage() {
             setActiveTaskTitle(attendanceStatus.record.punchInActivityValue);
           }
         });
+    } else if (attendanceStatus?.isPunchedIn && attendanceStatus.record?.punchInActivityType === "Work") {
+      setActiveTaskTitle(attendanceStatus.record?.punchInActivityValue || null);
     } else {
       setActiveTaskTitle(null);
     }
@@ -542,6 +544,7 @@ export default function DashboardPage() {
       if (data.type === "Work") {
         payload.activityType = "Work";
         payload.taskId = data.taskId;
+        payload.activityValue = data.value;
       } else if (data.type === "Research") {
         payload.activityType = "Research";
         payload.activityValue = data.value;
@@ -573,22 +576,51 @@ export default function DashboardPage() {
       });
       
       if (res.ok) {
-        if (data.type === "Work" && data.taskId) {
-          // Update task status to in-progress via PUT /wm-tasks/{taskId}
+        if (data.type === "Work") {
+          // Downgrade any other in-progress task for this user
           try {
-            await fetch(`${API_URL}/wm-tasks/${data.taskId}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ status: 'in-progress' })
-            });
-          } catch (taskErr) {
-            console.error("Failed to update task status:", taskErr);
+            const tasksRes = await fetch(`${API_URL}/wm-tasks`);
+            if (tasksRes.ok) {
+              const allTasks = await tasksRes.json();
+              const myInProgress = allTasks.filter((t: any) => 
+                (t.status === 'in-progress' || t.status === 'in_progress') && 
+                String(t.id || t._id) !== String(data.taskId) &&
+                String(t.assignedToId) === String(user?.id)
+              );
+              
+              for (const t of myInProgress) {
+                await fetch(`${API_URL}/wm-tasks/${t.id || t._id}`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ status: 'todo' })
+                });
+              }
+            }
+          } catch(e) {
+            console.error("Failed to downgrade previous in-progress tasks:", e);
+          }
+
+          if (data.taskId) {
+            // Update task status to in-progress via PUT /wm-tasks/{taskId}
+            try {
+              await fetch(`${API_URL}/wm-tasks/${data.taskId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'in-progress' })
+              });
+            } catch (taskErr) {
+              console.error("Failed to update task status:", taskErr);
+            }
           }
         }
         await fetchStatus();
         await fetchHistory();
         window.dispatchEvent(new Event("attendance-update"));
-        toast.success("Successfully punched in!");
+        if (attendanceStatus?.isPunchedIn) {
+          toast.success("Activity changed successfully!");
+        } else {
+          toast.success("Successfully punched in!");
+        }
       } else {
         const errorData = await res.json().catch(() => ({}));
         toast.error(`Punch in failed: ${errorData.detail || 'Server error'}`);
@@ -1216,7 +1248,11 @@ function EmployeeView({
       if (p.punchOut && p.punchIn) {
         let isSame = false;
         if (currentType === "Work") {
-          isSame = (p.activityType === "Work" && String(p.taskId) === String(currentTaskId));
+          if (currentTaskId && currentTaskId !== "undefined") {
+            isSame = (p.activityType === "Work" && String(p.taskId) === String(currentTaskId));
+          } else {
+            isSame = (p.activityType === "Work" && p.activityValue === currentValue);
+          }
         } else if (currentType === "Research") {
           isSame = (p.activityType === "Research" && p.activityValue === currentValue);
         } else if (currentType === "Other") {

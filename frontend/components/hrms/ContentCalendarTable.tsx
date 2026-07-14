@@ -17,6 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "@/components/ui/badge";
 import { useUserContext } from "@/context/UserContext";
+import { MultiSelect } from "@/components/ui/multi-select";
 import dayjs from "dayjs";
 
 interface ContentCalendarTableProps {
@@ -28,6 +29,7 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
   const searchParams = useSearchParams();
   const highlightTask = searchParams.get('highlightTask');
   const [entries, setEntries] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(() => {
     const now = new Date();
@@ -150,14 +152,14 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
     setLogsDialogOpen(true);
   };
   const tableHeaders = [
-    "Posting Date", "Posting Day", "Post/Reel", "Topic", "Concept", "Reference",
+    "Posting Date", "Posting Day", "Post/Reel", "Topic", "Concept", "Reference", "Brand Person",
     "Script Date", "Script Link", "Shoot Date", "Shoot Link", "Editing Start",
     "Final Reel Link", "Final Post Link", "Approval by Het", "Is Approved", "Thumbnail Date", "Thumbnail Link",
     "Caption Date", "Caption", "Posting Link IG", "Actual Posting Date", "Remark", ""
   ];
 
   const fieldKeys = [
-    "postingDate", "postingDay", "postReel", "topic", "concept", "reference",
+    "postingDate", "postingDay", "postReel", "topic", "concept", "reference", "assignedBrandPersonIds",
     "scriptDate", "scriptLink", "shootDate", "shootLink", "editingStart",
     "finalReelLink", "finalPostLink", "approval", "isApproved", "thumbnailDate", "thumbnailLink",
     "captionDate", "caption", "postingLinkOfIg", "actualPostingDate", "remark"
@@ -171,6 +173,11 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
       .then(res => res.json())
       .then(data => setHolidays(data || []))
       .catch(err => console.error("Failed to fetch holidays", err));
+
+    fetch(`${API_URL}/employees`)
+      .then(res => res.json())
+      .then(data => setEmployees(data || []))
+      .catch(err => console.error("Failed to fetch employees", err));
   }, []);
 
   const fetchSettings = async () => {
@@ -1445,6 +1452,15 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
                                   onChange={(e) => setEditForm({ ...editForm, [key]: e.target.value })}
                                 />
                               )
+                            ) : key === "assignedBrandPersonIds" ? (
+                              <div className="w-[200px]">
+                                <MultiSelect 
+                                  options={employees.map(e => ({ value: e.id, label: e.name || `${e.firstName} ${e.lastName}` }))}
+                                  selected={Array.isArray(editForm[key]) ? editForm[key] : (typeof editForm[key] === 'string' ? editForm[key].split(',').filter(Boolean) : [])}
+                                  onChange={(vals) => setEditForm({ ...editForm, [key]: vals })}
+                                  placeholder="Select Employees"
+                                />
+                              </div>
                             ) : (
                               ( (key === 'thumbnailLink' || key === 'shootLink') && editForm.postReel === 'Post') ? (
                                 <div className="text-slate-400 text-center w-full">-</div>
@@ -1508,6 +1524,20 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
                                        </div>
                                      );
                                    }
+                                 }
+
+                                 if (key === "assignedBrandPersonIds") {
+                                   const bpIdsRaw = entry[key];
+                                   const ids = Array.isArray(bpIdsRaw) ? bpIdsRaw : (typeof bpIdsRaw === 'string' ? bpIdsRaw.split(',').filter(Boolean) : []);
+                                   const names = ids.map((id: string) => {
+                                     const emp = employees.find((e: any) => e.id === id);
+                                     return emp ? (emp.name || `${emp.firstName} ${emp.lastName}`) : id;
+                                   });
+                                   return (
+                                     <span className="truncate flex-1" title={names.join(', ')}>
+                                       {names.length > 0 ? names.join(', ') : null}
+                                     </span>
+                                   );
                                  }
 
                                  return (

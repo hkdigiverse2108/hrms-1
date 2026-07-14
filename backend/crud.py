@@ -4220,6 +4220,11 @@ async def update_wm_task(db, task_id: str, task_update: schemas.WMTaskUpdate):
                 {"$set": {"status": "todo"}}
             )
 
+        if "status" in update_data:
+            new_status = str(update_data["status"]).strip().lower()
+            if new_status != "completed":
+                update_data["isApproved"] = False
+
         await db.wm_tasks.update_one({"_id": ObjectId(task_id)}, {"$set": update_data})
         
         log_details, diffs = format_field_changes(old_task, update_data, f"Task '{old_task.get('title')}'")

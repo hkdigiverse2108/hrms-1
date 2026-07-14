@@ -555,7 +555,10 @@ export default function TasksPage() {
 
     const prevTasks = [...tasks];
     const updatedTasks = tasks.map(t => {
-      if (t.id === taskId) return { ...t, status: newStatus, reasonForPending: reason || t.reasonForPending };
+      if (t.id === taskId) {
+        const isAppr = newStatus !== 'completed' ? false : t.isApproved;
+        return { ...t, status: newStatus, reasonForPending: reason || t.reasonForPending, isApproved: isAppr };
+      }
       return t;
     });
     setTasks(updatedTasks);
@@ -632,7 +635,8 @@ export default function TasksPage() {
 
         setTasks(prev => prev.map(t => {
           if (t.id === taskId) {
-            return { ...t, ...payload };
+            const isAppr = (field === 'status' && value !== 'completed') ? false : t.isApproved;
+            return { ...t, ...payload, isApproved: isAppr };
           }
           if (field === 'status' && value === 'in-progress' && targetAssignee && t.assignedToId === targetAssignee && t.status === 'in-progress') {
             return { ...t, status: 'todo' };
