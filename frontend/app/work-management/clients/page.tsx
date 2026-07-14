@@ -62,7 +62,7 @@ export default function ClientsPage() {
 
   useEffect(() => {
     if (!isAdmin && user?.department) {
-      setActiveTab(user.department.toLowerCase());
+      setActiveTab(user.department.toLowerCase().trim());
     }
   }, [isAdmin, user]);
 
@@ -198,18 +198,21 @@ export default function ClientsPage() {
   const allowedClients = clients.filter(c => {
     if (isAdmin) return true;
     if (!user?.department) return true;
-    return c.department && c.department.toLowerCase().includes(user.department.toLowerCase());
+    const uDept = user.department.toLowerCase().trim();
+    return c.department && c.department.toLowerCase().includes(uDept);
   });
 
   const filteredClients = allowedClients.filter(c => {
-    const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          c.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          c.industry?.toLowerCase().includes(searchTerm.toLowerCase());
+    const searchLower = searchTerm.toLowerCase().trim();
+    const matchesSearch = (c.name && c.name.toLowerCase().includes(searchLower)) || 
+                          (c.companyName && c.companyName.toLowerCase().includes(searchLower)) ||
+                          (c.industry && c.industry.toLowerCase().includes(searchLower));
     
     const matchesStatus = statusFilter === "all" || c.status === statusFilter;
     
+    const activeTabLower = activeTab.toLowerCase().trim();
     const matchesDept = activeTab === "all" || 
-      (c.department && c.department.toLowerCase().split(',').map((d:string) => d.trim()).includes(activeTab.toLowerCase()));
+      (c.department && c.department.toLowerCase().split(',').map((d:string) => d.trim()).includes(activeTabLower));
 
     return matchesSearch && matchesStatus && matchesDept;
   });
