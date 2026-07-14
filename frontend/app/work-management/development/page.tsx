@@ -26,6 +26,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
+import { TaskPresetsView } from "@/components/work-management/TaskPresetsView";
+import EmployeeAnalytics from "@/components/work-management/EmployeeAnalytics";
 import { usePermissions } from "@/hooks/usePermissions";
 import { TablePagination } from "@/components/common/TablePagination";
 import { toast } from "sonner";
@@ -39,6 +41,14 @@ const STAGES = [
   { id: "pending", label: "Pending", color: "text-purple-700 bg-transparent", lineColor: "bg-purple-500" },
   { id: "completed", label: "Completed", color: "text-green-700 bg-transparent", lineColor: "bg-emerald-500" },
 ];
+
+const formatDate = (dateStr?: string) => {
+  if (!dateStr) return '-';
+  const d = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+  const parts = d.split('-');
+  if (parts.length !== 3) return dateStr;
+  return `${parts[2]}-${parts[1]}-${parts[0]}`;
+};
 
 export default function TasksPage() {
   const { confirm } = useConfirm();
@@ -72,18 +82,20 @@ export default function TasksPage() {
   const [editingCell, setEditingCell] = useState<{id: string, field: string} | null>(null);
   const [dateFilter, setDateFilter] = useState<string>(new Date().toISOString().split('T')[0]);
   const [taskScope, setTaskScope] = useState<"my" | "all">("all");
-  const [showOnlyToday, setShowOnlyToday] = useState(false);
+  const [taskTimeFilter, setTaskTimeFilter] = useState<"all" | "pending" | "today" | "upcoming">("today");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const [pendingReasonOpen, setPendingReasonOpen] = useState(false);
   const [pendingReasonText, setPendingReasonText] = useState("");
+  const [pendingStatusType, setPendingStatusType] = useState<"pending" | "onhold">("pending");
   const [pendingReasonCallback, setPendingReasonCallback] = useState<{
     resolve: (reason: string | null) => void;
   } | null>(null);
 
-  const getPendingReason = () => {
+  const getPendingReason = (statusType: "pending" | "onhold" = "pending") => {
     return new Promise<string | null>((resolve) => {
+      setPendingStatusType(statusType);
       setPendingReasonText("");
       setPendingReasonCallback({ resolve });
       setPendingReasonOpen(true);
@@ -101,12 +113,12 @@ export default function TasksPage() {
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferringTask, setTransferringTask] = useState<any>(null);
   const [selectedReceiverId, setSelectedReceiverId] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<"tasks" | "progress">("tasks");
+  const [activeTab, setActiveTab] = useState<"tasks" | "progress" | "presets">("tasks");
   const isRealAdmin = user?.role?.toLowerCase() === "admin";
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedDepartment, selectedEmployeeId, selectedProjectId, dateFilter, taskScope, showOnlyToday]);
+  }, [searchTerm, selectedDepartment, selectedEmployeeId, selectedProjectId, dateFilter, taskScope, taskTimeFilter]);
 
   useEffect(() => {
     if (permissionsLoading) return;
@@ -129,7 +141,11 @@ export default function TasksPage() {
   }, [user]);
 
   const isAdmin = user?.role?.toLowerCase() === "admin" || user?.name === "Admin Admin" || hasFullTasksAccess;
-  const isRegularEmployee = !isAdmin && !isTeamLeader;
+  const isHR = user?.role === 'HR' || user?.role?.toLowerCase() === 'hr' || user?.department?.toLowerCase() === 'hr';
+  // Strict role check for board access — NOT permission-based (to avoid employees with view perms getting board)
+  const isBoardUser = user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin' || isTeamLeader || isHR;
+  // Only Team Leaders, HR, and Admins can see the Board view; regular employees see table only
+  const isRegularEmployee = !isBoardUser;
 
   useEffect(() => {
     if (user && !isAdmin && user.department) {
@@ -517,13 +533,13 @@ export default function TasksPage() {
     const assigneeId = draggedTask?.assignedToId;
     
     let reason = "";
-    if (newStatus === "pending") {
-      const inputReason = await getPendingReason();
+    if (newStatus === "pending" || newStatus === "onhold") {
+      const inputReason = await getPendingReason(newStatus as "pending" | "onhold");
       if (inputReason === null) {
         return; // User cancelled
       }
       if (!inputReason.trim()) {
-        toast.error("A reason is required to mark a task as Pending.");
+        toast.error(`A reason is required to mark a task as ${newStatus === 'onhold' ? 'On Hold' : 'Pending'}.`);
         return;
       }
       reason = inputReason.trim();
@@ -576,14 +592,14 @@ export default function TasksPage() {
         userName: user?.name || `${user?.firstName} ${user?.lastName}`,
       };
 
-      if (field === 'status' && value === 'pending') {
-        const inputReason = await getPendingReason();
+      if (field === 'status' && (value === 'pending' || value === 'onhold')) {
+        const inputReason = await getPendingReason(value as "pending" | "onhold");
         if (inputReason === null) {
           setEditingCell(null);
           return; // User cancelled
         }
         if (!inputReason.trim()) {
-          toast.error("A reason is required to mark a task as Pending.");
+          toast.error(`A reason is required to mark a task as ${value === 'onhold' ? 'On Hold' : 'Pending'}.`);
           setEditingCell(null);
           return;
         }
@@ -664,12 +680,13 @@ export default function TasksPage() {
   const departments = Array.from(new Set(employees.map(e => e.department).filter(Boolean)))
     .filter((d: any) => !["sales", "admin", "hr"].includes(d.toLowerCase()));
   const isCreativeDefault = selectedDepartment.toLowerCase() === "creative" || (selectedDepartment === "all" && user?.department?.toLowerCase() === "creative");
-  const showTableView = viewMode !== null ? viewMode === "table" : isCreativeDefault;
+  // Regular employees always see table view only
+  const showTableView = isRegularEmployee ? true : (viewMode !== null ? viewMode === "table" : isCreativeDefault);
 
   const isDueTask = (t: any) => {
     if (!t.assignedToId || t.status === "completed") return false;
     const todayStr = new Date().toISOString().split('T')[0];
-    const taskDate = showTableView ? t.postingDate : t.dueDate;
+    const taskDate = t.dueDate || t.postingDate;
     if (!taskDate) return false;
     if (taskDate <= todayStr || taskDate <= dateFilter) return true;
     return false;
@@ -688,10 +705,9 @@ export default function TasksPage() {
     }
 
     let isVisible = false;
-    if (isAdmin) {
+    const isHR = user?.role === 'HR' || user?.role?.toLowerCase() === 'hr';
+    if (isAdmin || isHR || isTeamLeader) {
       isVisible = true;
-    } else if (isTeamLeader) {
-      isVisible = isProjectTL || t.assignedToId === user?.id || t.performedBy === user?.id;
     } else {
       isVisible = t.assignedToId === user?.id || t.performedBy === user?.id;
     }
@@ -726,14 +742,28 @@ export default function TasksPage() {
       if (t.assignedToId !== user.id && t.performedBy !== user.id) return false;
     }
 
-    // Date Filtering
-    if (showOnlyToday) {
-      const taskDate = showTableView ? t.postingDate : t.dueDate;
-      if (taskDate !== dateFilter && !isDueTask(t)) return false;
+    // Date/Time Filtering
+    const todayStr = new Date().toISOString().split('T')[0];
+    const taskDate = t.dueDate || t.postingDate;
+    if (taskTimeFilter === "today") {
+      if (t.status === "completed" || t.status === "pending" || t.status === "onhold") return false;
+      if (!taskDate || taskDate > todayStr) return false;
+    } else if (taskTimeFilter === "pending") {
+      const isPendingStatus = t.status === "pending" || t.status === "onhold";
+      if (!isPendingStatus) return false;
+    } else if (taskTimeFilter === "upcoming") {
+      if (t.status === "completed") return false;
+      if (taskDate && taskDate <= todayStr) return false;
     }
 
     return true;
   }).sort((a, b) => {
+    const aInProgress = (a.status === "in_progress" || a.status === "in-progress") ? 1 : 0;
+    const bInProgress = (b.status === "in_progress" || b.status === "in-progress") ? 1 : 0;
+    if (aInProgress !== bInProgress) {
+      return bInProgress - aInProgress;
+    }
+
     const pA = a.projectName || "";
     const pB = b.projectName || "";
     if (pA !== pB) return pA.localeCompare(pB);
@@ -762,7 +792,7 @@ export default function TasksPage() {
   }
 
   return (
-    <div className="space-y-4 flex flex-col h-[calc(100vh-140px)]">
+    <div className="space-y-4 flex flex-col h-[calc(100vh-90px)]">
       <PageHeader
         title="Development Board"
         description="Manage software & web development sprints. Click any card to update details."
@@ -796,6 +826,20 @@ export default function TasksPage() {
             <Briefcase className="w-4 h-4" />
             Project Modules
           </Button>
+
+          {isRealAdmin && activeTab === "tasks" && (
+            <Button onClick={() => setActiveTab("analytics")} variant="outline" className="gap-2 border-brand-teal text-brand-teal hover:bg-brand-teal/10 font-bold">
+              <User className="w-4 h-4" />
+              Activity Log
+            </Button>
+          )}
+
+          {(isRealAdmin || isTeamLeader) && activeTab === "tasks" && (
+            <Button onClick={() => setActiveTab("presets")} variant="outline" className="border-brand-teal text-brand-teal hover:bg-brand-teal/10 font-bold">
+              <Plus className="w-4 h-4 mr-2" />
+              Manage Presets
+            </Button>
+          )}
 
           {canAddTask && activeTab === "tasks" && (
             <Button onClick={() => { setEditingTask(null); setModalOpen(true); }} className="bg-brand-teal text-white hover:bg-brand-teal-light font-bold">
@@ -835,17 +879,17 @@ export default function TasksPage() {
           }}>
             <DialogContent className="sm:max-w-[425px]">
               <DialogHeader>
-                <DialogTitle className="text-lg font-bold">Reason for Pending</DialogTitle>
+                <DialogTitle className="text-lg font-bold">Reason for {pendingStatusType === "onhold" ? "On Hold" : "Pending"}</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 py-2">
                 <div className="space-y-2">
                   <Label htmlFor="customReasonForPending" className="text-sm font-semibold text-slate-700">
-                    Please provide a reason why this task is pending (Client Side):
+                    Please provide a reason why this task is {pendingStatusType === "onhold" ? "on hold" : "pending"}:
                   </Label>
                   <textarea
                     id="customReasonForPending"
                     className="flex min-h-[100px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    placeholder="e.g. Waiting for client response on design feedback"
+                    placeholder={pendingStatusType === "onhold" ? "e.g. Client requested to pause development until next week" : "e.g. Waiting for client response on design feedback"}
                     value={pendingReasonText}
                     onChange={(e) => setPendingReasonText(e.target.value)}
                   />
@@ -897,7 +941,17 @@ export default function TasksPage() {
         isLoading={isLoadingLogs}
       />
       
-      {activeTab === "progress" ? (
+      {activeTab === "analytics" ? (
+        <EmployeeAnalytics 
+          employees={employees} 
+          tasks={tasks} 
+          onBack={() => setActiveTab('tasks')} 
+        />
+      ) : activeTab === "presets" ? (
+        <div className="space-y-4 flex-1 flex flex-col">
+          <TaskPresetsView onBack={() => setActiveTab('tasks')} />
+        </div>
+      ) : activeTab === "progress" ? (
         <div className="space-y-4 flex-1 flex flex-col">
           <div className="flex items-center">
             <Button 
@@ -1229,7 +1283,7 @@ export default function TasksPage() {
                           />
                           All Employees
                         </CommandItem>
-                        {employees.map((emp) => {
+                        {employees.filter(e => e.department?.toLowerCase() === 'development').map((emp) => {
                           const fullName = `${emp.firstName} ${emp.lastName}`;
                           return (
                             <CommandItem
@@ -1276,14 +1330,22 @@ export default function TasksPage() {
             </div>
           )}
 
-          <button 
-            type="button"
-            className={`h-9 px-4 text-xs font-extrabold rounded-lg border transition-all ${showOnlyToday ? 'bg-brand-teal text-white border-brand-teal shadow-sm' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
-            onClick={() => setShowOnlyToday(!showOnlyToday)}
+          <Select
+            value={taskTimeFilter}
+            onValueChange={(val: any) => setTaskTimeFilter(val)}
           >
-            📅 Today
-          </button>
+            <SelectTrigger className="w-44 h-9 bg-white border-slate-200 text-slate-700 text-xs font-semibold rounded-lg shadow-2xs hover:bg-slate-50 transition-colors">
+              <SelectValue placeholder="Filter by Time" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="text-xs cursor-pointer">All Tasks</SelectItem>
+              <SelectItem value="pending" className="text-xs cursor-pointer">Pending Work</SelectItem>
+              <SelectItem value="today" className="text-xs cursor-pointer">Today's Work</SelectItem>
+              <SelectItem value="upcoming" className="text-xs cursor-pointer">Upcoming Work</SelectItem>
+            </SelectContent>
+          </Select>
 
+          {!isRegularEmployee && (
           <div className="flex items-center bg-slate-100 border border-slate-200 rounded-lg p-1 gap-1">
             <button 
               type="button"
@@ -1300,6 +1362,7 @@ export default function TasksPage() {
               📋 Table
             </button>
           </div>
+          )}
 
         </div>
       </div>
@@ -1308,54 +1371,22 @@ export default function TasksPage() {
         {showTableView ? (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm h-full flex flex-col overflow-hidden">
             <div className="overflow-x-auto overflow-y-auto flex-1 custom-scrollbar">
-              <table className="w-full text-left border-collapse min-w-[2000px]">
+              <table className="w-full text-left border-collapse min-w-full">
                 <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 z-10">
                   <tr className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                     <th className="px-4 py-3 w-16 text-center">S.No.</th>
                     <th className="px-4 py-3 min-w-[200px]">Task Title</th>
                     <th className="px-4 py-3 min-w-[150px]">Project</th>
-                    <th className="px-4 py-3 min-w-[120px]">Phase</th>
+                    <th className="px-4 py-3 min-w-[120px]">Module</th>
                     <th className="px-4 py-3 min-w-[120px]">Assignee</th>
-                    <th className="px-4 py-3 min-w-[80px]">Hours</th>
-                    <th className="px-4 py-3 min-w-[120px]">Department</th>
                     <th className="px-4 py-3 min-w-[120px]">Stage</th>
-                    <th className="px-4 py-3 min-w-[125px]">Created Date</th>
-                    <th className="px-4 py-3">Posting Date</th>
-                    <th className="px-4 py-3">Posting Day</th>
-                    <th className="px-4 py-3">Reel/Post</th>
-                    <th className="px-4 py-3">Concept</th>
-                    <th className="px-4 py-3">Reference</th>
-                    <th className="px-4 py-3">Script Link</th>
-                    <th className="px-4 py-3">Script Date</th>
-                    <th className="px-4 py-3">Shooting Link</th>
-                    <th className="px-4 py-3">Shoot Date</th>
-                    <th className="px-4 py-3">Editing Link</th>
-                    <th className="px-4 py-3">Edit Date</th>
-                    <th className="px-4 py-3">Review By TL</th>
-                    <th className="px-4 py-3">Final Link</th>
-                    <th className="px-4 py-3 min-w-[200px]">Remarks</th>
-                    <th className="px-4 py-3">Posted</th>
+                    <th className="px-4 py-3 min-w-[120px]">Due Date</th>
                     <th className="px-4 py-3 w-24 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="text-[12px] divide-y divide-slate-100">
-                  {(() => {
-                    let currentGroup = "";
-                    return paginatedTasks.map((task, index) => {
-                      const groupKey = `${task.projectName || "Unknown Project"} ${task.phase ? `- ${task.phase}` : ''}`;
-                      const showHeader = groupKey !== currentGroup;
-                      if (showHeader) currentGroup = groupKey;
-
-                      return (
-                        <React.Fragment key={task.id}>
-                          {showHeader && (
-                            <tr className="bg-brand-teal/5">
-                              <td colSpan={24} className="px-4 py-2 font-bold text-brand-teal border-y border-brand-teal/10">
-                                {groupKey}
-                              </td>
-                            </tr>
-                          )}
-                          <tr 
+                  {paginatedTasks.map((task, index) => (
+                    <tr 
                       key={task.id} 
                       className={`hover:bg-slate-50/50 transition-colors group ${isDueTask(task) ? 'bg-rose-50/40 border-l-4 border-l-rose-500' : ''}`}
                     >
@@ -1365,27 +1396,10 @@ export default function TasksPage() {
                       {[
                         { key: 'title', type: 'text', minWidth: '200px' },
                         { key: 'projectId', labelKey: 'projectName', type: 'select', options: projects.filter(p => p.department?.toLowerCase() === 'development').map(p => ({ value: p.id, label: p.title })), minWidth: '150px' },
-                        { key: 'phase', type: 'text', minWidth: '120px' },
+                        { key: 'moduleName', type: 'readonly', minWidth: '120px' },
                         { key: 'assignedToId', labelKey: 'assignedToName', type: 'select', options: employees.filter(e => e.department?.toLowerCase() === 'development').map(e => ({ value: e.id, label: `${e.firstName} ${e.lastName}` })), minWidth: '150px' },
-                        { key: 'estimatedHours', type: 'number', minWidth: '80px' },
-                        { key: 'department', type: 'select', options: ['Development'].map(d => ({ value: d, label: d })), minWidth: '120px' },
                         { key: 'status', type: 'select', options: STAGES.map(s => ({ value: s.id, label: s.label })), minWidth: '120px' },
-                        { key: 'createdDate', type: 'readonly', minWidth: '125px' },
-                        { key: 'postingDate', type: 'date' },
-                        { key: 'postingDay', type: 'readonly' },
-                        { key: 'reelPost', type: 'select', options: ['Post', 'Reel', 'Video'].map(v => ({ value: v, label: v })) },
-                        { key: 'concept', type: 'text' },
-                        { key: 'reference', type: 'text' },
-                        { key: 'scriptLink', type: 'text' },
-                        { key: 'scriptDate', type: 'date' },
-                        { key: 'shootingLink', type: 'text' },
-                        { key: 'shootDate', type: 'date' },
-                        { key: 'editingLink', type: 'text' },
-                        { key: 'editingDate', type: 'date' },
-                        { key: 'reviewByTL', type: 'text' },
-                        { key: 'finalLink', type: 'text' },
-                        { key: 'remarks', type: 'text', minWidth: '200px' },
-                        { key: 'postingStatus', type: 'select', options: ['Yes', 'No'].map(v => ({ value: v, label: v })) },
+                        { key: 'dueDate', type: 'date', minWidth: '120px' },
                       ].map((col) => (
                         <td 
                           key={col.key} 
@@ -1421,22 +1435,25 @@ export default function TasksPage() {
                           ) : (
                             <div className="flex items-center gap-2 min-h-[20px]">
                               {col.key === 'title' ? (
-                                <div className="flex items-center gap-1.5">
-                                  {isDueTask(task) && (
-                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black bg-rose-500 text-white uppercase tracking-wider shrink-0 shadow-sm">
-                                      Due
-                                    </span>
-                                  )}
-                                  <span className="font-bold text-slate-800">{task[col.key]}</span>
-                                  {getPendingTransferRequest(task) && (
-                                    <span className="text-[9px] text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap">
-                                      Pending Transfer to {getPendingTransferRequest(task)?.receiverName}
-                                    </span>
-                                  )}
-                                  {getAcceptedTransferRequest(task) && (
-                                    <span className="text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap">
-                                      Transferred from {getAcceptedTransferRequest(task)?.senderName}
-                                    </span>
+                                <div className="flex flex-col gap-1">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-bold text-slate-800">{task[col.key]}</span>
+                                    {getPendingTransferRequest(task) && (
+                                      <span className="text-[9px] text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap">
+                                        Pending Transfer to {getPendingTransferRequest(task)?.receiverName}
+                                      </span>
+                                    )}
+                                    {getAcceptedTransferRequest(task) && (
+                                      <span className="text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap">
+                                        Transferred from {getAcceptedTransferRequest(task)?.senderName}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {(task.status === 'onhold' || task.status === 'pending') && task.reasonForPending && (
+                                    <div className="flex items-start gap-1 bg-amber-50 border border-amber-200 rounded px-1.5 py-1 max-w-xs">
+                                      <AlertTriangle className="w-2.5 h-2.5 text-amber-500 shrink-0 mt-0.5" />
+                                      <span className="text-[9px] font-medium text-amber-700 break-words leading-tight">{task.reasonForPending}</span>
+                                    </div>
                                   )}
                                 </div>
                               ) : col.key === 'projectId' || col.key === 'assignedToId' ? (
@@ -1467,6 +1484,8 @@ export default function TasksPage() {
                                       <Badge className={task[col.key] === "Yes" ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"}>
                                         {task[col.key] || "No"}
                                       </Badge>
+                                    ) : col.key === 'dueDate' || col.key === 'postingDate' ? (
+                                      <span>{task[col.key] ? formatDate(task[col.key]) : "-"}</span>
                                     ) : (
                                       <span>{task[col.key] || "-"}</span>
                                     )}
@@ -1491,13 +1510,10 @@ export default function TasksPage() {
                               </div>
                             </td>
                           </tr>
-                        </React.Fragment>
-                      );
-                    });
-                  })()}
+                        ))}
                   {filteredTasks.length === 0 && (
                     <tr>
-                      <td colSpan={24} className="px-4 py-20 text-center text-slate-400 italic">No creative tasks found.</td>
+                      <td colSpan={7} className="px-4 py-20 text-center text-slate-400 italic">No creative tasks found.</td>
                     </tr>
                   )}
                 </tbody>
@@ -1627,9 +1643,13 @@ export default function TasksPage() {
                                         <AlertTriangle className="w-3 h-3" /> Due
                                       </span>
                                     )}
-                                    {isDueTask(task) && (task.dueDate || task.postingDate) && (
-                                      <span className="text-[10px] font-black text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">
-                                        Due: {task.dueDate || task.postingDate}
+                                    {(task.dueDate || task.postingDate) && (
+                                      <span className={`text-[10px] font-black px-1.5 py-0.5 rounded border ${
+                                        isDueTask(task)
+                                          ? "text-rose-600 bg-rose-50 border-rose-100"
+                                          : "text-slate-600 bg-slate-100 border-slate-200"
+                                      }`}>
+                                        📅 Due: {formatDate(task.dueDate || task.postingDate)}
                                       </span>
                                     )}
                                     {task.isApproved && (
@@ -1667,6 +1687,14 @@ export default function TasksPage() {
                                       )}
                                     </div>
                                   )}
+                                  {(task.status === 'onhold' || task.status === 'pending') && task.reasonForPending && (
+                                    <div className="mt-2 flex items-start gap-1.5 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
+                                      <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0 mt-0.5" />
+                                      <span className="text-[10px] font-medium text-amber-700 break-words leading-snug">
+                                        {task.reasonForPending}
+                                      </span>
+                                    </div>
+                                  )}
                                   <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2 text-xs">
                                     <div className="flex items-center gap-1.5 text-slate-600 font-semibold truncate">
                                       <div className="w-4 h-4 rounded-full bg-brand-teal/10 text-brand-teal flex items-center justify-center text-[9px] font-black shrink-0">
@@ -1691,11 +1719,7 @@ export default function TasksPage() {
                                           {task.isApproved ? "Disapprove" : "Approve"}
                                         </Button>
                                       )}
-                                      {task.estimatedHours > 0 && (
-                                        <span className="shrink-0 text-[10px] font-black text-brand-teal bg-brand-teal/10 px-2 py-0.5 rounded-md border border-brand-teal/20 flex items-center gap-1">
-                                          ⏱️ {task.estimatedHours} hrs
-                                        </span>
-                                      )}
+
                                     </div>
                                   </div>
                                 </div>

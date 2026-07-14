@@ -50,6 +50,9 @@ export default function SettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
   const [deptInput, setDeptInput] = useState<string | null>(null);
+  const [activitiesInput, setActivitiesInput] = useState<string | null>(null);
+  const [meetingsInput, setMeetingsInput] = useState<string | null>(null);
+  const [categoriesInput, setCategoriesInput] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -168,6 +171,31 @@ export default function SettingsPage() {
     }
   };
 
+  const handleToggleOtpRole = async (role: string, checked: boolean) => {
+    setIsUpdating(true);
+    try {
+      const currentRoles = settings?.otpRequiredRoles || [];
+      let newRoles = [...currentRoles];
+      if (checked && !newRoles.includes(role)) {
+        newRoles.push(role);
+      } else if (!checked && newRoles.includes(role)) {
+        newRoles = newRoles.filter(r => r !== role);
+      }
+      const res = await fetch(`${API_URL}/system-settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ otpRequiredRoles: newRoles })
+      });
+      if (res.ok) {
+        setSettings(await res.json());
+      }
+    } catch (err) {
+      console.error("Error updating settings:", err);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const handleUpdateShiftSettings = async (key: string, value: any) => {
     setIsUpdating(true);
     try {
@@ -213,6 +241,9 @@ export default function SettingsPage() {
           proformaInvoicePrefix: settings?.proformaInvoicePrefix || "PINV",
           noTaxInvoicePrefix: settings?.noTaxInvoicePrefix || "NINV",
           invoiceClientDepartments: deptInput !== null ? deptInput.split(",").map(s => s.trim()).filter(Boolean) : (settings?.invoiceClientDepartments || []),
+          otherActivities: activitiesInput !== null ? activitiesInput.split(",").map(s => s.trim()).filter(Boolean) : (settings?.otherActivities || []),
+          otherMeetings: meetingsInput !== null ? meetingsInput.split(",").map(s => s.trim()).filter(Boolean) : (settings?.otherMeetings || []),
+          otherCategories: categoriesInput !== null ? categoriesInput.split(",").map(s => s.trim()).filter(Boolean) : (settings?.otherCategories || ["Activity", "Meeting"]),
           companyLetterheadUrl: settings?.companyLetterheadUrl || null,
           companySignatureUrl: settings?.companySignatureUrl || null,
           invoiceColor1: settings?.invoiceColor1 || "#08304b",
@@ -222,7 +253,8 @@ export default function SettingsPage() {
           defaultShootDateOffset: settings?.defaultShootDateOffset !== undefined ? settings.defaultShootDateOffset : null,
           defaultEditingStartOffset: settings?.defaultEditingStartOffset !== undefined ? settings.defaultEditingStartOffset : null,
           defaultApprovalOffset: settings?.defaultApprovalOffset !== undefined ? settings.defaultApprovalOffset : null,
-          addHoldDaysToEndDate: settings?.addHoldDaysToEndDate !== undefined ? settings.addHoldDaysToEndDate : true
+          addHoldDaysToEndDate: settings?.addHoldDaysToEndDate !== undefined ? settings.addHoldDaysToEndDate : true,
+          otpRequiredRoles: settings?.otpRequiredRoles || []
         })
       });
       if (res.ok) {
@@ -439,6 +471,48 @@ export default function SettingsPage() {
                           onCheckedChange={handleToggleAutoInactiveAfterResignation}
                           disabled={isUpdating || !canEditSettings}
                         />
+                      )}
+                    </div>
+                    <div className="flex flex-col p-4 rounded-xl border border-slate-100 bg-slate-50/30 mt-4 gap-4">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <Label className="text-[14px] font-bold">Require OTP Validation on Login</Label>
+                          <Badge variant="outline" className="text-[9px] h-4 font-bold bg-white">SECURITY</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground max-w-[400px]">
+                          Select which roles require an OTP sent to their email during login.
+                        </p>
+                      </div>
+                      
+                      {isLoading ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-brand-teal" />
+                      ) : (
+                        <div className="flex flex-col gap-3 ml-2">
+                          <div className="flex items-center gap-2">
+                            <Switch 
+                              checked={settings?.otpRequiredRoles?.includes("admin") ?? false}
+                              onCheckedChange={(c) => handleToggleOtpRole("admin", c)}
+                              disabled={isUpdating || !canEditSettings}
+                            />
+                            <Label className="text-xs cursor-pointer">Admin</Label>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Switch 
+                              checked={settings?.otpRequiredRoles?.includes("hr") ?? false}
+                              onCheckedChange={(c) => handleToggleOtpRole("hr", c)}
+                              disabled={isUpdating || !canEditSettings}
+                            />
+                            <Label className="text-xs cursor-pointer">HR</Label>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Switch 
+                              checked={settings?.otpRequiredRoles?.includes("employee") ?? false}
+                              onCheckedChange={(c) => handleToggleOtpRole("employee", c)}
+                              disabled={isUpdating || !canEditSettings}
+                            />
+                            <Label className="text-xs cursor-pointer">Employee (and others)</Label>
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -938,8 +1012,24 @@ export default function SettingsPage() {
                       placeholder="e.g. Billing Department, Support, Sales"
                     />
                   </div>
-                </div>
                 
+                  <div className="space-y-1">
+                    <Label className="text-sm font-bold">Other Categories (Comma Separated)</Label>
+                    <p className="text-[10px] text-muted-foreground mb-1">These are the main subcategories that appear under 'Other' when punching in.</p>
+                    <input 
+                      type="text" 
+                      className="w-full h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold"
+                      value={categoriesInput !== null ? categoriesInput : (settings?.otherCategories || ["Activity", "Meeting"]).join(", ")}
+                      onChange={(e) => setCategoriesInput(e.target.value)}
+                      onBlur={(e) => {
+                        setSettings({...settings, otherCategories: e.target.value.split(",").map(s => s.trim()).filter(Boolean)});
+                        setCategoriesInput(null);
+                      }}
+                      disabled={isUpdating || !canEditSettings}
+                      placeholder="e.g. Activity, Meeting, Training"
+                    />
+                  </div>
+                </div>
                 <div className="col-span-1 md:col-span-2 border-t border-slate-100 pt-6 mt-4">
                   <Label className="text-sm font-bold text-foreground block mb-2">Invoice Theme Gradient</Label>
                   <p className="text-xs text-muted-foreground mb-4">Choose two colors to customize the gradient background of invoice badges, table headers, and total banners.</p>

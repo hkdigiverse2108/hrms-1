@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/common/PageHeader";
+import { LiveTimer } from "@/components/common/LiveTimer";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
@@ -60,6 +61,7 @@ import { AddEventDialog } from "@/components/dashboard/AddEventDialog";
 import { ViewAllEventsDialog } from "@/components/dashboard/ViewAllEventsDialog";
 import { toast } from "sonner";
 import { useConfirm } from "@/context/ConfirmContext";
+import { PunchInModal } from "@/components/dashboard/PunchInModal";
  
 const formatToHhMm = (totalMinutes: number) => {
   const { confirm } = useConfirm();
@@ -103,15 +105,40 @@ export default function DashboardPage() {
   const [workTime, setWorkTime] = useState("00:00:00");
   const [totalBreakTime, setTotalBreakTime] = useState("0h 0m");
   const [currentTime, setCurrentTime] = useState(getISTNow());
+  const serverTimeOffset = getISTNow().getTime() - Date.now();
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
+  const [isPunchInModalOpen, setIsPunchInModalOpen] = useState(false);
+  const [isBreakOutModalOpen, setIsBreakOutModalOpen] = useState(false);
   const [leaveRequests, setLeaveRequests] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [interns, setInterns] = useState<any[]>([]);
   const [allAttendance, setAllAttendance] = useState<any[]>([]);
   const [applications, setApplications] = useState<any[]>([]);
   const [assets, setAssets] = useState<any[]>([]);
+  const [activeTaskTitle, setActiveTaskTitle] = useState<string | null>(null);
 
-  
+  useEffect(() => {
+    if (attendanceStatus?.isPunchedIn && attendanceStatus.record?.punchInActivityType === "Work" && attendanceStatus.record?.punchInTaskId) {
+      fetch(`${API_URL}/wm-tasks/${attendanceStatus.record.punchInTaskId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.title) {
+            setActiveTaskTitle(data.title);
+          } else if (attendanceStatus.record?.punchInActivityValue) {
+            setActiveTaskTitle(attendanceStatus.record.punchInActivityValue);
+          }
+        })
+        .catch(err => {
+          console.error("Error fetching active task:", err);
+          if (attendanceStatus.record?.punchInActivityValue) {
+            setActiveTaskTitle(attendanceStatus.record.punchInActivityValue);
+          }
+        });
+    } else {
+      setActiveTaskTitle(null);
+    }
+  }, [attendanceStatus]);
+
   const punchCardRef = useRef<HTMLDivElement>(null);
  
   useEffect(() => {
@@ -261,7 +288,10 @@ export default function DashboardPage() {
 
       const runTimer = () => {
         const istNow = getISTNow();
-        const lastPunchInStr = attendanceStatus.record.lastPunchIn || attendanceStatus.record.checkIn;
+        let lastPunchInStr = attendanceStatus.record.lastPunchIn || attendanceStatus.record.checkIn;
+        if (!attendanceStatus.record.accumulatedWorkSeconds) {
+          lastPunchInStr = attendanceStatus.record.checkIn;
+        }
         if (!lastPunchInStr) return;
 
         const normalizeDate = (d: Date) => {
@@ -437,6 +467,16 @@ export default function DashboardPage() {
   };
  
   const handlePunch = async (type: 'punch-in' | 'punch-out' | 'break-in' | 'break-out') => {
+    if (type === 'punch-in') {
+      setIsPunchInModalOpen(true);
+      return;
+    }
+    
+    if (type === 'break-out') {
+      setIsBreakOutModalOpen(true);
+      return;
+    }
+
     setIsPunching(true);
     try {
       const res = await fetch(`${API_URL}/attendance/${type}/${user?.id}`, {
@@ -456,6 +496,106 @@ export default function DashboardPage() {
     } catch (err) {
       console.error("Punch error:", err);
       toast.error("Failed to connect to the server. Please ensure the backend is running.");
+    } finally {
+      setIsPunching(false);
+    }
+  };
+
+  const handleBreakOutConfirm = async (action: 'continue' | 'change') => {
+    setIsBreakOutModalOpen(false);
+    
+    if (action === 'change') {
+      setIsPunchInModalOpen(true);
+      return;
+    }
+
+    setIsPunching(true);
+    
+    try {
+      const breakOutRes = await fetch(`${API_URL}/attendance/break-out/${user?.id}?resume_task=true`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      
+      if (breakOutRes.ok) {
+        await fetchStatus();
+        await fetchHistory();
+        window.dispatchEvent(new Event("attendance-update"));
+      } else {
+        const errorData = await breakOutRes.json().catch(() => ({}));
+        toast.error(`Action failed: ${errorData.detail || 'Server error'}`);
+      }
+    } catch (err) {
+      console.error("Break out error:", err);
+      toast.error("Failed to connect to the server. Please ensure the backend is running.");
+    } finally {
+      setIsPunching(false);
+    }
+  };
+
+  const handleConfirmPunchIn = async (data: { type: string; subtype?: string; value?: string; taskId?: string }) => {
+    setIsPunchInModalOpen(false);
+    setIsPunching(true);
+    try {
+      const payload: any = {};
+      if (data.type === "Work") {
+        payload.activityType = "Work";
+        payload.taskId = data.taskId;
+      } else if (data.type === "Research") {
+        payload.activityType = "Research";
+        payload.activityValue = data.value;
+      } else if (data.type === "Other") {
+        payload.activityType = "Other";
+        payload.activitySubtype = data.subtype;
+        payload.activityValue = data.value;
+      }
+
+      // If user is currently on break, break-out first before starting new activity
+      const isOnBreak = attendanceStatus?.record?.status === "On Break";
+      if (isOnBreak) {
+        const breakOutRes = await fetch(`${API_URL}/attendance/break-out/${user?.id}?resume_task=false`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
+        if (!breakOutRes.ok) {
+          toast.error("Failed to break out before changing activity");
+          setIsPunching(false);
+          return;
+        }
+      }
+
+      const res = await fetch(`${API_URL}/attendance/punch-in/${user?.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      
+      if (res.ok) {
+        if (data.type === "Work" && data.taskId) {
+          // Update task status to in-progress via PUT /wm-tasks/{taskId}
+          try {
+            await fetch(`${API_URL}/wm-tasks/${data.taskId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: 'in-progress' })
+            });
+          } catch (taskErr) {
+            console.error("Failed to update task status:", taskErr);
+          }
+        }
+        await fetchStatus();
+        await fetchHistory();
+        window.dispatchEvent(new Event("attendance-update"));
+        toast.success("Successfully punched in!");
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        toast.error(`Punch in failed: ${errorData.detail || 'Server error'}`);
+      }
+    } catch (err) {
+      console.error("Punch error:", err);
+      toast.error("Failed to connect to the server.");
     } finally {
       setIsPunching(false);
     }
@@ -546,6 +686,7 @@ export default function DashboardPage() {
             <div className="lg:col-span-2 space-y-6">
               {/* 2. Show Employee Punch Card Box */}
               <EmployeeView 
+                serverTimeOffset={serverTimeOffset}
                 user={user} 
                 attendanceStatus={attendanceStatus} 
                 handlePunch={handlePunch} 
@@ -560,10 +701,13 @@ export default function DashboardPage() {
                 getISTNow={getISTNow}
                 punchCardRef={punchCardRef}
                 showPunchCardOnly={true}
+                setIsPunchInModalOpen={setIsPunchInModalOpen}
+                activeTaskTitle={activeTaskTitle}
               />
 
               {/* 3. Show Employee stats and Recent Attendance table */}
               <EmployeeView 
+                serverTimeOffset={serverTimeOffset}
                 user={user} 
                 attendanceStatus={attendanceStatus} 
                 handlePunch={handlePunch} 
@@ -578,6 +722,8 @@ export default function DashboardPage() {
                 getISTNow={getISTNow}
                 punchCardRef={punchCardRef}
                 showStatsAndAttendanceOnly={true}
+                setIsPunchInModalOpen={setIsPunchInModalOpen}
+                activeTaskTitle={activeTaskTitle}
               />
 
               {/* 4. If HR, show HR Lists (Recent Leave Requests, Upcoming Interviews) */}
@@ -616,6 +762,54 @@ export default function DashboardPage() {
           punchCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }}
       />
+      <PunchInModal
+        open={isPunchInModalOpen}
+        onOpenChange={setIsPunchInModalOpen}
+        onConfirm={handleConfirmPunchIn}
+        userId={user?.id || ""}
+        initialActivityType={attendanceStatus?.record?.punchInActivityType}
+        initialActivitySubtype={attendanceStatus?.record?.punchInActivitySubtype}
+        initialActivityValue={attendanceStatus?.record?.punchInActivityValue}
+        initialTaskId={attendanceStatus?.record?.punchInTaskId}
+        isUpdateMode={attendanceStatus?.isPunchedIn || false}
+      />
+      
+      {isBreakOutModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] relative">
+            <div className="p-6">
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Resume Work</h2>
+              <p className="text-sm text-gray-500 mb-6">
+                Are you sure you want to continue the previous task or want to change the task?
+              </p>
+              
+              <div className="flex gap-3">
+                <Button 
+                  onClick={() => handleBreakOutConfirm('continue')}
+                  className="flex-1 bg-brand-teal hover:bg-brand-teal/90 text-white font-bold"
+                  disabled={isPunching}
+                >
+                  Continue Previous
+                </Button>
+                <Button 
+                  onClick={() => handleBreakOutConfirm('change')}
+                  variant="outline"
+                  className="flex-1 bg-white hover:bg-gray-50 text-gray-700 font-bold border-gray-200"
+                  disabled={isPunching}
+                >
+                  Change Task
+                </Button>
+              </div>
+            </div>
+            <button 
+              onClick={() => setIsBreakOutModalOpen(false)}
+              className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -960,7 +1154,10 @@ function EmployeeView({
   punchCardRef,
   leaves,
   showPunchCardOnly = false,
-  showStatsAndAttendanceOnly = false
+  showStatsAndAttendanceOnly = false,
+  setIsPunchInModalOpen,
+  activeTaskTitle,
+  serverTimeOffset
 }: { 
   user: any, 
   attendanceStatus: any, 
@@ -977,7 +1174,10 @@ function EmployeeView({
   punchCardRef: React.RefObject<HTMLDivElement | null>,
   leaves?: any[],
   showPunchCardOnly?: boolean,
-  showStatsAndAttendanceOnly?: boolean
+  showStatsAndAttendanceOnly?: boolean,
+  setIsPunchInModalOpen: (val: boolean) => void,
+  activeTaskTitle?: string | null,
+  serverTimeOffset?: number
 }) {
   const userName = user?.name || "Guest";
   const firstName = user?.firstName || userName.split(' ')[0];
@@ -991,6 +1191,64 @@ function EmployeeView({
   const punchInTime = formatTime12h(punchInTimeRaw);
   const punchOutTime = formatTime12h(punchOutTimeRaw);
 
+  let accumulatedSeconds = 0;
+  if (attendanceStatus?.record?.punches) {
+    const currentType = attendanceStatus.record.punchInActivityType;
+    const currentTaskId = attendanceStatus.record.punchInTaskId;
+    const currentValue = attendanceStatus.record.punchInActivityValue;
+    const currentSubtype = attendanceStatus.record.punchInActivitySubtype;
+    
+    const parseTimeSafe = (timeStr: string) => {
+      if (!timeStr) return NaN;
+      if (timeStr.includes('AM') || timeStr.includes('PM')) {
+        const [time, modifier] = timeStr.trim().split(' ');
+        let [hours, minutes, seconds] = time.split(':');
+        if (hours === '12') hours = '00';
+        if (modifier === 'PM') hours = String(parseInt(hours, 10) + 12);
+        return new Date(`2000/01/01 ${hours}:${minutes}:${seconds || '00'}`).getTime();
+      }
+      return new Date(`2000/01/01 ${timeStr}`).getTime();
+    };
+
+    const breaksList = attendanceStatus.record.breaks || [];
+    attendanceStatus.record.punches.forEach((p: any) => {
+      // Only count completed punches for this same activity
+      if (p.punchOut && p.punchIn) {
+        let isSame = false;
+        if (currentType === "Work") {
+          isSame = (p.activityType === "Work" && String(p.taskId) === String(currentTaskId));
+        } else if (currentType === "Research") {
+          isSame = (p.activityType === "Research" && p.activityValue === currentValue);
+        } else if (currentType === "Other") {
+          isSame = (p.activityType === "Other" && p.activitySubtype === currentSubtype && p.activityValue === currentValue);
+        }
+
+        if (isSame) {
+          const inTime = parseTimeSafe(p.punchIn);
+          const outTime = parseTimeSafe(p.punchOut);
+          if (!isNaN(inTime) && !isNaN(outTime) && outTime > inTime) {
+            let durationSec = Math.floor((outTime - inTime) / 1000);
+            
+            breaksList.forEach((b: any) => {
+              if (b.startTime && b.endTime) {
+                const bIn = parseTimeSafe(b.startTime);
+                const bOut = parseTimeSafe(b.endTime);
+                if (!isNaN(bIn) && !isNaN(bOut) && bOut > bIn) {
+                  const overlapStart = Math.max(inTime, bIn);
+                  const overlapEnd = Math.min(outTime, bOut);
+                  if (overlapEnd > overlapStart) {
+                    durationSec -= Math.floor((overlapEnd - overlapStart) / 1000);
+                  }
+                }
+              }
+            });
+
+            accumulatedSeconds += Math.max(0, durationSec);
+          }
+        }
+      }
+    });
+  }
   const getFormattedWorkedTime = () => {
     if (!workTime || workTime === "00:00:00") return "Not Started";
     const parts = workTime.split(':');
@@ -1000,7 +1258,8 @@ function EmployeeView({
       return `${h}h ${m}m`;
     }
     return "Not Started";
-  };  const punchCardSection = (
+  };
+  const punchCardSection = (
     <div ref={punchCardRef} className="bg-white border border-border rounded-2xl p-8 shadow-sm scroll-mt-20 relative overflow-hidden">
             <div className="flex justify-between items-start mb-8">
               <div className="flex flex-col gap-4">
@@ -1013,7 +1272,7 @@ function EmployeeView({
                      <Moon className="w-4 h-4 text-brand-teal" />
                    )}
                    <span className="text-[11px] font-bold text-brand-teal">
-                     {getISTNow().getHours() < 12 ? "Good morning" : getISTNow().getHours() < 17 ? "Good afternoon" : "Good evening"}, {firstName}
+                     {getISTNow().getHours() < 12 ? "Good Morning" : getISTNow().getHours() < 17 ? "Good Afternoon" : "Good Evening"}, {firstName}
                    </span>
                 </div>
                 <div className="flex items-center gap-4">
@@ -1096,17 +1355,7 @@ function EmployeeView({
                 )}
               </Button>
  
-              <Button 
-                onClick={handleGoingForMeeting} 
-                disabled={isPunching || !isPunchedIn || isOnBreak}
-                variant="outline"
-                className={`flex-1 py-7 text-base font-bold shadow-sm transition-all border-[#F3F4F6] rounded-xl bg-white hover:bg-gray-50 text-[#111827]`}
-              >
-                {isPunching ? <Loader2 className="w-5 h-5 animate-spin" /> : (
-                  <><CalendarIcon className="w-5 h-5 mr-3 text-indigo-500" /> Going for Meeting</>
-                )}
-              </Button>
-              
+
               <Button 
                 onClick={() => handlePunch(isPunchedIn ? 'punch-out' : 'punch-in')} 
                 disabled={isPunching || isOnBreak}
@@ -1117,6 +1366,56 @@ function EmployeeView({
                 )}
               </Button>
             </div>
+
+            {isPunchedIn && attendanceStatus?.record?.punchInActivityType && (
+              <div className="flex items-center justify-between px-6 py-4 mb-8 bg-brand-light/40 border border-brand-teal/20 rounded-2xl shadow-sm">
+                <div>
+                  <p className="text-xs text-brand-teal/80 font-bold uppercase tracking-wider mb-1">Current Activity</p>
+                  <div className="font-black text-gray-800 text-lg flex items-center gap-3">
+                    <span>
+                      {attendanceStatus.record.punchInActivityType === "Work" ? (
+                        `Work: ${activeTaskTitle || 'Loading...'}`
+                      ) : attendanceStatus.record.punchInActivityType === "Research" ? (
+                        `Research: ${attendanceStatus.record.punchInActivityValue}`
+                      ) : attendanceStatus.record.punchInActivityType === "Other" ? (
+                        `${attendanceStatus.record.punchInActivitySubtype}: ${attendanceStatus.record.punchInActivityValue}`
+                      ) : (
+                        "Active"
+                      )}
+                    </span>
+                    {(attendanceStatus.record.lastPunchIn || isOnBreak) && (
+                      <LiveTimer 
+                        startTime={attendanceStatus.record.punches && attendanceStatus.record.punches.length > 0 
+                                      ? attendanceStatus.record.punches[attendanceStatus.record.punches.length - 1].punchIn 
+                                      : attendanceStatus.record.lastPunchIn} 
+                        serverTimeOffset={serverTimeOffset} 
+                        accumulatedSeconds={accumulatedSeconds} 
+                        isPaused={isOnBreak} 
+                        breaks={attendanceStatus.record.breaks}
+                      />
+                    )}
+                    {isOnBreak && (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-50 text-orange-600 border border-orange-100 text-[11px] font-bold font-mono tracking-wider shadow-sm">
+                        <span className="relative flex h-1.5 w-1.5">
+                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-orange-500"></span>
+                        </span>
+                        PAUSED
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {!isOnBreak && (
+                  <Button 
+                    onClick={() => setIsPunchInModalOpen(true)}
+                    variant="outline" 
+                    size="sm" 
+                    className="bg-white hover:bg-gray-50 border-gray-200 text-gray-700 font-bold shadow-sm rounded-xl px-5"
+                  >
+                    Change
+                  </Button>
+                )}
+              </div>
+            )}
  
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-0 border border-brand-teal/10 rounded-xl overflow-hidden bg-white">
                {[

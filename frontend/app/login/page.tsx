@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Mail, Lock, Eye, EyeOff, ShieldHalf, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { API_URL } from "@/lib/config";
 import { useUserContext } from "@/context/UserContext";
  
@@ -14,6 +15,8 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [isOtpSent, setIsOtpSent] = useState(false);
+  const [otp, setOtp] = useState("");
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -24,25 +27,46 @@ export default function LoginPage() {
     setError("");
  
     try {
-      const response = await fetch(`${API_URL}/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
-      });
- 
-      const data = await response.json();
- 
-      if (!response.ok) {
-        throw new Error(data.detail || "Login failed");
+      if (!isOtpSent) {
+        const response = await fetch(`${API_URL}/login`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ email, password }),
+        });
+   
+        const data = await response.json();
+   
+        if (!response.ok) {
+          throw new Error(data.detail || "Login failed");
+        }
+        
+        if (data.require_otp) {
+          setIsOtpSent(true);
+        } else {
+          // Fallback if OTP is disabled for some reason
+          login({ ...data.user, token: data.token });
+          router.push("/");
+        }
+      } else {
+        const response = await fetch(`${API_URL}/login/verify-otp`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ email, otp }),
+        });
+        
+        const data = await response.json();
+   
+        if (!response.ok) {
+          throw new Error(data.detail || "OTP verification failed");
+        }
+        
+        login({ ...data.user, token: data.token });
+        router.push("/");
       }
- 
-      // Use the global login function to update state and storage
-      login({ ...data.user, token: data.token });
-      
-      // Redirect to dashboard
-      router.push("/");
     } catch (err: any) {
       setError(err.message || "An error occurred. Please try again.");
     } finally {
@@ -89,8 +113,14 @@ export default function LoginPage() {
           </div>
  
           <div className="mb-10 text-center lg:text-left">
-            <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-3 whitespace-nowrap tracking-tight">Welcome in HK DigiVerse :)</h1>
-            <p className="text-muted-foreground text-sm sm:text-base">Please enter your details to sign in to your account.</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-3 whitespace-nowrap tracking-tight">
+              {isOtpSent ? "Verify your identity" : "Welcome in HK DigiVerse :)"}
+            </h1>
+            <p className="text-muted-foreground text-sm sm:text-base">
+              {isOtpSent 
+                ? "Enter the 6-digit code sent to your email." 
+                : "Please enter your details to sign in to your account."}
+            </p>
             {error && (
               <div className="mt-4 p-3 rounded-md bg-destructive/10 text-destructive text-sm font-medium border border-destructive/20 animate-in fade-in slide-in-from-top-1">
                 {error}
@@ -99,44 +129,69 @@ export default function LoginPage() {
           </div>
  
           <form className="space-y-6" onSubmit={handleSubmit}>
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-foreground">Work Email</label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input 
-                  type="email" 
-                  placeholder="sarah.jenkins@hkdigiverse.com" 
-                  className="pl-10 pb-2 pt-2 h-12 bg-white" 
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  disabled={isLoading}
-                />
+            {!isOtpSent ? (
+              <>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-foreground">Work Email</label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input 
+                      type="email" 
+                      placeholder="sarah.jenkins@hkdigiverse.com" 
+                      className="pl-10 pb-2 pt-2 h-12 bg-white" 
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      disabled={isLoading}
+                    />
+                  </div>
+                </div>
+     
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-foreground">Password</label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input 
+                      type={showPassword ? "text" : "password"} 
+                      placeholder="••••••••••••" 
+                      className="pl-10 pr-10 pb-2 pt-2 h-12 bg-white font-mono tracking-widest placeholder:tracking-normal" 
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      disabled={isLoading}
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-foreground">One-Time Password (OTP)</label>
+                <div className="flex justify-center w-full pt-2">
+                  <InputOTP
+                    maxLength={6}
+                    value={otp}
+                    onChange={(val) => setOtp(val)}
+                    disabled={isLoading}
+                  >
+                    <InputOTPGroup className="gap-2 sm:gap-3">
+                      <InputOTPSlot index={0} className="w-10 h-12 sm:w-12 sm:h-14 text-lg border rounded-md" />
+                      <InputOTPSlot index={1} className="w-10 h-12 sm:w-12 sm:h-14 text-lg border rounded-md" />
+                      <InputOTPSlot index={2} className="w-10 h-12 sm:w-12 sm:h-14 text-lg border rounded-md" />
+                      <InputOTPSlot index={3} className="w-10 h-12 sm:w-12 sm:h-14 text-lg border rounded-md" />
+                      <InputOTPSlot index={4} className="w-10 h-12 sm:w-12 sm:h-14 text-lg border rounded-md" />
+                      <InputOTPSlot index={5} className="w-10 h-12 sm:w-12 sm:h-14 text-lg border rounded-md" />
+                    </InputOTPGroup>
+                  </InputOTP>
+                </div>
               </div>
-            </div>
- 
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-foreground">Password</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input 
-                  type={showPassword ? "text" : "password"} 
-                  placeholder="••••••••••••" 
-                  className="pl-10 pr-10 pb-2 pt-2 h-12 bg-white font-mono tracking-widest placeholder:tracking-normal" 
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={isLoading}
-                />
-                <button 
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
+            )}
  
 
  
@@ -148,16 +203,33 @@ export default function LoginPage() {
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Signing in...
+                  {isOtpSent ? "Verifying..." : "Signing in..."}
                 </>
+              ) : isOtpSent ? (
+                "Verify OTP"
               ) : (
-                "Sign in to Dashboard"
+                <>
+                  Sign In
+                </>
               )}
             </Button>
           </form>
  
           <div className="mt-8 text-center text-sm text-muted-foreground">
-            Don't have an account? <a href="#" className="font-medium text-foreground hover:text-brand-teal transition-colors">Contact HR</a>
+            {isOtpSent ? (
+              <button 
+                type="button"
+                onClick={() => {
+                  setIsOtpSent(false);
+                  setOtp("");
+                }} 
+                className="font-medium text-foreground hover:text-brand-teal transition-colors"
+              >
+                Back to Login
+              </button>
+            ) : (
+              <span>Don't have an account? <a href="#" className="font-medium text-foreground hover:text-brand-teal transition-colors">Contact HR</a></span>
+            )}
           </div>
  
         </div>

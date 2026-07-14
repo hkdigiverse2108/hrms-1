@@ -1,0 +1,15 @@
+{
+  "url": "http://127.0.0.1:8002/research",
+  "errors": [
+    {
+      "type": "missing",
+      "loc": [
+        "header",
+        "user-id"
+      ],
+      "msg": "Field required",
+      "input": null
+    }
+  ],
+  "body": ""
+}

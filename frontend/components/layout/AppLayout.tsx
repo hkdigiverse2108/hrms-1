@@ -29,6 +29,8 @@ function getRequiredModuleForPath(pathname: string): string | null {
   if (pathname.startsWith("/work-management/clients")) return "clients";
   if (pathname.startsWith("/work-management/digital-marketing")) return "marketing";
   if (pathname.startsWith("/work-management/smm")) return "creative";
+  if (pathname.startsWith("/work-management/work-logs")) return "work-logs";
+  if (pathname.startsWith("/work-management/research")) return "research";
   
   if (pathname.startsWith("/employees/organization")) return "org-structure";
   if (pathname.startsWith("/employees/attendance")) return "employee-attendance";
@@ -734,7 +736,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <Layout className="site-layout h-screen overflow-y-auto relative custom-scrollbar">
         <Header />
         <Content 
-          className="px-4 sm:px-6 lg:px-8 mx-auto w-full max-w-[1600px]"
+          className="px-4 sm:px-6 lg:px-8 w-full"
           style={{ paddingBottom: '24px' }}
         >
           {hasAccess ? children : <AccessDenied />}

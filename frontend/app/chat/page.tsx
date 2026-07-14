@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useApi } from "@/hooks/useApi";
@@ -567,7 +567,7 @@ const VoiceMessagePlayer = ({ msg, isMe, renderCheckmarks }: { msg: any; isMe: b
 
   return (
     <div className={cn(
-      "rounded-xl mb-0.5 w-[300px] sm:w-[330px] max-w-full px-1.5 py-1",
+      "rounded-xl mb-0.5 w-[260px] sm:w-[300px] lg:w-[330px] max-w-full px-1.5 py-1",
       isMe
         ? "bg-[#d9fdd3] ml-auto rounded-tr-none"
         : "bg-white mr-auto rounded-tl-none"
@@ -863,7 +863,7 @@ const AudioMessagePlayer = ({ msg, isMe, renderCheckmarks }: { msg: any; isMe: b
 
   return (
     <div className={cn(
-      "rounded-xl mb-0.5 w-[300px] sm:w-[330px] max-w-full px-1.5 py-1",
+      "rounded-xl mb-0.5 w-[260px] sm:w-[300px] lg:w-[330px] max-w-full px-1.5 py-1",
       isMe
         ? "bg-[#d9fdd3] ml-auto rounded-tr-none"
         : "bg-white mr-auto rounded-tl-none"
@@ -929,7 +929,7 @@ const SmartMediaAttachment = ({ msg, isMe, setPreviewImageMsgId }: { msg: any; i
   if (isAudioOnly === null) {
     return (
       <div className={cn(
-        "rounded-xl mb-0.5 w-[300px] sm:w-[330px] max-w-full px-1.5 py-1",
+        "rounded-xl mb-0.5 w-[260px] sm:w-[300px] lg:w-[330px] max-w-full px-1.5 py-1",
         isMe
           ? "bg-[#d9fdd3] ml-auto rounded-tr-none"
           : "bg-white mr-auto rounded-tl-none border border-slate-100/80 shadow-xs"
@@ -1021,6 +1021,28 @@ const SmartPreviewAttachment = ({ msg }: { msg: any }) => {
   );
 };
 
+const ImageWithLoader = ({ src, alt, className, imgClassName, onLoad, onClick }: { src: string; alt: string; className?: string; imgClassName?: string; onLoad?: () => void; onClick?: () => void }) => {
+  const [loaded, setLoaded] = useState(false);
+  return (
+    <div className={cn("relative overflow-hidden", className)} style={loaded ? {} : { minHeight: 180 }}>
+      {!loaded && (
+        <div className="absolute inset-0 flex items-center justify-center bg-slate-100 animate-pulse rounded-lg z-10">
+          <div className="w-6 h-6 border-2 border-slate-300 border-t-slate-500 rounded-full animate-spin" />
+        </div>
+      )}
+      <img
+        src={src}
+        alt={alt}
+        className={cn("w-full h-full", imgClassName || "object-contain")}
+        style={loaded ? {} : { opacity: 0 }}
+        onLoad={() => { setLoaded(true); onLoad?.(); }}
+        onClick={onClick}
+        onError={() => setLoaded(true)}
+      />
+    </div>
+  );
+};
+
 const VideoAttachment = ({ msg, setPreviewImageMsgId }: { msg: any; setPreviewImageMsgId: (id: string | null) => void }) => {
   const handleAction = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -1029,6 +1051,7 @@ const VideoAttachment = ({ msg, setPreviewImageMsgId }: { msg: any; setPreviewIm
   };
 
   const msgTime = dayjs(msg.timestamp).format("h:mm a");
+  const [videoLoaded, setVideoLoaded] = useState(false);
 
   return (
     <div className={cn(
@@ -1038,7 +1061,7 @@ const VideoAttachment = ({ msg, setPreviewImageMsgId }: { msg: any; setPreviewIm
       {/* Video Thumbnail Placeholder */}
       <div 
         onClick={handleAction}
-        className="relative w-[280px] sm:w-[360px] h-[200px] flex items-center justify-center bg-slate-950"
+        className="relative w-full sm:w-[360px] lg:w-[420px] h-[180px] sm:h-[220px] flex items-center justify-center bg-slate-950"
       >
         <video
           src={
@@ -1046,9 +1069,18 @@ const VideoAttachment = ({ msg, setPreviewImageMsgId }: { msg: any; setPreviewIm
               msg.attachmentUrl?.startsWith('http') ? msg.attachmentUrl :
                 `${API_URL}${msg.attachmentUrl}`
           }
-          className="w-full h-full object-cover opacity-60 pointer-events-none"
+          className={cn("w-full h-full object-cover pointer-events-none", videoLoaded ? "opacity-60" : "opacity-0")}
+          onLoadedData={() => setVideoLoaded(true)}
+          preload="metadata"
         />
         
+        {/* Loader Overlay */}
+        {!videoLoaded && !msg._optimistic && (
+          <div className="absolute inset-0 flex items-center justify-center bg-slate-900 animate-pulse z-10">
+            <div className="w-10 h-10 border-2 border-slate-600 border-t-slate-300 rounded-full animate-spin" />
+          </div>
+        )}
+
         {/* Loader Overlay (Optimistic) */}
         {msg._optimistic ? (
           <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center backdrop-blur-xs select-none">
@@ -1057,17 +1089,17 @@ const VideoAttachment = ({ msg, setPreviewImageMsgId }: { msg: any; setPreviewIm
               Uploading...
             </span>
           </div>
-        ) : (
+        ) : videoLoaded ? (
           /* Play Button Overlay */
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/20 hover:bg-black/35 transition-all select-none">
             <div className="w-14 h-14 rounded-full bg-black/50 text-white flex items-center justify-center border border-white/20 shadow-md">
               <Play className="w-6 h-6 fill-current ml-0.5" />
             </div>
           </div>
-        )}
+        ) : null}
 
         {/* Timestamp overlay */}
-        {!msg._optimistic && (
+        {!msg._optimistic && videoLoaded && (
           <div className="absolute bottom-2 right-2 flex items-center gap-1.5 text-[10px] text-white bg-black/40 px-2 py-0.5 rounded-[10px] select-none backdrop-blur-xs">
             <span>{msgTime}</span>
             {msg.isMe && (
@@ -1139,7 +1171,7 @@ const FileAttachment = ({ msg, handleOpenAttachment, renderCheckmarks }: { msg: 
     <div 
       onClick={handleAction}
       className={cn(
-        "rounded-xl overflow-hidden mb-1.5 border w-[280px] sm:w-[320px] relative group/file cursor-pointer transition-all hover:shadow-xs",
+        "rounded-xl overflow-hidden mb-1.5 border w-[280px] sm:w-[320px] lg:w-[360px] max-w-full relative group/file cursor-pointer transition-all hover:shadow-xs",
         msg.isMe ? "bg-[#d9fdd3] border-[#c3ebbc]" : "bg-white border-[#e2e5e7]"
       )}
     >
@@ -2443,6 +2475,9 @@ export default function ChatPage() {
   const isSendingRef = useRef(false);
   const recordingActionRef = useRef<'preview' | 'send' | 'delete'>('preview');
   const recordingStartTimeRef = useRef<number>(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const [isMessagesLoading, setIsMessagesLoading] = useState(false);
+  const pausedDurationRef = useRef(0);
 
 
   const prevMessagesLength = useRef(0);
@@ -2832,6 +2867,7 @@ export default function ChatPage() {
   const fetchMessages = React.useCallback(async () => {
     if (!selectedChat || !user || !user.id) return;
     const targetId = selectedChat.id || selectedChat.employeeId;
+    setIsMessagesLoading(true);
     try {
       const url = (selectedChat.type === 'group' || selectedChat.type === 'general')
         ? `${API_URL}/chat/messages/${user.id}/${targetId}?group_id=${targetId}`
@@ -2899,6 +2935,8 @@ export default function ChatPage() {
       }
     } catch (err) {
       console.error("Error fetching messages:", err);
+    } finally {
+      setIsMessagesLoading(false);
     }
   }, [selectedChat, user, mutedChats, chatNotificationPrefs, globalDndEnabled, globalDefaultMode, globalDefaultSound]);
 
@@ -2960,10 +2998,18 @@ export default function ChatPage() {
         }
       }
 
-      // Live refresh lists
-      fetchChatSummaries();
-      fetchGroups();
-      fetchChannels();
+      // Live update sidebar lastMessage for all chats
+      const otherId = isGroupMsg ? data.groupId : (data.senderId === user.id ? data.receiverId : data.senderId);
+      const msgText = data.text || (data.isVoice ? "🎤 Voice message" : (data.attachmentName ? "📎 Media" : ""));
+      const nowIso = new Date().toISOString();
+      if (data.groupId) {
+        setChatGroups(prev => prev.map(g => g.id === data.groupId ? { ...g, lastMessage: msgText, lastMessageTime: nowIso, lastMessageSenderId: data.senderId } : g));
+      } else {
+        setChatSummaries(prev => ({
+          ...prev,
+          [otherId]: { ...prev[otherId], lastMessage: msgText, timestamp: nowIso, senderId: data.senderId }
+        }));
+      }
     }
     else if (eventType === "message_updated") {
       const activeChat = selectedChatRef.current;
@@ -2994,6 +3040,23 @@ export default function ChatPage() {
           }
         });
       }
+    }
+    else if (eventType === "message_deleted") {
+      const activeChat = selectedChatRef.current;
+      const activeChatId = activeChat ? (activeChat.id || activeChat.employeeId) : null;
+      const deletedMsgId = data.messageId || data.id;
+      const deletedFor = data.deleteFor || 'me';
+
+      if (deletedFor === 'everyone' || data.senderId === user.id || data.performedBy === user.id) {
+        setCurrentMessages((prev) => prev.filter(m => m.id !== deletedMsgId && m.tempId !== deletedMsgId));
+      } else {
+        setCurrentMessages((prev) =>
+          prev.map(m => m.id === deletedMsgId ? { ...m, text: "You deleted this message", deletedForMe: true } : m)
+        );
+      }
+      fetchChatSummaries();
+      fetchGroups();
+      fetchChannels();
     }
     else if (eventType === "messages_seen") {
       const { chatId: seenChatId, userId: readerUserId } = data;
@@ -3419,11 +3482,11 @@ export default function ChatPage() {
 
     let gridClass = "";
     if (count === 2) {
-      gridClass = "grid grid-cols-2 gap-1 w-[280px] sm:w-[360px] h-[140px] sm:h-[180px]";
+      gridClass = "grid grid-cols-2 gap-1 w-[280px] sm:w-[360px] h-[120px] sm:h-[160px] lg:h-[200px]";
     } else if (count === 3) {
-      gridClass = "grid grid-cols-3 grid-rows-2 gap-1 w-[280px] sm:w-[360px] h-[180px] sm:h-[240px]";
+      gridClass = "grid grid-cols-3 grid-rows-2 gap-1 w-[280px] sm:w-[360px] h-[160px] sm:h-[200px] lg:h-[260px]";
     } else {
-      gridClass = "grid grid-cols-2 grid-rows-2 gap-1 w-[280px] sm:w-[360px] h-[280px] sm:h-[360px]";
+      gridClass = "grid grid-cols-2 grid-rows-2 gap-1 w-[280px] sm:w-[360px] h-[200px] sm:h-[300px] lg:h-[400px]";
     }
 
     const showTimestampOverlay = groupMsgs.every(gMsg => !gMsg.text || !gMsg.text.trim());
@@ -3457,10 +3520,11 @@ export default function ChatPage() {
               className={itemClass}
               onClick={() => setPreviewImageMsgId(gMsg.id)}
             >
-              <img
+              <ImageWithLoader
                 src={imgUrl}
                 alt={gMsg.attachmentName}
-                className="w-full h-full object-cover"
+                className="w-full h-full"
+                imgClassName="object-cover"
                 onLoad={() => scrollToBottom(true)}
               />
               {isLast && (
@@ -3713,23 +3777,44 @@ export default function ChatPage() {
   };
 
   const handleDeleteMessage = (msg: any) => {
+    enterSelectionMode();
+    toggleMessageSelection(msg.id);
     setMessageToDelete(msg);
     setShowDeleteConfirm(true);
   };
 
-  const confirmDeleteMessage = async () => {
-    if (!messageToDelete) return;
+  const canDeleteForEveryone = () => {
+    const ids = selectedMessageIds.length > 0 ? selectedMessageIds : (messageToDelete ? [messageToDelete.id] : []);
+    if (ids.length === 0) return false;
+    return ids.every(id => {
+      const msg = currentMessages.find(m => m.id === id);
+      return msg?.isMe;
+    });
+  };
+
+  const confirmDeleteMessage = async (deleteFor: 'me' | 'everyone') => {
+    const idsToDelete = selectedMessageIds.length > 0
+      ? selectedMessageIds
+      : (messageToDelete ? [messageToDelete.id] : []);
+    if (idsToDelete.length === 0) return;
     try {
-      const res = await fetch(`${API_URL}/chat/messages/${messageToDelete.id}`, {
-        method: 'DELETE'
-      });
-      if (res.ok) {
-        setShowDeleteConfirm(false);
-        setMessageToDelete(null);
-        fetchMessages();
-      }
+      await Promise.all(idsToDelete.map(id =>
+        fetch(`${API_URL}/chat/messages/${id}?deleteFor=${deleteFor}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ performedBy: user?.id })
+        })
+      ));
+      setShowDeleteConfirm(false);
+      setMessageToDelete(null);
+      if (isSelectionMode) exitSelectionMode();
+      fetchMessages();
+      toast.success(idsToDelete.length > 1
+        ? `${idsToDelete.length} messages deleted`
+        : (deleteFor === 'everyone' ? "Message deleted for everyone" : "Message deleted for you"));
     } catch (err) {
       console.error("Error deleting message:", err);
+      toast.error("Failed to delete message");
     }
   };
 
@@ -3933,9 +4018,11 @@ export default function ChatPage() {
 
       mediaRecorder.start();
       setIsRecording(true);
+      setIsPaused(false);
       setRecordingDuration(0);
       recordingActionRef.current = 'preview';
       recordingStartTimeRef.current = Date.now();
+      pausedDurationRef.current = 0;
       recordingTimerRef.current = setInterval(() => {
         setRecordingDuration(prev => prev + 1);
       }, 1000);
@@ -3945,10 +4032,29 @@ export default function ChatPage() {
     }
   };
 
+  const pauseRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      mediaRecorderRef.current.pause();
+      setIsPaused(true);
+      clearInterval(recordingTimerRef.current);
+    }
+  };
+
+  const resumeRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "paused") {
+      mediaRecorderRef.current.resume();
+      setIsPaused(false);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+    }
+  };
+
   const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
+    if (mediaRecorderRef.current && (isRecording || mediaRecorderRef.current.state !== "inactive")) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+      setIsPaused(false);
       clearInterval(recordingTimerRef.current);
     }
   };
@@ -5367,7 +5473,7 @@ export default function ChatPage() {
                 )}
 
                 {/* Chat Messages */}
-                <div className="flex-1 flex flex-col whatsapp-chat-bg overflow-hidden relative">
+                <div className="flex-1 flex flex-col whatsapp-chat-bg overflow-x-hidden overflow-y-hidden relative">
                   {/* Selection Mode Header */}
                   {isSelectionMode && (
                     <div className="bg-brand-teal text-white px-4 py-2.5 flex items-center justify-between animate-in slide-in-from-top-1 z-10 shrink-0">
@@ -5383,6 +5489,20 @@ export default function ChatPage() {
                         <span className="text-sm font-bold">{selectedMessageIds.length} selected</span>
                       </div>
                       <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-white hover:bg-white/20 h-8 w-8 rounded-full"
+                          onClick={() => {
+                            if (selectedMessageIds.length === 0) return;
+                            setMessageToDelete(null);
+                            setShowDeleteConfirm(true);
+                          }}
+                          disabled={selectedMessageIds.length === 0}
+                          title="Delete selected"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -5413,7 +5533,7 @@ export default function ChatPage() {
                   <div
                     ref={scrollRef}
                     onScroll={handleScroll}
-                    className="flex-1 overflow-y-auto px-3 py-2 sm:px-6 sm:py-4 space-y-0.5 custom-scrollbar"
+                    className="flex-1 overflow-y-auto px-2 sm:px-4 md:px-6 lg:px-8 py-2 sm:py-4 space-y-0.5 custom-scrollbar"
                   >
                     <div className="flex justify-center">
                       <span className="px-3 py-1 bg-white border border-border rounded-full text-[10px] font-bold text-muted-foreground uppercase tracking-wider shadow-sm">
@@ -5421,8 +5541,15 @@ export default function ChatPage() {
                       </span>
                     </div>
 
-                    {displayMessages.length === 0 ? (
-                      <div className="text-center py-10">
+                    {isMessagesLoading ? (
+                      <div className="flex items-center justify-center py-20">
+                        <div className="flex flex-col items-center gap-3">
+                          <div className="w-8 h-8 border-[3px] border-brand-teal border-t-transparent rounded-full animate-spin" />
+                          <span className="text-xs text-muted-foreground font-medium">Loading messages...</span>
+                        </div>
+                      </div>
+                    ) : displayMessages.length === 0 ? (
+                      <div className="flex items-center justify-center py-20">
                         <p className="text-sm text-muted-foreground">
                           {messageSearchQuery ? "No messages matching your search." : `No messages yet. Say hi to ${selectedChat.name}!`}
                         </p>
@@ -5525,7 +5652,7 @@ export default function ChatPage() {
                               )
                             )}
                             <div className={cn(
-                              "flex flex-col max-w-[85%] sm:max-w-[70%]",
+                              "flex flex-col max-w-[90%] sm:max-w-[75%] lg:max-w-[65%] xl:max-w-[60%]",
                               msg.isMe ? "items-end" : "items-start"
                             )}>
                               {editingMessageId === msg.id ? (
@@ -5581,14 +5708,14 @@ export default function ChatPage() {
                                     return (
                                   <div
                                     className={cn(
-                                      "whatsapp-bubble text-[14.2px] leading-[19px] whitespace-pre-wrap break-words [word-break:break-word] select-text relative flow-root",
+                                      "whatsapp-bubble text-[14.2px] leading-[19px] whitespace-pre-wrap break-words [word-break:break-word] overflow-wrap-anywhere select-text relative flow-root",
                                       (msg.attachmentName && !msg.isVoice && /\.(mov|mkv)$/i.test(msg.attachmentName))
-                                        ? "w-[280px] sm:w-[360px]"
+                                        ? "w-[280px] sm:w-[360px] lg:w-[420px] max-w-full"
                                         : (msg.attachmentName && !msg.isVoice && /\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName) && msg.text) || imageGroups[msg.id]
-                                          ? "w-[280px] sm:w-[360px]"
+                                          ? "w-[280px] sm:w-[360px] lg:w-[420px] max-w-full"
                                           : (msg.attachmentName && !msg.isVoice)
-                                            ? "w-[280px] sm:w-[320px]"
-                                            : "w-fit",
+                                            ? "w-[280px] sm:w-[320px] lg:w-[360px] max-w-full max-w-full"
+                                            : "w-fit max-w-full",
                                       (msg.attachmentName || imageGroups[msg.id])
                                         ? (
                                           (msg.text || (imageGroups[msg.id] && imageGroups[msg.id].some(g => g.text && g.text.trim())))
@@ -5651,14 +5778,14 @@ export default function ChatPage() {
                                           "relative rounded-lg overflow-hidden border border-black/10 max-w-full",
                                           msg.text ? "mb-1" : "mb-0"
                                         )}>
-                                          <img
+                                          <ImageWithLoader
                                             src={
                                               msg.attachmentUrl?.startsWith('blob:') ? msg.attachmentUrl :
                                                 msg.attachmentUrl?.startsWith('http') ? msg.attachmentUrl :
                                                   `${API_URL}${msg.attachmentUrl}`
                                             }
                                             alt={msg.attachmentName}
-                                            className="max-w-[280px] sm:max-w-[360px] max-h-[300px] object-contain cursor-pointer hover:opacity-95 transition-opacity bg-slate-50 border border-slate-100 rounded-lg"
+                                            className="max-w-[280px] sm:max-w-[360px] max-h-[300px] cursor-pointer rounded-lg"
                                             onLoad={() => scrollToBottom(true)}
                                             onClick={() => setPreviewImageMsgId(msg.id)}
                                           />
@@ -6114,44 +6241,60 @@ export default function ChatPage() {
                               </Button>
 
                               <div className="flex items-center gap-1.5">
-                                <span className="flex h-2 w-2 relative shrink-0">
-                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                                </span>
+                                {!isPaused && (
+                                  <span className="flex h-2 w-2 relative shrink-0">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                                  </span>
+                                )}
                                 <span className="text-[12px] font-bold text-red-500 tabular-nums">
                                   {Math.floor(recordingDuration / 60)}:{String(recordingDuration % 60).padStart(2, '0')}
                                 </span>
                               </div>
 
-                              <div className="flex-1 flex items-center justify-center overflow-hidden">
-                                <div className="flex items-center gap-[2px] h-6">
-                                  {Array.from({ length: 30 }).map((_, i) => (
-                                    <div
-                                      key={i}
-                                      className="w-[3px] bg-red-400 rounded-full animate-pulse"
-                                      style={{
-                                        height: `${Math.max(4, Math.sin(Date.now() / 200 + i * 0.5) * 12 + 14)}px`,
-                                        animationDelay: `${i * 50}ms`,
-                                        opacity: 0.7
-                                      }}
-                                    />
-                                  ))}
+                              {!isPaused ? (
+                                <div className="flex-1 flex items-center justify-center overflow-hidden">
+                                  <div className="flex items-center gap-[2px] h-6">
+                                    {Array.from({ length: 30 }).map((_, i) => (
+                                      <div
+                                        key={i}
+                                        className="w-[3px] bg-red-400 rounded-full animate-pulse"
+                                        style={{
+                                          height: `${Math.max(4, Math.sin(Date.now() / 200 + i * 0.5) * 12 + 14)}px`,
+                                          animationDelay: `${i * 50}ms`,
+                                          opacity: 0.7
+                                        }}
+                                      />
+                                    ))}
+                                  </div>
                                 </div>
-                              </div>
+                              ) : (
+                                <div className="flex-1 flex items-center justify-center">
+                                  <span className="text-[12px] font-semibold text-slate-400">Paused</span>
+                                </div>
+                              )}
 
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-9 w-9 text-[#54656f] hover:bg-slate-100 rounded-full shrink-0"
-                                onClick={() => { recordingActionRef.current = 'preview'; stopRecording(); }}
-                              >
-                                <Pause className="w-5 h-5 fill-current" />
-                              </Button>
-
-                              <span className="text-[11px] font-mono font-bold text-red-500 tabular-nums shrink-0">
-                                {Math.floor(recordingDuration / 60)}:{String(recordingDuration % 60).padStart(2, '0')}
-                              </span>
+                              {!isPaused ? (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-9 w-9 text-[#54656f] hover:bg-slate-100 rounded-full shrink-0"
+                                  onClick={pauseRecording}
+                                >
+                                  <Pause className="w-5 h-5 fill-current" />
+                                </Button>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-9 w-9 text-brand-teal hover:bg-brand-teal/10 rounded-full shrink-0"
+                                  onClick={resumeRecording}
+                                >
+                                  <Play className="w-5 h-5 fill-current ml-0.5" />
+                                </Button>
+                              )}
 
                               <Button
                                 type="button"
@@ -6416,7 +6559,7 @@ export default function ChatPage() {
             )}
             {/* Right Sidebar - Shared Files Repository / Contact Info */}
             {selectedChat && showRightSidebar && (
-              <div className="w-[380px] border-l border-border bg-white flex flex-col overflow-hidden animate-in slide-in-from-right duration-300 shrink-0">
+              <div className="hidden sm:flex w-full sm:w-[340px] lg:w-[380px] border-l border-border bg-white flex-col overflow-hidden animate-in slide-in-from-right duration-300 shrink-0">
                 <div className="h-[88px] border-b border-border px-6 flex items-center justify-between bg-white shrink-0">
                   {sidebarContactUser ? (
                     <div className="flex items-center gap-2">
@@ -6999,59 +7142,36 @@ export default function ChatPage() {
 
       {/* Delete Message Confirmation Dialog */}
       <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-        <DialogContent className="sm:max-w-[500px] bg-[#1a1c1e] border-none text-white rounded-3xl p-0 overflow-hidden">
-          <div className="p-8 pb-6">
-            <DialogHeader className="flex-row items-center justify-between mb-6 space-y-0">
-              <DialogTitle className="text-2xl font-bold text-white">Delete message</DialogTitle>
-              <DialogDescription className="sr-only">Are you sure you want to delete this message?</DialogDescription>
-              <Button variant="ghost" size="icon" className="text-gray-400 hover:text-white hover:bg-white/10 h-8 w-8 rounded-full" onClick={() => setShowDeleteConfirm(false)}>
-                <X className="w-5 h-5" />
-              </Button>
+        <DialogContent className="sm:max-w-[320px] bg-white border-none rounded-2xl p-0 overflow-hidden shadow-2xl">
+          <div className="p-5">
+            <DialogHeader className="mb-3">
+              <DialogTitle className="text-base font-bold text-slate-800 text-center">Delete message?</DialogTitle>
+              <DialogDescription className="sr-only">Choose how to delete this message</DialogDescription>
             </DialogHeader>
 
-            <p className="text-gray-400 text-lg mb-8 leading-relaxed">
-              Are you sure you want to delete this message? This cannot be undone.
-            </p>
-
-            {messageToDelete && (
-              <div className="bg-[#2a2d31]/50 border border-white/5 rounded-2xl p-6 mb-8">
-                <div className="flex items-start gap-4">
-                  <Avatar className="w-10 h-10 border border-white/10">
-                    <AvatarImage src={getAvatarUrl(messageToDelete.isMe ? user?.profilePhoto : selectedChat?.avatar)} />
-                    <AvatarFallback className="bg-brand-teal text-white font-bold uppercase text-xs">
-                      {(messageToDelete.isMe ? user?.name : selectedChat?.name)?.[0]}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <span className="font-bold text-white text-[15px]">
-                        {messageToDelete.isMe ? user?.name : selectedChat?.name}
-                      </span>
-                      <span className="text-[11px] text-gray-500 font-medium uppercase tracking-wider">
-                        {dayjs(messageToDelete.timestamp).format("MMM DD at hh:mm A")}
-                      </span>
-                    </div>
-                    <p className="text-gray-300 text-sm break-words leading-relaxed">
-                      {messageToDelete.text}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="flex justify-end gap-3">
+            <div className="flex flex-col gap-1.5">
+              <Button
+                onClick={() => { confirmDeleteMessage('me'); if (isSelectionMode) exitSelectionMode(); }}
+                className="w-full justify-start text-sm font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl py-5 px-4 shadow-none"
+              >
+                <Trash2 className="w-4 h-4 mr-3 text-slate-500" />
+                Delete for me
+              </Button>
+              {canDeleteForEveryone() && (
+                <Button
+                  onClick={() => { confirmDeleteMessage('everyone'); if (isSelectionMode) exitSelectionMode(); }}
+                  className="w-full justify-start text-sm font-semibold text-red-600 bg-white hover:bg-red-50 border border-slate-200 rounded-xl py-5 px-4 shadow-none"
+                >
+                  <Trash2 className="w-4 h-4 mr-3 text-red-500" />
+                  Delete for everyone
+                </Button>
+              )}
               <Button
                 variant="ghost"
-                onClick={() => setShowDeleteConfirm(false)}
-                className="text-white hover:bg-white/10 px-8 py-6 text-lg font-bold rounded-2xl border border-white/10"
+                onClick={() => { setShowDeleteConfirm(false); if (isSelectionMode) exitSelectionMode(); }}
+                className="w-full justify-center text-sm font-medium text-slate-500 hover:bg-slate-50 rounded-xl py-4 mt-0.5"
               >
                 Cancel
-              </Button>
-              <Button
-                onClick={confirmDeleteMessage}
-                className="bg-[#be123c] hover:bg-[#9f1239] text-white px-10 py-6 text-lg font-bold rounded-2xl shadow-xl shadow-red-900/20"
-              >
-                Delete
               </Button>
             </div>
           </div>
@@ -7446,13 +7566,21 @@ export default function ChatPage() {
       </Dialog>
 
       {/* Right-click Context Menu */}
-      {contextMenu && (
+      {contextMenu && (() => {
+        const menuW = 200, menuH = 320;
+        const vw = typeof window !== 'undefined' ? window.innerWidth : 0;
+        const vh = typeof window !== 'undefined' ? window.innerHeight : 0;
+        const fitsBelow = contextMenu.y + menuH <= vh;
+        const fitsRight = contextMenu.x + menuW <= vw;
+        return (
         <div
           key={`${contextMenu.msg.id}-${contextMenu.x}-${contextMenu.y}`}
-          className="custom-ctx-menu fixed z-[999] bg-white/95 backdrop-blur-md border border-slate-200/80 rounded-xl shadow-2xl p-1.5 min-w-[200px] animate-in fade-in zoom-in-95 duration-100"
+          className="custom-ctx-menu fixed z-[999] bg-white/95 backdrop-blur-md border border-slate-200/80 rounded-xl shadow-2xl p-1.5 min-w-[200px] max-h-[70vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-100"
           style={{
-            top: Math.min(contextMenu.y, typeof window !== 'undefined' ? window.innerHeight - 440 : contextMenu.y),
-            left: Math.min(contextMenu.x, typeof window !== 'undefined' ? window.innerWidth - 220 : contextMenu.x)
+            top: fitsBelow ? contextMenu.y : undefined,
+            bottom: fitsBelow ? undefined : vh - contextMenu.y,
+            left: fitsRight ? contextMenu.x : undefined,
+            right: fitsRight ? undefined : vw - contextMenu.x
           }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -7500,31 +7628,28 @@ export default function ChatPage() {
                   toggleMessageSelection(contextMenu.msg.id);
                   setContextMenu(null);
                 }}
-                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
               >
                 {selectedMessageIds.includes(contextMenu.msg.id) ? (
-                  <>
-                    <X className="w-4 h-4 text-slate-400" />
-                    Deselect message
-                  </>
+                  <><X className="w-4 h-4 text-slate-400" /> Deselect</>
                 ) : (
-                  <>
-                    <Check className="w-4 h-4 text-slate-400" />
-                    Select message
-                  </>
+                  <><Check className="w-4 h-4 text-slate-400" /> Select</>
                 )}
               </button>
               <button
                 type="button"
                 onClick={() => {
-                  handleForwardSelectedMessages();
+                  if (selectedMessageIds.length > 0) {
+                    setShowDeleteConfirm(true);
+                    setMessageToDelete(null);
+                  }
                   setContextMenu(null);
                 }}
                 disabled={selectedMessageIds.length === 0}
-                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors disabled:opacity-50"
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-lg text-left transition-colors disabled:opacity-50"
               >
-                <Forward className="w-4 h-4 text-slate-400" />
-                Forward selected ({selectedMessageIds.length})
+                <Trash2 className="w-4 h-4 text-red-500" />
+                Delete ({selectedMessageIds.length})
               </button>
               <button
                 type="button"
@@ -7532,25 +7657,14 @@ export default function ChatPage() {
                   exitSelectionMode();
                   setContextMenu(null);
                 }}
-                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
               >
                 <X className="w-4 h-4 text-slate-400" />
-                Clear selection
+                Clear
               </button>
             </>
           ) : (
             <>
-              {contextMenu.msg.isMe && selectedChat?.type !== 'personal' && (
-                <button
-                  type="button"
-                  onClick={() => { setMsgInfoData(contextMenu.msg); setContextMenu(null); }}
-                  className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
-                >
-                  <Info className="w-4 h-4 text-slate-400" />
-                  Message Info
-                </button>
-              )}
-
               <button
                 type="button"
                 onClick={() => {
@@ -7558,7 +7672,7 @@ export default function ChatPage() {
                   setContextMenu(null);
                   setTimeout(() => messageInputRef.current?.focus(), 50);
                 }}
-                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
               >
                 <Reply className="w-4 h-4 text-slate-400" />
                 Reply
@@ -7567,77 +7681,13 @@ export default function ChatPage() {
               <button
                 type="button"
                 onClick={async () => {
-                  if (contextMenu.msg.text && !contextMenu.msg.attachmentName) {
+                  if (contextMenu.msg.text) {
                     navigator.clipboard.writeText(contextMenu.msg.text);
-                    toast.success("Copied to clipboard!");
-                  } else if (contextMenu.msg.attachmentName) {
-                    const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(contextMenu.msg.attachmentName);
-                    if (isImage) {
-                      try {
-                        const fullUrl = contextMenu.msg.attachmentUrl.startsWith('http')
-                          ? contextMenu.msg.attachmentUrl
-                          : `${API_URL}${contextMenu.msg.attachmentUrl}`;
-
-                        try {
-                          const response = await fetch(fullUrl);
-                          const originalBlob = await response.blob();
-                          if (originalBlob.type === 'image/png') {
-                            await navigator.clipboard.write([
-                              new ClipboardItem({
-                                [originalBlob.type]: originalBlob
-                              })
-                            ]);
-                            toast.success("Image copied to clipboard!");
-                            setContextMenu(null);
-                            return;
-                          }
-                        } catch (fetchErr) {
-                          console.warn("Direct image copy failed, using canvas fallback", fetchErr);
-                        }
-
-                        const img = new Image();
-                        img.crossOrigin = "anonymous";
-                        img.src = fullUrl;
-                        img.onload = () => {
-                          const canvas = document.createElement('canvas');
-                          canvas.width = img.naturalWidth;
-                          canvas.height = img.naturalHeight;
-                          const ctx = canvas.getContext('2d');
-                          if (ctx) {
-                            ctx.drawImage(img, 0, 0);
-                            canvas.toBlob(async (pngBlob) => {
-                              if (pngBlob) {
-                                try {
-                                  await navigator.clipboard.write([
-                                    new ClipboardItem({
-                                      [pngBlob.type]: pngBlob
-                                    })
-                                  ]);
-                                  toast.success("Image copied to clipboard!");
-                                } catch (err) {
-                                  navigator.clipboard.writeText(fullUrl);
-                                  toast.success("Copied image link to clipboard!");
-                                }
-                              }
-                            }, 'image/png');
-                          }
-                        };
-                        img.onerror = () => {
-                          navigator.clipboard.writeText(fullUrl);
-                          toast.success("Copied image link to clipboard!");
-                        };
-                      } catch (e) {
-                        navigator.clipboard.writeText(contextMenu.msg.attachmentName);
-                        toast.success("Copied file name to clipboard!");
-                      }
-                    } else {
-                      navigator.clipboard.writeText(contextMenu.msg.attachmentName);
-                      toast.success("Copied file name to clipboard!");
-                    }
+                    toast.success("Copied!");
                   }
                   setContextMenu(null);
                 }}
-                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
               >
                 <Copy className="w-4 h-4 text-slate-400" />
                 Copy
@@ -7646,7 +7696,7 @@ export default function ChatPage() {
               <button
                 type="button"
                 onClick={() => { setForwardingMessage(contextMenu.msg); setForwardingMessages(null); setContextMenu(null); }}
-                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
               >
                 <Forward className="w-4 h-4 text-slate-400" />
                 Forward
@@ -7659,7 +7709,7 @@ export default function ChatPage() {
                   toggleMessageSelection(contextMenu.msg.id);
                   setContextMenu(null);
                 }}
-                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
               >
                 <CheckCheck className="w-4 h-4 text-slate-400" />
                 Select messages
@@ -7668,7 +7718,7 @@ export default function ChatPage() {
               <button
                 type="button"
                 onClick={() => { handleTogglePin(contextMenu.msg.id); setContextMenu(null); }}
-                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
               >
                 <Pin className={cn("w-4 h-4 text-slate-400", contextMenu.msg.isPinned && "fill-current text-brand-teal")} />
                 {contextMenu.msg.isPinned ? "Unpin" : "Pin"}
@@ -7690,7 +7740,7 @@ export default function ChatPage() {
                   }
                   setContextMenu(null);
                 }}
-                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
               >
                 <Download className="w-4 h-4 text-slate-400" />
                 Save as
@@ -7700,48 +7750,8 @@ export default function ChatPage() {
 
               <button
                 type="button"
-                onClick={() => { handleToggleStarMessage(contextMenu.msg.id); setContextMenu(null); }}
-                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
-              >
-                <Star className="w-4 h-4 text-slate-400" />
-                Star
-              </button>
-
-              <button
-                type="button"
-                onClick={() => { handleShareMessage(contextMenu.msg); setContextMenu(null); }}
-                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
-              >
-                <Share2 className="w-4 h-4 text-slate-400" />
-                Share
-              </button>
-
-              {contextMenu.msg.attachmentUrl && (
-                <button
-                  type="button"
-                  onClick={() => { handleOpenWith(contextMenu.msg); setContextMenu(null); }}
-                  className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
-                >
-                  <ExternalLink className="w-4 h-4 text-slate-400" />
-                  Open with
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => { handleReportMessage(contextMenu.msg.id); setContextMenu(null); }}
-                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
-              >
-                <Flag className="w-4 h-4 text-slate-400" />
-                Report
-              </button>
-
-              <DropdownMenuSeparator className="my-1" />
-
-              <button
-                type="button"
-                onClick={() => { handleDeleteMessage(contextMenu.msg); setContextMenu(null); }}
-                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-lg text-left transition-colors"
+                onClick={() => { enterSelectionMode(); toggleMessageSelection(contextMenu.msg.id); setContextMenu(null); }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-lg text-left transition-colors"
               >
                 <Trash2 className="w-4 h-4 text-red-500" />
                 Delete
@@ -7749,15 +7759,23 @@ export default function ChatPage() {
             </>
           )}
         </div>
-      )}
+      ); })()}
 
       {/* Chat Background Context Menu */}
-      {chatBackgroundContextMenu && (
+      {chatBackgroundContextMenu && (() => {
+        const bgMenuW = 180, bgMenuH = 120;
+        const vw = typeof window !== 'undefined' ? window.innerWidth : 0;
+        const vh = typeof window !== 'undefined' ? window.innerHeight : 0;
+        const fitsBelow = chatBackgroundContextMenu.y + bgMenuH <= vh;
+        const fitsRight = chatBackgroundContextMenu.x + bgMenuW <= vw;
+        return (
         <div
           className="custom-ctx-menu fixed z-[999] bg-white/95 backdrop-blur-md border border-slate-200/80 rounded-xl shadow-2xl p-1.5 min-w-[180px] animate-in fade-in zoom-in-95 duration-100"
           style={{
-            top: Math.min(chatBackgroundContextMenu.y, typeof window !== 'undefined' ? window.innerHeight - 120 : chatBackgroundContextMenu.y),
-            left: Math.min(chatBackgroundContextMenu.x, typeof window !== 'undefined' ? window.innerWidth - 200 : chatBackgroundContextMenu.x)
+            top: fitsBelow ? chatBackgroundContextMenu.y : undefined,
+            bottom: fitsBelow ? undefined : vh - chatBackgroundContextMenu.y,
+            left: fitsRight ? chatBackgroundContextMenu.x : undefined,
+            right: fitsRight ? undefined : vw - chatBackgroundContextMenu.x
           }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -7808,7 +7826,7 @@ export default function ChatPage() {
             </>
           )}
         </div>
-      )}
+      ); })()}
 
       {showDiscardConfirm && (
         <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center animate-in fade-in duration-200">

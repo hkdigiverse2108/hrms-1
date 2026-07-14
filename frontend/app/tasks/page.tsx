@@ -586,7 +586,7 @@ export default function TaskManagementPage() {
   });
 
   const filteredTasks = statsTasks.filter(task => {
-    const statusMatch = filterMode === 'all' || activeStatuses.includes(task.status) || (activeStatuses.includes('on-hold') && task.status === 'pending') || (activeStatuses.includes('pending') && task.status === 'on-hold');
+    const statusMatch = activeStatuses.length === 0 || activeStatuses.includes(task.status) || (activeStatuses.includes('on-hold') && task.status === 'pending') || (activeStatuses.includes('pending') && task.status === 'on-hold');
     return statusMatch;
   });
 

@@ -2135,8 +2135,29 @@ async def _apply_punch_out_to_record(db, record: dict, close_dt: datetime, auto_
 
 async def auto_close_stale_open_sessions(db, employee_id: str) -> int:
     """Auto-close open attendance sessions from previous days (forgotten punch-out)."""
-    # Disabled automatic punch-out as requested by the user
-    return 0
+    closed_count = 0
+    today_str = get_now().strftime("%Y-%m-%d")
+    today_dt_naive = datetime.strptime(today_str, "%Y-%m-%d")
+    today_dt_aware = today_dt_naive.replace(tzinfo=IST)
+    query_or = [{"employeeId": employee_id}]
+    if ObjectId.is_valid(employee_id):
+        query_or.append({"employeeId": ObjectId(employee_id)})
+    cursor = db.attendance.find({
+        "$or": query_or,
+        "checkOut": None,
+        "date": {"$nin": [today_str, today_dt_naive, today_dt_aware]}
+    })
+    async for record in cursor:
+        try:
+            default_end = parse_datetime(record["date"], "20:00:00")
+            close_dt = default_end if default_end else get_now()
+            if close_dt > get_now():
+                close_dt = get_now()
+            await _apply_punch_out_to_record(db, record, close_dt, auto_remark="Auto closed (forgotten punch-out)")
+            closed_count += 1
+        except Exception as e:
+            print(f"Error auto-closing old session for {employee_id}: {e}")
+    return closed_count
 
 
 async def get_attendance_status(db, employee_id: str):
@@ -2153,7 +2174,7 @@ async def get_attendance_status(db, employee_id: str):
     record = records[0] if records else None
     return fix_id(record)
 
-async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None, performed_by: str = "System", user_name: str = "System User"):
+async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None, performed_by: str = "System", user_name: str = "System User", punch_in_activity_type: Optional[str] = None, punch_in_activity_subtype: Optional[str] = None, punch_in_activity_value: Optional[str] = None, punch_in_task_id: Optional[str] = None):
     employee = await get_employee(db, employee_id)
     if not employee or employee.get("status", "").lower() == "inactive":
         return None
@@ -2290,16 +2311,89 @@ async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None, pe
         print(f"Error computing late punch-in status: {e}")
 
     if existing_record:
-        # If already active or on break, just return the record
-        if existing_record.get("status") in ["Active", "On Break"] and existing_record.get("checkOut") is None:
+        # If already active, check if there's a new activity type passed, and if so, change activity instead of just returning.
+        if existing_record.get("status") == "Active" and existing_record.get("checkOut") is None:
+            if punch_in_activity_type is not None:
+                punches = existing_record.get("punches", [])
+                if punches and punches[-1].get("punchOut") is None:
+                    punches[-1]["punchOut"] = now_time_str
+                
+                new_punch = {
+                    "punchIn": now_time_str, 
+                    "punchOut": None,
+                    "activityType": punch_in_activity_type,
+                    "activitySubtype": punch_in_activity_subtype,
+                    "activityValue": punch_in_activity_value,
+                    "taskId": punch_in_task_id
+                }
+                punches.append(new_punch)
+                
+                await db.attendance.update_one(
+                    {"_id": existing_record["_id"]},
+                    {
+                        "$set": {
+                            "punches": punches,
+                            "punchInActivityType": punch_in_activity_type,
+                            "punchInActivitySubtype": punch_in_activity_subtype,
+                            "punchInActivityValue": punch_in_activity_value,
+                            "punchInTaskId": punch_in_task_id
+                        }
+                    }
+                )
+                
+
+                updated_doc = await db.attendance.find_one({"_id": existing_record["_id"]})
+                await log_activity(
+                    db=db,
+                    action="Activity Changed",
+                    performedBy=performed_by if performed_by != "System" else employee_id,
+                    userName=user_name if user_name != "System User" else employee.get("name", "Staff"),
+                    details=f"Employee changed activity to {punch_in_activity_type} at {now_time_str}.",
+                    attendanceId=str(updated_doc["_id"])
+                )
+                
+                # Auto-create research if it doesn't exist
+                if punch_in_activity_type == "Research" and punch_in_activity_value:
+                    try:
+                        existing_res = await db.research.find_one({"title": punch_in_activity_value, "createdBy": employee_id})
+                        if not existing_res:
+                            new_research = {
+                                "title": punch_in_activity_value,
+                                "description": "",
+                                "link": "",
+                                "createdBy": employee_id,
+                                "createdByName": employee.get("name", ""),
+                                "sharedWith": [],
+                                "projectId": "",
+                                "createdAt": get_now()
+                            }
+                            await db.research.insert_one(new_research)
+                    except Exception as e_res:
+                        print(f"Error auto-creating Research: {e_res}")
+                        
+                return fix_id(updated_doc)
+            return fix_id(existing_record)
+            
+        if existing_record.get("status") == "On Break" and existing_record.get("checkOut") is None:
             return fix_id(existing_record)
         
         # If logged out, resume this record instead of creating a new one
-        new_punch = {"punchIn": now_time_str, "punchOut": None}
+        new_punch = {
+            "punchIn": now_time_str, 
+            "punchOut": None,
+            "activityType": punch_in_activity_type,
+            "activitySubtype": punch_in_activity_subtype,
+            "activityValue": punch_in_activity_value,
+            "taskId": punch_in_task_id
+        }
         set_values = {
             "status": "Active",
             "checkOut": None,
-            "lastPunchIn": now_time_str
+            "lastPunchIn": now_time_str,
+            "punchInActivityType": punch_in_activity_type,
+            "punchInActivitySubtype": punch_in_activity_subtype,
+            "punchInActivityValue": punch_in_activity_value,
+            "punchInTaskId": punch_in_task_id
         }
         # If the existing checkIn is a placeholder or empty, set it to the actual first punch-in time!
         if existing_record.get("checkIn") in [None, "--", "--:--", "", "-"]:
@@ -2335,6 +2429,26 @@ async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None, pe
             details=f"Employee clocked in at {now_time_str} (Resumed existing session).",
             attendanceId=str(updated_doc["_id"])
         )
+        
+        # Auto-create research if it doesn't exist
+        if punch_in_activity_type == "Research" and punch_in_activity_value:
+            try:
+                existing_res = await db.research.find_one({"title": punch_in_activity_value, "createdBy": employee_id})
+                if not existing_res:
+                    new_research = {
+                        "title": punch_in_activity_value,
+                        "description": "",
+                        "link": "",
+                        "createdBy": employee_id,
+                        "createdByName": employee.get("name", ""),
+                        "sharedWith": [],
+                        "projectId": "",
+                        "createdAt": get_now()
+                    }
+                    await db.research.insert_one(new_research)
+            except Exception as e_res:
+                print(f"Error auto-creating Research: {e_res}")
+                
         return fix_id(updated_doc)
     
     # First punch of the day: create new record (use naive date so MongoDB stores it as exactly today's midnight UTC date)
@@ -2348,9 +2462,20 @@ async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None, pe
         "status": "Active",
         "workHours": None,
         "accumulatedWorkSeconds": 0,
-        "punches": [{"punchIn": now_time_str, "punchOut": None}],
+        "punches": [{
+            "punchIn": now_time_str, 
+            "punchOut": None,
+            "activityType": punch_in_activity_type,
+            "activitySubtype": punch_in_activity_subtype,
+            "activityValue": punch_in_activity_value,
+            "taskId": punch_in_task_id
+        }],
         "remarks": f"On Leave: {half_day_type}" if half_day_type else "-",
-        "isLate": is_late_punch
+        "isLate": is_late_punch,
+        "punchInActivityType": punch_in_activity_type,
+        "punchInActivitySubtype": punch_in_activity_subtype,
+        "punchInActivityValue": punch_in_activity_value,
+        "punchInTaskId": punch_in_task_id
     }
     
     # If late, insert the remark
@@ -2370,6 +2495,26 @@ async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None, pe
         details=f"Employee clocked in at {now_time_str}.",
         attendanceId=attendance_data["id"]
     )
+    
+    # Auto-create research if it doesn't exist
+    if punch_in_activity_type == "Research" and punch_in_activity_value:
+        try:
+            existing_res = await db.research.find_one({"title": punch_in_activity_value, "createdBy": employee_id})
+            if not existing_res:
+                new_research = {
+                    "title": punch_in_activity_value,
+                    "description": "",
+                    "link": "",
+                    "createdBy": employee_id,
+                    "createdByName": employee.get("name", ""),
+                    "sharedWith": [],
+                    "projectId": "",
+                    "createdAt": get_now()
+                }
+                await db.research.insert_one(new_research)
+        except Exception as e_res:
+            print(f"Error auto-creating Research: {e_res}")
+
     if "_id" in attendance_data:
         attendance_data.pop("_id")
     return attendance_data
@@ -2524,23 +2669,34 @@ async def break_in(db, employee_id: str):
     if not status or status.get("status") == "On Break":
         return None
     
+    now_str = get_now().strftime("%H:%M:%S")
     new_break = {
-        "startTime": get_now().strftime("%H:%M:%S"),
+        "startTime": now_str,
         "endTime": None,
         "duration": None
     }
     
+    update_data = {
+        "$push": {"breaks": new_break},
+        "$set": {"status": "On Break"}
+    }
+    
+    # Close the current punch so its time stops
+    if status.get("punches") and len(status["punches"]) > 0:
+        last_punch_idx = len(status["punches"]) - 1
+        last_punch = status["punches"][last_punch_idx]
+        if not last_punch.get("punchOut"):
+            update_data["$set"] = update_data.get("$set", {})
+            update_data["$set"][f"punches.{last_punch_idx}.punchOut"] = now_str
+            
     await db.attendance.update_one(
         {"_id": ObjectId(status["id"])},
-        {
-            "$push": {"breaks": new_break},
-            "$set": {"status": "On Break"}
-        }
+        update_data
     )
     result = await db.attendance.find_one({"_id": ObjectId(status["id"])})
     return fix_id(result)
 
-async def break_out(db, employee_id: str):
+async def break_out(db, employee_id: str, resume_task: bool = False):
     await auto_close_stale_open_sessions(db, employee_id)
     query_or = [{"employeeId": employee_id}]
     if ObjectId.is_valid(employee_id):
@@ -2571,15 +2727,35 @@ async def break_out(db, employee_id: str):
     minutes = int(duration_delta.total_seconds()) // 60
     duration_str = f"{minutes}m"
     
+    update_data = {
+        "$set": {
+            f"breaks.{last_break_idx}.endTime": now.strftime("%H:%M:%S"),
+            f"breaks.{last_break_idx}.duration": duration_str,
+            "status": "Active"
+        }
+    }
+    
+    if resume_task and record.get("punches") and len(record["punches"]) > 0:
+        last_punch = record["punches"][-1]
+        now_time_str = now.strftime("%H:%M:%S")
+        new_punch = {
+            "punchIn": now_time_str,
+            "punchOut": None,
+            "activityType": last_punch.get("activityType"),
+            "activitySubtype": last_punch.get("activitySubtype"),
+            "activityValue": last_punch.get("activityValue"),
+            "taskId": last_punch.get("taskId")
+        }
+        update_data["$push"] = update_data.get("$push", {})
+        update_data["$push"]["punches"] = new_punch
+        update_data["$set"]["punchInActivityType"] = last_punch.get("activityType")
+        update_data["$set"]["punchInActivitySubtype"] = last_punch.get("activitySubtype")
+        update_data["$set"]["punchInActivityValue"] = last_punch.get("activityValue")
+        update_data["$set"]["punchInTaskId"] = last_punch.get("taskId")
+
     await db.attendance.update_one(
         {"_id": ObjectId(record["_id"])},
-        {
-            "$set": {
-                f"breaks.{last_break_idx}.endTime": now.strftime("%H:%M:%S"),
-                f"breaks.{last_break_idx}.duration": duration_str,
-                "status": "Active"
-            }
-        }
+        update_data
     )
     result = await db.attendance.find_one({"_id": ObjectId(record["_id"])})
     return fix_id(result)
@@ -3283,7 +3459,9 @@ async def get_projects(db, userId: str = None, role: str = None, skip: int = 0, 
                 {"assignedPostDesignerId": userId},
                 {"assignedShooterId": userId},
                 {"assignedApproverId": userId},
-                {"assignedPosterId": userId}
+                {"assignedPosterId": userId},
+                {"assignedCaptionWriterId": userId},
+                {"assignedThumbnailDesignerId": userId}
             ]
             if project_ids:
                 project_ids_as_obj = []
@@ -3398,6 +3576,7 @@ async def update_project(db, project_id: str, project_update: schemas.ProjectUpd
             deleted_modules = [m for m in old_modules if not any(nm.get("name") == m.get("name") and nm.get("phaseName") == m.get("phaseName") for nm in new_modules)]
             # Check for updates
             for nm in new_modules:
+                nm_tasks = nm.pop("tasks", None)
                 for om in old_modules:
                     if nm.get("name") == om.get("name") and nm.get("phaseName") == om.get("phaseName"):
                         changes = []
@@ -3411,9 +3590,82 @@ async def update_project(db, project_id: str, project_update: schemas.ProjectUpd
                                 changes.append(f"{field.replace('Id', '')}: '{old_val}' -> '{new_val}'")
                         if changes:
                             await log_activity(db, "Module Updated", performedBy, userName, f"Updated module '{nm.get('name')}' in project '{old_project.get('title')}': {', '.join(changes)}", projectId=project_id)
+                        
+                        # Handle auto-assignment of tasks within the module to the module's assignee
+                        if "assignedToId" in nm:
+                            new_assignee_id = nm.get("assignedToId")
+                            new_assignee_name = nm.get("assignedToName")
+                            new_dept = None
+                            if new_assignee_id and new_assignee_id != "unassigned":
+                                try:
+                                    emp = await db.employees.find_one({"_id": ObjectId(new_assignee_id)})
+                                    if emp:
+                                        new_assignee_name = f"{emp.get('firstName')} {emp.get('lastName')}"
+                                        new_dept = emp.get("department")
+                                except Exception:
+                                    pass
+                            
+                            update_fields = {
+                                "assignedToId": (new_assignee_id if new_assignee_id != "unassigned" else "") or "",
+                                "assignedToName": new_assignee_name or "Unassigned"
+                            }
+                            if new_dept:
+                                update_fields["department"] = new_dept
+                            
+                            await db.wm_tasks.update_many(
+                                {"projectId": project_id, "moduleName": nm.get("name")},
+                                {"$set": update_fields}
+                            )
             
             for am in added_modules:
+                tasks_to_add = am.pop("tasks", None)
+                if tasks_to_add and isinstance(tasks_to_add, list):
+                    for t in tasks_to_add:
+                        if not t.get("title"):
+                            continue
+                        
+                        task_assignee_id = am.get("assignedToId") or ""
+                        task_assignee_name = am.get("assignedToName") or "Unassigned"
+                        task_dept = None
+                        if task_assignee_id:
+                            try:
+                                emp = await db.employees.find_one({"_id": ObjectId(task_assignee_id)})
+                                if emp:
+                                    task_assignee_name = f"{emp.get('firstName')} {emp.get('lastName')}"
+                                    task_dept = emp.get("department")
+                            except Exception:
+                                pass
+                                
+                        new_task = {
+                            "title": t.get("title"),
+                            "description": t.get("description") or "",
+                            "projectId": project_id,
+                            "projectName": old_project.get("title"),
+                            "assignedToId": task_assignee_id,
+                            "assignedToName": task_assignee_name,
+                            "dueDate": t.get("dueDate") or am.get("dueDate") or None,
+                            "moduleName": am.get("name"),
+                            "moduleDeadline": am.get("dueDate") or None,
+                            "status": t.get("status") or "todo",
+                            "priority": t.get("priority") or am.get("priority") or "medium",
+                            "estimatedHours": float(t.get("estimatedHours") or 0),
+                            "createdBy": performedBy,
+                            "performedBy": performedBy,
+                            "userName": userName,
+                            "phase": am.get("phaseName") or None,
+                            "subtasks": [],
+                            "isApproved": False,
+                            "createdDate": get_now().strftime("%Y-%m-%d")
+                        }
+                        if task_dept:
+                            new_task["department"] = task_dept
+                            
+                        result = await db.wm_tasks.insert_one(new_task)
+                        taskId = str(result.inserted_id)
+                        await log_task_activity(db, taskId, "Created", performedBy, userName, f"Task '{new_task['title']}' was created automatically under module '{am.get('name')}'")
+
                 await log_activity(db, "Module Created", performedBy, userName, f"Added module '{am.get('name')}' to project '{old_project.get('title')}'", projectId=project_id)
+            
             for dm in deleted_modules:
                 await log_activity(db, "Module Deleted", performedBy, userName, f"Deleted module '{dm.get('name')}' from project '{old_project.get('title')}'", projectId=project_id)
         
@@ -3592,6 +3844,24 @@ async def create_task(db, task: schemas.TaskCreate):
     
     task_dict["_id"] = result.inserted_id
     await log_activity(db, "Created", performedBy, userName, f"Created a new task '{task_dict.get('title')}'", taskId=taskId)
+    
+    # Send notification to assignee(s)
+    try:
+        assignee_ids = task_dict.get("assignedToIds", [])
+        if task_dict.get("assignedToId") and task_dict["assignedToId"] not in assignee_ids:
+            assignee_ids.append(task_dict["assignedToId"])
+        for assignee_id in assignee_ids:
+            if assignee_id and assignee_id != performedBy:
+                await create_notification(db, schemas.NotificationCreate(
+                    employee_id=assignee_id,
+                    title="New Task Assigned",
+                    message=f"You have been assigned task '{task_dict.get('title')}'.",
+                    type="task",
+                    reference_id=taskId
+                ))
+    except Exception as e_notif:
+        print(f"Error notifying assignee on task create: {e_notif}")
+    
     return fix_id(task_dict)
 
 async def update_task(db, task_id: str, task: schemas.TaskUpdate):
@@ -3656,6 +3926,14 @@ async def delete_task(db, task_id: str):
     return True
 
 # Work Management Task CRUD
+async def get_wm_task(db, task_id: str):
+    from bson.objectid import ObjectId
+    try:
+        task = await db.wm_tasks.find_one({"_id": ObjectId(task_id)})
+        return fix_id(task) if task else None
+    except Exception:
+        return None
+
 async def get_wm_tasks(db, userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 1000):
     query = {}
     if userId and not await user_has_full_entity_access(db, userId, role, "wm-tasks"):
@@ -3703,7 +3981,24 @@ async def create_wm_task(db, task: schemas.WMTaskCreate):
         if project:
             task_dict["projectName"] = project.get("title")
     
-    if not task_dict.get("assignedToId"):
+    if task_dict.get("moduleName") and task_dict.get("projectId"):
+        try:
+            project_obj = await db.projects.find_one({"_id": ObjectId(task_dict["projectId"])})
+            if project_obj and project_obj.get("modules"):
+                for m in project_obj.get("modules", []):
+                    if m.get("name") == task_dict["moduleName"]:
+                        mod_assignee = m.get("assignedToId")
+                        if mod_assignee and mod_assignee != "unassigned":
+                            task_dict["assignedToId"] = mod_assignee
+                            task_dict["assignedToName"] = m.get("assignedToName") or "Unassigned"
+                        else:
+                            task_dict["assignedToId"] = ""
+                            task_dict["assignedToName"] = "Unassigned"
+                        break
+        except Exception as e_mod_sync:
+            print(f"Error syncing module assignee on task creation: {e_mod_sync}")
+
+    if not task_dict.get("assignedToId") and not task_dict.get("moduleName"):
         fallback_id = performedBy if performedBy and performedBy != "Unknown" else task_dict.get("createdBy")
         if fallback_id and fallback_id != "Unknown":
             task_dict["assignedToId"] = fallback_id
@@ -3746,14 +4041,136 @@ async def create_wm_task(db, task: schemas.WMTaskCreate):
                 employee_id=assignee_id,
                 title="New Task Assigned",
                 message=f"You have been assigned task '{task_dict.get('title')}' in project '{task_dict.get('projectName', 'General')}'.",
-                type="task",
+                type="wm-task",
                 reference_id=taskId
             ))
     except Exception as e_notif:
         print(f"Error notifying assignee on task create: {e_notif}")
 
     doc = await db.wm_tasks.find_one({"_id": result.inserted_id})
+    if doc:
+        await sync_module_and_phase_stages(db, doc.get("projectId"), doc.get("moduleName"), doc.get("phase"), performedBy, userName)
     return fix_id(doc)
+
+async def sync_module_and_phase_stages(db, project_id: str, module_name: str, phase_name: str = None, performed_by: str = "System", user_name: str = "System"):
+    if not project_id or not module_name:
+        return
+    try:
+        project = await db.projects.find_one({"_id": ObjectId(project_id)})
+        if not project or not project.get("modules"):
+            return
+            
+        modules = project.get("modules", [])
+        target_mod_index = -1
+        for idx, m in enumerate(modules):
+            if m.get("name") == module_name:
+                if phase_name and m.get("phaseName") and m.get("phaseName") != phase_name:
+                    continue
+                target_mod_index = idx
+                break
+                
+        if target_mod_index == -1:
+            return
+            
+        current_mod = modules[target_mod_index]
+        current_stage = str(current_mod.get("stage") or "todo").strip().lower()
+        
+        query = {"projectId": project_id, "moduleName": module_name}
+        if phase_name:
+            query["phase"] = phase_name
+        tasks = await db.wm_tasks.find(query).to_list(length=1000)
+        
+        if not tasks:
+            return
+            
+        all_completed_and_approved = all(
+            str(t.get("status") or "").strip().lower() == "completed" and t.get("isApproved") is True 
+            for t in tasks
+        )
+        all_completed_or_review = all(
+            str(t.get("status") or "").strip().lower() in ["completed", "review", "ready for review"] 
+            for t in tasks
+        ) and not all_completed_and_approved
+        any_bugs = any(str(t.get("status") or "").strip().lower() == "bugs" for t in tasks)
+        any_in_progress = any(
+            str(t.get("status") or "").strip().lower() in ["in-progress", "in_progress", "review", "ready for review"] 
+            for t in tasks
+        )
+        all_todo = all(str(t.get("status") or "").strip().lower() == "todo" for t in tasks)
+        
+        target_stage = current_stage
+        if all_completed_and_approved:
+            target_stage = "completed"
+        elif any_bugs:
+            target_stage = "bugs"
+        elif all_completed_or_review:
+            target_stage = "review"
+        elif any_in_progress:
+            target_stage = "in_progress"
+        elif all_todo:
+            target_stage = "todo"
+        else:
+            target_stage = "in_progress"
+            
+        if current_stage == "onhold" and not all_completed_and_approved and not any_bugs:
+            target_stage = current_stage
+            
+        mod_changed = False
+        if target_stage != current_stage:
+            modules[target_mod_index]["stage"] = target_stage
+            mod_changed = True
+            await db.projects.update_one(
+                {"_id": ObjectId(project_id)},
+                {"$set": {"modules": modules}}
+            )
+            await log_activity(
+                db, "Module Stage Updated", performed_by, user_name,
+                f"Module '{module_name}' stage automatically updated to '{target_stage}' based on task progress.",
+                projectId=project_id
+            )
+            
+        phase_changed = False
+        target_phase_name = phase_name or current_mod.get("phaseName")
+        if target_phase_name and project.get("phases"):
+            phases = project.get("phases", [])
+            for p_idx, p in enumerate(phases):
+                if p.get("name") == target_phase_name:
+                    current_p_status = str(p.get("status") or "todo").strip().lower()
+                    phase_modules = [m for m in modules if m.get("phaseName") == target_phase_name]
+                    if phase_modules:
+                        all_mods_completed = all(str(m.get("stage") or "").strip().lower() == "completed" for m in phase_modules)
+                        any_mods_active = any(str(m.get("stage") or "").strip().lower() in ["in_progress", "in-progress", "review", "bugs", "completed"] for m in phase_modules)
+                        
+                        target_p_status = current_p_status
+                        if all_mods_completed:
+                            target_p_status = "completed"
+                        elif any_mods_active:
+                            target_p_status = "in-progress"
+                        else:
+                            target_p_status = "todo"
+                            
+                        if target_p_status != current_p_status:
+                            phases[p_idx]["status"] = target_p_status
+                            phase_changed = True
+                            await db.projects.update_one(
+                                {"_id": ObjectId(project_id)},
+                                {"$set": {"phases": phases}}
+                            )
+                            await log_activity(
+                                db, "Phase Status Updated", performed_by, user_name,
+                                f"Phase '{target_phase_name}' status automatically updated to '{target_p_status}'.",
+                                projectId=project_id
+                            )
+                    break
+                    
+        if mod_changed or phase_changed:
+            try:
+                await ws_manager.broadcast_all("data_refresh", {"entity": "projects"})
+                await ws_manager.broadcast_all("data_refresh", {"entity": "wm_tasks"})
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"Error syncing module and phase stages: {e}")
 
 async def update_wm_task(db, task_id: str, task_update: schemas.WMTaskUpdate):
     update_data = task_update.dict(exclude_unset=True)
@@ -3769,6 +4186,25 @@ async def update_wm_task(db, task_id: str, task_update: schemas.WMTaskUpdate):
             if project:
                 update_data["projectName"] = project.get("title")
         
+        if update_data.get("moduleName") and update_data.get("moduleName") != (old_task.get("moduleName") if old_task else None):
+            p_id = update_data.get("projectId") or (old_task.get("projectId") if old_task else None)
+            if p_id:
+                try:
+                    project_obj = await db.projects.find_one({"_id": ObjectId(p_id)})
+                    if project_obj and project_obj.get("modules"):
+                        for m in project_obj.get("modules", []):
+                            if m.get("name") == update_data["moduleName"]:
+                                mod_assignee = m.get("assignedToId")
+                                if mod_assignee and mod_assignee != "unassigned":
+                                    update_data["assignedToId"] = mod_assignee
+                                    update_data["assignedToName"] = m.get("assignedToName") or "Unassigned"
+                                else:
+                                    update_data["assignedToId"] = ""
+                                    update_data["assignedToName"] = "Unassigned"
+                                break
+                except Exception as e_mod_update_sync:
+                    print(f"Error syncing module assignee on task update: {e_mod_update_sync}")
+
         if update_data.get("assignedToId"):
             employee = await db.employees.find_one({"_id": ObjectId(update_data["assignedToId"])})
             if employee:
@@ -3797,7 +4233,7 @@ async def update_wm_task(db, task_id: str, task_update: schemas.WMTaskUpdate):
                     employee_id=new_assignee_id,
                     title="Task Re-assigned",
                     message=f"You have been assigned task '{update_data.get('title') or (old_task.get('title') if old_task else '')}' in project '{update_data.get('projectName') or (old_task.get('projectName') if old_task else 'General')}'.",
-                    type="task",
+                    type="wm-task",
                     reference_id=task_id
                 ))
         except Exception as e_notif:
@@ -3817,13 +4253,15 @@ async def update_wm_task(db, task_id: str, task_update: schemas.WMTaskUpdate):
                         employee_id=creator_id,
                         title="Task Ready for Review",
                         message=f"{(old_task.get('assignedToName') if old_task else 'An employee')} has submitted task '{(old_task.get('title') if old_task else '')}' for your review.",
-                        type="task",
+                        type="wm-task",
                         reference_id=task_id
                     ))
         except Exception as e_notif:
             print(f"Error notifying reviewer on task stage update: {e_notif}")
     
     doc = await db.wm_tasks.find_one({"_id": ObjectId(task_id)})
+    if doc:
+        await sync_module_and_phase_stages(db, doc.get("projectId"), doc.get("moduleName"), doc.get("phase"), performedBy, userName)
     return fix_id(doc)
 
 async def delete_wm_task(db, task_id: str):
@@ -3833,6 +4271,7 @@ async def delete_wm_task(db, task_id: str):
     
     if result.deleted_count > 0 and task:
         await log_task_activity(db, task_id, "Deleted", "Admin/User", "N/A", f"Task '{task.get('title')}' was deleted.")
+        await sync_module_and_phase_stages(db, task.get("projectId"), task.get("moduleName"), task.get("phase"), "Admin/User", "Admin/User")
         
     return result.deleted_count > 0
 
@@ -4363,6 +4802,7 @@ async def get_system_settings(db):
             "inactivityTimeoutMins": 5,
             "allowedMonthlyPaidLeaves": 1,
             "companyGstin": "24AAXFN3372M1ZK",
+            "otherCategories": ["Activity", "Meeting"],
             "companyAddress": "FLAT-204, 2nd FLOOR, RS NO-67/1, WING-A, HARIKRUSHANA COMPLEX, OPP. BHAGAT NAGAR, VED, GURUKULROAD, KATARGAM, SURAT- 395004, GUJARAT, INDIA.",
             "companyPhone": "+91 87805 64463",
             "companyEmail": "billing@hkdigiverse.com",
@@ -4997,8 +5437,18 @@ async def get_messages(db, sender_id: str = None, receiver_id: str = None, group
     except Exception:
         employee_cache = {}
 
+    user_id = None
+    if group_id:
+        user_id = receiver_id
+    else:
+        user_id = sender_id
+    
     fixed_rows = []
     for row in rows:
+        deleted_for = row.get("deletedFor") or []
+        if user_id and str(user_id) in [str(d) for d in deleted_for]:
+            continue
+        
         fixed = fix_id(row)
         if "senderId" in fixed and fixed["senderId"]:
             fixed["senderId"] = str(fixed["senderId"])
@@ -5009,6 +5459,8 @@ async def get_messages(db, sender_id: str = None, receiver_id: str = None, group
             fixed["receiverId"] = str(fixed["receiverId"])
         if "groupId" in fixed and fixed["groupId"]:
             fixed["groupId"] = str(fixed["groupId"])
+        if "deletedFor" in fixed:
+            del fixed["deletedFor"]
         fixed_rows.append(fixed)
     return fixed_rows
 
@@ -5020,9 +5472,19 @@ async def update_message(db, message_id: str, text: str):
     doc = await db.messages.find_one({"_id": ObjectId(message_id)})
     return fix_id(doc)
 
-async def delete_message(db, message_id: str):
-    await db.messages.delete_one({"_id": ObjectId(message_id)})
-    return True
+async def delete_message(db, message_id: str, delete_for: str = "everyone", user_id: str = None):
+    if delete_for == "me" and user_id:
+        await db.messages.update_one(
+            {"_id": ObjectId(message_id)},
+            {
+                "$push": {"deletedFor": user_id},
+                "$set": {"text": "You deleted this message", "attachmentUrl": None, "attachmentName": None}
+            }
+        )
+        return {"deleted": "for_me"}
+    else:
+        await db.messages.delete_one({"_id": ObjectId(message_id)})
+        return {"deleted": "for_everyone"}
 
 async def mark_messages_as_seen(db, other_id: str, user_id: str):
     is_group = await db.chat_groups.find_one({"_id": ObjectId(other_id)}) if len(other_id) == 24 else None
@@ -7988,6 +8450,10 @@ async def get_content_calendar_entries(db, client_id: str, month_year: str = Non
 
 async def create_content_calendar_entry(db, entry_data: dict):
     updated_by = entry_data.pop("updatedBy", "Unknown User")
+    
+    if entry_data.get("postReel") == "Post" and not entry_data.get("shootLink"):
+        entry_data["shootLink"] = "-"
+        
     entry_data["logs"] = [{
         "timestamp": datetime.now(IST).isoformat(),
         "action": "Row created",
@@ -8008,6 +8474,10 @@ async def update_content_calendar_entry(db, entry_id: str, update_data: dict):
         
     changes = []
     updated_by = update_data.get("updatedBy", "Unknown User")
+    if update_data.get("postReel") == "Post" or (existing.get("postReel") == "Post" and "postReel" not in update_data):
+        if not update_data.get("shootLink") and not existing.get("shootLink"):
+            update_data["shootLink"] = "-"
+            
     for key, val in update_data.items():
         if key not in ["logs", "clientId", "monthYear", "id", "_id", "updated_at", "created_at", "updatedAt", "createdAt", "updatedBy"]:
             old_val = existing.get(key)
@@ -8675,3 +9145,71 @@ async def get_finance_summary(db):
         "expenseTrend": -4.2
     }
 
+# --- Task Presets CRUD ---
+async def get_task_presets(db, skip: int = 0, limit: int = 100):
+    return await get_items(db, "task_presets", skip, limit)
+
+async def create_task_preset(db, preset: schemas.TaskPresetCreate):
+    return await create_item(db, "task_presets", preset.dict())
+
+async def update_task_preset(db, preset_id: str, update: dict):
+    return await update_item(db, "task_presets", preset_id, update)
+
+async def delete_task_preset(db, preset_id: str):
+    return await delete_item(db, "task_presets", preset_id)
+
+# --- Research ---
+async def create_research(db, data: dict):
+    now = get_now()
+    data["createdAt"] = now
+    data["logs"] = [{
+        "action": "Created",
+        "byUserId": data.get("createdBy", "Unknown"),
+        "byUserName": data.get("createdByName", "Unknown"),
+        "timestamp": now
+    }]
+    result = await db.research.insert_one(data)
+    created = await db.research.find_one({"_id": result.inserted_id})
+    return fix_id(created)
+
+async def get_research(db, user_id: str, is_admin: bool):
+    if is_admin:
+        cursor = db.research.find().sort("createdAt", -1)
+    else:
+        cursor = db.research.find({
+            "$or": [
+                {"createdBy": user_id},
+                {"sharedWith": user_id}
+            ]
+        }).sort("createdAt", -1)
+    
+    research_list = await cursor.to_list(length=None)
+    return [fix_id(r) for r in research_list]
+
+async def update_research(db, research_id: str, data: dict):
+    from bson import ObjectId
+    if not data:
+        updated = await db.research.find_one({"_id": ObjectId(research_id)})
+        return fix_id(updated) if updated else None
+    
+    updatedBy = data.pop("updatedBy", "Unknown")
+    updatedByName = data.pop("updatedByName", "Unknown")
+    
+    log_entry = {
+        "action": "Updated",
+        "byUserId": updatedBy,
+        "byUserName": updatedByName,
+        "timestamp": get_now()
+    }
+    
+    await db.research.update_one(
+        {"_id": ObjectId(research_id)}, 
+        {"$set": data, "$push": {"logs": log_entry}}
+    )
+    updated = await db.research.find_one({"_id": ObjectId(research_id)})
+    return fix_id(updated) if updated else None
+
+async def delete_research(db, research_id: str):
+    from bson import ObjectId
+    result = await db.research.delete_one({"_id": ObjectId(research_id)})
+    return result.deleted_count > 0

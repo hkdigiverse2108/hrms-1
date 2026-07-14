@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, File, Form, UploadFile, Request, Response, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, HTTPException, Depends, File, Form, UploadFile, Request, Response, WebSocket, WebSocketDisconnect, Query, Header
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
@@ -14,7 +14,10 @@ from websocket import manager as ws_manager
 import google_auth
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
+import pytz
+import random
+from email_utils import send_otp_email
 import pytz
 async def get_actor_from_request(request: Request, db):
     authorization = request.headers.get("Authorization")
@@ -824,8 +827,77 @@ async def login(login_data: schemas.LoginRequest, db=Depends(get_db)):
     if user.get("status", "").lower() == "inactive":
         raise HTTPException(status_code=403, detail="Your account has been deactivated. Please contact the administrator.")
     
-    token = user.pop("token", None)
-    return {"message": "Login successful", "user": user, "token": token}
+    # Check OTP requirements
+    settings = await db.system_settings.find_one({}) or {}
+    otp_roles = settings.get("otpRequiredRoles", [])
+    
+    raw_role = user.get("role", "").strip().lower()
+    if raw_role == "admin":
+        mapped_role = "admin"
+    elif raw_role == "hr":
+        mapped_role = "hr"
+    else:
+        mapped_role = "employee"
+        
+    if mapped_role not in otp_roles:
+        # Skip OTP and return token directly
+        return {"message": "Login successful", "user": user, "token": user["token"], "require_otp": False}
+
+    # Generate 6-digit OTP
+    otp = str(random.randint(100000, 999999))
+    expiry = datetime.now(pytz.timezone('Asia/Kolkata')) + timedelta(minutes=5)
+    
+    # Save OTP to user document
+    await db.employees.update_one(
+        {"email": login_data.email},
+        {"$set": {"login_otp": otp, "login_otp_expiry": expiry.isoformat()}}
+    )
+    
+    # Send email
+    send_otp_email(login_data.email, otp)
+    
+    return {"message": "OTP sent to your email", "require_otp": True}
+
+@app.post("/login/verify-otp", response_model=schemas.LoginResponse)
+async def verify_otp(otp_data: schemas.VerifyOTPRequest, db=Depends(get_db)):
+    user = await db.employees.find_one({"email": otp_data.email})
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+        
+    stored_otp = user.get("login_otp")
+    expiry_str = user.get("login_otp_expiry")
+    
+    if not stored_otp or not expiry_str:
+        raise HTTPException(status_code=400, detail="OTP not requested or expired")
+        
+    expiry = datetime.fromisoformat(expiry_str)
+    now = datetime.now(pytz.timezone('Asia/Kolkata'))
+    
+    if now > expiry:
+        # Clear expired OTP
+        await db.employees.update_one({"email": otp_data.email}, {"$unset": {"login_otp": "", "login_otp_expiry": ""}})
+        raise HTTPException(status_code=400, detail="OTP expired")
+        
+    if stored_otp != otp_data.otp:
+        raise HTTPException(status_code=400, detail="Invalid OTP")
+        
+    # Clear OTP upon successful verification
+    await db.employees.update_one({"email": otp_data.email}, {"$unset": {"login_otp": "", "login_otp_expiry": ""}})
+    
+    # Generate JWT token
+    user_id = str(user["_id"])
+    user_fixed = crud.fix_id(user)
+    
+    permissions_doc = await db.user_permissions.find_one({"employeeId": user_id})
+    if permissions_doc:
+        user_fixed["permissions"] = crud.fix_id(permissions_doc).get("permissions", [])
+    else:
+        user_fixed["permissions"] = []
+        
+    token = auth.create_access_token(data={"sub": user_id, "role": user.get("role", "")})
+    user_fixed["token"] = token
+    
+    return {"message": "Login successful", "user": user_fixed, "token": token, "require_otp": False}
 
 # Employee Endpoints
 @app.get("/time")
@@ -882,7 +954,17 @@ async def get_attendance_status(employee_id: str, db=Depends(get_db)):
 async def punch_in(employee_id: str, request: Request, payload: Optional[schemas.PunchInRequest] = None, db=Depends(get_db)):
     punch_in_time = payload.punch_in_time if payload else None
     performed_by, user_name = await get_actor_from_request(request, db)
-    result = await crud.punch_in(db, employee_id, punch_in_time=punch_in_time, performed_by=performed_by, user_name=user_name)
+    result = await crud.punch_in(
+        db, 
+        employee_id, 
+        punch_in_time=punch_in_time, 
+        performed_by=performed_by, 
+        user_name=user_name,
+        punch_in_activity_type=payload.activityType if payload else None,
+        punch_in_activity_subtype=payload.activitySubtype if payload else None,
+        punch_in_activity_value=payload.activityValue if payload else None,
+        punch_in_task_id=payload.taskId if payload else None
+    )
     if not result:
         raise HTTPException(status_code=400, detail="Punch in failed")
     return result
@@ -935,8 +1017,8 @@ async def break_in(employee_id: str, db=Depends(get_db)):
     return result
 
 @app.post("/attendance/break-out/{employee_id}")
-async def break_out(employee_id: str, db=Depends(get_db)):
-    result = await crud.break_out(db, employee_id)
+async def break_out(employee_id: str, resume_task: bool = False, db=Depends(get_db)):
+    result = await crud.break_out(db, employee_id, resume_task=resume_task)
     if not result:
         raise HTTPException(status_code=400, detail="Break out failed")
     return result
@@ -1007,7 +1089,6 @@ async def read_payroll(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
 @app.post("/payroll", response_model=schemas.Payroll)
 async def create_payroll(payroll: schemas.PayrollBase, db=Depends(get_db)):
     return await crud.create_item(db, "payroll", payroll.dict())
-
 
 @app.post("/payroll/process")
 async def process_payroll(request: dict, request_obj: Request, db=Depends(get_db)):
@@ -1522,6 +1603,13 @@ async def read_task_activities(task_id: str, db=Depends(get_db)):
 async def read_wm_tasks(userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_wm_tasks(db, userId=userId, role=role, skip=skip, limit=limit)
 
+@app.get("/wm-tasks/{task_id}", response_model=schemas.WMTask)
+async def read_wm_task(task_id: str, db=Depends(get_db)):
+    task = await crud.get_wm_task(db, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
+
 @app.post("/wm-tasks", response_model=schemas.WMTask)
 async def create_wm_task(task: schemas.WMTaskCreate, db=Depends(get_db)):
     if task.status == "pending" and (not task.reasonForPending or not task.reasonForPending.strip()):
@@ -1800,9 +1888,20 @@ async def update_chat_message(message_id: str, update: schemas.ChatMessageUpdate
     return updated
 
 @app.delete("/chat/messages/{message_id}")
-async def delete_chat_message(message_id: str, db=Depends(get_db)):
-    await crud.delete_message(db, message_id)
-    return {"message": "Message deleted successfully"}
+async def delete_chat_message(message_id: str, request: Request, deleteFor: str = "everyone", db=Depends(get_db)):
+    performed_by = None
+    try:
+        body = await request.json()
+        performed_by = body.get("performedBy")
+    except Exception:
+        pass
+    result = await crud.delete_message(db, message_id, delete_for=deleteFor, user_id=performed_by)
+    try:
+        from websocket import manager as ws_manager
+        await ws_manager.broadcast_all("message_deleted", {"messageId": message_id, "deleteFor": deleteFor})
+    except Exception:
+        pass
+    return result
 
 @app.post("/chat/mark-seen/{sender_id}/{receiver_id}")
 async def mark_messages_as_seen(sender_id: str, receiver_id: str, db=Depends(get_db)):
@@ -2371,6 +2470,13 @@ async def update_permission_preset(preset_id: str, preset: schemas.PermissionPre
     if not updated:
         raise HTTPException(status_code=404, detail="Preset not found")
     return updated
+
+@app.delete("/task-presets/{preset_id}")
+async def delete_task_preset_entry(preset_id: str, db=Depends(get_db)):
+    success = await crud.delete_task_preset(db, preset_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Preset not found")
+    return {"status": "success"}
 
 @app.delete("/permission-presets/{preset_id}")
 async def delete_permission_preset(preset_id: str, db=Depends(get_db)):
@@ -3669,7 +3775,103 @@ async def delete_finance_plan_endpoint(plan_id: str, db=Depends(get_db)):
 async def get_finance_summary_endpoint(db=Depends(get_db)):
     return await crud.get_finance_summary(db)
 
+# --- Task Preset Endpoints ---
+@app.get("/task-presets", response_model=List[schemas.TaskPreset])
+async def read_task_presets(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+    return await crud.get_task_presets(db, skip, limit)
+
+@app.post("/task-presets", response_model=schemas.TaskPreset)
+async def create_task_preset_entry(preset: schemas.TaskPresetCreate, db=Depends(get_db)):
+    return await crud.create_task_preset(db, preset)
+
+@app.put("/task-presets/{preset_id}", response_model=schemas.TaskPreset)
+async def update_task_preset_entry(preset_id: str, payload: dict, db=Depends(get_db)):
+    updated = await crud.update_task_preset(db, preset_id, payload)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Preset not found")
+    return updated
+
+    if not success:
+        raise HTTPException(status_code=404, detail="Preset not found")
+    return {"status": "success"}
+
+@app.post("/task-presets/{preset_id}/assign")
+async def assign_task_preset(preset_id: str, payload: dict, db=Depends(get_db)):
+    from bson import ObjectId
+    import datetime
+    
+    assignee_ids = payload.get("assignedToIds", [])
+    if not assignee_ids and payload.get("assignedToId"):
+        assignee_ids = [payload.get("assignedToId")]
+        
+    performer_id = payload.get("performedBy", "Unknown")
+    user_name = payload.get("userName", "Unknown")
+    
+    if not assignee_ids:
+        raise HTTPException(status_code=400, detail="assignee_ids is required")
+        
+    presets = await crud.get_task_presets(db, 0, 1000)
+    target_preset = next((p for p in presets if str(p.get("_id")) == preset_id or str(p.get("id")) == preset_id), None)
+    
+    if not target_preset:
+        raise HTTPException(status_code=404, detail="Preset not found")
+        
+    tasks = target_preset.get("tasks", [])
+    created_tasks = []
+    
+    for assignee_id in assignee_ids:
+        emp = await db.employees.find_one({"_id": ObjectId(assignee_id)})
+        assignee_name = f"{emp.get('firstName', '')} {emp.get('lastName', '')}".strip() if emp else "Unknown"
+        
+        for pt in tasks:
+            new_task = schemas.WMTaskCreate(
+                title=pt.get("title"),
+                description=pt.get("description", ""),
+                projectId=pt.get("projectId"),
+                projectName=pt.get("projectName"),
+                department=pt.get("department", "development"),
+                assignedToId=assignee_id,
+                assignedToName=assignee_name,
+                status="todo",
+                priority="medium",
+                estimatedHours=0,
+                createdBy=performer_id,
+                performedBy=performer_id,
+                userName=user_name,
+                postingDate=datetime.datetime.now().strftime("%Y-%m-%d"),
+                dueDate=datetime.datetime.now().strftime("%Y-%m-%d")
+            )
+            created = await crud.create_wm_task(db, new_task)
+            created_tasks.append(created)
+            
+    return {"message": "Success", "tasks_created": len(created_tasks), "tasks": created_tasks}
+
+
+# --- Research API ---
+@app.post("/research", response_model=schemas.ResearchResponse)
+async def create_research(entry: schemas.ResearchCreate, db=Depends(get_db)):
+    return await crud.create_research(db, entry.model_dump())
+
+@app.get("/research", response_model=List[schemas.ResearchResponse])
+async def get_research(user_id: str = Header(...), role: str = Header(...), db=Depends(get_db)):
+    is_admin = role.lower() == "admin"
+    return await crud.get_research(db, user_id, is_admin)
+
+@app.put("/research/{entry_id}", response_model=schemas.ResearchResponse)
+async def update_research(entry_id: str, entry: schemas.ResearchUpdate, db=Depends(get_db)):
+    updated = await crud.update_research(db, entry_id, entry.model_dump(exclude_unset=True))
+    if not updated:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return updated
+
+@app.delete("/research/{entry_id}")
+async def delete_research(entry_id: str, db=Depends(get_db)):
+    success = await crud.delete_research(db, entry_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return {"message": "Entry deleted successfully"}
+
 if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", os.environ.get("PORT", 8000)))
     print(f"Starting HRMS Backend on http://127.0.0.1:{port}")
-    uvicorn.run("main:app", host="127.0.0.1", port=port, reload=False)
+    uvicorn.run(app, host="127.0.0.1", port=port, reload=False)
