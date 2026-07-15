@@ -231,10 +231,13 @@ export default function CompanyFinancePlanPage() {
   const [values, setValues] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved" | "idle">("idle");
 
   // States for nested multiple items modal
   const [activeMultipleId, setActiveMultipleId] = useState<string | null>(null);
   const [modalItems, setModalItems] = useState<MultipleItem[]>([]);
+  const [isAllMultiModalOpen, setIsAllMultiModalOpen] = useState(false);
 
   const monthOptions = useMemo(() => {
     const options = [];
@@ -266,6 +269,7 @@ export default function CompanyFinancePlanPage() {
   const fetchMonthlyPlan = async () => {
     try {
       setLoading(true);
+      setIsInitialLoad(true);
       
       const res = await fetch(`${API_URL}/company-finance/monthly-plans/${selectedMonth}`);
       let targetValues: Record<string, any> = {};
@@ -506,6 +510,9 @@ export default function CompanyFinancePlanPage() {
       }
 
       setValues(targetValues);
+      setTimeout(() => {
+        setIsInitialLoad(false);
+      }, 300);
     } catch (err) {
       console.error("Error loading monthly plan:", err);
       toast.error("Failed to load monthly plan sheet");
@@ -553,9 +560,40 @@ export default function CompanyFinancePlanPage() {
     setActiveMultipleId(null);
   };
 
+  const autoSave = async (currentValues: Record<string, any>) => {
+    try {
+      setSaveStatus("saving");
+      const res = await fetch(`${API_URL}/company-finance/monthly-plans/${selectedMonth}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ values: currentValues }),
+      });
+      if (res.ok) {
+        setSaveStatus("saved");
+      } else {
+        setSaveStatus("unsaved");
+      }
+    } catch (err) {
+      console.error(err);
+      setSaveStatus("unsaved");
+    }
+  };
+
+  useEffect(() => {
+    if (loading || isInitialLoad) return;
+
+    setSaveStatus("unsaved");
+    const timer = setTimeout(() => {
+      autoSave(values);
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [values, loading, isInitialLoad]);
+
   const handleSave = async () => {
     try {
       setSaving(true);
+      setSaveStatus("saving");
       const res = await fetch(`${API_URL}/company-finance/monthly-plans/${selectedMonth}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -563,12 +601,15 @@ export default function CompanyFinancePlanPage() {
       });
       if (res.ok) {
         toast.success("Plan saved successfully!");
+        setSaveStatus("saved");
       } else {
         toast.error("Failed to save plan");
+        setSaveStatus("unsaved");
       }
     } catch (err) {
       console.error(err);
       toast.error("Error saving plan");
+      setSaveStatus("unsaved");
     } finally {
       setSaving(false);
     }
@@ -631,6 +672,34 @@ export default function CompanyFinancePlanPage() {
               ))}
             </select>
           </div>
+
+          {saveStatus === "saving" && (
+            <span className="text-[11px] text-slate-500 font-bold flex items-center gap-1.5 bg-slate-50 border border-slate-200/60 rounded-xl px-2.5 py-1.5 shadow-sm">
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-teal" />
+              Saving changes...
+            </span>
+          )}
+          {saveStatus === "saved" && (
+            <span className="text-[11px] text-emerald-600 font-bold flex items-center gap-1 bg-emerald-50 border border-emerald-100 rounded-xl px-2.5 py-1.5 shadow-sm">
+              ✓ All changes saved
+            </span>
+          )}
+          {saveStatus === "unsaved" && (
+            <span className="text-[11px] text-amber-500 font-bold flex items-center gap-1 bg-amber-50 border border-amber-100 rounded-xl px-2.5 py-1.5 shadow-sm">
+              ⚠ Unsaved changes
+            </span>
+          )}
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setIsAllMultiModalOpen(true)}
+            disabled={loading}
+            className="h-9 font-bold border-brand-teal text-brand-teal hover:bg-brand-light shadow-sm flex items-center gap-1.5"
+          >
+            <ListPlus className="w-4 h-4" />
+            All Multi-Entries
+          </Button>
 
           <Button
             size="sm"
@@ -881,6 +950,108 @@ export default function CompanyFinancePlanPage() {
               className="font-bold bg-brand-teal hover:bg-brand-teal/90 text-white"
             >
               Confirm & Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- ALL MULTI-ENTRIES POPUP DIALOG --- */}
+      <Dialog open={isAllMultiModalOpen} onOpenChange={setIsAllMultiModalOpen}>
+        <DialogContent className="max-w-4xl p-0 overflow-hidden bg-white max-h-[85vh] flex flex-col">
+          <DialogHeader className="p-6 pb-4 border-b border-slate-100 bg-slate-50 flex-shrink-0">
+            <DialogTitle className="text-base font-black text-slate-900 flex items-center gap-2">
+              <ListPlus className="w-5 h-5 text-brand-teal" />
+              All Multi-Entry Items Summary
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              Overview of all categorized multi-entry items for {selectedMonth}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="p-6 overflow-y-auto space-y-6 flex-1">
+            {PLAN_ROWS.filter((row) => row.type === "multiple").map((row) => {
+              const items: MultipleItem[] = Array.isArray(values[row.id]) ? values[row.id] : [];
+              const total = items.reduce(
+                (sum, item) => sum + (parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0),
+                0
+              );
+
+              return (
+                <div key={row.id} className="border border-slate-100 rounded-xl overflow-hidden shadow-sm bg-white">
+                  <div className="p-3 bg-slate-50/70 border-b border-slate-100 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                        {row.category} / {row.subCategory}
+                      </span>
+                      <span className="font-extrabold text-slate-800 text-xs">
+                        {row.metric}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-black text-emerald-700 text-xs">
+                        Total: ₹{total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setIsAllMultiModalOpen(false);
+                          handleOpenMultipleModal(row.id);
+                        }}
+                        className="h-7 text-[10px] font-bold border-brand-teal text-brand-teal hover:bg-brand-light px-2"
+                      >
+                        Edit
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="p-3">
+                    {items.length > 0 ? (
+                      <table className="w-full text-xs text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                            <th className="pb-1 w-[50%]">Description</th>
+                            <th className="pb-1 w-[15%] text-right">Qty</th>
+                            <th className="pb-1 w-[15%] text-right">Rate</th>
+                            <th className="pb-1 w-[20%] text-right">Est. Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {items.map((item, idx) => {
+                            const amt = (parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0);
+                            return (
+                              <tr key={idx} className="text-slate-600 font-medium">
+                                <td className="py-1.5">{item.description}</td>
+                                <td className="py-1.5 text-right font-bold">{item.qty}</td>
+                                <td className="py-1.5 text-right font-bold">₹{parseFloat(item.rate).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                                <td className="py-1.5 text-right font-extrabold text-slate-800">
+                                  ₹{amt.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <div className="text-center py-4 text-slate-400 font-medium text-xs">
+                        No entries.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <DialogFooter className="p-6 pt-4 border-t border-slate-100 bg-slate-50 flex-shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsAllMultiModalOpen(false)}
+              className="font-bold border-slate-300 text-slate-600 hover:bg-slate-100"
+            >
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>
