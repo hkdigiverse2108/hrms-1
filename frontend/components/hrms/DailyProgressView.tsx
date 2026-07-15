@@ -143,6 +143,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
           status: report?.status || 'Pending Verification',
           reportId: report?.id,
           note: report?.note || '',
+          rating: report?.rating,
           verifiedBy: report?.userName || '',
           responsiblePerson
         }
@@ -303,11 +304,6 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
         }`}>
           {record.status}
         </span>
-        {record.status === 'Approved' && record.rating && (
-          <span className="text-[10px] font-bold text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100 flex items-center gap-1">
-            ⭐ {record.rating}/10
-          </span>
-        )}
       </div>
     )},
     { key: 'note' as const, header: 'Verification Note', render: (record: any) => (
@@ -321,6 +317,15 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
         </span>
       ) : (
         <span className="text-[10px] text-slate-400 italic">No note added</span>
+      )
+    )},
+    { key: 'rating' as const, header: 'Rating', render: (record: any) => (
+      record.status === 'Approved' && record.rating ? (
+        <span className="text-[10px] font-bold text-amber-500 bg-amber-50 px-2 py-1 rounded border border-amber-100 inline-flex items-center gap-1 w-max shadow-sm">
+          ⭐ {record.rating}/10
+        </span>
+      ) : (
+        <span className="text-[10px] text-slate-400 italic">-</span>
       )
     )},
     { key: 'verifiedBy' as const, header: 'Verified By / Responsible', render: (record: any) => (
