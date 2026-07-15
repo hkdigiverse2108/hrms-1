@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useApi } from "@/hooks/useApi";
@@ -2975,10 +2975,12 @@ export default function ChatPage() {
   }, [ws]);
 
   useEffect(() => {
-    if (!lastEvent || !user) return;
-    const { event: eventType, data } = lastEvent;
+    if (!user) return;
 
-    if (eventType === "new_message") {
+    const handleWsEvent = (e: any) => {
+      const { event: eventType, data } = e.detail;
+
+      if (eventType === "new_message") {
       const activeChat = selectedChatRef.current;
       const activeChatId = activeChat ? (activeChat.id || activeChat.employeeId) : null;
 
@@ -2987,6 +2989,7 @@ export default function ChatPage() {
 
       if (activeChatId === messageChatId) {
         // Append to active chat messages
+        shouldScrollToBottom.current = true;
         setCurrentMessages((prev) => {
           if (prev.some((m) => m.id === data.id || (data.tempId && (m.tempId === data.tempId || m.id === data.tempId)))) {
             return prev.map(m => (m.tempId === data.tempId || m.id === data.tempId || m.id === data.id) ? { ...data, isMe: data.senderId === user.id } : m);
@@ -3076,8 +3079,25 @@ export default function ChatPage() {
           })
         );
       }
+
+      setChatSummaries((prev: any) => {
+        if (prev[seenChatId] && prev[seenChatId].senderId === user.id) {
+          return {
+            ...prev,
+            [seenChatId]: {
+              ...prev[seenChatId],
+              isSeen: true
+            }
+          };
+        }
+        return prev;
+      });
     }
-  }, [lastEvent, user]);
+    };
+
+    window.addEventListener('chat-ws-event', handleWsEvent);
+    return () => window.removeEventListener('chat-ws-event', handleWsEvent);
+  }, [user, isWindowFocused, employees]);
 
   const handleSendMessage = async (extraData: any = null) => {
     // Prevent double-send on rapid taps
@@ -3131,7 +3151,7 @@ export default function ChatPage() {
             ...prev[targetId],
             lastMessage: lastText,
             timestamp: nowIso,
-            isSeen: true,
+            isSeen: false,
             senderId: user.id
           }
         }));
@@ -3311,7 +3331,7 @@ export default function ChatPage() {
           ...prev[targetId],
           lastMessage: optimisticText,
           timestamp: nowIso,
-          isSeen: true,
+          isSeen: false,
           senderId: user.id
         }
       }));

@@ -272,6 +272,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           // Wrap with a unique counter so React always detects a new event,
           // even if two consecutive messages have the same shape
           setLastEvent({ ...payload, _seq: Date.now() });
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent('chat-ws-event', { detail: payload }));
+          }
 
           const { event: eventType, data } = payload;
           if (eventType === "user_status") {

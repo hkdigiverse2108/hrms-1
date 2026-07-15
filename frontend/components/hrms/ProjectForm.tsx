@@ -407,7 +407,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
               👥 Assigned Project Team Members (Select Multiple Employees)
             </Label>
             <PhaseMemberMultiSelect 
-              employees={formData.department ? allEmployees.filter(e => e.department?.toLowerCase() === formData.department?.toLowerCase()) : allEmployees}
+              employees={formData.department ? allEmployees.filter(e => e.department?.toLowerCase().trim() === formData.department?.toLowerCase().trim() || (formData.teamLeaderId && e.id === formData.teamLeaderId)) : allEmployees}
               selectedIds={formData.assignedTeamIds || []}
               onChange={(val) => handleChange("assignedTeamIds", val)}
             />
@@ -565,7 +565,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
                           <div>
                             <Label className="text-xs font-bold text-slate-600">Assign To Members</Label>
                             <PhaseMemberMultiSelect 
-                              employees={allEmployees.filter(e => formData.department ? e.department?.toLowerCase() === formData.department.toLowerCase() : true)}
+                              employees={allEmployees.filter(e => formData.department ? (e.department?.toLowerCase().trim() === formData.department.toLowerCase().trim() || (formData.teamLeaderId && e.id === formData.teamLeaderId)) : true)}
                               selectedIds={phase.assignedToIds || (phase.assignedToId ? [phase.assignedToId] : [])}
                               onChange={(val) => handlePhaseChange(index, "assignedToIds", val)}
                             />

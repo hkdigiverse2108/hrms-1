@@ -3233,9 +3233,9 @@ async def get_all_content_calendar_entries(db=Depends(get_db)):
         return {"error": str(e), "trace": traceback.format_exc()}
 
 @app.get("/content-calendar")
-async def get_content_calendar_entries(clientId: str, monthYear: Optional[str] = None, db=Depends(get_db)):
+async def get_content_calendar_entries(clientId: str, projectId: Optional[str] = None, monthYear: Optional[str] = None, db=Depends(get_db)):
     try:
-        return await crud.get_content_calendar_entries(db, client_id=clientId, month_year=monthYear)
+        return await crud.get_content_calendar_entries(db, client_id=clientId, project_id=projectId, month_year=monthYear)
     except Exception as e:
         import traceback
         print(traceback.format_exc())
@@ -3260,8 +3260,8 @@ async def delete_content_calendar_entry(entry_id: str, db=Depends(get_db)):
     return {"message": "Entry deleted successfully"}
 
 @app.get("/content-calendar-settings", response_model=schemas.ContentCalendarSettingsBase)
-async def get_content_calendar_settings(clientId: str, monthYear: str, db=Depends(get_db)):
-    settings = await crud.get_content_calendar_settings(db, clientId, monthYear)
+async def get_content_calendar_settings(clientId: str, monthYear: str, projectId: Optional[str] = None, db=Depends(get_db)):
+    settings = await crud.get_content_calendar_settings(db, clientId, monthYear, projectId)
     if settings:
         return settings
     # Return empty if not found
@@ -3277,7 +3277,7 @@ async def get_all_content_calendar_settings(monthYear: str, db=Depends(get_db)):
 @app.post("/content-calendar-settings", response_model=schemas.ContentCalendarSettings)
 async def upsert_content_calendar_settings(settings: schemas.ContentCalendarSettingsBase, db=Depends(get_db)):
     return await crud.upsert_content_calendar_settings(
-        db, settings.clientId, settings.monthYear, settings.model_dump()
+        db, settings.clientId, settings.monthYear, settings.projectId, settings.model_dump()
     )
 
 # Dynamic Feedback Forms
@@ -3442,9 +3442,9 @@ async def get_all_content_calendar_entries(db=Depends(get_db)):
         return {"error": str(e), "trace": traceback.format_exc()}
 
 @app.get("/content-calendar")
-async def get_content_calendar_entries(clientId: str, monthYear: Optional[str] = None, db=Depends(get_db)):
+async def get_content_calendar_entries(clientId: str, projectId: Optional[str] = None, monthYear: Optional[str] = None, includeLegacy: bool = False, db=Depends(get_db)):
     try:
-        return await crud.get_content_calendar_entries(db, client_id=clientId, month_year=monthYear)
+        return await crud.get_content_calendar_entries(db, client_id=clientId, project_id=projectId, month_year=monthYear, include_legacy=includeLegacy)
     except Exception as e:
         import traceback
         print(traceback.format_exc())
@@ -3469,8 +3469,8 @@ async def delete_content_calendar_entry(entry_id: str, db=Depends(get_db)):
     return {"message": "Entry deleted successfully"}
 
 @app.get("/content-calendar-settings", response_model=schemas.ContentCalendarSettingsBase)
-async def get_content_calendar_settings(clientId: str, monthYear: str, db=Depends(get_db)):
-    settings = await crud.get_content_calendar_settings(db, clientId, monthYear)
+async def get_content_calendar_settings(clientId: str, monthYear: str, projectId: Optional[str] = None, db=Depends(get_db)):
+    settings = await crud.get_content_calendar_settings(db, clientId, monthYear, projectId)
     if settings:
         return settings
     # Return empty if not found
@@ -3486,7 +3486,7 @@ async def get_all_content_calendar_settings(monthYear: str, db=Depends(get_db)):
 @app.post("/content-calendar-settings", response_model=schemas.ContentCalendarSettings)
 async def upsert_content_calendar_settings(settings: schemas.ContentCalendarSettingsBase, db=Depends(get_db)):
     return await crud.upsert_content_calendar_settings(
-        db, settings.clientId, settings.monthYear, settings.model_dump()
+        db, settings.clientId, settings.monthYear, settings.projectId, settings.model_dump()
     )
 
 # Dynamic Feedback Forms
@@ -3784,7 +3784,7 @@ async def get_finance_summary_endpoint(db=Depends(get_db)):
     return await crud.get_finance_summary(db)
 
 # --- Task Preset Endpoints ---
-@app.get("/task-presets", response_model=List[schemas.TaskPreset])
+@app.get("/task-presets")
 async def read_task_presets(skip: int = 0, limit: int = 100, db=Depends(get_db)):
     return await crud.get_task_presets(db, skip, limit)
 
@@ -3851,6 +3851,19 @@ async def assign_task_preset(preset_id: str, payload: dict, db=Depends(get_db)):
             )
             created = await crud.create_wm_task(db, new_task)
             created_tasks.append(created)
+
+    existing_assigned = target_preset.get("assignedToIds", [])
+    new_assigned = list(set(existing_assigned + assignee_ids))
+    
+    try:
+        preset_obj_id = ObjectId(preset_id) if len(preset_id) == 24 else preset_id
+    except:
+        preset_obj_id = preset_id
+        
+    await db.task_presets.update_one(
+        {"_id": preset_obj_id},
+        {"$set": {"assignedToIds": new_assigned}}
+    )
             
     return {"message": "Success", "tasks_created": len(created_tasks), "tasks": created_tasks}
 
