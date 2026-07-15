@@ -3710,7 +3710,7 @@ async def delete_gallery_entry(gallery_id: str, db=Depends(get_db)):
     return {"status": "success"}
 
 # --- Task Preset Endpoints ---
-@app.get("/task-presets", response_model=List[schemas.TaskPreset])
+@app.get("/task-presets")
 async def read_task_presets(skip: int = 0, limit: int = 100, db=Depends(get_db)):
     return await crud.get_task_presets(db, skip, limit)
 
@@ -3777,6 +3777,19 @@ async def assign_task_preset(preset_id: str, payload: dict, db=Depends(get_db)):
             )
             created = await crud.create_wm_task(db, new_task)
             created_tasks.append(created)
+
+    existing_assigned = target_preset.get("assignedToIds", [])
+    new_assigned = list(set(existing_assigned + assignee_ids))
+    
+    try:
+        preset_obj_id = ObjectId(preset_id) if len(preset_id) == 24 else preset_id
+    except:
+        preset_obj_id = preset_id
+        
+    await db.task_presets.update_one(
+        {"_id": preset_obj_id},
+        {"$set": {"assignedToIds": new_assigned}}
+    )
             
     return {"message": "Success", "tasks_created": len(created_tasks), "tasks": created_tasks}
 
