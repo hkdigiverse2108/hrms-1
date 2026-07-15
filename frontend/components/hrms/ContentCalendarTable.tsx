@@ -25,9 +25,10 @@ interface ContentCalendarTableProps {
   projectId?: string;
   projectName?: string;
   clientName?: string;
+  isOldestProject?: boolean;
 }
 
-export function ContentCalendarTable({ clientId, projectId, projectName, clientName }: ContentCalendarTableProps) {
+export function ContentCalendarTable({ clientId, clientName, projectId, projectName, isOldestProject }: ContentCalendarTableProps) {
   const searchParams = useSearchParams();
   const highlightTask = searchParams.get('highlightTask');
   const [entries, setEntries] = useState<any[]>([]);
@@ -235,7 +236,7 @@ export function ContentCalendarTable({ clientId, projectId, projectName, clientN
   const fetchEntries = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_URL}/content-calendar?clientId=${clientId}&monthYear=${monthYear}${projectId ? `&projectId=${projectId}` : ''}`);
+      const res = await fetch(`${API_URL}/content-calendar?clientId=${clientId}&monthYear=${monthYear}${projectId ? `&projectId=${projectId}` : ''}${isOldestProject ? '&includeLegacy=true' : ''}`);
       if (res.ok) {
         const data = await res.json();
         data.sort((a: any, b: any) => {

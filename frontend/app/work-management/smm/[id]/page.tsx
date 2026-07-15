@@ -218,7 +218,23 @@ export default function ClientDetailsPage() {
         </div>
       </div>
 
-      <ContentCalendarTable clientId={params.id as string} clientName={client.companyName} projectId={project?.id} projectName={project?.name} />
+      {(() => {
+        const oldestProject = creativeProjects.reduce((oldest: any, p: any) => {
+          if (!oldest) return p;
+          return (p._id || p.id) < (oldest._id || oldest.id) ? p : oldest;
+        }, null);
+        const isOldestProject = !project || (oldestProject?.id === project?.id);
+        
+        return (
+          <ContentCalendarTable 
+            clientId={params.id as string} 
+            clientName={client.companyName} 
+            projectId={project?.id} 
+            projectName={project?.name} 
+            isOldestProject={isOldestProject}
+          />
+        );
+      })()}
 
       <ActivityLogDialog 
         open={logsOpen} 

@@ -8579,20 +8579,43 @@ async def get_all_content_calendar_entries(db):
     except Exception as e:
         raise e
 
-async def get_content_calendar_entries(db, client_id: str, project_id: str = None, month_year: str = None):
+async def get_content_calendar_entries(db, client_id: str, project_id: str = None, month_year: str = None, include_legacy: bool = False):
     try:
         query = {"clientId": client_id}
+        and_conditions = []
+        
         if project_id:
-            query["projectId"] = project_id
+            if include_legacy:
+                and_conditions.append({
+                    "$or": [
+                        {"projectId": project_id},
+                        {"projectId": {"$exists": False}},
+                        {"projectId": None},
+                        {"projectId": ""}
+                    ]
+                })
+            else:
+                query["projectId"] = project_id
+                
         if month_year:
-            query["$or"] = [
-                {"monthYear": month_year},
-                {"postingDate": {"$regex": f"^{month_year}"}},
-                {"scriptDate": {"$regex": f"^{month_year}"}},
-                {"shootDate": {"$regex": f"^{month_year}"}},
-                {"editingStart": {"$regex": f"^{month_year}"}},
-                {"actualPostingDate": {"$regex": f"^{month_year}"}}
-            ]
+            month_cond = {
+                "$or": [
+                    {"monthYear": month_year},
+                    {"postingDate": {"$regex": f"^{month_year}"}},
+                    {"scriptDate": {"$regex": f"^{month_year}"}},
+                    {"shootDate": {"$regex": f"^{month_year}"}},
+                    {"editingStart": {"$regex": f"^{month_year}"}},
+                    {"actualPostingDate": {"$regex": f"^{month_year}"}}
+                ]
+            }
+            if "$or" in query:
+                and_conditions.append(month_cond)
+            else:
+                and_conditions.append(month_cond)
+                
+        if and_conditions:
+            query["$and"] = and_conditions
+            
         cursor = db.content_calendar_entries.find(query)
         entries = await cursor.to_list(length=1000)
         return [fix_id(e) for e in entries]

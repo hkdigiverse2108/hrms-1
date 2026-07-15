@@ -3442,9 +3442,9 @@ async def get_all_content_calendar_entries(db=Depends(get_db)):
         return {"error": str(e), "trace": traceback.format_exc()}
 
 @app.get("/content-calendar")
-async def get_content_calendar_entries(clientId: str, projectId: Optional[str] = None, monthYear: Optional[str] = None, db=Depends(get_db)):
+async def get_content_calendar_entries(clientId: str, projectId: Optional[str] = None, monthYear: Optional[str] = None, includeLegacy: bool = False, db=Depends(get_db)):
     try:
-        return await crud.get_content_calendar_entries(db, client_id=clientId, project_id=projectId, month_year=monthYear)
+        return await crud.get_content_calendar_entries(db, client_id=clientId, project_id=projectId, month_year=monthYear, include_legacy=includeLegacy)
     except Exception as e:
         import traceback
         print(traceback.format_exc())

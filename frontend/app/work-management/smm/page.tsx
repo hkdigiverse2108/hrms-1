@@ -1171,8 +1171,13 @@ export default function CreativeClientsPage() {
                             )}
                           </div>
                           {(() => {
-                            const isFirstProject = clientProjects[client.id]?.[0]?.id === project?.id;
-                            const legacyCount = isFirstProject || !project ? (pendingCounts[client.id] || 0) : 0;
+                            const clientProjs = clientProjects[client.id] || [];
+                            const oldestProject = clientProjs.reduce((oldest: any, p: any) => {
+                              if (!oldest) return p;
+                              return (p._id || p.id) < (oldest._id || oldest.id) ? p : oldest;
+                            }, null);
+                            const isOldestProject = oldestProject?.id === project?.id;
+                            const legacyCount = isOldestProject || !project ? (pendingCounts[client.id] || 0) : 0;
                             const totalPending = (project ? (pendingCounts[project.id] || 0) : 0) + legacyCount;
                             
                             if (totalPending > 0) {
@@ -1205,8 +1210,13 @@ export default function CreativeClientsPage() {
                     </td>
                     <td className="px-6 py-4 text-center whitespace-nowrap sticky left-[250px] z-10 bg-white group-hover:bg-slate-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] transition-colors min-w-[120px] w-[120px] max-w-[120px]">
                       {(() => {
-                        const isFirstProject = clientProjects[client.id]?.[0]?.id === project?.id;
-                        const legacyDate = isFirstProject || !project ? clientMaxDates[client.id] : null;
+                        const clientProjs = clientProjects[client.id] || [];
+                        const oldestProject = clientProjs.reduce((oldest: any, p: any) => {
+                          if (!oldest) return p;
+                          return (p._id || p.id) < (oldest._id || oldest.id) ? p : oldest;
+                        }, null);
+                        const isOldestProject = oldestProject?.id === project?.id;
+                        const legacyDate = isOldestProject || !project ? clientMaxDates[client.id] : null;
                         const projectDate = project ? clientMaxDates[project.id] : null;
                         const finalDate = (projectDate && legacyDate) ? (projectDate > legacyDate ? projectDate : legacyDate) : (projectDate || legacyDate);
                         
