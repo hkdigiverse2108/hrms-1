@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { PageHeader } from "@/components/common/PageHeader";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { TablePagination } from "@/components/common/TablePagination";
@@ -158,7 +159,8 @@ export default function ReviewPage() {
   const [newReview, setNewReview] = useState({
     employeeId: "",
     summary: "",
-    rating: 0
+    rating: 0,
+    showNameToAdmin: false
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -214,6 +216,7 @@ export default function ReviewPage() {
           department: user.department || "N/A",
           summary: newReview.summary,
           rating: newReview.rating,
+          showNameToAdmin: newReview.showNameToAdmin,
           updatedBy: currentUserName
         };
       } else {
@@ -236,7 +239,7 @@ export default function ReviewPage() {
 
       if (res.ok) {
         setCreateModalOpen(false);
-        setNewReview({ employeeId: (!isAdmin && user) ? (user.id || user._id || "") : "", summary: "", rating: 0 });
+        setNewReview({ employeeId: (!isAdmin && user) ? (user.id || user._id || "") : "", summary: "", rating: 0, showNameToAdmin: false });
         setNewRating(0);
         fetchData();
       }
@@ -262,6 +265,7 @@ export default function ReviewPage() {
         body: JSON.stringify({
           summary: selectedReview.summary,
           rating: selectedReview.rating,
+          showNameToAdmin: selectedReview.showNameToAdmin,
           updatedBy: currentUserName
         })
       });
@@ -396,6 +400,16 @@ export default function ReviewPage() {
                     className="h-32 resize-none bg-white"
                   />
                 </div>
+                <div className="flex items-center space-x-2 sm:col-span-2 pt-2">
+                  <Checkbox 
+                    id="showNameToAdminCreate" 
+                    checked={newReview.showNameToAdmin}
+                    onCheckedChange={(checked) => setNewReview(prev => ({ ...prev, showNameToAdmin: checked === true }))}
+                  />
+                  <label htmlFor="showNameToAdminCreate" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                    Force show my name to Admins
+                  </label>
+                </div>
               </div>
 
               <DialogFooter className="flex flex-col-reverse sm:flex-row gap-3 mt-4">
@@ -455,7 +469,13 @@ export default function ReviewPage() {
                 </tr>
               ) : (
                 paginatedReviews.map((review, idx) => {
-                  const shouldHideNames = isAdmin && sysSettings && sysSettings.showNamesInRemarksToAdmin === false;
+                  let shouldHideNames = false;
+                  if (isAdmin && sysSettings && sysSettings.showNamesInRemarksToAdmin === false) {
+                    shouldHideNames = true;
+                  }
+                  if (review.showNameToAdmin === true) {
+                    shouldHideNames = false;
+                  }
                   const displayName = shouldHideNames ? "Anonymous" : review.employeeName;
                   const displayRole = shouldHideNames ? "Employee" : review.role;
                   const displayAvatarFallback = shouldHideNames ? "A" : review.employeeName?.split(' ').map((n:any) => n[0]).join('');
@@ -560,6 +580,16 @@ export default function ReviewPage() {
                   onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setSelectedReview((prev: any) => ({ ...prev, summary: e.target.value }))}
                   className="h-32 resize-none bg-white"
                 />
+              </div>
+              <div className="flex items-center space-x-2 sm:col-span-2 pt-2">
+                <Checkbox 
+                  id="showNameToAdminEdit" 
+                  checked={selectedReview.showNameToAdmin || false}
+                  onCheckedChange={(checked) => setSelectedReview((prev: any) => ({ ...prev, showNameToAdmin: checked === true }))}
+                />
+                <label htmlFor="showNameToAdminEdit" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                  Force show my name to Admins
+                </label>
               </div>
               </div>
             </div>
