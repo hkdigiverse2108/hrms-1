@@ -58,6 +58,8 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [noteRecord, setNoteRecord] = useState<any>(null)
   const [noteText, setNoteText] = useState('')
+  const [approveRecord, setApproveRecord] = useState<any>(null)
+  const [approveRating, setApproveRating] = useState<number | ''>('')
   const [logsOpen, setLogsOpen] = useState(false)
   const [reportLogs, setReportLogs] = useState<any[]>([])
   const [isLoadingLogs, setIsLoadingLogs] = useState(false)
@@ -154,7 +156,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
     return mapped
   }, [employees, allReports, dateRange, user, isAdmin, isTeamLeader, activeDeptTab, activeRoleTab, selectedStatusFilter])
 
-  const handleStatusUpdate = async (emp: any, newStatus: string) => {
+  const handleStatusUpdate = async (emp: any, newStatus: string, rating?: number) => {
     setIsSubmitting(true)
     try {
       const method = emp.reportId ? 'PUT' : 'POST'
@@ -166,7 +168,8 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
         ? { 
             status: newStatus,
             performedBy: user?.id,
-            userName: user?.name || `${user?.firstName} ${user?.lastName}`
+            userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+            ...(rating !== undefined && { rating })
           }
         : {
             employeeId: emp.employeeId,
@@ -178,7 +181,8 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
             tasksInProgress: [],
             hoursWorked: 8.0,
             performedBy: user?.id,
-            userName: user?.name || `${user?.firstName} ${user?.lastName}`
+            userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+            ...(rating !== undefined && { rating })
           }
 
       const response = await fetch(url, {
@@ -291,13 +295,20 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
       </div>
     )},
     { key: 'status' as const, header: 'Work Status', render: (record: any) => (
-      <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-tight ${
-        record.status === 'Approved' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 
-        record.status === 'Rejected' ? 'bg-rose-50 text-rose-600 border border-rose-100' : 
-        'bg-amber-50 text-amber-600 border border-amber-100'
-      }`}>
-        {record.status}
-      </span>
+      <div className="flex flex-col gap-1 items-start">
+        <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-tight ${
+          record.status === 'Approved' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 
+          record.status === 'Rejected' ? 'bg-rose-50 text-rose-600 border border-rose-100' : 
+          'bg-amber-50 text-amber-600 border border-amber-100'
+        }`}>
+          {record.status}
+        </span>
+        {record.status === 'Approved' && record.rating && (
+          <span className="text-[10px] font-bold text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100 flex items-center gap-1">
+            ⭐ {record.rating}/10
+          </span>
+        )}
+      </div>
     )},
     { key: 'note' as const, header: 'Verification Note', render: (record: any) => (
       record.note ? (
@@ -342,7 +353,10 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
           size="sm" 
           variant="outline"
           className="h-7 px-3 text-[10px] font-bold border-emerald-200 text-emerald-600 hover:bg-emerald-50"
-          onClick={() => handleStatusUpdate(record, 'Approved')}
+          onClick={() => {
+            setApproveRecord(record)
+            setApproveRating('')
+          }}
           disabled={isSubmitting || record.status === 'Approved'}
         >
           <CheckCircle2 className="w-3 h-3 mr-1" /> Approve
@@ -567,6 +581,55 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
         logs={reportLogs}
         isLoading={isLoadingLogs}
       />
+      <Dialog open={!!approveRecord} onOpenChange={(open) => {
+        if (!open) {
+          setApproveRecord(null)
+          setApproveRating('')
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Approve Daily Progress</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <Label>Rating (1 to 10)</Label>
+              <Input 
+                type="number" 
+                min={1} 
+                max={10} 
+                value={approveRating} 
+                onChange={(e) => {
+                  const val = parseInt(e.target.value);
+                  if (isNaN(val)) setApproveRating('');
+                  else if (val >= 1 && val <= 10) setApproveRating(val);
+                }} 
+                placeholder="Enter rating (1-10)" 
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setApproveRecord(null)
+              setApproveRating('')
+            }}>Cancel</Button>
+            <Button 
+              onClick={() => {
+                if (approveRating === '' || approveRating < 1 || approveRating > 10) {
+                  toast.error("Please enter a valid rating between 1 and 10");
+                  return;
+                }
+                handleStatusUpdate(approveRecord, 'Approved', approveRating as number);
+                setApproveRecord(null);
+                setApproveRating('');
+              }}
+              disabled={isSubmitting}
+            >
+              Approve
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
