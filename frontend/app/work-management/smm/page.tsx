@@ -1156,10 +1156,17 @@ export default function CreativeClientsPage() {
                       <div className="flex flex-col gap-1.5 items-start">
                         <div className="flex items-center gap-3">
                           <div 
-                            className="font-semibold text-brand-teal text-base underline underline-offset-2 hover:text-brand-teal/80 transition-colors cursor-pointer pl-2"
+                            className="font-semibold text-brand-teal text-base hover:text-brand-teal/80 transition-colors cursor-pointer pl-2"
                             onClick={() => router.push(`/work-management/smm/${client.id}${project ? `?projectId=${project.id}` : ''}`)}
                           >
-                            {project?.title ? `${project.title} — ${client.companyName}` : (client.companyName || "N/A")}
+                            {project?.title ? (
+                              <div className="flex flex-col gap-0.5">
+                                <span className="underline underline-offset-2 leading-tight">{project.title}</span>
+                                <span className="text-xs text-slate-500 font-medium no-underline">{client.companyName}</span>
+                              </div>
+                            ) : (
+                              <span className="underline underline-offset-2">{client.companyName || "N/A"}</span>
+                            )}
                           </div>
                           {pendingCounts[client.id] > 0 && (
                             <Badge 
