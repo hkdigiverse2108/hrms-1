@@ -1351,6 +1351,7 @@ class TaskPresetBase(BaseModel):
     presetType: Optional[str] = "intern"
     tasks: Optional[List[PresetTask]] = []
     modules: Optional[List[dict]] = []
+    assignedToIds: Optional[List[str]] = []
 
 class TaskPresetCreate(TaskPresetBase):
     pass

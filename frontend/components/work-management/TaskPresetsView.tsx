@@ -82,11 +82,12 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
 
   const openModal = (preset: any = null) => {
     if (preset) {
-      setEditingPreset(preset);
+      const tasksWithUid = (preset.tasks?.length ? preset.tasks : [{ title: "", description: "", projectId: "", projectName: "", department: "development", estimatedHours: 0, estimatedMinutes: 0 }]).map((t: any) => ({ ...t, _uid: t._uid || Math.random().toString(36).substr(2, 9) }));
+      setEditingPreset({ ...preset, tasks: tasksWithUid });
       setFormData({
         name: preset.name,
         description: preset.description || "",
-        tasks: preset.tasks?.length ? preset.tasks : [{ title: "", description: "", projectId: "", projectName: "", department: "development", estimatedHours: 0, estimatedMinutes: 0 }],
+        tasks: tasksWithUid,
         modules: preset.modules?.length ? preset.modules : [{ name: "", tasks: [{ title: "", description: "", priority: "medium", estimatedHours: 0, status: "todo" }] }]
       });
     } else {
@@ -94,7 +95,7 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
       setFormData({
         name: "",
         description: "",
-        tasks: [{ title: "", description: "", projectId: "", projectName: "", department: "development", estimatedHours: 0, estimatedMinutes: 0 }],
+        tasks: [{ title: "", description: "", projectId: "", projectName: "", department: "development", estimatedHours: 0, estimatedMinutes: 0, _uid: Math.random().toString(36).substr(2, 9) }],
         modules: [{ name: "", tasks: [{ title: "", description: "", priority: "medium", estimatedHours: 0, status: "todo" }] }]
       });
     }
@@ -137,6 +138,79 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
 
       if (res.ok) {
         toast.success(editingPreset ? "Preset updated" : "Preset created");
+        
+        // Auto-update assigned tasks for interns
+        if (editingPreset && activeTab === "intern") {
+          try {
+            const presetId = editingPreset._id || editingPreset.id;
+            const local = localStorage.getItem(`preset_assigned_${presetId}`);
+            if (local) {
+              const assignedIds = JSON.parse(local);
+              if (assignedIds.length > 0) {
+                const tasksRes = await fetch(`${API_URL}/wm-tasks`);
+                if (tasksRes.ok) {
+                  const data = await tasksRes.json();
+                  const allTasks = Array.isArray(data) ? data : (data.value || []);
+                  
+                  const oldTasks = editingPreset.tasks || [];
+                  const newTasks = formData.tasks.filter((t: any) => t.title.trim() !== "");
+                  
+                  for (const assigneeId of assignedIds) {
+                    const employeeName = allTasks.find((t: any) => t.assignedToId === assigneeId)?.assignedToName || "Unknown";
+                    
+                    // 1. Handle modified or deleted tasks
+                    for (const oldTask of oldTasks) {
+                      const newTask = newTasks.find((t: any) => t._uid === oldTask._uid);
+                      const empTask = allTasks.find((t: any) => t.assignedToId === assigneeId && t.title === oldTask.title && t.status !== 'completed');
+                      
+                      if (empTask) {
+                        if (newTask) {
+                          // Modified
+                          await fetch(`${API_URL}/wm-tasks/${empTask._id || empTask.id}`, {
+                            method: "PUT",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ ...empTask, title: newTask.title, description: newTask.description, estimatedHours: newTask.estimatedHours, estimatedMinutes: newTask.estimatedMinutes, projectId: newTask.projectId, projectName: newTask.projectName, department: newTask.department })
+                          });
+                        } else {
+                          // Deleted
+                          await fetch(`${API_URL}/wm-tasks/${empTask._id || empTask.id}`, { method: "DELETE" });
+                        }
+                      }
+                    }
+                    
+                    // 2. Handle entirely new tasks added to the preset
+                    for (const newTask of newTasks) {
+                      if (!oldTasks.find((t: any) => t._uid === newTask._uid)) {
+                        const taskPayload = {
+                          title: newTask.title,
+                          description: newTask.description || "",
+                          projectId: newTask.projectId || "",
+                          projectName: newTask.projectName || "",
+                          department: newTask.department || "development",
+                          assignedToId: assigneeId,
+                          assignedToName: employeeName,
+                          status: "todo",
+                          priority: "medium",
+                          estimatedHours: newTask.estimatedHours || 0,
+                          estimatedMinutes: newTask.estimatedMinutes || 0,
+                          createdBy: user?.id,
+                          performedBy: user?.id,
+                          userName: `${user?.firstName} ${user?.lastName}`,
+                          postingDate: new Date().toISOString().split('T')[0],
+                          dueDate: new Date().toISOString().split('T')[0]
+                        };
+                        await fetch(`${API_URL}/wm-tasks`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(taskPayload) });
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            console.error("Error auto-updating tasks", e);
+          }
+        }
+
         setViewState("list");
         fetchPresets();
       } else {
@@ -165,39 +239,90 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
 
   const openAssignModal = (preset: any) => {
     setAssigningPreset(preset);
-    setSelectedEmployeeIds([]);
+    let assigned = preset.assignedToIds || [];
+    if (assigned.length === 0) {
+      try {
+        const local = localStorage.getItem(`preset_assigned_${preset._id || preset.id}`);
+        if (local) assigned = JSON.parse(local);
+      } catch (e) {}
+    }
+    setSelectedEmployeeIds(assigned);
     setAssignModalOpen(true);
   };
 
   const handleAssign = async () => {
-    if (!assigningPreset || selectedEmployeeIds.length === 0) {
-      toast.error("Please select at least one employee");
-      return;
-    }
+    if (!assigningPreset) return;
+    
     setIsAssigning(true);
     try {
-      const payload = {
-        assignedToIds: selectedEmployeeIds,
-        performedBy: user?.id,
-        userName: `${user?.firstName} ${user?.lastName}`
-      };
-      const res = await fetch(`${API_URL}/task-presets/${assigningPreset._id || assigningPreset.id}/assign`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-      if (res.ok) {
-        const data = await res.json();
-        toast.success(`Successfully assigned preset and created ${data.tasks_created} tasks`);
-        setAssignModalOpen(false);
-        setSelectedEmployeeIds([]);
-      } else {
-        const err = await res.json();
-        toast.error(`Error: ${err.detail || "Failed to assign preset"}`);
+      const presetId = assigningPreset._id || assigningPreset.id;
+      let previousIds: string[] = [];
+      try {
+        const local = localStorage.getItem(`preset_assigned_${presetId}`);
+        if (local) previousIds = JSON.parse(local);
+      } catch (e) {}
+
+      const newlyAssignedIds = selectedEmployeeIds.filter(id => !previousIds.includes(id));
+      const unassignedIds = previousIds.filter(id => !selectedEmployeeIds.includes(id));
+
+      let tasksCreated = 0;
+      let tasksDeleted = 0;
+
+      // 1. Delete tasks for unassigned users
+      if (unassignedIds.length > 0) {
+        try {
+          const tasksRes = await fetch(`${API_URL}/wm-tasks`);
+          if (tasksRes.ok) {
+            const data = await tasksRes.json();
+            const allTasks = Array.isArray(data) ? data : (data.value || []);
+            const presetTitles = (assigningPreset.tasks || []).map((t: any) => t.title);
+            
+            const tasksToDelete = allTasks.filter((t: any) => 
+              unassignedIds.includes(t.assignedToId) && 
+              presetTitles.includes(t.title) && 
+              t.status !== 'completed'
+            );
+
+            for (const t of tasksToDelete) {
+              await fetch(`${API_URL}/wm-tasks/${t._id || t.id}`, { method: 'DELETE' });
+              tasksDeleted++;
+            }
+          }
+        } catch (e) {
+          console.error("Error deleting tasks", e);
+        }
       }
+
+      // 2. Create tasks for newly assigned users
+      if (newlyAssignedIds.length > 0) {
+        const payload = {
+          assignedToIds: newlyAssignedIds,
+          performedBy: user?.id,
+          userName: `${user?.firstName} ${user?.lastName}`
+        };
+        const res = await fetch(`${API_URL}/task-presets/${presetId}/assign`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          const data = await res.json();
+          tasksCreated = data.tasks_created || 0;
+        }
+      }
+
+      // 3. Update localStorage
+      try {
+        localStorage.setItem(`preset_assigned_${presetId}`, JSON.stringify(selectedEmployeeIds));
+      } catch (e) {}
+
+      toast.success(`Successfully updated assignments. Created ${tasksCreated} tasks, removed ${tasksDeleted} tasks.`);
+      setAssignModalOpen(false);
+      setSelectedEmployeeIds([]);
+      fetchPresets();
     } catch (error) {
       console.error(error);
-      toast.error("An error occurred while assigning");
+      toast.error("An error occurred while updating assignments");
     } finally {
       setIsAssigning(false);
     }
@@ -206,7 +331,7 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
   const addTaskRow = () => {
     setFormData({
       ...formData,
-      tasks: [...formData.tasks, { title: "", description: "", projectId: "", projectName: "", department: "development", estimatedHours: 0, estimatedMinutes: 0 }]
+      tasks: [...formData.tasks, { title: "", description: "", projectId: "", projectName: "", department: "development", estimatedHours: 0, estimatedMinutes: 0, _uid: Math.random().toString(36).substr(2, 9) }]
     });
     setTimeout(() => {
       const inputs = document.querySelectorAll('.task-title-input');
