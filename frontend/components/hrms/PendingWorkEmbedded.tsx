@@ -1181,67 +1181,69 @@ export function PendingWorkEmbedded({
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <div className="flex justify-end items-center gap-2">
-                        {item.isOtherWork ? (
-                          <>
-                            {item.status === 'Pending' && item.description !== 'Custom task created from Punch-In' && (
-                              <Button 
-                                size="sm" 
-                                className="bg-brand-teal hover:bg-brand-teal/90 text-white text-xs h-7"
-                                onClick={() => handleUpdateOtherWorkStatus(item.id, 'Ready for Review')}
+                        {(() => {
+                          const uId = currentUser?.id || currentUser?._id;
+                          const isAssigner = item.assignerId === uId;
+                          const isAssignee = item.assigneeId === uId;
+                          const isAdminOrTL = currentUser?.role === 'Team Leader' || currentUser?.designation?.toLowerCase() === 'team leader' || currentUser?.role?.toLowerCase() === 'admin' || currentUser?.name === 'Admin Admin' || currentUser?.role === 'HR';
+                          
+                          return item.isOtherWork ? (
+                            <>
+                              {item.status === 'Pending' && item.description !== 'Custom task created from Punch-In' && isAssignee && (
+                                <Button 
+                                  size="sm" 
+                                  className="bg-brand-teal hover:bg-brand-teal/90 text-white text-xs h-7"
+                                  onClick={() => handleUpdateOtherWorkStatus(item.id, 'Ready for Review')}
+                                >
+                                  Submit for Review
+                                </Button>
+                              )}
+                              {item.status === 'Ready for Review' && item.description !== 'Custom task created from Punch-In' && (isAssigner || isAdminOrTL) && (
+                                <>
+                                  <Button 
+                                    size="sm" 
+                                    className="bg-green-600 hover:bg-green-700 text-white text-xs h-7"
+                                    onClick={() => handleUpdateOtherWorkStatus(item.id, 'Approved')}
+                                  >
+                                    Approve
+                                  </Button>
+                                  <Button 
+                                    size="sm" 
+                                    variant="destructive"
+                                    className="text-xs h-7"
+                                    onClick={() => handleUpdateOtherWorkStatus(item.id, 'Pending')}
+                                  >
+                                    Reject
+                                  </Button>
+                                </>
+                              )}
+                              {getPendingTransferRequest(item) ? (
+                                <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 px-2 py-1 rounded font-semibold whitespace-nowrap">
+                                  Pending Transfer to {getPendingTransferRequest(item)?.receiverName}
+                                </span>
+                              ) : (
+                                canTransferTask(item) && (
+                                  <Button
+                                    onClick={() => handleOpenTransferModal(item)}
+                                    variant="ghost"
+                                    size="icon"
+                                    title="Transfer Task"
+                                    className="h-8 w-8 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700"
+                                  >
+                                    <ArrowLeftRight className="w-4 h-4" />
+                                  </Button>
+                                )
+                              )}
+                              <Button
+                                onClick={() => handleOpenLogs(item)}
+                                variant="ghost"
+                                size="icon"
+                                title="View Logs"
+                                className="h-8 w-8 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
                               >
-                                Submit for Review
+                                <History className="w-4 h-4" />
                               </Button>
-                            )}
-                            {item.status === 'Ready for Review' && item.description !== 'Custom task created from Punch-In' && (
-                              <>
-                                <Button 
-                                  size="sm" 
-                                  className="bg-green-600 hover:bg-green-700 text-white text-xs h-7"
-                                  onClick={() => handleUpdateOtherWorkStatus(item.id, 'Approved')}
-                                >
-                                  Approve
-                                </Button>
-                                <Button 
-                                  size="sm" 
-                                  variant="destructive"
-                                  className="text-xs h-7"
-                                  onClick={() => handleUpdateOtherWorkStatus(item.id, 'Pending')}
-                                >
-                                  Reject
-                                </Button>
-                              </>
-                            )}
-                            {getPendingTransferRequest(item) ? (
-                              <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 px-2 py-1 rounded font-semibold whitespace-nowrap">
-                                Pending Transfer to {getPendingTransferRequest(item)?.receiverName}
-                              </span>
-                            ) : (
-                              canTransferTask(item) && (
-                                <Button
-                                  onClick={() => handleOpenTransferModal(item)}
-                                  variant="ghost"
-                                  size="icon"
-                                  title="Transfer Task"
-                                  className="h-8 w-8 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700"
-                                >
-                                  <ArrowLeftRight className="w-4 h-4" />
-                                </Button>
-                              )
-                            )}
-                            <Button
-                              onClick={() => handleOpenLogs(item)}
-                              variant="ghost"
-                              size="icon"
-                              title="View Logs"
-                              className="h-8 w-8 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-                            >
-                              <History className="w-4 h-4" />
-                            </Button>
-                            {(() => {
-                              const isAssigner = item.assignerId === currentUser?.id || item.assignerId === currentUser?._id;
-                              const isAdminOrTL = currentUser?.role === 'Team Leader' || currentUser?.designation?.toLowerCase() === 'team leader' || currentUser?.role?.toLowerCase() === 'admin' || currentUser?.name === 'Admin Admin' || currentUser?.role === 'HR';
-                              const canDelete = isAssigner || isAdminOrTL;
-                              return canDelete && (
+                              {(isAssigner || isAdminOrTL) && (
                                 <Button
                                   onClick={() => handleDeleteOtherWork(item.id)}
                                   variant="ghost"
@@ -1251,48 +1253,48 @@ export function PendingWorkEmbedded({
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </Button>
-                              );
-                            })()}
-                          </>
-                        ) : (
-                          <>
-                            {getPendingTransferRequest(item) ? (
-                              <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 px-2 py-1 rounded font-semibold whitespace-nowrap">
-                                Pending Transfer to {getPendingTransferRequest(item)?.receiverName}
-                              </span>
-                            ) : (
-                              canTransferTask(item) && (
-                                <Button
-                                  onClick={() => handleOpenTransferModal(item)}
-                                  variant="ghost"
-                                  size="icon"
-                                  title="Transfer Task"
-                                  className="h-8 w-8 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700"
-                                >
-                                  <ArrowLeftRight className="w-4 h-4" />
-                                </Button>
-                              )
-                            )}
-                            <Button
-                              onClick={() => handleOpenLogs(item)}
-                              variant="ghost"
-                              size="icon"
-                              title="View Logs"
-                              className="h-8 w-8 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-                            >
-                              <History className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              onClick={() => router.push(`/work-management/smm/${item.clientId}?highlightTask=${item.id}`)}
-                              variant="ghost"
-                              size="icon"
-                              title="Show in Calendar"
-                              className="h-8 w-8 text-brand-teal hover:bg-brand-teal/10 hover:text-brand-teal"
-                            >
-                              <CalendarIcon className="w-4 h-4" />
-                            </Button>
-                          </>
-                        )}
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              {getPendingTransferRequest(item) ? (
+                                <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 px-2 py-1 rounded font-semibold whitespace-nowrap">
+                                  Pending Transfer to {getPendingTransferRequest(item)?.receiverName}
+                                </span>
+                              ) : (
+                                canTransferTask(item) && (
+                                  <Button
+                                    onClick={() => handleOpenTransferModal(item)}
+                                    variant="ghost"
+                                    size="icon"
+                                    title="Transfer Task"
+                                    className="h-8 w-8 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700"
+                                  >
+                                    <ArrowLeftRight className="w-4 h-4" />
+                                  </Button>
+                                )
+                              )}
+                              <Button
+                                onClick={() => handleOpenLogs(item)}
+                                variant="ghost"
+                                size="icon"
+                                title="View Logs"
+                                className="h-8 w-8 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                              >
+                                <History className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                onClick={() => router.push(`/work-management/smm/${item.clientId}?highlightTask=${item.id}`)}
+                                variant="ghost"
+                                size="icon"
+                                title="Show in Calendar"
+                                className="h-8 w-8 text-brand-teal hover:bg-brand-teal/10 hover:text-brand-teal"
+                              >
+                                <CalendarIcon className="w-4 h-4" />
+                              </Button>
+                            </>
+                          );
+                        })()}
                       </div>
                     </td>
                   </tr>
