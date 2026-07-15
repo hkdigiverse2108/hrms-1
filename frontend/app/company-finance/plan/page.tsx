@@ -700,7 +700,7 @@ export default function CompanyFinancePlanPage() {
                             {row.metric}
                           </td>
                           <td className="px-4 py-2.5 border-r border-slate-100 font-bold text-slate-500">
-                            {row.unit}
+                            {row.type === "select" ? (values[row.id] || "Active") : row.unit}
                           </td>
                           <td className="px-4 py-1.5 text-right w-[240px]">
                             {row.type === "field" && (
