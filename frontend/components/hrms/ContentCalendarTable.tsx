@@ -236,9 +236,12 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
   const fetchEntries = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_URL}/content-calendar?clientId=${clientId}&monthYear=${monthYear}${projectId ? `&projectId=${projectId}` : ''}${isOldestProject ? '&includeLegacy=true' : ''}`);
+      const res = await fetch(`${API_URL}/content-calendar?clientId=${clientId}&monthYear=${monthYear}`);
       if (res.ok) {
-        const data = await res.json();
+        let data = await res.json();
+        if (projectId) {
+           data = data.filter((entry: any) => entry.projectId === projectId || (isOldestProject && !entry.projectId));
+        }
         data.sort((a: any, b: any) => {
           if (!a.postingDate) return 1;
           if (!b.postingDate) return -1;
@@ -256,14 +259,17 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
 
   useEffect(() => {
     if (highlightTask && clientId) {
-      fetch(`${API_URL}/content-calendar?clientId=${clientId}${projectId ? `&projectId=${projectId}` : ''}`)
+      fetch(`${API_URL}/content-calendar?clientId=${clientId}`)
         .then(res => {
           if (res.ok) return res.json();
           throw new Error("Failed to fetch entries");
         })
         .then(data => {
           if (Array.isArray(data)) {
-            const task = data.find(t => t.id === highlightTask);
+            if (projectId) {
+               data = data.filter((entry: any) => entry.projectId === projectId || (isOldestProject && !entry.projectId));
+            }
+            const task = data.find((t: any) => t.id === highlightTask);
             if (task) {
               const dateVal = task.postingDate || task.scriptDate || task.shootDate || task.editingStart || task.actualPostingDate || task.monthYear;
               if (dateVal && typeof dateVal === 'string') {
