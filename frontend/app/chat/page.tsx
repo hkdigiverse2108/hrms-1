@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useApi } from "@/hooks/useApi";
@@ -3076,6 +3076,19 @@ export default function ChatPage() {
           })
         );
       }
+
+      setChatSummaries((prev: any) => {
+        if (prev[seenChatId] && prev[seenChatId].senderId === user.id) {
+          return {
+            ...prev,
+            [seenChatId]: {
+              ...prev[seenChatId],
+              isSeen: true
+            }
+          };
+        }
+        return prev;
+      });
     }
   }, [lastEvent, user]);
 
@@ -3131,7 +3144,7 @@ export default function ChatPage() {
             ...prev[targetId],
             lastMessage: lastText,
             timestamp: nowIso,
-            isSeen: true,
+            isSeen: false,
             senderId: user.id
           }
         }));
@@ -3311,7 +3324,7 @@ export default function ChatPage() {
           ...prev[targetId],
           lastMessage: optimisticText,
           timestamp: nowIso,
-          isSeen: true,
+          isSeen: false,
           senderId: user.id
         }
       }));
