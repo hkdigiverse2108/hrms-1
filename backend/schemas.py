@@ -2379,6 +2379,7 @@ class RegisteredPC(RegisteredPCBase):
 # Content Calendar Schemas
 class ContentCalendarEntryBase(BaseModel):
     clientId: str
+    projectId: Optional[str] = None
     monthYear: str  # Format: "YYYY-MM"
     postingDate: Optional[str] = None
     postingDay: Optional[str] = None
@@ -2473,6 +2474,7 @@ class WorkTransferRequest(WorkTransferRequestBase):
 
 class ContentCalendarSettingsBase(BaseModel):
     clientId: str
+    projectId: Optional[str] = None
     monthYear: str
     scriptDateOffset: Optional[int] = None
     shootDateOffset: Optional[int] = None

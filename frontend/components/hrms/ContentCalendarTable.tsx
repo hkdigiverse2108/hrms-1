@@ -22,10 +22,12 @@ import dayjs from "dayjs";
 
 interface ContentCalendarTableProps {
   clientId: string;
+  projectId?: string;
+  projectName?: string;
   clientName?: string;
 }
 
-export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTableProps) {
+export function ContentCalendarTable({ clientId, projectId, projectName, clientName }: ContentCalendarTableProps) {
   const searchParams = useSearchParams();
   const highlightTask = searchParams.get('highlightTask');
   const [entries, setEntries] = useState<any[]>([]);
@@ -103,7 +105,7 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
 
   const fetchOverallMaxDate = async () => {
     try {
-      const res = await fetch(`${API_URL}/content-calendar?clientId=${clientId}`);
+      const res = await fetch(`${API_URL}/content-calendar?clientId=${clientId}${projectId ? `&projectId=${projectId}` : ''}`);
       if (res.ok) {
         const data = await res.json();
         let max = new Date(0);
@@ -202,7 +204,7 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
         }
       }
 
-      const res = await fetch(`${API_URL}/content-calendar-settings?clientId=${clientId}&monthYear=${monthYear}`);
+      const res = await fetch(`${API_URL}/content-calendar-settings?clientId=${clientId}&monthYear=${monthYear}${projectId ? `&projectId=${projectId}` : ''}`);
       let customSettings = {};
       if (res.ok) {
         const data = await res.json();
@@ -233,7 +235,7 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
   const fetchEntries = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_URL}/content-calendar?clientId=${clientId}&monthYear=${monthYear}`);
+      const res = await fetch(`${API_URL}/content-calendar?clientId=${clientId}&monthYear=${monthYear}${projectId ? `&projectId=${projectId}` : ''}`);
       if (res.ok) {
         const data = await res.json();
         data.sort((a: any, b: any) => {
@@ -253,7 +255,7 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
 
   useEffect(() => {
     if (highlightTask && clientId) {
-      fetch(`${API_URL}/content-calendar?clientId=${clientId}`)
+      fetch(`${API_URL}/content-calendar?clientId=${clientId}${projectId ? `&projectId=${projectId}` : ''}`)
         .then(res => {
           if (res.ok) return res.json();
           throw new Error("Failed to fetch entries");
@@ -275,12 +277,12 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
         })
         .catch(err => console.error(err));
     }
-  }, [highlightTask, clientId]);
+  }, [highlightTask, clientId, projectId]);
 
   useEffect(() => {
     fetchEntries();
     fetchSettings();
-  }, [clientId, monthYear]);
+  }, [clientId, monthYear, projectId]);
 
   useEffect(() => {
     if (entries.length > 0 && highlightTask) {
@@ -319,6 +321,7 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           clientId,
+          projectId,
           monthYear,
           updatedBy: userName,
           postReel: typeFilter !== "all" ? typeFilter : undefined
@@ -342,6 +345,7 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
 
       let payload: any = {
         clientId,
+        projectId,
         monthYear,
         postingDate: dateString,
         updatedBy: userName,
@@ -498,7 +502,7 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
         reason: reason
       };
       const updatedLogs = [...(settings?.statusLogs || []), newLog];
-      const updatedSettings = { ...settings, clientId, monthYear, approvalStatus: newStatus, statusLogs: updatedLogs };
+      const updatedSettings = { ...settings, clientId, projectId, monthYear, approvalStatus: newStatus, statusLogs: updatedLogs };
       
       const res = await fetch(`${API_URL}/content-calendar-settings`, {
         method: "POST",
@@ -582,6 +586,7 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
       const payload = {
         ...settingsForm,
         clientId,
+        projectId,
         monthYear,
         scriptDateOffset: Number(settingsForm.scriptDateOffset),
         shootDateOffset: Number(settingsForm.shootDateOffset),
@@ -936,7 +941,15 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
     <div className={containerClasses}>
       <div className="p-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4 bg-white">
         <div>
-          <h2 className="text-lg font-bold text-slate-800">Content Calendar</h2>
+          <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+            Content Calendar
+            {projectName && (
+              <>
+                <span className="text-slate-300">|</span>
+                <span className="text-brand-teal text-base">{projectName}</span>
+              </>
+            )}
+          </h2>
           <p className="text-xs text-slate-500">Plan and track content creation and posting</p>
         </div>
         <div className="flex items-start gap-3">

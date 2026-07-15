@@ -8579,9 +8579,11 @@ async def get_all_content_calendar_entries(db):
     except Exception as e:
         raise e
 
-async def get_content_calendar_entries(db, client_id: str, month_year: str = None):
+async def get_content_calendar_entries(db, client_id: str, project_id: str = None, month_year: str = None):
     try:
         query = {"clientId": client_id}
+        if project_id:
+            query["projectId"] = project_id
         if month_year:
             query["$or"] = [
                 {"monthYear": month_year},
@@ -8660,11 +8662,14 @@ async def delete_content_calendar_entry(db, entry_id: str):
     res = await db.content_calendar_entries.delete_one({"_id": ObjectId(entry_id)})
     return res.deleted_count > 0
 
-async def get_content_calendar_settings(db, client_id: str, month_year: str):
-    settings = await db.content_calendar_settings.find_one({
+async def get_content_calendar_settings(db, client_id: str, month_year: str, project_id: str = None):
+    query = {
         "clientId": client_id,
         "monthYear": month_year
-    })
+    }
+    if project_id:
+        query["projectId"] = project_id
+    settings = await db.content_calendar_settings.find_one(query)
     if settings:
         return fix_id(settings)
     return None
@@ -8674,15 +8679,23 @@ async def get_all_content_calendar_settings(db, month_year: str):
     settings = await cursor.to_list(length=1000)
     return [fix_id(s) for s in settings]
 
-async def upsert_content_calendar_settings(db, client_id: str, month_year: str, update_data: dict):
+async def upsert_content_calendar_settings(db, client_id: str, month_year: str, project_id: str, update_data: dict):
+    query = {
+        "clientId": client_id,
+        "monthYear": month_year
+    }
+    if project_id:
+        query["projectId"] = project_id
+
     if "_id" in update_data:
         del update_data["_id"]
+
     await db.content_calendar_settings.update_one(
-        {"clientId": client_id, "monthYear": month_year},
+        query,
         {"$set": update_data},
         upsert=True
     )
-    return await get_content_calendar_settings(db, client_id, month_year)
+    return await get_content_calendar_settings(db, client_id, month_year, project_id)
 
 # Dynamic Feedback Forms
 
