@@ -831,6 +831,9 @@ class RemarkUpdate(BaseModel):
 
 class Remark(RemarkBase):
     id: str
+    amount: Optional[float] = None
+    computedAmount: Optional[float] = None
+    isWarning: Optional[bool] = False
 
 class PenaltyTypeBase(BaseModel):
     name: str
