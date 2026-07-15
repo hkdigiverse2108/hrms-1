@@ -3748,6 +3748,14 @@ async def get_finance_balances_endpoint(db=Depends(get_db)):
 async def update_finance_balances_endpoint(payload: dict, db=Depends(get_db)):
     return await crud.update_finance_balances(db, payload)
 
+@app.get("/company-finance/monthly-plans/{month}")
+async def get_monthly_plan_endpoint(month: str, db=Depends(get_db)):
+    return await crud.get_monthly_plan(db, month)
+
+@app.post("/company-finance/monthly-plans/{month}")
+async def save_monthly_plan_endpoint(month: str, payload: dict, db=Depends(get_db)):
+    return await crud.save_monthly_plan(db, month, payload.get("values", {}))
+
 @app.get("/company-finance/plans", response_model=dict)
 async def get_finance_plans_endpoint(db=Depends(get_db)):
     plans = await crud.get_finance_plans(db)

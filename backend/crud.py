@@ -9116,6 +9116,21 @@ async def update_finance_plan(db, plan_id: str, update_data: dict):
 async def delete_finance_plan(db, plan_id: str):
     return await delete_item(db, "company_finance_plans", plan_id)
 
+async def get_monthly_plan(db, month: str):
+    doc = await db.company_finance_monthly_plans.find_one({"month": month})
+    if not doc:
+        return {"month": month, "values": {}}
+    return fix_id(doc)
+
+async def save_monthly_plan(db, month: str, values: dict):
+    await db.company_finance_monthly_plans.update_one(
+        {"month": month},
+        {"$set": {"month": month, "values": values}},
+        upsert=True
+    )
+    doc = await db.company_finance_monthly_plans.find_one({"month": month})
+    return fix_id(doc)
+
 async def get_finance_summary(db):
     all_txs = await get_finance_transactions(db)
     balances = await get_finance_balances(db)

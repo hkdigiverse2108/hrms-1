@@ -2670,3 +2670,18 @@ class ResearchResponse(ResearchBase):
     class Config:
         from_attributes = True
 
+
+# --- Monthly Plan Schemas ---
+class MonthlyPlanBase(BaseModel):
+    month: str
+    values: dict
+
+class MonthlyPlanCreate(MonthlyPlanBase):
+    pass
+
+class MonthlyPlanUpdate(BaseModel):
+    values: dict
+
+class MonthlyPlan(MonthlyPlanBase):
+    id: str
+
