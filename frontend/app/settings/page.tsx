@@ -92,7 +92,7 @@ export default function SettingsPage() {
   const fetchSettings = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_URL}/system-settings`);
+      const res = await fetch(`${API_URL}/system-settings?t=${Date.now()}`, { cache: 'no-store' });
       if (res.ok) {
         setSettings(await res.json());
       }
@@ -105,7 +105,7 @@ export default function SettingsPage() {
 
   const fetchEmployees = async () => {
     try {
-      const res = await fetch(`${API_URL}/employees`);
+      const res = await fetch(`${API_URL}/employees?t=${Date.now()}`, { cache: 'no-store' });
       if (res.ok) {
         setEmployees(await res.json());
       }
