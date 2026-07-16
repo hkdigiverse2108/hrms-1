@@ -3679,15 +3679,40 @@ async def update_project(db, project_id: str, project_update: schemas.ProjectUpd
     if update_data:
         old_project = await db.projects.find_one({"_id": ObjectId(project_id)})
         
-        if update_data.get("clientId") and not update_data.get("clientName"):
+        if update_data.get("clientId") and update_data.get("clientId") != old_project.get("clientId"):
             client = await db.clients.find_one({"_id": ObjectId(update_data["clientId"])})
             if client:
                 update_data["clientName"] = client.get("companyName")
         
-        if update_data.get("teamLeaderId") and not update_data.get("teamLeaderName"):
+        if update_data.get("teamLeaderId") and update_data.get("teamLeaderId") != old_project.get("teamLeaderId"):
             employee = await db.employees.find_one({"_id": ObjectId(update_data["teamLeaderId"])})
             if employee:
                 update_data["teamLeaderName"] = f"{employee.get('firstName')} {employee.get('lastName')}"
+                
+        # Reassign tasks and modules if team leader changed
+        if update_data.get("teamLeaderId") and old_project.get("teamLeaderId") and update_data["teamLeaderId"] != old_project.get("teamLeaderId"):
+            old_tl = old_project.get("teamLeaderId")
+            new_tl = update_data["teamLeaderId"]
+            new_tl_name = update_data.get("teamLeaderName", "Team Leader")
+            
+            # 1. Reassign modules in the project
+            if "modules" in old_project and "modules" not in update_data:
+                updated_modules = []
+                modules_changed = False
+                for mod in old_project["modules"]:
+                    if mod.get("assignedToId") == old_tl:
+                        mod["assignedToId"] = new_tl
+                        mod["assignedToName"] = new_tl_name
+                        modules_changed = True
+                    updated_modules.append(mod)
+                if modules_changed:
+                    update_data["modules"] = updated_modules
+            
+            # 2. Reassign wm_tasks
+            await db.wm_tasks.update_many(
+                {"projectId": project_id, "assignedToId": old_tl},
+                {"$set": {"assignedToId": new_tl, "assignedToName": new_tl_name}}
+            )
                 
         # Calculate nextFollowupDate
         followup_keys = ["followupType", "followupIntervalDays", "followupDaysOfWeek", "followupDatesOfMonth", "lastFollowupDate"]
