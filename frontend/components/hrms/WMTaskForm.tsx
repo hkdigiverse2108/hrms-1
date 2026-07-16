@@ -103,6 +103,15 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
     ...initialData,
   });
 
+  const descriptionRef = React.useRef<HTMLTextAreaElement>(null);
+
+  React.useEffect(() => {
+    if (descriptionRef.current) {
+      descriptionRef.current.style.height = "auto";
+      descriptionRef.current.style.height = `${descriptionRef.current.scrollHeight}px`;
+    }
+  }, [formData.description]);
+
   useEffect(() => {
     fetchMetadata();
   }, []);
@@ -429,7 +438,8 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
         <Label htmlFor="description">Description</Label>
         <textarea
           id="description"
-          className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+          ref={descriptionRef}
+          className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 overflow-hidden"
           placeholder="Task details..."
           value={formData.description ?? ""}
           onChange={(e) => handleChange("description", e.target.value)}
