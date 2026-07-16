@@ -1357,17 +1357,12 @@ const parseMonospace = (text: string): React.ReactNode => {
 };
 
 const parseFormatting = (text: string): React.ReactNode => {
-  return parseMonospace(text);
+  return text;
 };
 
 const stripFormatting = (text: string | null | undefined): string => {
   if (!text) return "";
-  return text
-    .replace(/```([\s\S]+?)```/g, "$1")
-    .replace(/`(?!\s)([^`]+?)(?<!\s)`/g, "$1")
-    .replace(/\*(?!\s)([^*]+?)(?<!\s)\*/g, "$1")
-    .replace(/_(?!\s)([^_]+?)(?<!\s)_/g, "$1")
-    .replace(/~(?!\s)([^~]+?)(?<!\s)~/g, "$1");
+  return text;
 };
 
 const isAudioMessageText = (text: string | null | undefined): boolean => {
