@@ -227,6 +227,7 @@ class EmployeeBase(BaseModel):
     status: Optional[str] = "active"
     gender: Optional[str] = "Male"
     position: Optional[str] = "Intern"
+    quickActions: Optional[List[str]] = []
     salary: RobustFloat = None
     company: Optional[str] = None
     role: Optional[str] = None
@@ -280,6 +281,7 @@ class EmployeeUpdate(BaseModel):
     gender: Optional[str] = None
     salary: RobustFloat = None
     company: Optional[str] = None
+    quickActions: Optional[List[str]] = None
     role: Optional[str] = None
     upiId: Optional[str] = None
     accountNumber: Optional[str] = None
