@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { API_URL } from "@/lib/config";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const AVAILABLE_ACTIONS = [
   { id: 'dashboard', label: 'Dashboard', path: '/', icon: LayoutDashboard, category: 'General' },
@@ -126,23 +127,29 @@ export function QuickActionsWidget({ user, onUpdate }: { user: any, onUpdate?: (
   };
 
   return (
-    <div className="flex items-center gap-2">
+    <>
       {selectedActions.length > 0 && (
-        <div className="flex items-center gap-1.5 mr-2">
+        <TooltipProvider>
           {selectedActions.map(action => (
-            <Link href={action.path} key={action.id}>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="h-9 px-3 gap-1.5 bg-white shadow-sm border-slate-200 text-slate-700 hover:text-brand-teal hover:border-brand-teal/30 hover:bg-brand-teal/5 transition-all"
-                title={action.label}
-              >
-                <action.icon className="w-4 h-4" />
-                <span className="hidden sm:inline-block">{action.label}</span>
-              </Button>
-            </Link>
+            <Tooltip key={action.id}>
+              <TooltipTrigger asChild>
+                <Link href={action.path} className="shrink-0">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="h-9 px-3 gap-1.5 bg-white shadow-sm border-slate-200 text-slate-700 hover:text-brand-teal hover:border-brand-teal/30 hover:bg-brand-teal/5 transition-all"
+                  >
+                    <action.icon className="w-4 h-4" />
+                    <span className="hidden sm:inline-block">{action.label.split(' ')[0]}</span>
+                  </Button>
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{action.label}</p>
+              </TooltipContent>
+            </Tooltip>
           ))}
-        </div>
+        </TooltipProvider>
       )}
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -230,6 +237,6 @@ export function QuickActionsWidget({ user, onUpdate }: { user: any, onUpdate?: (
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }
