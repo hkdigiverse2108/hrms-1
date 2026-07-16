@@ -242,6 +242,7 @@ class EmployeeBase(BaseModel):
     panCard: Optional[str] = None
     startTime: Optional[str] = None
     endTime: Optional[str] = None
+    signatureUrl: Optional[str] = None
     profilePhoto: Optional[str] = None
     customStatus: Optional[str] = None
     customEmoji: Optional[str] = None
@@ -293,6 +294,7 @@ class EmployeeUpdate(BaseModel):
     panCard: Optional[str] = None
     startTime: Optional[str] = None
     endTime: Optional[str] = None
+    signatureUrl: Optional[str] = None
     profilePhoto: Optional[str] = None
     customStatus: Optional[str] = None
     customEmoji: Optional[str] = None
