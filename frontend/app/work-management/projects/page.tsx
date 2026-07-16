@@ -1160,7 +1160,7 @@ export default function ProjectsPage() {
                     <div className="flex flex-col">
                       <div className="flex gap-2 items-center mb-2">
                         <Badge variant={getStatusColor(project.status, progress)} className="capitalize">
-                          {isDevProject && progress === 100 ? 'Completed' : project.status.replace('-', ' ')}
+                          {project.status === 'testing' ? 'Testing Phase' : project.status.replace('-', ' ')}
                         </Badge>
                         {overdue && (
                           <Badge variant="destructive" className="text-[10px] font-bold h-5 flex items-center gap-1">
