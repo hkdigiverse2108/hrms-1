@@ -5,7 +5,7 @@ import { DataTable } from '@/components/hrms/data-table'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Calendar, User, Users, Briefcase, CheckCircle2, XCircle, Clock, Search, Filter } from 'lucide-react'
+import { Calendar, User, Users, Briefcase, CheckCircle2, XCircle, Clock, Search, Filter, Star } from 'lucide-react'
 import { useApi } from '@/hooks/useApi'
 import { useUser } from '@/hooks/useUser'
 import { API_URL } from '@/lib/config'
@@ -50,6 +50,8 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
 
   const employees = data?.employees || []
   const allReports = (data as any)?.employeeDailyReports || []
+  const attendanceRecords = (data as any)?.attendanceRecords || []
+  const leaveRequests = (data as any)?.leaveRequests || []
   
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: new Date(),
@@ -67,6 +69,11 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
   const [activeRoleTab, setActiveRoleTab] = useState<'Team Leaders' | 'Employees'>('Team Leaders')
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('all')
   const [tlViewMode, setTlViewMode] = useState<'my' | 'team'>('team')
+  
+  const [ratingDialogOpen, setRatingDialogOpen] = useState(false)
+  const [ratingFilter, setRatingFilter] = useState<'yesterday' | 'this_week' | 'all'>('all')
+  const [ratingsModalOpen, setRatingsModalOpen] = useState(false)
+  const [ratingDateFilter, setRatingDateFilter] = useState<'yesterday' | 'this_week' | 'all'>('all')
 
   const availableDepartments = useMemo(() => {
     if (!employees || employees.length === 0) return []
@@ -83,6 +90,55 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
       setActiveDeptTab(user.department)
     }
   }, [isTeamLeader, user, activeDeptTab])
+
+  const ratingData = useMemo(() => {
+     if (!isAdmin) return []
+     const today = new Date()
+     today.setHours(0,0,0,0)
+     const yesterday = new Date(today)
+     yesterday.setDate(yesterday.getDate() - 1)
+     
+     const startOfThisWeek = new Date(today)
+     startOfThisWeek.setDate(today.getDate() - today.getDay()) // Sunday as start
+
+     let filteredReports = allReports.filter((r: any) => r.rating)
+
+     if (ratingFilter === 'yesterday') {
+        const yesterdayStr = format(yesterday, "yyyy-MM-dd")
+        filteredReports = filteredReports.filter((r: any) => r.date === yesterdayStr)
+     } else if (ratingFilter === 'this_week') {
+        filteredReports = filteredReports.filter((r: any) => {
+           const reportDate = new Date(r.date)
+           reportDate.setHours(0,0,0,0)
+           return reportDate >= startOfThisWeek && reportDate <= today
+        })
+     }
+
+     const empMap = new Map<string, { employeeName: string, department: string, totalScore: number, count: number }>()
+     
+     filteredReports.forEach((r: any) => {
+        if (!empMap.has(r.employeeId)) {
+           empMap.set(r.employeeId, {
+              employeeName: r.employeeName || employees.find((e:any)=>e.id===r.employeeId)?.name || 'Unknown',
+              department: r.department || employees.find((e:any)=>e.id===r.employeeId)?.department || '',
+              totalScore: 0,
+              count: 0
+           })
+        }
+        const data = empMap.get(r.employeeId)!
+        data.totalScore += Number(r.rating)
+        data.count += 1
+     })
+
+     const result = Array.from(empMap.values()).map(d => ({
+        employeeName: d.employeeName,
+        department: d.department,
+        avgRating: (d.totalScore / d.count).toFixed(1),
+        count: d.count
+     }))
+     
+     return result.sort((a, b) => Number(b.avgRating) - Number(a.avgRating))
+  }, [allReports, ratingFilter, isAdmin, employees])
 
   // Combine employees with their report status for the selected date
   const displayData = useMemo(() => {
@@ -120,6 +176,33 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
       const dateStr = format(dateObj, "yyyy-MM-dd")
       return filteredEmployees.map((emp: any) => {
         const report = allReports.find((r: any) => r.employeeId === emp.id && r.date === dateStr)
+        
+        let isFullDayLeave = false
+        if (leaveRequests?.length > 0) {
+          const leaves = leaveRequests.filter((l: any) => l.employee_id === emp.id && l.status === 'Approved')
+          isFullDayLeave = leaves.some((l: any) => {
+            if (!l.start_date || !l.end_date) return false
+            const [lsD, lsM, lsY] = l.start_date.split('-')
+            const [leD, leM, leY] = l.end_date.split('-')
+            const start = new Date(Number(lsY), Number(lsM)-1, Number(lsD))
+            const end = new Date(Number(leY), Number(leM)-1, Number(leD))
+            start.setHours(0,0,0,0)
+            end.setHours(0,0,0,0)
+            const current = new Date(dateObj)
+            current.setHours(0,0,0,0)
+            return current >= start && current <= end && l.day_type !== 'Half Day'
+          })
+        }
+
+        let avgRatingStr = ''
+        if (isAdmin) {
+           const empReports = allReports.filter((r: any) => r.employeeId === emp.id && r.rating)
+           if (empReports.length > 0) {
+              const total = empReports.reduce((sum: number, r: any) => sum + Number(r.rating), 0)
+              avgRatingStr = (total / empReports.length).toFixed(1)
+           }
+        }
+
         let responsiblePerson = ''
         if (['Team Leader', 'Manager', 'Social Media Manager'].includes(emp.role || '') || emp.role?.toLowerCase() === 'admin') {
            responsiblePerson = 'HR / Admin'
@@ -139,10 +222,11 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
           department: emp.department,
           role: emp.role,
           date: dateStr,
-          status: report?.status || 'Pending Verification',
+          status: isFullDayLeave ? 'On Leave' : (report?.status || 'Pending Verification'),
           reportId: report?.id,
           note: report?.note || '',
           rating: report?.rating || '',
+          avgRating: avgRatingStr,
           tasksCompleted: report?.tasksCompleted || [],
           tasksInProgress: report?.tasksInProgress || [],
           verifiedBy: report?.userName || '',
@@ -156,7 +240,54 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
     }
 
     return mapped
-  }, [employees, allReports, dateRange, user, isAdmin, isTeamLeader, activeDeptTab, activeRoleTab, selectedStatusFilter])
+  }, [employees, allReports, leaveRequests, dateRange, user, isAdmin, isTeamLeader, activeDeptTab, activeRoleTab, selectedStatusFilter])
+
+  const allRatingsData = useMemo(() => {
+    if (!ratingsModalOpen) return [];
+    
+    let filteredReports = allReports.filter((r: any) => r.rating);
+    
+    const today = new Date();
+    if (ratingDateFilter === 'yesterday') {
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yStr = format(yesterday, "yyyy-MM-dd");
+      filteredReports = filteredReports.filter((r: any) => r.date === yStr);
+    } else if (ratingDateFilter === 'this_week') {
+      const day = today.getDay() || 7;
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(today.getDate() - day + 1);
+      const startStr = format(startOfWeek, "yyyy-MM-dd");
+      filteredReports = filteredReports.filter((r: any) => r.date >= startStr);
+    }
+
+    const employeeMap = new Map();
+    employees.filter((e: any) => e.status?.trim()?.toLowerCase() === 'active').forEach((e: any) => {
+      employeeMap.set(e.id, {
+        id: e.id,
+        name: e.name || `${e.firstName} ${e.lastName}`,
+        department: e.department,
+        totalRating: 0,
+        count: 0
+      });
+    });
+
+    filteredReports.forEach((r: any) => {
+      const emp = employeeMap.get(r.employeeId);
+      if (emp) {
+        emp.totalRating += Number(r.rating);
+        emp.count += 1;
+      }
+    });
+
+    return Array.from(employeeMap.values())
+      .filter(e => e.count > 0)
+      .map(e => ({
+        ...e,
+        avgRating: (e.totalRating / e.count).toFixed(1)
+      }))
+      .sort((a, b) => Number(b.avgRating) - Number(a.avgRating));
+  }, [allReports, employees, ratingDateFilter, ratingsModalOpen]);
 
   const handleVerify = async (status: 'Approved' | 'Rejected') => {
     if (!verifyRecord) return
@@ -266,24 +397,27 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
       <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-tight ${
         record.status === 'Approved' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 
         record.status === 'Rejected' ? 'bg-rose-50 text-rose-600 border border-rose-100' : 
+        record.status === 'On Leave' ? 'bg-blue-50 text-blue-600 border border-blue-100' :
         'bg-amber-50 text-amber-600 border border-amber-100'
       }`}>
         {record.status}
       </span>
     )},
     { key: 'note' as const, header: 'Verification Note', render: (record: any) => (
-      record.note ? (
-        <span 
-          className="text-[11px] text-slate-600 font-medium block" 
-          style={{ wordBreak: 'normal', overflowWrap: 'break-word', whiteSpace: 'normal', maxWidth: '200px' }} 
-          title={record.note}
-        >
-          {record.note}
-          {record.rating && <span className="block text-brand-teal font-bold mt-0.5">Rating: {record.rating}/10</span>}
-        </span>
-      ) : (
-        <span className="text-[10px] text-slate-400 italic">No note added</span>
-      )
+      <div className="flex flex-col gap-1">
+        {record.note ? (
+          <span 
+            className="text-[11px] text-slate-600 font-medium block" 
+            style={{ wordBreak: 'normal', overflowWrap: 'break-word', whiteSpace: 'normal', maxWidth: '200px' }} 
+            title={record.note}
+          >
+            {record.note}
+            {record.rating && <span className="block text-brand-teal font-bold mt-0.5">Rating: {record.rating}/10</span>}
+          </span>
+        ) : (
+          <span className="text-[10px] text-slate-400 italic">No note added</span>
+        )}
+      </div>
     )},
     { key: 'verifiedBy' as const, header: 'Verified By / Responsible', render: (record: any) => (
       record.status === 'Pending Verification' ? (
@@ -303,6 +437,9 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
     const isHighLevelRole = ['Team Leader', 'Manager', 'Social Media Manager'].includes(record.role);
     const canManage = (canEditDailyProgress || (isTeamLeader && user?.department === record.department && !isHighLevelRole) || (isHRUser && isHighLevelRole)) && !isSelf
     
+    if (record.status === 'On Leave') {
+        return <span className="text-[10px] text-slate-400 italic font-medium tracking-tighter">On Leave</span>
+    }
     if (!canManage) {
         return <span className="text-[10px] text-slate-400 italic font-medium tracking-tighter">
           View Only
@@ -390,6 +527,24 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
         {/* Department and Role Tabs */}
         {(isAdmin || isTeamLeader || isHRUser) && (
           <div className="flex items-center gap-4">
+            {isAdmin && (
+              <Button
+                onClick={() => router.push('/ratings')}
+                className="bg-amber-50 text-amber-600 hover:bg-amber-100 border border-amber-200 shadow-sm h-9 px-4 text-xs font-bold whitespace-nowrap"
+              >
+                <Star className="w-3.5 h-3.5 mr-2" />
+                View Ratings
+              </Button>
+            )}
+            {isTeamLeader && !isAdmin && (
+              <Button 
+                variant="outline" 
+                className="h-9 px-4 text-xs font-bold border-brand-teal text-brand-teal hover:bg-brand-teal/10 shadow-sm"
+                onClick={() => router.push('/ratings')}
+              >
+                All Ratings
+              </Button>
+            )}
             {isTeamLeader && !isAdmin && (
               <div className="flex items-center gap-1 bg-slate-100/70 p-1 rounded-xl shadow-inner border border-slate-200/60">
                 <button
@@ -488,37 +643,33 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
           </DialogHeader>
 
           <div className="py-4 space-y-5">
-            <div>
-              <Label className="text-xs font-bold text-slate-700 mb-2 block">Tasks Logged</Label>
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-4">
-                {(verifyRecord?.tasksCompleted?.length > 0 || verifyRecord?.tasksInProgress?.length > 0) ? (
-                  <>
-                    {verifyRecord?.tasksCompleted?.length > 0 && (
-                      <div>
-                        <span className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider mb-2 block flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> Completed</span>
-                        <ul className="list-disc pl-5 space-y-1.5">
-                          {verifyRecord.tasksCompleted.map((task: string, i: number) => (
-                            <li key={i} className="text-[13px] text-slate-700 leading-snug">{task}</li>
-                          ))}
-                        </ul>
-                      </div>
+            {(() => {
+              const selectedAttendance = verifyRecord ? attendanceRecords.find((a: any) => a.employeeId === verifyRecord.employeeId && a.date === verifyRecord.date) : null;
+              const workLogs = selectedAttendance?.punches || [];
+              
+              return (
+                <div>
+                  <Label className="text-xs font-bold text-slate-700 mb-2 block">Tasks Logged</Label>
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3 max-h-[250px] overflow-y-auto">
+                    {workLogs.length > 0 ? (
+                      <ul className="list-disc pl-5 space-y-1.5">
+                        {workLogs.map((punch: any, i: number) => {
+                          const text = punch.activityType === 'Work' && punch.activityValue ? punch.activityValue : 
+                                       punch.activityType === 'Other' ? `${punch.activitySubtype || 'Other'}: ${punch.activityValue || ''}` :
+                                       punch.activityType === 'Research' ? `Research: ${punch.activityValue || ''}` :
+                                       punch.activityType || 'Work Log';
+                          return (
+                            <li key={i} className="text-[13px] text-slate-700 leading-snug">{text}</li>
+                          );
+                        })}
+                      </ul>
+                    ) : (
+                      <div className="text-[13px] text-slate-500 italic">No tasks logged for this date.</div>
                     )}
-                    {verifyRecord?.tasksInProgress?.length > 0 && (
-                      <div>
-                        <span className="text-[11px] font-bold text-amber-600 uppercase tracking-wider mb-2 block flex items-center gap-1.5 mt-3"><Clock className="w-3.5 h-3.5" /> In Progress</span>
-                        <ul className="list-disc pl-5 space-y-1.5">
-                          {verifyRecord.tasksInProgress.map((task: string, i: number) => (
-                            <li key={i} className="text-[13px] text-slate-700 leading-snug">{task}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="text-[13px] text-slate-500 italic">No tasks logged for this date.</div>
-                )}
-              </div>
-            </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             <div>
               <Label className="text-xs font-bold text-slate-700 mb-2 block">Rating (1 to 10) <span className="text-rose-500">*</span></Label>
@@ -573,6 +724,65 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
         </DialogContent>
       </Dialog>
 
+      <Dialog open={ratingsModalOpen} onOpenChange={setRatingsModalOpen}>
+        <DialogContent className="sm:max-w-[700px] bg-white rounded-2xl shadow-xl border border-slate-100 p-6 max-h-[85vh] flex flex-col">
+          <DialogHeader className="flex flex-row justify-between items-center mb-2 flex-shrink-0">
+            <DialogTitle className="text-base font-bold text-slate-800">
+              Employee Ratings Overview
+            </DialogTitle>
+            <Select value={ratingDateFilter} onValueChange={(val: any) => setRatingDateFilter(val)}>
+              <SelectTrigger className="w-[160px] h-9 text-xs font-semibold bg-white border border-slate-200">
+                <SelectValue placeholder="Filter Date" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Time</SelectItem>
+                <SelectItem value="this_week">This Week</SelectItem>
+                <SelectItem value="yesterday">Yesterday</SelectItem>
+              </SelectContent>
+            </Select>
+          </DialogHeader>
+
+          <div className="overflow-y-auto border border-slate-200 rounded-xl">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 sticky top-0 shadow-sm">
+                <tr>
+                  <th className="px-4 py-3 font-semibold text-slate-500 text-[11px] uppercase tracking-wider">Employee</th>
+                  <th className="px-4 py-3 font-semibold text-slate-500 text-[11px] uppercase tracking-wider">Department</th>
+                  <th className="px-4 py-3 font-semibold text-slate-500 text-[11px] uppercase tracking-wider text-center">Days Verified</th>
+                  <th className="px-4 py-3 font-semibold text-slate-500 text-[11px] uppercase tracking-wider text-right">Avg Rating</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {allRatingsData.length > 0 ? (
+                  allRatingsData.map((emp, i) => (
+                    <tr key={i} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-4 py-3 font-bold text-slate-700 text-xs">{emp.name}</td>
+                      <td className="px-4 py-3">
+                        <span className="px-2 py-0.5 bg-slate-100 text-slate-500 border border-slate-200 rounded text-[10px] font-bold uppercase tracking-wider">
+                          {emp.department}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center text-slate-600 font-semibold text-xs">{emp.count}</td>
+                      <td className="px-4 py-3 text-right">
+                        <span className="px-2.5 py-1 bg-amber-50 text-amber-600 border border-amber-200 rounded-lg font-black text-xs shadow-sm min-w-[50px] inline-block text-center">
+                          {emp.avgRating}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-8 text-center text-slate-400 italic text-sm">
+                      No ratings found for the selected period.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <ActivityLogDialog 
         open={logsOpen}
         onOpenChange={setLogsOpen}
@@ -581,6 +791,52 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
         logs={reportLogs}
         isLoading={isLoadingLogs}
       />
+
+      <Dialog open={ratingDialogOpen} onOpenChange={setRatingDialogOpen}>
+        <DialogContent className="sm:max-w-[600px] bg-white rounded-2xl shadow-xl border border-slate-100 p-6 max-h-[85vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
+            <DialogTitle className="text-base font-bold text-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Star className="w-5 h-5 text-amber-500 fill-amber-500" />
+                <span>Employee Ratings</span>
+              </div>
+              <Select value={ratingFilter} onValueChange={(v: any) => setRatingFilter(v)}>
+                <SelectTrigger className="w-[140px] h-8 text-xs font-semibold bg-slate-50 border-slate-200">
+                  <SelectValue placeholder="Filter" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Time</SelectItem>
+                  <SelectItem value="this_week">This Week</SelectItem>
+                  <SelectItem value="yesterday">Yesterday</SelectItem>
+                </SelectContent>
+              </Select>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto mt-4 pr-2">
+            {ratingData.length > 0 ? (
+              <div className="space-y-2">
+                {ratingData.map((d, i) => (
+                  <div key={i} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                    <div>
+                      <div className="font-bold text-slate-800 text-sm">{d.employeeName}</div>
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{d.department}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-black text-amber-600">{d.avgRating} <span className="text-xs text-amber-400 font-bold">/10</span></div>
+                      <div className="text-[10px] text-slate-400 font-semibold">{d.count} Report{d.count !== 1 ? 's' : ''}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-32 text-slate-500 text-sm italic">
+                No ratings found for the selected period.
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
