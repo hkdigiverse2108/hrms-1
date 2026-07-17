@@ -1931,6 +1931,7 @@ class EmployeeDailyReportBase(BaseModel):
     hoursWorked: float = 8.0
     status: str = "Submitted" # Submitted, Reviewed
     note: Optional[str] = None
+    rating: Optional[int] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
 
@@ -1945,6 +1946,7 @@ class EmployeeDailyReportUpdate(BaseModel):
     hoursWorked: Optional[float] = None
     status: Optional[str] = None
     note: Optional[str] = None
+    rating: Optional[int] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
 

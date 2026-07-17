@@ -56,8 +56,9 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
     to: new Date()
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [noteRecord, setNoteRecord] = useState<any>(null)
-  const [noteText, setNoteText] = useState('')
+  const [verifyRecord, setVerifyRecord] = useState<any>(null)
+  const [verifyNote, setVerifyNote] = useState('')
+  const [verifyRating, setVerifyRating] = useState<number | ''>('')
   const [logsOpen, setLogsOpen] = useState(false)
   const [reportLogs, setReportLogs] = useState<any[]>([])
   const [isLoadingLogs, setIsLoadingLogs] = useState(false)
@@ -141,6 +142,9 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
           status: report?.status || 'Pending Verification',
           reportId: report?.id,
           note: report?.note || '',
+          rating: report?.rating || '',
+          tasksCompleted: report?.tasksCompleted || [],
+          tasksInProgress: report?.tasksInProgress || [],
           verifiedBy: report?.userName || '',
           responsiblePerson
         }
@@ -154,76 +158,43 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
     return mapped
   }, [employees, allReports, dateRange, user, isAdmin, isTeamLeader, activeDeptTab, activeRoleTab, selectedStatusFilter])
 
-  const handleStatusUpdate = async (emp: any, newStatus: string) => {
-    setIsSubmitting(true)
-    try {
-      const method = emp.reportId ? 'PUT' : 'POST'
-      const url = emp.reportId 
-        ? `${API_URL}/employee-daily-reports/${emp.reportId}` 
-        : `${API_URL}/employee-daily-reports`
-
-      const payload = emp.reportId 
-        ? { 
-            status: newStatus,
-            performedBy: user?.id,
-            userName: user?.name || `${user?.firstName} ${user?.lastName}`
-          }
-        : {
-            employeeId: emp.employeeId,
-            employeeName: emp.employeeName,
-            department: emp.department,
-            date: emp.date,
-            status: newStatus,
-            tasksCompleted: ["Work verified by TL"],
-            tasksInProgress: [],
-            hoursWorked: 8.0,
-            performedBy: user?.id,
-            userName: user?.name || `${user?.firstName} ${user?.lastName}`
-          }
-
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-
-      if (response.ok) {
-        toast.success(`Work ${newStatus.toLowerCase()} successfully`)
-        refreshItem('employeeDailyReports')
-      }
-    } catch (error) {
-      console.error('Error updating status:', error)
-      toast.error('Failed to update status')
-    } finally {
-      setIsSubmitting(false)
+  const handleVerify = async (status: 'Approved' | 'Rejected') => {
+    if (!verifyRecord) return
+    if (!verifyNote.trim() || !verifyRating) {
+      toast.error('Note and Rating are compulsory')
+      return
     }
-  }
-
-  const handleSaveNote = async () => {
-    if (!noteRecord) return
+    if (Number(verifyRating) < 1 || Number(verifyRating) > 10) {
+      toast.error('Rating must be between 1 and 10')
+      return
+    }
+    
     setIsSubmitting(true)
     try {
-      const method = noteRecord.reportId ? 'PUT' : 'POST'
-      const url = noteRecord.reportId 
-        ? `${API_URL}/employee-daily-reports/${noteRecord.reportId}` 
+      const method = verifyRecord.reportId ? 'PUT' : 'POST'
+      const url = verifyRecord.reportId 
+        ? `${API_URL}/employee-daily-reports/${verifyRecord.reportId}` 
         : `${API_URL}/employee-daily-reports`
 
-      const payload = noteRecord.reportId 
+      const payload = verifyRecord.reportId 
         ? { 
-            note: noteText,
+            status: status,
+            note: verifyNote,
+            rating: Number(verifyRating),
             performedBy: user?.id,
             userName: user?.name || `${user?.firstName} ${user?.lastName}`
           }
         : {
-            employeeId: noteRecord.employeeId,
-            employeeName: noteRecord.employeeName,
-            department: noteRecord.department,
-            date: noteRecord.date,
-            status: noteRecord.status,
+            employeeId: verifyRecord.employeeId,
+            employeeName: verifyRecord.employeeName,
+            department: verifyRecord.department,
+            date: verifyRecord.date,
+            status: status,
             tasksCompleted: ["Work verified by TL"],
             tasksInProgress: [],
             hoursWorked: 8.0,
-            note: noteText,
+            note: verifyNote,
+            rating: Number(verifyRating),
             performedBy: user?.id,
             userName: user?.name || `${user?.firstName} ${user?.lastName}`
           }
@@ -235,16 +206,17 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
       })
 
       if (response.ok) {
-        toast.success('Note saved successfully')
-        setNoteRecord(null)
-        setNoteText('')
+        toast.success(`Work ${status.toLowerCase()} successfully`)
+        setVerifyRecord(null)
+        setVerifyNote('')
+        setVerifyRating('')
         refreshItem('employeeDailyReports')
       } else {
-        toast.error('Failed to save note')
+        toast.error('Failed to verify work')
       }
     } catch (error) {
-      console.error('Error saving note:', error)
-      toast.error('Failed to save note')
+      console.error('Error verifying work:', error)
+      toast.error('Failed to verify work')
     } finally {
       setIsSubmitting(false)
     }
@@ -307,6 +279,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
           title={record.note}
         >
           {record.note}
+          {record.rating && <span className="block text-brand-teal font-bold mt-0.5">Rating: {record.rating}/10</span>}
         </span>
       ) : (
         <span className="text-[10px] text-slate-400 italic">No note added</span>
@@ -341,31 +314,14 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
         <Button 
           size="sm" 
           variant="outline"
-          className="h-7 px-3 text-[10px] font-bold border-emerald-200 text-emerald-600 hover:bg-emerald-50"
-          onClick={() => handleStatusUpdate(record, 'Approved')}
-          disabled={isSubmitting || record.status === 'Approved'}
-        >
-          <CheckCircle2 className="w-3 h-3 mr-1" /> Approve
-        </Button>
-        <Button 
-          size="sm" 
-          variant="outline"
-          className="h-7 px-3 text-[10px] font-bold border-rose-200 text-rose-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200"
-          onClick={() => handleStatusUpdate(record, 'Rejected')}
-          disabled={isSubmitting || record.status === 'Rejected'}
-        >
-          <XCircle className="w-3 h-3 mr-1" /> Reject
-        </Button>
-        <Button 
-          size="sm" 
-          variant="outline"
-          className="h-7 px-3 text-[10px] font-bold border-slate-200 text-slate-600 hover:bg-slate-50"
+          className="h-7 px-3 text-[10px] font-bold border-brand-teal text-brand-teal hover:bg-brand-teal/10"
           onClick={() => {
-            setNoteRecord(record)
-            setNoteText(record.note || '')
+            setVerifyRecord(record)
+            setVerifyNote(record.note || '')
+            setVerifyRating(record.rating || '')
           }}
         >
-          <MessageSquare className="w-3 h-3 mr-1" /> Note
+          <CheckCircle2 className="w-3 h-3 mr-1" /> Verify
         </Button>
         <Button 
           size="sm" 
@@ -519,41 +475,99 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
         />
       </div>
 
-      <Dialog open={!!noteRecord} onOpenChange={(open) => !open && setNoteRecord(null)}>
-        <DialogContent className="sm:max-w-[425px] bg-white rounded-2xl shadow-xl border border-slate-100 p-6">
+      <Dialog open={!!verifyRecord} onOpenChange={(open) => !open && setVerifyRecord(null)}>
+        <DialogContent className="sm:max-w-[600px] bg-white rounded-2xl shadow-xl border border-slate-100 p-6 max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
-              <MessageSquare className="w-5 h-5 text-brand-teal" />
-              <span>Verification Note</span>
+              <CheckCircle2 className="w-5 h-5 text-brand-teal" />
+              <span>Verify Daily Progress</span>
             </DialogTitle>
             <div className="text-[11px] text-slate-400 font-medium tracking-tight mt-1">
-              Add verification remarks for <span className="font-bold text-slate-600">{noteRecord?.employeeName}</span> on <span className="font-bold text-slate-600">{noteRecord?.date}</span>.
+              Verify work for <span className="font-bold text-slate-600">{verifyRecord?.employeeName}</span> on <span className="font-bold text-slate-600">{verifyRecord?.date}</span>.
             </div>
           </DialogHeader>
-          <div className="py-4">
-            <Textarea
-              value={noteText}
-              onChange={(e) => setNoteText(e.target.value)}
-              placeholder="Enter details, feedback, or verification remarks..."
-              className="min-h-[120px] text-xs resize-none border-slate-200 focus:border-brand-teal focus:ring-brand-teal rounded-xl p-3"
-            />
+
+          <div className="py-4 space-y-5">
+            <div>
+              <Label className="text-xs font-bold text-slate-700 mb-2 block">Tasks Logged</Label>
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-4">
+                {(verifyRecord?.tasksCompleted?.length > 0 || verifyRecord?.tasksInProgress?.length > 0) ? (
+                  <>
+                    {verifyRecord?.tasksCompleted?.length > 0 && (
+                      <div>
+                        <span className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider mb-2 block flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> Completed</span>
+                        <ul className="list-disc pl-5 space-y-1.5">
+                          {verifyRecord.tasksCompleted.map((task: string, i: number) => (
+                            <li key={i} className="text-[13px] text-slate-700 leading-snug">{task}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {verifyRecord?.tasksInProgress?.length > 0 && (
+                      <div>
+                        <span className="text-[11px] font-bold text-amber-600 uppercase tracking-wider mb-2 block flex items-center gap-1.5 mt-3"><Clock className="w-3.5 h-3.5" /> In Progress</span>
+                        <ul className="list-disc pl-5 space-y-1.5">
+                          {verifyRecord.tasksInProgress.map((task: string, i: number) => (
+                            <li key={i} className="text-[13px] text-slate-700 leading-snug">{task}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-[13px] text-slate-500 italic">No tasks logged for this date.</div>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-xs font-bold text-slate-700 mb-2 block">Rating (1 to 10) <span className="text-rose-500">*</span></Label>
+              <Input
+                type="number"
+                min="1"
+                max="10"
+                value={verifyRating}
+                onChange={(e) => setVerifyRating(e.target.value === '' ? '' : Number(e.target.value))}
+                placeholder="Enter rating from 1 to 10"
+                className="text-xs border-slate-200 focus:border-brand-teal focus:ring-brand-teal rounded-xl h-10"
+              />
+            </div>
+
+            <div>
+              <Label className="text-xs font-bold text-slate-700 mb-2 block">Verification Note <span className="text-rose-500">*</span></Label>
+              <Textarea
+                value={verifyNote}
+                onChange={(e) => setVerifyNote(e.target.value)}
+                placeholder="Enter verification note (compulsory)..."
+                className="min-h-[100px] text-xs resize-none border-slate-200 focus:border-brand-teal focus:ring-brand-teal rounded-xl p-3"
+              />
+            </div>
           </div>
-          <DialogFooter className="flex items-center justify-end gap-2 border-t border-slate-50 pt-4">
+
+          <DialogFooter className="flex items-center justify-end gap-2 border-t border-slate-50 pt-4 mt-2">
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setNoteRecord(null)}
-              className="h-8 text-xs font-bold border-slate-200 text-slate-500 rounded-lg"
+              onClick={() => setVerifyRecord(null)}
+              className="h-9 text-xs font-bold border-slate-200 text-slate-500 rounded-lg px-4"
             >
               Cancel
             </Button>
             <Button
               size="sm"
-              onClick={handleSaveNote}
+              onClick={() => handleVerify('Rejected')}
               disabled={isSubmitting}
-              className="h-8 text-xs font-bold bg-brand-teal hover:bg-brand-teal-light text-white rounded-lg shadow-sm"
+              className="h-9 text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg shadow-sm border border-rose-200 px-4"
             >
-              {isSubmitting ? 'Saving...' : 'Save Note'}
+              {isSubmitting ? 'Processing...' : 'Reject'}
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => handleVerify('Approved')}
+              disabled={isSubmitting}
+              className="h-9 text-xs font-bold bg-brand-teal hover:bg-brand-teal-light text-white rounded-lg shadow-sm px-4"
+            >
+              {isSubmitting ? 'Processing...' : 'Approve'}
             </Button>
           </DialogFooter>
         </DialogContent>
