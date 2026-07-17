@@ -520,8 +520,8 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                                   : 'border-border/50 hover:border-brand-teal/50 hover:bg-muted/30'
                               }`}
                             >
-                              <div className="font-medium text-sm line-clamp-1 flex-1 flex items-center gap-2">
-                                <span className="truncate">{t.title}</span>
+                              <div className="font-medium text-sm flex-1 flex items-center gap-2 min-w-0">
+                                <span className="whitespace-normal break-words" title={t.title}>{t.title}</span>
                                 {t.dueDate && (
                                   <span className="text-[10px] font-semibold bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap">
                                     {typeof t.dueDate === 'string' && t.dueDate.includes('T') ? t.dueDate.split('T')[0] : String(t.dueDate)}
@@ -584,8 +584,8 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                               : 'border-border/50 hover:border-brand-teal/50 hover:bg-muted/30'
                           }`}
                         >
-                          <div className="font-medium text-sm line-clamp-1 flex-1 flex items-center gap-2">
-                            <span className="truncate">{topic}</span>
+                          <div className="font-medium text-sm flex-1 flex items-center gap-2 min-w-0">
+                            <span className="whitespace-normal break-words" title={topic}>{topic}</span>
                           </div>
                         </div>
                       ))}
@@ -639,8 +639,8 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                               : 'border-border/50 hover:border-brand-teal/50 hover:bg-muted/30'
                           }`}
                         >
-                          <div className="font-medium text-sm line-clamp-1 flex-1 flex items-center gap-2">
-                            <span className="truncate">{t.title}</span>
+                          <div className="font-medium text-sm flex-1 flex items-center gap-2 min-w-0">
+                            <span className="whitespace-normal break-words" title={t.title}>{t.title}</span>
                           </div>
                         </div>
                       ))}

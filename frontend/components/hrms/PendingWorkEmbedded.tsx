@@ -96,7 +96,7 @@ export function PendingWorkEmbedded({
     if (defaultTaskType === 'digital-marketing') {
       return r.taskType === 'digital-marketing';
     } else {
-      return r.taskType === 'content-calendar' || r.taskType === 'other-work' || r.taskType === 'creative';
+      return r.taskType === 'content-calendar' || r.taskType === 'other-work' || r.taskType === 'creative' || r.taskType === 'dev-creative-work';
     }
   });
 
@@ -104,7 +104,7 @@ export function PendingWorkEmbedded({
     if (defaultTaskType === 'digital-marketing') {
       return r.taskType === 'digital-marketing';
     } else {
-      return r.taskType === 'content-calendar' || r.taskType === 'other-work' || r.taskType === 'creative';
+      return r.taskType === 'content-calendar' || r.taskType === 'other-work' || r.taskType === 'creative' || r.taskType === 'dev-creative-work';
     }
   });
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -520,9 +520,9 @@ export function PendingWorkEmbedded({
       // Assignee sees it in their today/upcoming/pending until they submit for review
       // Assigner sees it in their pending when it's Ready for Review
       let canSee = false;
-      if (ow.status === 'Pending') canSee = isAssignee;
+      if (ow.status === 'Pending') canSee = isAssignee || isAssigner;
       else if (ow.status === 'Ready for Review') canSee = isAssigner || isAssignee;
-      else if (ow.status === 'Approved') canSee = isAssignee || isAssigner; // Show in completed
+      else if (ow.status === 'Approved') canSee = isAssignee || isAssigner;
 
       const isManagerOrAdmin = ['Team Leader', 'Admin', 'HR', 'Manager', 'Social Media Manager'].includes(user?.role) || user?.role?.toLowerCase() === 'admin';
       if (isManagerOrAdmin || isAssignee || isAssigner) {
@@ -551,7 +551,7 @@ export function PendingWorkEmbedded({
     let filteredTasks = tasks;
     if (workScope === 'my') {
       const uId = user?.id || user?._id;
-      filteredTasks = filteredTasks.filter(t => t.assigneeId === uId);
+      filteredTasks = filteredTasks.filter(t => t.assigneeId === uId || t.assignerId === uId);
     }
 
     // Apply Project Filter
@@ -569,6 +569,8 @@ export function PendingWorkEmbedded({
         filteredTasks = filteredTasks.filter(t => t.type === 'digital-marketing');
       } else if (filterTaskType === 'dm-other-work') {
         filteredTasks = filteredTasks.filter(t => t.type === 'dm-other-work');
+      } else if (filterTaskType === 'dev-creative-work') {
+        filteredTasks = filteredTasks.filter(t => t.type === 'dev-creative-work');
       }
     }
 
@@ -873,7 +875,7 @@ export function PendingWorkEmbedded({
                   </h2>
                 </div>
 
-                {defaultTaskType !== 'digital-marketing' && (
+                {defaultTaskType !== 'digital-marketing' && defaultTaskType !== 'dev-creative-work' && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -1003,24 +1005,26 @@ export function PendingWorkEmbedded({
               </Select>
             )}
 
-            {isAdminOrTL && (
+            {(isAdminOrTL || defaultTaskType === 'dev-creative-work') && (
               <>
-                <Select value={filterAssigner} onValueChange={setFilterAssigner}>
-                  <SelectTrigger className="w-[160px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal">
-                    <SelectValue placeholder="Assigned By" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Assigned By: All</SelectItem>
-                    {employees.map(emp => {
-                      const empName = `${emp.firstName} ${emp.lastName}`;
-                      return (
-                        <SelectItem key={`assigner-${emp.id}`} value={`${empName}|${emp.id}`}>
-                          {empName}
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
+                {isAdminOrTL && (
+                  <Select value={filterAssigner} onValueChange={setFilterAssigner}>
+                    <SelectTrigger className="w-[160px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal">
+                      <SelectValue placeholder="Assigned By" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Assigned By: All</SelectItem>
+                      {employees.map(emp => {
+                        const empName = `${emp.firstName} ${emp.lastName}`;
+                        return (
+                          <SelectItem key={`assigner-${emp.id}`} value={`${empName}|${emp.id}`}>
+                            {empName}
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                )}
 
                 <Select value={filterAssignee} onValueChange={setFilterAssignee}>
                   <SelectTrigger className="w-[160px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal">
