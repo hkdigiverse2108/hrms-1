@@ -2696,3 +2696,32 @@ class MonthlyPlanUpdate(BaseModel):
 class MonthlyPlan(MonthlyPlanBase):
     id: str
 
+
+# --- Client Transactions ---
+class ClientTransactionBase(BaseModel):
+    personName: str
+    date: str
+    amount: float = 0.0
+    type: str = "inflow"  # "inflow" or "outflow"
+    description: Optional[str] = None
+    paymentMethod: Optional[str] = "bank"  # "bank", "cash", "gpay", etc.
+    remarks: Optional[str] = None
+
+class ClientTransactionCreate(ClientTransactionBase):
+    pass
+
+class ClientTransactionUpdate(BaseModel):
+    personName: Optional[str] = None
+    date: Optional[str] = None
+    amount: Optional[float] = None
+    type: Optional[str] = None
+    description: Optional[str] = None
+    paymentMethod: Optional[str] = None
+    remarks: Optional[str] = None
+
+class ClientTransaction(ClientTransactionBase):
+    id: str
+    class Config:
+        from_attributes = True
+
+

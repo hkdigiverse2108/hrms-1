@@ -9452,3 +9452,34 @@ async def delete_research(db, research_id: str):
     from bson import ObjectId
     result = await db.research.delete_one({"_id": ObjectId(research_id)})
     return result.deleted_count > 0
+
+
+# --- Client Transactions ---
+async def get_client_transactions(db):
+    cursor = db.client_transactions.find().sort("date", -1)
+    rows = await cursor.to_list(length=None)
+    return [fix_id(row) for row in rows]
+
+async def create_client_transaction(db, tx_data: dict):
+    result = await db.client_transactions.insert_one(tx_data)
+    created = await db.client_transactions.find_one({"_id": result.inserted_id})
+    return fix_id(created)
+
+async def update_client_transaction(db, tx_id: str, update_data: dict):
+    from bson import ObjectId
+    if not update_data:
+        updated = await db.client_transactions.find_one({"_id": ObjectId(tx_id)})
+        return fix_id(updated) if updated else None
+    
+    await db.client_transactions.update_one(
+        {"_id": ObjectId(tx_id)},
+        {"$set": update_data}
+    )
+    updated = await db.client_transactions.find_one({"_id": ObjectId(tx_id)})
+    return fix_id(updated) if updated else None
+
+async def delete_client_transaction(db, tx_id: str):
+    from bson import ObjectId
+    result = await db.client_transactions.delete_one({"_id": ObjectId(tx_id)})
+    return result.deleted_count > 0
+

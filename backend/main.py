@@ -3892,7 +3892,33 @@ async def delete_research(entry_id: str, db=Depends(get_db)):
         raise HTTPException(status_code=404, detail="Entry not found")
     return {"message": "Entry deleted successfully"}
 
+
+# --- Client Transactions API ---
+@app.get("/client-transactions", response_model=List[schemas.ClientTransaction])
+async def get_client_transactions_endpoint(db=Depends(get_db)):
+    return await crud.get_client_transactions(db)
+
+@app.post("/client-transactions", response_model=schemas.ClientTransaction)
+async def create_client_transaction_endpoint(tx: schemas.ClientTransactionCreate, db=Depends(get_db)):
+    return await crud.create_client_transaction(db, tx.model_dump())
+
+@app.put("/client-transactions/{tx_id}", response_model=schemas.ClientTransaction)
+async def update_client_transaction_endpoint(tx_id: str, tx_update: schemas.ClientTransactionUpdate, db=Depends(get_db)):
+    updated = await crud.update_client_transaction(db, tx_id, tx_update.model_dump(exclude_unset=True))
+    if not updated:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    return updated
+
+@app.delete("/client-transactions/{tx_id}")
+async def delete_client_transaction_endpoint(tx_id: str, db=Depends(get_db)):
+    success = await crud.delete_client_transaction(db, tx_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    return {"message": "Transaction deleted successfully"}
+
+
 if __name__ == "__main__":
+
     port = int(os.environ.get("BACKEND_PORT", os.environ.get("PORT", 8000)))
     print(f"Starting HRMS Backend on http://127.0.0.1:{port}")
     uvicorn.run(app, host="127.0.0.1", port=port, reload=False)
