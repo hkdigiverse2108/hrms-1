@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useConfirm } from "@/context/ConfirmContext";
 import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 
 export default function ProjectsPage() {
   const { confirm } = useConfirm();
@@ -433,12 +434,21 @@ export default function ProjectsPage() {
     }
   };
 
-  const calculateProgress = (projectId: string) => {
-    const projectTasks = tasks.filter(t => t.projectId === projectId);
-    if (projectTasks.length === 0) return 0;
+  const getProjectStats = (project: any) => {
+    if (project.modules && project.modules.length > 0) {
+      const completedModulesCount = project.modules.filter((m: any) => m.stage === "completed").length;
+      const inProgressModules = project.modules.filter((m: any) => m.stage === "in_progress" || m.stage === "in-progress" || m.stage === "testing" || m.stage === "bugs");
+      const percent = Math.round((completedModulesCount / project.modules.length) * 100);
+      return { percent, inProgressNames: inProgressModules.map((m: any) => m.name), isTaskFallback: false };
+    }
+
+    const projectTasks = tasks.filter(t => t.projectId === project.id);
+    if (projectTasks.length === 0) return { percent: 0, inProgressNames: [], isTaskFallback: false };
     
     const completedTasks = projectTasks.filter(t => t.status === "completed").length;
-    return Math.round((completedTasks / projectTasks.length) * 100);
+    const inProgressTasks = projectTasks.filter(t => t.status === "in_progress" || t.status === "in-progress" || t.status === "testing" || t.status === "bugs");
+    const percent = Math.round((completedTasks / projectTasks.length) * 100);
+    return { percent, inProgressNames: inProgressTasks.map(t => t.title), isTaskFallback: true };
   };
 
   const getStatusColor = (status: string, progress: number) => {
@@ -1146,7 +1156,8 @@ export default function ProjectsPage() {
       ) : filteredProjects.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredProjects.map((project) => {
-            const progress = calculateProgress(project.id);
+            const stats = getProjectStats(project);
+            const progress = stats.percent;
             const isDevProject = !project.department || project.department.toLowerCase() === "development" || project.department.toLowerCase().includes("dev");
             const overdue = isOverdue(project.endDate, project.status, progress);
             const isManagementOrTL = isAdmin || user?.role === "HR" || project.teamLeaderId === user?.id;
@@ -1288,7 +1299,29 @@ export default function ProjectsPage() {
                       </div>
                     )}
 
-                    {/* Development Details */}
+                    {/* Development Details & Progress */}
+                    {isDevProject && (
+                      <div className="pt-3 border-t border-dashed border-border/60 space-y-2">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="font-semibold text-slate-500 uppercase tracking-wider text-[9px]">Overall Progress</span>
+                          <span className="font-bold text-brand-teal">{progress}%</span>
+                        </div>
+                        <Progress value={progress} className="h-2 bg-slate-100" />
+                        {stats.inProgressNames.length > 0 && (
+                          <div className="pt-1">
+                            <p className="text-[10px] text-slate-500 italic mb-1">{stats.isTaskFallback ? "In-Progress Tasks:" : "In-Progress Modules:"}</p>
+                            <div className="flex flex-wrap gap-1">
+                              {stats.inProgressNames.map((name, i) => (
+                                <Badge key={i} variant="outline" className="text-[9px] bg-blue-50 text-blue-700 border-blue-200 shadow-none font-bold">
+                                  {name}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {project.department?.toLowerCase() === 'development' && (project.frontendLink || (project.thirdPartyIntegrations && project.thirdPartyIntegrations.length > 0)) && (
                       <div className="pt-3 border-t border-dashed border-border/60 space-y-2">
                         {project.frontendLink && (
