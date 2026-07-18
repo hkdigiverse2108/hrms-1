@@ -542,8 +542,8 @@ export default function CompanyFinancePlanPage() {
               ...item,
               rate: String(parseFloat(item.rate || 0) / scale)
             }));
-          } else if (val !== undefined && val !== null && val !== "" && !isNaN(parseFloat(val))) {
-            targetValues[key] = String(parseFloat(val) / scale);
+          } else if (val !== undefined && val !== null && val !== "" && !isNaN(parseFloat(String(val)))) {
+            targetValues[key] = String(parseFloat(String(val)) / scale);
           } else {
             targetValues[key] = val;
           }
