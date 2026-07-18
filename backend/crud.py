@@ -9197,6 +9197,43 @@ async def get_finance_transactions(db, payment_method: str = None, type_filter: 
     transactions.sort(key=lambda x: str(x.get("date") or x.get("id") or ""), reverse=True)
     return transactions
 
+async def resequence_all_expenses(db):
+    try:
+        cursor = db.company_finance_transactions.find({"type": "debit"})
+        all_debits = []
+        async for tx in cursor:
+            all_debits.append(tx)
+            
+        from collections import defaultdict
+        grouped = defaultdict(list)
+        
+        for tx in all_debits:
+            tx_date = tx.get("date")
+            if tx_date:
+                try:
+                    dt = datetime.strptime(tx_date.split("T")[0], "%Y-%m-%d")
+                    prefix = dt.strftime("%y%m")
+                    grouped[prefix].append(tx)
+                except Exception:
+                    pass
+                    
+        for prefix, txs in grouped.items():
+            def sort_key(t):
+                d = t.get("date") or ""
+                return (d, str(t.get("_id")))
+                
+            txs.sort(key=sort_key)
+            
+            for idx, tx in enumerate(txs):
+                new_exp_no = f"{prefix}{idx + 1:03d}"
+                if tx.get("expenseNo") != new_exp_no:
+                    await db.company_finance_transactions.update_one(
+                        {"_id": tx["_id"]},
+                        {"$set": {"expenseNo": new_exp_no}}
+                    )
+    except Exception as e:
+        print(f"Error during resequencing: {e}")
+
 async def create_finance_transaction(db, tx_data: dict):
     if not tx_data.get("date"):
         now = datetime.now(pytz.timezone('Asia/Kolkata'))
@@ -9206,6 +9243,8 @@ async def create_finance_transaction(db, tx_data: dict):
         tx_data["expenseNo"] = await get_next_expense_number(db, tx_data.get("date"))
         
     result = await db.company_finance_transactions.insert_one(tx_data)
+    if tx_data.get("type") == "debit":
+        await resequence_all_expenses(db)
     created = await db.company_finance_transactions.find_one({"_id": result.inserted_id})
     return fix_id(created)
 
@@ -9235,6 +9274,7 @@ async def update_finance_transaction(db, tx_id: str, update_data: dict):
     else:
         try:
             await db.company_finance_transactions.update_one({"_id": ObjectId(tx_id)}, {"$set": clean_update})
+            await resequence_all_expenses(db)
             updated = await db.company_finance_transactions.find_one({"_id": ObjectId(tx_id)})
             return fix_id(updated)
         except Exception as e:
@@ -9289,8 +9329,13 @@ async def delete_finance_transaction(db, tx_id: str):
             return False
     else:
         try:
+            tx = await db.company_finance_transactions.find_one({"_id": ObjectId(tx_id)})
             res = await db.company_finance_transactions.delete_one({"_id": ObjectId(tx_id)})
-            return res.deleted_count > 0
+            if res.deleted_count > 0:
+                if tx and tx.get("type") == "debit":
+                    await resequence_all_expenses(db)
+                return True
+            return False
         except Exception:
             return False
 
