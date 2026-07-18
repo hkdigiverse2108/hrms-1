@@ -547,6 +547,42 @@ export function PendingWorkEmbedded({
       }
     });
 
+    // Add client project follow-ups
+    Object.values(clientProjects).forEach((project: any) => {
+      if (!project.nextFollowupDate) return;
+      
+      const client = clients.find(c => c.id === project.clientId);
+      const clientName = client ? (client.companyName || client.clientName || 'Unknown Client') : 'Unknown Client';
+      const displayName = `${project.title} (${clientName})`;
+      
+      const assigneeId = project.teamLeaderId || project.assignedEmployeeId;
+      const uId = user?.id;
+      const isAssignee = assigneeId === uId;
+      
+      const isManagerOrAdmin = ['Team Leader', 'Admin', 'HR', 'Manager', 'Social Media Manager'].includes(user?.role) || user?.role?.toLowerCase() === 'admin';
+      
+      if (isManagerOrAdmin || isAssignee) {
+        const deadlineStr = typeof project.nextFollowupDate === 'string' && project.nextFollowupDate.includes('T') 
+          ? project.nextFollowupDate.split('T')[0] 
+          : String(project.nextFollowupDate);
+        
+        tasks.push({
+          id: `${project.id}-followup`,
+          clientDisplayName: displayName,
+          clientId: project.clientId,
+          stage: 'Follow-up',
+          deadline: deadlineStr,
+          type: 'follow-up',
+          taskName: 'Client Follow-up',
+          assigneeName: project.teamLeaderName || project.assignedEmployeeName || 'Unassigned',
+          assignerName: null,
+          assigneeId: assigneeId,
+          assignerId: null,
+          isFollowup: true
+        });
+      }
+    });
+
     // Apply Scope Filter (My Work vs All Work)
     let filteredTasks = tasks;
     if (workScope === 'my') {
@@ -564,13 +600,15 @@ export function PendingWorkEmbedded({
       if (filterTaskType === 'other-work') {
         filteredTasks = filteredTasks.filter(t => t.isOtherWork && t.type !== 'digital-marketing' && t.type !== 'dm-other-work');
       } else if (filterTaskType === 'content-calendar') {
-        filteredTasks = filteredTasks.filter(t => !t.isOtherWork && t.type !== 'digital-marketing' && t.type !== 'dm-other-work');
+        filteredTasks = filteredTasks.filter(t => !t.isOtherWork && t.type !== 'digital-marketing' && t.type !== 'dm-other-work' && !t.isFollowup);
       } else if (filterTaskType === 'digital-marketing') {
         filteredTasks = filteredTasks.filter(t => t.type === 'digital-marketing');
       } else if (filterTaskType === 'dm-other-work') {
         filteredTasks = filteredTasks.filter(t => t.type === 'dm-other-work');
       } else if (filterTaskType === 'dev-creative-work') {
         filteredTasks = filteredTasks.filter(t => t.type === 'dev-creative-work');
+      } else if (filterTaskType === 'follow-up') {
+        filteredTasks = filteredTasks.filter(t => t.isFollowup);
       }
     }
 
@@ -658,7 +696,7 @@ export function PendingWorkEmbedded({
   }, [preFilteredTasks, filterStage]);
 
   const availableStages = useMemo(() => {
-    const defaultStages = ['script', 'shoot', 'brand person', 'caption', 'thumbnail', 'editing', 'post/graphics', 'approval', 'posting'];
+    const defaultStages = ['script', 'shoot', 'brand person', 'caption', 'thumbnail', 'editing', 'post/graphics', 'approval', 'posting', 'follow-up'];
     if (isAdminOrTL) {
       return defaultStages;
     }
@@ -963,6 +1001,7 @@ export function PendingWorkEmbedded({
                   <SelectItem value="content-calendar">Content Calendar</SelectItem>
                   <SelectItem value="other-work">Other Work</SelectItem>
                   <SelectItem value="digital-marketing">Digital Marketing</SelectItem>
+                  <SelectItem value="follow-up">Follow-ups</SelectItem>
                 </SelectContent>
               </Select>
             )}
@@ -983,6 +1022,7 @@ export function PendingWorkEmbedded({
                   {availableStages.includes('post/graphics') && <SelectItem value="post/graphics">Post/Graphics</SelectItem>}
                   {availableStages.includes('approval') && <SelectItem value="approval">Approval</SelectItem>}
                   {availableStages.includes('posting') && <SelectItem value="posting">Posting</SelectItem>}
+                  {availableStages.includes('follow-up') && <SelectItem value="follow-up">Follow-up</SelectItem>}
                 </SelectContent>
               </Select>
             )}
@@ -1069,15 +1109,24 @@ export function PendingWorkEmbedded({
                 <th className="px-6 py-4 whitespace-nowrap">Stage</th>
                 <th className="px-6 py-4 whitespace-nowrap">Task Details</th>
                 <th className="px-6 py-4 whitespace-nowrap">Remark</th>
-                <th className="px-6 py-4 text-right whitespace-nowrap">Action</th>
+<th className="px-6 py-4 text-right whitespace-nowrap">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
                {allPendingTasks.map((item, idx) => {
                 const isOverdue = new Date(item.deadline) < new Date(new Date().setHours(0,0,0,0));
+                const todayStr = new Date().toISOString().split('T')[0];
+                const isFollowupDueToday = item.isFollowup && item.deadline === todayStr;
                 const transferReq = incomingRequests.find(r => r.taskId === item.id && (item.type === 'other-work' || r.stage === item.stage) && r.status === 'Accepted');
                 return (
-                  <tr key={`${item.id}-${item.type}-${idx}`} className="hover:bg-slate-50/50 transition-colors group">
+                  <tr 
+                    key={`${item.id}-${item.type}-${idx}`} 
+                    className={`hover:bg-slate-50/50 transition-colors group ${
+                      isFollowupDueToday 
+                        ? 'bg-amber-50/70 hover:bg-amber-100/60 border-l-4 border-l-amber-500 shadow-[inset_4px_0_0_0_#f59e0b]' 
+                        : ''
+                    }`}
+                  >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <Badge variant={isOverdue ? "destructive" : "secondary"} className="text-xs px-2.5 py-1">
                         {item.deadline}
@@ -1191,7 +1240,19 @@ export function PendingWorkEmbedded({
                           const isAssignee = item.assigneeId === uId;
                           const isAdminOrTL = currentUser?.role === 'Team Leader' || currentUser?.designation?.toLowerCase() === 'team leader' || currentUser?.role?.toLowerCase() === 'admin' || currentUser?.name === 'Admin Admin' || currentUser?.role === 'HR';
                           
-                          return item.isOtherWork ? (
+                          return item.isFollowup ? (
+                            <>
+                              <Button
+                                onClick={() => router.push(`/work-management/smm`)}
+                                variant="outline"
+                                size="sm"
+                                className="text-xs h-7 border-brand-teal text-brand-teal hover:bg-brand-teal/10 font-semibold rounded-lg flex items-center gap-1"
+                              >
+                                Perform Follow-up
+                                <ArrowRight className="w-3.5 h-3.5" />
+                              </Button>
+                            </>
+                          ) : item.isOtherWork ? (
                             <>
                               {item.status === 'Pending' && item.description !== 'Custom task created from Punch-In' && isAssignee && (
                                 <Button 
