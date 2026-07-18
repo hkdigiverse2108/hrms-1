@@ -227,6 +227,7 @@ class EmployeeBase(BaseModel):
     status: Optional[str] = "active"
     gender: Optional[str] = "Male"
     position: Optional[str] = "Intern"
+    quickActions: Optional[List[str]] = []
     salary: RobustFloat = None
     company: Optional[str] = None
     role: Optional[str] = None
@@ -242,6 +243,7 @@ class EmployeeBase(BaseModel):
     panCard: Optional[str] = None
     startTime: Optional[str] = None
     endTime: Optional[str] = None
+    signatureUrl: Optional[str] = None
     profilePhoto: Optional[str] = None
     customStatus: Optional[str] = None
     customEmoji: Optional[str] = None
@@ -280,6 +282,7 @@ class EmployeeUpdate(BaseModel):
     gender: Optional[str] = None
     salary: RobustFloat = None
     company: Optional[str] = None
+    quickActions: Optional[List[str]] = None
     role: Optional[str] = None
     upiId: Optional[str] = None
     accountNumber: Optional[str] = None
@@ -293,6 +296,7 @@ class EmployeeUpdate(BaseModel):
     panCard: Optional[str] = None
     startTime: Optional[str] = None
     endTime: Optional[str] = None
+    signatureUrl: Optional[str] = None
     profilePhoto: Optional[str] = None
     customStatus: Optional[str] = None
     customEmoji: Optional[str] = None
@@ -798,6 +802,8 @@ class ReviewBase(BaseModel):
     date: Optional[RobustDate] = None
     logs: Optional[List[dict]] = None
     updatedBy: Optional[str] = None
+    query: Optional[str] = None
+    adminReply: Optional[str] = None
 
 class ReviewCreate(ReviewBase):
     pass
@@ -806,6 +812,8 @@ class ReviewUpdate(BaseModel):
     summary: Optional[str] = None
     rating: Optional[int] = None
     updatedBy: Optional[str] = None
+    query: Optional[str] = None
+    adminReply: Optional[str] = None
 
 class Review(ReviewBase):
     id: str
@@ -1949,6 +1957,7 @@ class EmployeeDailyReportBase(BaseModel):
     hoursWorked: float = 8.0
     status: str = "Submitted" # Submitted, Reviewed
     note: Optional[str] = None
+    rating: Optional[int] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
 
@@ -1963,6 +1972,7 @@ class EmployeeDailyReportUpdate(BaseModel):
     hoursWorked: Optional[float] = None
     status: Optional[str] = None
     note: Optional[str] = None
+    rating: Optional[int] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
 
@@ -2601,3 +2611,97 @@ class ResearchResponse(ResearchBase):
     class Config:
         from_attributes = True
 
+# --- Courses ---
+class CourseBase(BaseModel):
+    title: str
+    description: Optional[str] = ''
+    image_url: Optional[str] = ''
+    assigned_employee_ids: Optional[List[str]] = []
+
+class CourseCreate(CourseBase):
+    pass
+
+class CourseUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    assigned_employee_ids: Optional[List[str]] = None
+
+class CourseResponse(CourseBase):
+    id: str
+    createdAt: Optional[datetime] = None
+    updatedAt: Optional[datetime] = None
+    class Config:
+        from_attributes = True
+
+# --- Course Modules ---
+class CourseModuleBase(BaseModel):
+    course_id: str
+    title: str
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    order: int
+
+class CourseModuleCreate(CourseModuleBase):
+    pass
+
+class CourseModuleUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    order: Optional[int] = None
+
+class CourseModuleResponse(CourseModuleBase):
+    id: str
+    createdAt: Optional[datetime] = None
+    updatedAt: Optional[datetime] = None
+    class Config:
+        from_attributes = True
+
+# --- Course Lectures ---
+class CourseLectureBase(BaseModel):
+    module_id: str
+    title: str
+    description: Optional[str] = ''
+    url: Optional[str] = ''
+    image_url: Optional[str] = None
+    type: Optional[str] = 'video' # video, document, link
+    order: int = 0
+
+class CourseLectureCreate(CourseLectureBase):
+    pass
+
+class CourseLectureUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    url: Optional[str] = None
+    image_url: Optional[str] = None
+    type: Optional[str] = None
+    order: Optional[int] = None
+
+class CourseLectureResponse(CourseLectureBase):
+    id: str
+    createdAt: Optional[datetime] = None
+    updatedAt: Optional[datetime] = None
+    class Config:
+        from_attributes = True
+
+# --- Course Progress ---
+class LectureProgressBase(BaseModel):
+    employee_id: str
+    course_id: str
+    module_id: str
+    lecture_id: str
+    watched_seconds: float = 0.0
+    total_seconds: float = 0.0
+    is_completed: bool = False
+
+class LectureProgressUpdate(BaseModel):
+    watched_seconds: float
+    total_seconds: float
+
+class LectureProgressResponse(LectureProgressBase):
+    id: str
+    last_watched_at: Optional[datetime] = None
+    class Config:
+        from_attributes = True

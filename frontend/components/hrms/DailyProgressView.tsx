@@ -5,7 +5,7 @@ import { DataTable } from '@/components/hrms/data-table'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Calendar, User, Users, Briefcase, CheckCircle2, XCircle, Clock, Search, Filter } from 'lucide-react'
+import { Calendar, User, Users, Briefcase, CheckCircle2, XCircle, Clock, Search, Filter, Star } from 'lucide-react'
 import { useApi } from '@/hooks/useApi'
 import { useUser } from '@/hooks/useUser'
 import { API_URL } from '@/lib/config'
@@ -50,14 +50,19 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
 
   const employees = data?.employees || []
   const allReports = (data as any)?.employeeDailyReports || []
+  const attendanceRecords = (data as any)?.attendanceRecords || []
+  const leaveRequests = (data as any)?.leaveRequests || []
   
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: new Date(),
     to: new Date()
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [noteRecord, setNoteRecord] = useState<any>(null)
-  const [noteText, setNoteText] = useState('')
+  const [verifyRecord, setVerifyRecord] = useState<any>(null)
+  const [verifyNote, setVerifyNote] = useState('')
+  const [verifyRating, setVerifyRating] = useState<number | ''>('')
+  const [pendingTasks, setPendingTasks] = useState<any[]>([])
+  const [isLoadingPendingTasks, setIsLoadingPendingTasks] = useState(false)
   const [logsOpen, setLogsOpen] = useState(false)
   const [reportLogs, setReportLogs] = useState<any[]>([])
   const [isLoadingLogs, setIsLoadingLogs] = useState(false)
@@ -66,6 +71,11 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
   const [activeRoleTab, setActiveRoleTab] = useState<'Team Leaders' | 'Employees'>('Team Leaders')
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('all')
   const [tlViewMode, setTlViewMode] = useState<'my' | 'team'>('team')
+  
+  const [ratingDialogOpen, setRatingDialogOpen] = useState(false)
+  const [ratingFilter, setRatingFilter] = useState<'yesterday' | 'this_week' | 'all'>('all')
+  const [ratingsModalOpen, setRatingsModalOpen] = useState(false)
+  const [ratingDateFilter, setRatingDateFilter] = useState<'yesterday' | 'this_week' | 'all'>('all')
 
   const availableDepartments = useMemo(() => {
     if (!employees || employees.length === 0) return []
@@ -82,6 +92,262 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
       setActiveDeptTab(user.department)
     }
   }, [isTeamLeader, user, activeDeptTab])
+
+  useEffect(() => {
+    if (verifyRecord?.employeeId && verifyRecord?.date) {
+      setIsLoadingPendingTasks(true);
+      
+      const employeeDept = verifyRecord.department?.toLowerCase() || '';
+      const isSmmDept = ['smm', 'creative'].includes(employeeDept);
+      const isDmDept = ['dm', 'digital marketing'].includes(employeeDept);
+      
+      if (isSmmDept) {
+        Promise.all([
+          fetch(`${API_URL}/content-calendar/all`).then(res => res.json()),
+          fetch(`${API_URL}/other-work/all`).then(res => res.json()),
+          fetch(`${API_URL}/projects`).then(res => res.json()),
+          fetch(`${API_URL}/clients`).then(res => res.json())
+        ])
+        .then(([ccData, owData, projectsData, clientsData]) => {
+          let smmTasks: any[] = [];
+          const targetId = verifyRecord.employeeId;
+          const targetDate = verifyRecord.date;
+          
+          const projects = Array.isArray(projectsData) ? projectsData : [];
+          const clients = Array.isArray(clientsData) ? clientsData : [];
+          
+          if (Array.isArray(ccData)) {
+            ccData.forEach(entry => {
+              const project = projects.find((p: any) => p.id === entry.projectId) || {};
+              const client = clients.find((c: any) => c.id === (entry.clientId || project.clientId)) || {};
+              
+              const addIfMatches = (stage: string, date: string, assigneeId: string, isCompleted: boolean) => {
+                if (!date || date > targetDate || isCompleted) return;
+                if (assigneeId !== targetId) return;
+                smmTasks.push({
+                  id: `${entry.id}-${stage}`,
+                  title: `${entry.concept || entry.topic || 'Content Task'} - ${stage}`,
+                  department: 'SMM'
+                });
+              };
+              
+              const isGraphicPost = entry.postReel === 'Post';
+              
+              const scriptAssignee = entry.assignedScriptwriterId || project.assignedScriptwriterId || client.assignedScriptwriterId;
+              addIfMatches('Script', entry.scriptDate, scriptAssignee, !!entry.scriptLink || isGraphicPost);
+              
+              const shootDate = entry.shootDate || entry.scriptDate;
+              const shootLink = entry.shootLink || entry.shootingLink;
+              const shootAssignee = entry.assignedShooterId || project.assignedShooterId || client.assignedShooterId;
+              addIfMatches('Shoot', shootDate, shootAssignee, !!shootLink || isGraphicPost);
+              
+              if (entry.assignedBrandPersonIds && (!shootLink || shootLink === '-')) {
+                const bpIdsRaw = entry.assignedBrandPersonIds;
+                const bpIds = Array.isArray(bpIdsRaw) ? bpIdsRaw : (typeof bpIdsRaw === 'string' ? bpIdsRaw.split(',').map((id: string) => id.trim()).filter(Boolean) : []);
+                if (bpIds.includes(targetId)) {
+                  const taskDeadline = entry.shootDate || entry.postingDate || (entry.monthYear ? `${entry.monthYear}-28` : new Date().toISOString().split('T')[0]);
+                  if (taskDeadline && taskDeadline <= targetDate) {
+                    smmTasks.push({
+                      id: `${entry.id}-BrandPerson`,
+                      title: `${entry.concept || entry.topic || 'Content Task'} - Brand Person`,
+                      department: 'SMM'
+                    });
+                  }
+                }
+              }
+
+              const editAssignee = isGraphicPost 
+                ? (entry.assignedPostDesignerId || project.assignedPostDesignerId || client.assignedPostDesignerId)
+                : (entry.assignedReelEditorId || project.assignedReelEditorId || client.assignedReelEditorId);
+              addIfMatches('Editing', entry.editingStart, editAssignee, isGraphicPost ? !!entry.finalPostLink : !!entry.finalReelLink);
+              
+              const captionAssignee = entry.assignedCaptionWriterId || project.assignedCaptionWriterId || client.assignedCaptionWriterId;
+              addIfMatches('Caption', entry.captionDate || entry.editingStart, captionAssignee, !!entry.caption);
+              
+              if (!isGraphicPost) {
+                const thumbAssignee = entry.assignedThumbnailDesignerId || project.assignedThumbnailDesignerId || client.assignedThumbnailDesignerId;
+                addIfMatches('Thumbnail', entry.thumbnailDate || entry.editingStart, thumbAssignee, !!entry.thumbnailLink);
+              }
+              
+              const approverAssignee = entry.assignedApproverId || project.assignedApproverId || client.assignedApproverId;
+              addIfMatches('Approval', entry.approval, approverAssignee, entry.isApproved === 'Yes');
+              
+              const posterAssignee = entry.assignedPosterId || project.assignedPosterId || client.assignedPosterId;
+              addIfMatches('Posting', entry.postingDate, posterAssignee, !!entry.postingLinkOfIg);
+            });
+          }
+          
+          if (Array.isArray(projects)) {
+            projects.forEach((p: any) => {
+              if (p.department?.toLowerCase() === 'digital marketing') return; // Skip DM projects for SMM employees
+              
+              const client = clients.find((c: any) => c.id === p.clientId) || {};
+              const followUpAssignee = p.assignedFollowUpId || client.assignedFollowUpId;
+              
+              if (followUpAssignee === targetId && p.nextFollowupDate) {
+                const nextDate = p.nextFollowupDate.split("T")[0].split(" ")[0];
+                if (nextDate <= targetDate) {
+                  smmTasks.push({
+                    id: `${p.id}-FollowUp`,
+                    title: `${client.companyName || p.title || 'Client'} - Follow-up`,
+                    department: 'SMM'
+                  });
+                }
+              }
+            });
+          }
+          
+          if (Array.isArray(owData)) {
+            owData.forEach(ow => {
+              if (ow.assigneeId === targetId && ow.deadline && ow.deadline <= targetDate) {
+                if (ow.status !== 'Approved' && ow.status !== 'Completed') {
+                  smmTasks.push({
+                    id: ow.id,
+                    title: ow.title || 'Other Work',
+                    department: 'SMM'
+                  });
+                }
+              }
+            });
+          }
+          setPendingTasks(smmTasks);
+        })
+        .catch(err => console.error("Error fetching SMM pending tasks:", err))
+        .finally(() => setIsLoadingPendingTasks(false));
+      } else if (isDmDept) {
+        Promise.all([
+          fetch(`${API_URL}/marketing/project-remarks`).then(res => res.json()),
+          fetch(`${API_URL}/projects`).then(res => res.json()),
+          fetch(`${API_URL}/clients`).then(res => res.json())
+        ])
+        .then(([prData, projectsData, clientsData]) => {
+          let dmTasks: any[] = [];
+          const targetId = verifyRecord.employeeId;
+          const targetDate = verifyRecord.date;
+          
+          const projects = Array.isArray(projectsData) ? projectsData : [];
+          const clients = Array.isArray(clientsData) ? clientsData : [];
+          const projectRemarks = Array.isArray(prData) ? prData : [];
+          
+          const normalizeDate = (d: string) => d ? d.split(" ")[0].split("T")[0] : "";
+          
+          clients.forEach(client => {
+            const clientProjects = projects.filter((p: any) => p.clientId === client.id && p.department?.toLowerCase() === "digital marketing");
+            const proj = clientProjects[0];
+            
+            if (proj) {
+              const hasDataFill = allReports.some((r: any) => r.clientId === client.id && normalizeDate(r.date) === targetDate);
+              const hasMetrics = projectRemarks.some((r: any) => r.projectId === proj.id && normalizeDate(r.date) === targetDate);
+              
+              let dayTasks = [
+                { id: "data_fill", name: "Data Fill", assigneeId: proj.assignedEmployeeId, date: targetDate },
+                { id: "revenue", name: "Revenue", assigneeId: proj.revenueAssigneeId, date: targetDate },
+                { id: "follower", name: "Follower", assigneeId: proj.followerAssigneeId, date: targetDate },
+                { id: "user_remark", name: "User Remark", assigneeId: proj.userRemarkAssigneeId, date: targetDate },
+                { id: "client_remark", name: "Client Remark", assigneeId: proj.clientRemarkAssigneeId, date: targetDate },
+              ].filter(t => t.assigneeId === targetId);
+              
+              if (hasDataFill) {
+                dayTasks = dayTasks.filter(t => t.id !== "data_fill");
+              }
+              if (hasMetrics) {
+                dayTasks = dayTasks.filter(t => !["revenue", "follower", "user_remark", "client_remark"].includes(t.id));
+              }
+              
+              dayTasks.forEach(t => {
+                dmTasks.push({
+                  id: `${proj.id}-${t.id}`,
+                  title: `${client.companyName || 'Client'} - ${t.name}`,
+                  department: 'Digital Marketing'
+                });
+              });
+            }
+          });
+          
+          setPendingTasks(dmTasks);
+        })
+        .catch(err => console.error("Error fetching DM pending tasks:", err))
+        .finally(() => setIsLoadingPendingTasks(false));
+      } else {
+        fetch(`${API_URL}/wm-tasks`)
+          .then(res => res.json())
+          .then(data => {
+            if (Array.isArray(data)) {
+              const tasks = data.filter((t: any) => {
+                // Must be assigned to this employee
+                if (t.assignedToId !== verifyRecord.employeeId) return false;
+
+                const taskDate = t.dueDate || t.postingDate;
+                const isDev = t.department?.toLowerCase() === 'development' || employeeDept === 'development';
+                
+                if (isDev) {
+                  if (!taskDate || taskDate > verifyRecord.date) return false;
+                  return true;
+                } else {
+                  if (t.status === 'completed' || t.status === 'approved') return false;
+                  if (!taskDate || taskDate > verifyRecord.date) return false;
+                  return true;
+                }
+              });
+              setPendingTasks(tasks);
+            }
+          })
+          .catch(err => console.error("Error fetching pending tasks:", err))
+          .finally(() => setIsLoadingPendingTasks(false))
+      }
+    } else {
+      setPendingTasks([])
+    }
+  }, [verifyRecord?.employeeId, verifyRecord?.date])
+
+  const ratingData = useMemo(() => {
+     if (!isAdmin) return []
+     const today = new Date()
+     today.setHours(0,0,0,0)
+     const yesterday = new Date(today)
+     yesterday.setDate(yesterday.getDate() - 1)
+     
+     const startOfThisWeek = new Date(today)
+     startOfThisWeek.setDate(today.getDate() - today.getDay()) // Sunday as start
+
+     let filteredReports = allReports.filter((r: any) => r.rating)
+
+     if (ratingFilter === 'yesterday') {
+        const yesterdayStr = format(yesterday, "yyyy-MM-dd")
+        filteredReports = filteredReports.filter((r: any) => r.date === yesterdayStr)
+     } else if (ratingFilter === 'this_week') {
+        filteredReports = filteredReports.filter((r: any) => {
+           const reportDate = new Date(r.date)
+           reportDate.setHours(0,0,0,0)
+           return reportDate >= startOfThisWeek && reportDate <= today
+        })
+     }
+
+     const empMap = new Map<string, { employeeName: string, department: string, totalScore: number, count: number }>()
+     
+     filteredReports.forEach((r: any) => {
+        if (!empMap.has(r.employeeId)) {
+           empMap.set(r.employeeId, {
+              employeeName: r.employeeName || employees.find((e:any)=>e.id===r.employeeId)?.name || 'Unknown',
+              department: r.department || employees.find((e:any)=>e.id===r.employeeId)?.department || '',
+              totalScore: 0,
+              count: 0
+           })
+        }
+        const data = empMap.get(r.employeeId)!
+        data.totalScore += Number(r.rating)
+        data.count += 1
+     })
+
+     const result = Array.from(empMap.values()).map(d => ({
+        employeeName: d.employeeName,
+        department: d.department,
+        avgRating: (d.totalScore / d.count).toFixed(1),
+        count: d.count
+     }))
+     
+     return result.sort((a, b) => Number(b.avgRating) - Number(a.avgRating))
+  }, [allReports, ratingFilter, isAdmin, employees])
 
   // Combine employees with their report status for the selected date
   const displayData = useMemo(() => {
@@ -119,6 +385,33 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
       const dateStr = format(dateObj, "yyyy-MM-dd")
       return filteredEmployees.map((emp: any) => {
         const report = allReports.find((r: any) => r.employeeId === emp.id && r.date === dateStr)
+        
+        let isFullDayLeave = false
+        if (leaveRequests?.length > 0) {
+          const leaves = leaveRequests.filter((l: any) => l.employee_id === emp.id && l.status === 'Approved')
+          isFullDayLeave = leaves.some((l: any) => {
+            if (!l.start_date || !l.end_date) return false
+            const [lsD, lsM, lsY] = l.start_date.split('-')
+            const [leD, leM, leY] = l.end_date.split('-')
+            const start = new Date(Number(lsY), Number(lsM)-1, Number(lsD))
+            const end = new Date(Number(leY), Number(leM)-1, Number(leD))
+            start.setHours(0,0,0,0)
+            end.setHours(0,0,0,0)
+            const current = new Date(dateObj)
+            current.setHours(0,0,0,0)
+            return current >= start && current <= end && l.day_type !== 'Half Day'
+          })
+        }
+
+        let avgRatingStr = ''
+        if (isAdmin) {
+           const empReports = allReports.filter((r: any) => r.employeeId === emp.id && r.rating)
+           if (empReports.length > 0) {
+              const total = empReports.reduce((sum: number, r: any) => sum + Number(r.rating), 0)
+              avgRatingStr = (total / empReports.length).toFixed(1)
+           }
+        }
+
         let responsiblePerson = ''
         if (['Team Leader', 'Manager', 'Social Media Manager'].includes(emp.role || '') || emp.role?.toLowerCase() === 'admin') {
            responsiblePerson = 'HR / Admin'
@@ -138,9 +431,13 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
           department: emp.department,
           role: emp.role,
           date: dateStr,
-          status: report?.status || 'Pending Verification',
+          status: isFullDayLeave ? 'On Leave' : (report?.status || 'Pending Verification'),
           reportId: report?.id,
           note: report?.note || '',
+          rating: report?.rating || '',
+          avgRating: avgRatingStr,
+          tasksCompleted: report?.tasksCompleted || [],
+          tasksInProgress: report?.tasksInProgress || [],
           verifiedBy: report?.userName || '',
           responsiblePerson
         }
@@ -152,78 +449,92 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
     }
 
     return mapped
-  }, [employees, allReports, dateRange, user, isAdmin, isTeamLeader, activeDeptTab, activeRoleTab, selectedStatusFilter])
+  }, [employees, allReports, leaveRequests, dateRange, user, isAdmin, isTeamLeader, activeDeptTab, activeRoleTab, selectedStatusFilter])
 
-  const handleStatusUpdate = async (emp: any, newStatus: string) => {
-    setIsSubmitting(true)
-    try {
-      const method = emp.reportId ? 'PUT' : 'POST'
-      const url = emp.reportId 
-        ? `${API_URL}/employee-daily-reports/${emp.reportId}` 
-        : `${API_URL}/employee-daily-reports`
-
-      const payload = emp.reportId 
-        ? { 
-            status: newStatus,
-            performedBy: user?.id,
-            userName: user?.name || `${user?.firstName} ${user?.lastName}`
-          }
-        : {
-            employeeId: emp.employeeId,
-            employeeName: emp.employeeName,
-            department: emp.department,
-            date: emp.date,
-            status: newStatus,
-            tasksCompleted: ["Work verified by TL"],
-            tasksInProgress: [],
-            hoursWorked: 8.0,
-            performedBy: user?.id,
-            userName: user?.name || `${user?.firstName} ${user?.lastName}`
-          }
-
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-
-      if (response.ok) {
-        toast.success(`Work ${newStatus.toLowerCase()} successfully`)
-        refreshItem('employeeDailyReports')
-      }
-    } catch (error) {
-      console.error('Error updating status:', error)
-      toast.error('Failed to update status')
-    } finally {
-      setIsSubmitting(false)
+  const allRatingsData = useMemo(() => {
+    if (!ratingsModalOpen) return [];
+    
+    let filteredReports = allReports.filter((r: any) => r.rating);
+    
+    const today = new Date();
+    if (ratingDateFilter === 'yesterday') {
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yStr = format(yesterday, "yyyy-MM-dd");
+      filteredReports = filteredReports.filter((r: any) => r.date === yStr);
+    } else if (ratingDateFilter === 'this_week') {
+      const day = today.getDay() || 7;
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(today.getDate() - day + 1);
+      const startStr = format(startOfWeek, "yyyy-MM-dd");
+      filteredReports = filteredReports.filter((r: any) => r.date >= startStr);
     }
-  }
 
-  const handleSaveNote = async () => {
-    if (!noteRecord) return
+    const employeeMap = new Map();
+    employees.filter((e: any) => e.status?.trim()?.toLowerCase() === 'active').forEach((e: any) => {
+      employeeMap.set(e.id, {
+        id: e.id,
+        name: e.name || `${e.firstName} ${e.lastName}`,
+        department: e.department,
+        totalRating: 0,
+        count: 0
+      });
+    });
+
+    filteredReports.forEach((r: any) => {
+      const emp = employeeMap.get(r.employeeId);
+      if (emp) {
+        emp.totalRating += Number(r.rating);
+        emp.count += 1;
+      }
+    });
+
+    return Array.from(employeeMap.values())
+      .filter(e => e.count > 0)
+      .map(e => ({
+        ...e,
+        avgRating: (e.totalRating / e.count).toFixed(1)
+      }))
+      .sort((a, b) => Number(b.avgRating) - Number(a.avgRating));
+  }, [allReports, employees, ratingDateFilter, ratingsModalOpen]);
+
+  const handleVerify = async (status: 'Approved' | 'Rejected') => {
+    if (!verifyRecord) return
+    if (!verifyNote.trim() || !verifyRating) {
+      toast.error('Note and Rating are compulsory')
+      return
+    }
+    if (Number(verifyRating) < 1 || Number(verifyRating) > 10) {
+      toast.error('Rating must be between 1 and 10')
+      return
+    }
+    
     setIsSubmitting(true)
     try {
-      const method = noteRecord.reportId ? 'PUT' : 'POST'
-      const url = noteRecord.reportId 
-        ? `${API_URL}/employee-daily-reports/${noteRecord.reportId}` 
+      const method = verifyRecord.reportId ? 'PUT' : 'POST'
+      const url = verifyRecord.reportId 
+        ? `${API_URL}/employee-daily-reports/${verifyRecord.reportId}` 
         : `${API_URL}/employee-daily-reports`
 
-      const payload = noteRecord.reportId 
+      const payload = verifyRecord.reportId 
         ? { 
-            note: noteText,
+            status: status,
+            note: verifyNote,
+            rating: Number(verifyRating),
             performedBy: user?.id,
             userName: user?.name || `${user?.firstName} ${user?.lastName}`
           }
         : {
-            employeeId: noteRecord.employeeId,
-            employeeName: noteRecord.employeeName,
-            department: noteRecord.department,
-            date: noteRecord.date,
-            status: noteRecord.status,
+            employeeId: verifyRecord.employeeId,
+            employeeName: verifyRecord.employeeName,
+            department: verifyRecord.department,
+            date: verifyRecord.date,
+            status: status,
             tasksCompleted: ["Work verified by TL"],
             tasksInProgress: [],
             hoursWorked: 8.0,
-            note: noteText,
+            note: verifyNote,
+            rating: Number(verifyRating),
             performedBy: user?.id,
             userName: user?.name || `${user?.firstName} ${user?.lastName}`
           }
@@ -235,16 +546,17 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
       })
 
       if (response.ok) {
-        toast.success('Note saved successfully')
-        setNoteRecord(null)
-        setNoteText('')
+        toast.success(`Work ${status.toLowerCase()} successfully`)
+        setVerifyRecord(null)
+        setVerifyNote('')
+        setVerifyRating('')
         refreshItem('employeeDailyReports')
       } else {
-        toast.error('Failed to save note')
+        toast.error('Failed to verify work')
       }
     } catch (error) {
-      console.error('Error saving note:', error)
-      toast.error('Failed to save note')
+      console.error('Error verifying work:', error)
+      toast.error('Failed to verify work')
     } finally {
       setIsSubmitting(false)
     }
@@ -294,23 +606,27 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
       <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-tight ${
         record.status === 'Approved' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 
         record.status === 'Rejected' ? 'bg-rose-50 text-rose-600 border border-rose-100' : 
+        record.status === 'On Leave' ? 'bg-blue-50 text-blue-600 border border-blue-100' :
         'bg-amber-50 text-amber-600 border border-amber-100'
       }`}>
         {record.status}
       </span>
     )},
     { key: 'note' as const, header: 'Verification Note', render: (record: any) => (
-      record.note ? (
-        <span 
-          className="text-[11px] text-slate-600 font-medium block" 
-          style={{ wordBreak: 'normal', overflowWrap: 'break-word', whiteSpace: 'normal', maxWidth: '200px' }} 
-          title={record.note}
-        >
-          {record.note}
-        </span>
-      ) : (
-        <span className="text-[10px] text-slate-400 italic">No note added</span>
-      )
+      <div className="flex flex-col gap-1">
+        {record.note ? (
+          <span 
+            className="text-[11px] text-slate-600 font-medium block" 
+            style={{ wordBreak: 'normal', overflowWrap: 'break-word', whiteSpace: 'normal', maxWidth: '200px' }} 
+            title={record.note}
+          >
+            {record.note}
+            {record.rating && <span className="block text-brand-teal font-bold mt-0.5">Rating: {record.rating}/10</span>}
+          </span>
+        ) : (
+          <span className="text-[10px] text-slate-400 italic">No note added</span>
+        )}
+      </div>
     )},
     { key: 'verifiedBy' as const, header: 'Verified By / Responsible', render: (record: any) => (
       record.status === 'Pending Verification' ? (
@@ -330,6 +646,9 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
     const isHighLevelRole = ['Team Leader', 'Manager', 'Social Media Manager'].includes(record.role);
     const canManage = (canEditDailyProgress || (isTeamLeader && user?.department === record.department && !isHighLevelRole) || (isHRUser && isHighLevelRole)) && !isSelf
     
+    if (record.status === 'On Leave') {
+        return <span className="text-[10px] text-slate-400 italic font-medium tracking-tighter">On Leave</span>
+    }
     if (!canManage) {
         return <span className="text-[10px] text-slate-400 italic font-medium tracking-tighter">
           View Only
@@ -341,31 +660,14 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
         <Button 
           size="sm" 
           variant="outline"
-          className="h-7 px-3 text-[10px] font-bold border-emerald-200 text-emerald-600 hover:bg-emerald-50"
-          onClick={() => handleStatusUpdate(record, 'Approved')}
-          disabled={isSubmitting || record.status === 'Approved'}
-        >
-          <CheckCircle2 className="w-3 h-3 mr-1" /> Approve
-        </Button>
-        <Button 
-          size="sm" 
-          variant="outline"
-          className="h-7 px-3 text-[10px] font-bold border-rose-200 text-rose-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200"
-          onClick={() => handleStatusUpdate(record, 'Rejected')}
-          disabled={isSubmitting || record.status === 'Rejected'}
-        >
-          <XCircle className="w-3 h-3 mr-1" /> Reject
-        </Button>
-        <Button 
-          size="sm" 
-          variant="outline"
-          className="h-7 px-3 text-[10px] font-bold border-slate-200 text-slate-600 hover:bg-slate-50"
+          className="h-7 px-3 text-[10px] font-bold border-brand-teal text-brand-teal hover:bg-brand-teal/10"
           onClick={() => {
-            setNoteRecord(record)
-            setNoteText(record.note || '')
+            setVerifyRecord(record)
+            setVerifyNote(record.note || '')
+            setVerifyRating(record.rating || '')
           }}
         >
-          <MessageSquare className="w-3 h-3 mr-1" /> Note
+          <CheckCircle2 className="w-3 h-3 mr-1" /> Verify
         </Button>
         <Button 
           size="sm" 
@@ -434,6 +736,24 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
         {/* Department and Role Tabs */}
         {(isAdmin || isTeamLeader || isHRUser) && (
           <div className="flex items-center gap-4">
+            {isAdmin && (
+              <Button
+                onClick={() => router.push('/ratings')}
+                className="bg-amber-50 text-amber-600 hover:bg-amber-100 border border-amber-200 shadow-sm h-9 px-4 text-xs font-bold whitespace-nowrap"
+              >
+                <Star className="w-3.5 h-3.5 mr-2" />
+                View Ratings
+              </Button>
+            )}
+            {isTeamLeader && !isAdmin && (
+              <Button 
+                variant="outline" 
+                className="h-9 px-4 text-xs font-bold border-brand-teal text-brand-teal hover:bg-brand-teal/10 shadow-sm"
+                onClick={() => router.push('/ratings')}
+              >
+                All Ratings
+              </Button>
+            )}
             {isTeamLeader && !isAdmin && (
               <div className="flex items-center gap-1 bg-slate-100/70 p-1 rounded-xl shadow-inner border border-slate-200/60">
                 <button
@@ -519,43 +839,211 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
         />
       </div>
 
-      <Dialog open={!!noteRecord} onOpenChange={(open) => !open && setNoteRecord(null)}>
-        <DialogContent className="sm:max-w-[425px] bg-white rounded-2xl shadow-xl border border-slate-100 p-6">
+      <Dialog open={!!verifyRecord} onOpenChange={(open) => !open && setVerifyRecord(null)}>
+        <DialogContent className="sm:max-w-[600px] bg-white rounded-2xl shadow-xl border border-slate-100 p-6 max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
-              <MessageSquare className="w-5 h-5 text-brand-teal" />
-              <span>Verification Note</span>
+              <CheckCircle2 className="w-5 h-5 text-brand-teal" />
+              <span>Verify Daily Progress</span>
             </DialogTitle>
             <div className="text-[11px] text-slate-400 font-medium tracking-tight mt-1">
-              Add verification remarks for <span className="font-bold text-slate-600">{noteRecord?.employeeName}</span> on <span className="font-bold text-slate-600">{noteRecord?.date}</span>.
+              Verify work for <span className="font-bold text-slate-600">{verifyRecord?.employeeName}</span> on <span className="font-bold text-slate-600">{verifyRecord?.date}</span>.
             </div>
           </DialogHeader>
-          <div className="py-4">
-            <Textarea
-              value={noteText}
-              onChange={(e) => setNoteText(e.target.value)}
-              placeholder="Enter details, feedback, or verification remarks..."
-              className="min-h-[120px] text-xs resize-none border-slate-200 focus:border-brand-teal focus:ring-brand-teal rounded-xl p-3"
-            />
+
+          <div className="py-4 space-y-5">
+            {(() => {
+              const selectedAttendance = verifyRecord ? attendanceRecords.find((a: any) => a.employeeId === verifyRecord.employeeId && a.date === verifyRecord.date) : null;
+              const workLogs = selectedAttendance?.punches || [];
+              
+              return (
+                <div>
+                  <Label className="text-xs font-bold text-slate-700 mb-2 block">Tasks Logged</Label>
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3 max-h-[250px] overflow-y-auto">
+                    {workLogs.length > 0 ? (
+                      <ul className="list-disc pl-5 space-y-1.5">
+                        {workLogs.map((punch: any, i: number) => {
+                          const text = punch.activityType === 'Work' && punch.activityValue ? punch.activityValue : 
+                                       punch.activityType === 'Other' ? `${punch.activitySubtype || 'Other'}: ${punch.activityValue || ''}` :
+                                       punch.activityType === 'Research' ? `Research: ${punch.activityValue || ''}` :
+                                       punch.activityType || 'Work Log';
+                          return (
+                            <li key={i} className="text-[13px] text-slate-700 leading-snug">{text}</li>
+                          );
+                        })}
+                      </ul>
+                    ) : (
+                      <div className="text-[13px] text-slate-500 italic">No tasks logged for this date.</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div>
+              <Label className="text-xs font-bold text-slate-700 mb-2 block">Today's Pending Tasks</Label>
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-4 max-h-[250px] overflow-y-auto">
+                {isLoadingPendingTasks ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="w-5 h-5 animate-spin text-brand-teal" />
+                  </div>
+                ) : pendingTasks.length > 0 ? (
+                  <>
+                    {(() => {
+                      const employeeDept = verifyRecord?.department?.toLowerCase() || '';
+                      
+                      // Normalize department names for matching
+                      const isSmm = (dept: string) => ['smm', 'creative'].includes(dept);
+                      const isDm = (dept: string) => dept === 'digital marketing' || dept === 'dm';
+                      
+                      const filtered = pendingTasks.filter(t => {
+                        const taskDept = t.department?.toLowerCase() || '';
+                        if (!employeeDept) return true;
+                        
+                        if (isSmm(employeeDept) && isSmm(taskDept)) return true;
+                        if (isDm(employeeDept) && isDm(taskDept)) return true;
+                        return taskDept === employeeDept;
+                      });
+
+                      if (filtered.length === 0) {
+                        return <div className="text-[13px] text-slate-500 italic">No pending tasks found for their department.</div>;
+                      }
+
+                      // Group by task department name
+                      const grouped = filtered.reduce((acc: any, task: any) => {
+                        const dept = task.department || 'Other';
+                        if (!acc[dept]) acc[dept] = [];
+                        acc[dept].push(task);
+                        return acc;
+                      }, {});
+
+                      return Object.entries(grouped).map(([dept, tasks]: [string, any]) => (
+                        <div key={dept} className="space-y-1.5">
+                          <h4 className="text-[11px] font-bold text-brand-teal uppercase tracking-wider">{dept}</h4>
+                          <ul className="list-disc pl-5 space-y-1">
+                            {tasks.map((t: any) => (
+                              <li key={t.id} className="text-[13px] text-slate-700 leading-snug">{t.title}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ));
+                    })()}
+                  </>
+                ) : (
+                  <div className="text-[13px] text-slate-500 italic">No pending tasks for this date.</div>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-xs font-bold text-slate-700 mb-2 block">Rating (1 to 10) <span className="text-rose-500">*</span></Label>
+              <Input
+                type="number"
+                min="1"
+                max="10"
+                value={verifyRating}
+                onChange={(e) => setVerifyRating(e.target.value === '' ? '' : Number(e.target.value))}
+                placeholder="Enter rating from 1 to 10"
+                className="text-xs border-slate-200 focus:border-brand-teal focus:ring-brand-teal rounded-xl h-10"
+              />
+            </div>
+
+            <div>
+              <Label className="text-xs font-bold text-slate-700 mb-2 block">Verification Note <span className="text-rose-500">*</span></Label>
+              <Textarea
+                value={verifyNote}
+                onChange={(e) => setVerifyNote(e.target.value)}
+                placeholder="Enter verification note (compulsory)..."
+                className="min-h-[100px] text-xs resize-none border-slate-200 focus:border-brand-teal focus:ring-brand-teal rounded-xl p-3"
+              />
+            </div>
           </div>
-          <DialogFooter className="flex items-center justify-end gap-2 border-t border-slate-50 pt-4">
+
+          <DialogFooter className="flex items-center justify-end gap-2 border-t border-slate-50 pt-4 mt-2">
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setNoteRecord(null)}
-              className="h-8 text-xs font-bold border-slate-200 text-slate-500 rounded-lg"
+              onClick={() => setVerifyRecord(null)}
+              className="h-9 text-xs font-bold border-slate-200 text-slate-500 rounded-lg px-4"
             >
               Cancel
             </Button>
             <Button
               size="sm"
-              onClick={handleSaveNote}
+              onClick={() => handleVerify('Rejected')}
               disabled={isSubmitting}
-              className="h-8 text-xs font-bold bg-brand-teal hover:bg-brand-teal-light text-white rounded-lg shadow-sm"
+              className="h-9 text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg shadow-sm border border-rose-200 px-4"
             >
-              {isSubmitting ? 'Saving...' : 'Save Note'}
+              {isSubmitting ? 'Processing...' : 'Reject'}
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => handleVerify('Approved')}
+              disabled={isSubmitting}
+              className="h-9 text-xs font-bold bg-brand-teal hover:bg-brand-teal-light text-white rounded-lg shadow-sm px-4"
+            >
+              {isSubmitting ? 'Processing...' : 'Approve'}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={ratingsModalOpen} onOpenChange={setRatingsModalOpen}>
+        <DialogContent className="sm:max-w-[700px] bg-white rounded-2xl shadow-xl border border-slate-100 p-6 max-h-[85vh] flex flex-col">
+          <DialogHeader className="flex flex-row justify-between items-center mb-2 flex-shrink-0">
+            <DialogTitle className="text-base font-bold text-slate-800">
+              Employee Ratings Overview
+            </DialogTitle>
+            <Select value={ratingDateFilter} onValueChange={(val: any) => setRatingDateFilter(val)}>
+              <SelectTrigger className="w-[160px] h-9 text-xs font-semibold bg-white border border-slate-200">
+                <SelectValue placeholder="Filter Date" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Time</SelectItem>
+                <SelectItem value="this_week">This Week</SelectItem>
+                <SelectItem value="yesterday">Yesterday</SelectItem>
+              </SelectContent>
+            </Select>
+          </DialogHeader>
+
+          <div className="overflow-y-auto border border-slate-200 rounded-xl">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 sticky top-0 shadow-sm">
+                <tr>
+                  <th className="px-4 py-3 font-semibold text-slate-500 text-[11px] uppercase tracking-wider">Employee</th>
+                  <th className="px-4 py-3 font-semibold text-slate-500 text-[11px] uppercase tracking-wider">Department</th>
+                  <th className="px-4 py-3 font-semibold text-slate-500 text-[11px] uppercase tracking-wider text-center">Days Verified</th>
+                  <th className="px-4 py-3 font-semibold text-slate-500 text-[11px] uppercase tracking-wider text-right">Avg Rating</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {allRatingsData.length > 0 ? (
+                  allRatingsData.map((emp, i) => (
+                    <tr key={i} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-4 py-3 font-bold text-slate-700 text-xs">{emp.name}</td>
+                      <td className="px-4 py-3">
+                        <span className="px-2 py-0.5 bg-slate-100 text-slate-500 border border-slate-200 rounded text-[10px] font-bold uppercase tracking-wider">
+                          {emp.department}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center text-slate-600 font-semibold text-xs">{emp.count}</td>
+                      <td className="px-4 py-3 text-right">
+                        <span className="px-2.5 py-1 bg-amber-50 text-amber-600 border border-amber-200 rounded-lg font-black text-xs shadow-sm min-w-[50px] inline-block text-center">
+                          {emp.avgRating}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-8 text-center text-slate-400 italic text-sm">
+                      No ratings found for the selected period.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -567,6 +1055,52 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
         logs={reportLogs}
         isLoading={isLoadingLogs}
       />
+
+      <Dialog open={ratingDialogOpen} onOpenChange={setRatingDialogOpen}>
+        <DialogContent className="sm:max-w-[600px] bg-white rounded-2xl shadow-xl border border-slate-100 p-6 max-h-[85vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
+            <DialogTitle className="text-base font-bold text-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Star className="w-5 h-5 text-amber-500 fill-amber-500" />
+                <span>Employee Ratings</span>
+              </div>
+              <Select value={ratingFilter} onValueChange={(v: any) => setRatingFilter(v)}>
+                <SelectTrigger className="w-[140px] h-8 text-xs font-semibold bg-slate-50 border-slate-200">
+                  <SelectValue placeholder="Filter" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Time</SelectItem>
+                  <SelectItem value="this_week">This Week</SelectItem>
+                  <SelectItem value="yesterday">Yesterday</SelectItem>
+                </SelectContent>
+              </Select>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto mt-4 pr-2">
+            {ratingData.length > 0 ? (
+              <div className="space-y-2">
+                {ratingData.map((d, i) => (
+                  <div key={i} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                    <div>
+                      <div className="font-bold text-slate-800 text-sm">{d.employeeName}</div>
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{d.department}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-black text-amber-600">{d.avgRating} <span className="text-xs text-amber-400 font-bold">/10</span></div>
+                      <div className="text-[10px] text-slate-400 font-semibold">{d.count} Report{d.count !== 1 ? 's' : ''}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-32 text-slate-500 text-sm italic">
+                No ratings found for the selected period.
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

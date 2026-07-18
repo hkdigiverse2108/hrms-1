@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/common/PageHeader";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { TablePagination } from "@/components/common/TablePagination";
@@ -124,6 +125,7 @@ export default function ReviewPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [activeTab, setActiveTab] = useState("remarks");
   const [logsDialogOpen, setLogsDialogOpen] = useState(false);
   const [selectedReviewForLogs, setSelectedReviewForLogs] = useState<any>(null);
 
@@ -163,6 +165,9 @@ export default function ReviewPage() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [sysSettings, setSysSettings] = useState<any>(null);
+  
+  const [createQueryModalOpen, setCreateQueryModalOpen] = useState(false);
+  const [newQueryText, setNewQueryText] = useState("");
 
   useEffect(() => {
     if (user !== undefined) {
@@ -247,6 +252,44 @@ export default function ReviewPage() {
     }
   };
 
+  const handleCreateQuery = async () => {
+    if (!newQueryText.trim()) return;
+    setIsSubmitting(true);
+    try {
+      const storedUser = localStorage.getItem('user');
+      const currentUser = storedUser ? JSON.parse(storedUser) : null;
+      const currentUserName = currentUser?.name || (currentUser?.firstName ? `${currentUser.firstName} ${currentUser.lastName || ''}`.trim() : null) || "Unknown User";
+
+      const payload = {
+        employeeId: user?.id || user?._id || "",
+        employeeName: user?.name || "Unknown",
+        role: user?.designation || "Staff",
+        avatar: user?.profilePhoto || "",
+        department: user?.department || "N/A",
+        summary: "Employee Query",
+        rating: 0,
+        query: newQueryText,
+        updatedBy: currentUserName
+      };
+
+      const res = await fetch(`${API_URL}/reviews`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        setCreateQueryModalOpen(false);
+        setNewQueryText("");
+        fetchData();
+      }
+    } catch (err) {
+      console.error("Error creating query:", err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleUpdateReview = async () => {
     if (!selectedReview) return;
     
@@ -262,6 +305,8 @@ export default function ReviewPage() {
         body: JSON.stringify({
           summary: selectedReview.summary,
           rating: selectedReview.rating,
+          query: selectedReview.query,
+          adminReply: selectedReview.adminReply,
           updatedBy: currentUserName
         })
       });
@@ -304,6 +349,10 @@ export default function ReviewPage() {
       const myId = user.id || user._id;
       if (r.employeeId !== myId) return false;
     }
+
+    if (activeTab === "remarks" && r.summary === "Employee Query") return false;
+    if (activeTab === "queries" && r.summary !== "Employee Query") return false;
+
     return (
       r.employeeName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       r.department?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -330,14 +379,53 @@ export default function ReviewPage() {
         description="Remark records with department, summary, rating, timestamps, and quick actions."
       >
         {canAddReviews && (
-          <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium shadow-sm w-full sm:w-auto mt-4 sm:mt-0">
-                <Plus className="w-4 h-4 mr-2" />
-                New Remark
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[600px]">
+          <div className="flex items-center gap-2 mt-4 sm:mt-0 w-full sm:w-auto">
+            {!isAdmin && (
+              <Dialog open={createQueryModalOpen} onOpenChange={setCreateQueryModalOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" className="text-brand-teal border-brand-teal hover:bg-brand-teal-light hover:text-white font-medium shadow-sm w-full sm:w-auto">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Query
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[500px]">
+                  <DialogHeader>
+                    <DialogTitle className="text-xl font-bold">Add Query</DialogTitle>
+                    <p className="text-sm text-muted-foreground mt-1">Submit a new query for the admin to review.</p>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-foreground">Your Query</label>
+                      <Textarea 
+                        value={newQueryText}
+                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewQueryText(e.target.value)}
+                        placeholder="Type your query here..."
+                        className="h-32 resize-none bg-white"
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter className="flex flex-col-reverse sm:flex-row gap-3 mt-4">
+                    <Button variant="outline" className="px-8" onClick={() => setCreateQueryModalOpen(false)}>Cancel</Button>
+                    <Button 
+                      disabled={isSubmitting || !newQueryText.trim()}
+                      className="bg-brand-teal hover:bg-brand-teal-light text-white font-semibold px-8" 
+                      onClick={handleCreateQuery}
+                    >
+                      {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Submit Query"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            )}
+            
+            <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
+              <DialogTrigger asChild>
+                <Button className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium shadow-sm w-full sm:w-auto">
+                  <Plus className="w-4 h-4 mr-2" />
+                  New Remark
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[600px]">
               <DialogHeader>
                 <DialogTitle className="text-xl font-bold">Add New Remark</DialogTitle>
                 <p className="text-sm text-muted-foreground mt-1">Submit a performance remark and rating for an employee.</p>
@@ -410,12 +498,19 @@ export default function ReviewPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          </div>
         )}
       </PageHeader>
 
       {/* Main Table Container */}
       <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden flex flex-col">
         <div className="p-4 sm:p-6 border-b border-border bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <Tabs value={activeTab} onValueChange={(val) => { setActiveTab(val); setCurrentPage(1); }} className="w-full sm:w-auto">
+            <TabsList className="bg-gray-100/80 p-1">
+              <TabsTrigger value="remarks" className="rounded-md px-6 data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm">Remarks</TabsTrigger>
+              <TabsTrigger value="queries" className="rounded-md px-6 data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm">Queries</TabsTrigger>
+            </TabsList>
+          </Tabs>
           <div className="relative w-full sm:w-[350px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input 
@@ -434,8 +529,9 @@ export default function ReviewPage() {
                 <th className="px-6 py-4 w-[80px]">Sr. No.</th>
                 <th className="px-6 py-4">User</th>
                 <th className="px-6 py-4">Department</th>
-                <th className="px-6 py-4">Remarks</th>
-                <th className="px-6 py-4">Rating</th>
+                {activeTab === "remarks" && <th className="px-6 py-4">Remarks</th>}
+                {activeTab === "remarks" && <th className="px-6 py-4">Rating</th>}
+                {activeTab === "queries" && <th className="px-6 py-4">Query & Reply</th>}
                 <th className="px-6 py-4 text-right">Action</th>
               </tr>
             </thead>
@@ -483,14 +579,35 @@ export default function ReviewPage() {
                     <td className="px-6 py-4 font-medium text-slate-600">
                       {review.department}
                     </td>
-                    <td className="px-6 py-4 max-w-[400px]" title={review.summary}>
-                      <div className="text-[13px] text-slate-600 leading-relaxed whitespace-normal line-clamp-2">
-                        {review.summary}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <RatingStars rating={review.rating} />
-                    </td>
+                    {activeTab === "remarks" && (
+                      <td className="px-6 py-4 max-w-[300px]" title={review.summary}>
+                        <div className="text-[13px] text-slate-600 leading-relaxed whitespace-normal line-clamp-2">
+                          {review.summary}
+                        </div>
+                      </td>
+                    )}
+                    {activeTab === "remarks" && (
+                      <td className="px-6 py-4">
+                        <RatingStars rating={review.rating} />
+                      </td>
+                    )}
+                    {activeTab === "queries" && (
+                      <td className="px-6 py-4 max-w-[350px]">
+                        {review.query && (
+                          <div className="text-[12px] mb-1">
+                            <span className="font-semibold text-brand-teal">Query:</span> <span className="text-slate-600 whitespace-normal">{review.query}</span>
+                          </div>
+                        )}
+                        {review.adminReply && (
+                          <div className="text-[12px]">
+                            <span className="font-semibold text-amber-600">Reply:</span> <span className="text-slate-600 whitespace-normal">{review.adminReply}</span>
+                          </div>
+                        )}
+                        {!review.query && !review.adminReply && (
+                          <span className="text-[12px] text-slate-400">No queries</span>
+                        )}
+                      </td>
+                    )}
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-1">
                         {isAdmin && (
@@ -504,8 +621,8 @@ export default function ReviewPage() {
                             <History className="w-3.5 h-3.5" />
                           </Button>
                         )}
-                        {canEditReviews && (
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-brand-teal" onClick={() => openEditModal(review)}>
+                        {(canEditReviews || (!isAdmin && user && review.employeeId === (user.id || user._id))) && (
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-brand-teal" onClick={() => openEditModal(review)} title={canEditReviews ? "Edit Review" : "Add/Edit Query"}>
                             <Edit2 className="w-3.5 h-3.5" />
                           </Button>
                         )}
@@ -544,23 +661,55 @@ export default function ReviewPage() {
           {selectedReview && (
             <div className="space-y-6 py-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-               <div className="space-y-2">
-                <label className="text-sm font-semibold text-foreground">Rating</label>
-                <RatingStars 
-                  rating={selectedReview.rating} 
-                  interactive={true} 
-                  onRatingChange={(val) => setSelectedReview((prev: any) => ({ ...prev, rating: val }))} 
-                />
-              </div>
+              
+              {selectedReview.summary !== "Employee Query" && (
+                <>
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-foreground">Rating</label>
+                    <RatingStars 
+                      rating={selectedReview.rating} 
+                      interactive={isAdmin || checkPermission('review', 'canEdit')} 
+                      onRatingChange={(val) => setSelectedReview((prev: any) => ({ ...prev, rating: val }))} 
+                    />
+                  </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-foreground">Summary</label>
-                <Textarea 
-                  value={selectedReview.summary}
-                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setSelectedReview((prev: any) => ({ ...prev, summary: e.target.value }))}
-                  className="h-32 resize-none bg-white"
-                />
-              </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-foreground">Summary</label>
+                    <Textarea 
+                      value={selectedReview.summary}
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setSelectedReview((prev: any) => ({ ...prev, summary: e.target.value }))}
+                      className="h-24 resize-none bg-white"
+                      disabled={!isAdmin && !checkPermission('review', 'canEdit')}
+                    />
+                  </div>
+                </>
+              )}
+
+              {(selectedReview.summary === "Employee Query" || selectedReview.query) && (
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-foreground">Employee Query</label>
+                  <Textarea
+                    value={selectedReview.query || ""}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setSelectedReview((prev: any) => ({ ...prev, query: e.target.value }))}
+                    className="h-24 resize-none bg-white"
+                    disabled={isAdmin}
+                    placeholder="Enter your query..."
+                  />
+                </div>
+              )}
+
+              {(selectedReview.summary === "Employee Query" || selectedReview.adminReply) && (
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-foreground">Admin Reply</label>
+                  <Textarea 
+                    value={selectedReview.adminReply || ""}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setSelectedReview((prev: any) => ({ ...prev, adminReply: e.target.value }))}
+                    placeholder={isAdmin ? "Enter a reply to the employee's query..." : "Waiting for admin reply..."}
+                    className="h-24 resize-none bg-white"
+                    disabled={!isAdmin}
+                  />
+                </div>
+              )}
               </div>
             </div>
           )}

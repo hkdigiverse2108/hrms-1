@@ -22,6 +22,7 @@ import {
   ChevronRight,
   Building2,
   Calendar,
+  BookOpen,
 } from 'lucide-react'
 
 import { useUserContext } from '@/context/UserContext'
@@ -30,7 +31,7 @@ import { useUserContext } from '@/context/UserContext'
    title: string
    href: string
    icon: React.ComponentType<{ className?: string }>
-   children?: { title: string; href: string }[]
+   children?: { title: string; href: string; moduleName?: string }[]
    roles?: string[]
    moduleName?: string
  }
@@ -201,6 +202,16 @@ import { useUserContext } from '@/context/UserContext'
        { title: 'Employee Report', href: '/reports/employees' },
      ],
    },
+   {
+     title: 'Training & Courses',
+     href: '/training',
+     icon: BookOpen,
+     moduleName: 'training',
+     children: [
+       { title: 'Course Library', href: '/training', moduleName: 'training' },
+       { title: 'Manage Courses', href: '/admin/courses', moduleName: 'admin-courses' },
+     ],
+   },
  ]
  
  export function HRMSSidebar() {
@@ -291,6 +302,11 @@ import { useUserContext } from '@/context/UserContext'
                     {item.children
                       .filter(child => {
                         if (child.title === 'Roles & Permissions' && userRole !== 'admin') return false
+                        if (userRole === 'admin') return true
+                        if (child.moduleName && user?.permissions) {
+                          const perm = user.permissions.find((p: any) => p.moduleName === child.moduleName);
+                          if (perm) return perm.canView;
+                        }
                         return true
                       })
                       .map((child) => (

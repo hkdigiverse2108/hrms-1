@@ -221,6 +221,7 @@ export default function CreativeClientsPage() {
   const [posterId, setPosterId] = useState("");
   const [captionWriterId, setCaptionWriterId] = useState("");
   const [thumbnailDesignerId, setThumbnailDesignerId] = useState("");
+  const [followupAssigneeId, setFollowupAssigneeId] = useState("");
 
   const [logsOpen, setLogsOpen] = useState(false);
   const [clientLogs, setClientLogs] = useState<any[]>([]);
@@ -682,6 +683,7 @@ export default function CreativeClientsPage() {
     const poster = creativeEmployees.find(e => e.id === posterId);
     const captionWriter = creativeEmployees.find(e => e.id === captionWriterId);
     const thumbnailDesigner = creativeEmployees.find(e => e.id === thumbnailDesignerId);
+    const followupAssignee = creativeEmployees.find(e => e.id === followupAssigneeId);
     
     try {
       const res = await fetch(`${API_URL}/projects/${project.id}`, {
@@ -704,6 +706,8 @@ export default function CreativeClientsPage() {
           assignedCaptionWriterName: captionWriterId === "none" ? null : captionWriter?.name || null,
           assignedThumbnailDesignerId: thumbnailDesignerId === "none" ? null : thumbnailDesignerId || null,
           assignedThumbnailDesignerName: thumbnailDesignerId === "none" ? null : thumbnailDesigner?.name || null,
+          assignedFollowUpId: followupAssigneeId === "none" ? null : followupAssigneeId || null,
+          assignedFollowUpName: followupAssigneeId === "none" ? null : followupAssignee?.name || null,
           performedBy: user?.id,
           userName: user?.name || `${user?.firstName} ${user?.lastName}`,
         }),
@@ -1375,6 +1379,7 @@ export default function CreativeClientsPage() {
                               setPosterId(p.assignedPosterId || client.assignedPosterId || "none");
                               setCaptionWriterId(p.assignedCaptionWriterId || client.assignedCaptionWriterId || "none");
                               setThumbnailDesignerId(p.assignedThumbnailDesignerId || client.assignedThumbnailDesignerId || "none");
+                              setFollowupAssigneeId(p.assignedFollowUpId || client.assignedFollowUpId || "none");
                               setAssignTeamOpen(true);
                             }}>
                               <UserPlus className="w-4 h-4 mr-2" /> Assign Creative Team
@@ -1768,7 +1773,16 @@ export default function CreativeClientsPage() {
               <SearchableEmployeeSelect 
                 value={thumbnailDesignerId} 
                 onChange={setThumbnailDesignerId} 
-                placeholder="Select thumbnail designer..." 
+                placeholder="Select designer..." 
+                employees={creativeEmployees} 
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Follow-up</Label>
+              <SearchableEmployeeSelect 
+                value={followupAssigneeId} 
+                onChange={setFollowupAssigneeId} 
+                placeholder="Select follow-up assignee..." 
                 employees={creativeEmployees} 
               />
             </div>
