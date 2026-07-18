@@ -47,7 +47,8 @@ import { ClientForm, ClientFormData } from "@/components/hrms/ClientForm";
 import { FollowUpDialog } from "@/components/hrms/FollowUpDialog";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
-import { FileSpreadsheet, Upload } from "lucide-react";
+import { FileSpreadsheet, Upload, Download } from "lucide-react";
+import { exportToExcel, exportToCSV } from "@/lib/export-utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { 
   DropdownMenu, 
@@ -205,6 +206,28 @@ export default function SalesPage() {
   const [bulkUploadCategory, setBulkUploadCategory] = useState<string>("");
   const [slabTab, setSlabTab] = useState<"global" | "employee">("global");
   const [selectedSlabEmployee, setSelectedSlabEmployee] = useState<string>("");
+
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<'xlsx' | 'csv'>('xlsx');
+  const [exportColumns, setExportColumns] = useState([
+    { key: 'company', label: 'Company', selected: true },
+    { key: 'contact', label: 'Contact Person', selected: true },
+    { key: 'email', label: 'Email', selected: true },
+    { key: 'phone', label: 'Phone', selected: true },
+    { key: 'source', label: 'Source', selected: true },
+    { key: 'category', label: 'Category', selected: true },
+    { key: 'status', label: 'Status', selected: true },
+    { key: 'priority', label: 'Priority', selected: true },
+    { key: 'assignedTo', label: 'Assigned To', selected: true },
+    { key: 'expectedIncome', label: 'Expected Income', selected: true },
+    { key: 'remarks', label: 'Remarks', selected: true },
+    { key: 'isHot', label: 'Is Hot Lead', selected: true },
+    { key: 'nextFollowUpDate', label: 'Next Follow-up Date', selected: true },
+    { key: 'followUpsCount', label: 'Number of Follow-ups', selected: true },
+    { key: 'closedDate', label: 'Closed Date', selected: true },
+    { key: 'createdByUserName', label: 'Created By', selected: true },
+    { key: 'date', label: 'Created Date', selected: true },
+  ]);
 
   const [isBreakdownOpen, setIsBreakdownOpen] = useState(false);
   const [selectedBreakdown, setSelectedBreakdown] = useState<any[]>([]);
@@ -537,6 +560,44 @@ export default function SalesPage() {
     } finally {
       setIsBulkSubmitting(false);
     }
+  };
+
+  const handleExportLeads = () => {
+    const dataToExport = leads.map(l => {
+      const row: any = {};
+      exportColumns.forEach(col => {
+        if (col.selected) {
+          if (col.key === 'assignedTo') {
+            const rawAssigned = l.assignedTo;
+            if (Array.isArray(rawAssigned)) {
+              row[col.label] = rawAssigned.map(emp => typeof emp === 'string' ? emp : (emp.name || emp.label || '')).filter(Boolean).join(', ');
+            } else if (rawAssigned) {
+              row[col.label] = typeof rawAssigned === 'string' ? rawAssigned : (rawAssigned.name || rawAssigned.label || '');
+            } else {
+              row[col.label] = '';
+            }
+          } else if (col.key === 'followUpsCount') {
+            row[col.label] = l.followUps?.length || 0;
+          } else if (col.key === 'isHot') {
+            row[col.label] = l.isHot ? 'Yes' : 'No';
+          } else if (col.key === 'closedDate') {
+            row[col.label] = l.closedDate ? dayjs(l.closedDate).format('YYYY-MM-DD') : '';
+          } else if (col.key === 'date') {
+            row[col.label] = l.date ? dayjs(l.date).format('YYYY-MM-DD') : '';
+          } else {
+            row[col.label] = l[col.key] || '';
+          }
+        }
+      });
+      return row;
+    });
+
+    if (exportFormat === 'xlsx') {
+      exportToExcel(dataToExport, `Sales_Leads_Export_${dayjs().format('YYYY-MM-DD')}`);
+    } else {
+      exportToCSV(dataToExport, `Sales_Leads_Export_${dayjs().format('YYYY-MM-DD')}`);
+    }
+    setIsExportDialogOpen(false);
   };
 
   const handleEditLead = async () => {
@@ -1734,6 +1795,71 @@ export default function SalesPage() {
                           </div>
                         </DialogContent>
                       </Dialog>
+                      <Dialog open={isExportDialogOpen} onOpenChange={setIsExportDialogOpen}>
+                          <DialogTrigger asChild>
+                            <Button variant="outline" className="border-indigo-600 text-indigo-600 hover:bg-indigo-50 shadow-sm transition-all active:scale-95">
+                              <Download className="w-4 h-4 mr-2" />
+                              Export Leads
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-md">
+                            <DialogHeader>
+                              <DialogTitle>Export Sales Leads</DialogTitle>
+                            </DialogHeader>
+                            <div className="space-y-4 py-2">
+                              <div className="space-y-2">
+                                <Label className="text-xs font-bold text-slate-700">Choose Format</Label>
+                                <Select value={exportFormat} onValueChange={(v) => setExportFormat(v as 'xlsx' | 'csv')}>
+                                  <SelectTrigger className="w-full h-9 text-xs">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="xlsx">Excel (.xlsx)</SelectItem>
+                                    <SelectItem value="csv">CSV (.csv)</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <Label className="text-xs font-bold text-slate-700">Select Columns to Include</Label>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const allSelected = exportColumns.every(c => c.selected);
+                                      setExportColumns(prev => prev.map(c => ({ ...c, selected: !allSelected })));
+                                    }}
+                                    className="text-[10px] font-bold text-brand-teal uppercase hover:underline"
+                                  >
+                                    {exportColumns.every(c => c.selected) ? "Deselect All" : "Select All"}
+                                  </button>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 border border-slate-100 rounded-lg p-3 bg-slate-50/50 max-h-48 overflow-y-auto">
+                                  {exportColumns.map((col) => (
+                                    <label key={col.key} className="flex items-center gap-2 text-xs font-semibold text-slate-600 cursor-pointer">
+                                      <input 
+                                        type="checkbox"
+                                        checked={col.selected}
+                                        onChange={(e) => {
+                                          setExportColumns(prev => prev.map(c => c.key === col.key ? { ...c, selected: e.target.checked } : c));
+                                        }}
+                                        className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-3.5 h-3.5"
+                                      />
+                                      {col.label}
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+
+                              <Button 
+                                className="w-full bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-9 text-xs"
+                                onClick={handleExportLeads}
+                              >
+                                <Download className="w-4 h-4 mr-2" /> Download Export
+                              </Button>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
                     </div>
                   )}
         </div>
