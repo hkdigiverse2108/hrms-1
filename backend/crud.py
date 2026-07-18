@@ -3193,6 +3193,19 @@ async def create_notification(db, notification: schemas.NotificationCreate):
         
     return notification_dict
 
+async def notify_work_assignment(db, employee_id: str, title: str, message: str, work_type: str, reference_id: str):
+    try:
+        if employee_id and employee_id != "System" and employee_id != "unassigned":
+            await create_notification(db, schemas.NotificationCreate(
+                employee_id=employee_id,
+                title=title,
+                message=message,
+                type=work_type,
+                reference_id=reference_id
+            ))
+    except Exception as e:
+        print(f"Error sending assignment notification: {e}")
+
 async def get_notifications_by_user(db, employee_id: str, skip: int = 0, limit: int = 50):
     try:
         emp_obj_id = ObjectId(employee_id)
@@ -3411,6 +3424,21 @@ async def create_client(db, client: schemas.ClientCreate):
     
     await log_activity(db, "Created", performedBy, userName, f"Client '{client_dict['companyName']}' was created.", clientId=clientId)
     
+    # Notify assignments
+    c_name = client_dict.get("companyName", "Unnamed Client")
+    if client_dict.get("assignedEmployeeId"):
+        await notify_work_assignment(db, client_dict["assignedEmployeeId"], "New Client Assigned", f"You have been assigned to client '{c_name}'.", "client", clientId)
+    
+    creative_fields = [
+        "assignedScriptwriterId", "assignedReelEditorId", "assignedPostDesignerId",
+        "assignedShooterId", "assignedApproverId", "assignedPosterId",
+        "assignedCaptionWriterId", "assignedThumbnailDesignerId"
+    ]
+    for field in creative_fields:
+        if client_dict.get(field):
+            role_display = field.replace("assigned", "").replace("Id", "")
+            await notify_work_assignment(db, client_dict[field], "Client Creative Role Assigned", f"You have been assigned as {role_display} for client '{c_name}'.", "client", clientId)
+    
     try:
         await ws_manager.broadcast_all("data_refresh", {"entity": "clients"})
     except Exception:
@@ -3469,6 +3497,25 @@ async def update_client(db, client_id: str, client_update: schemas.ClientUpdate)
         
         log_details, diffs = format_field_changes(old_client, update_data, f"Client '{old_client.get('companyName')}'")
         await log_activity(db, "Updated", performedBy, userName, log_details, diffs=diffs, clientId=client_id)
+        
+        # Check if client assignments changed and notify
+        c_name = old_client.get("companyName", "Unnamed Client")
+        new_emp = update_data.get("assignedEmployeeId")
+        old_emp = old_client.get("assignedEmployeeId")
+        if new_emp and new_emp != old_emp:
+            await notify_work_assignment(db, new_emp, "New Client Assigned", f"You have been assigned to client '{c_name}'.", "client", client_id)
+
+        creative_fields = [
+            "assignedScriptwriterId", "assignedReelEditorId", "assignedPostDesignerId",
+            "assignedShooterId", "assignedApproverId", "assignedPosterId",
+            "assignedCaptionWriterId", "assignedThumbnailDesignerId"
+        ]
+        for field in creative_fields:
+            new_assignee = update_data.get(field)
+            old_assignee = old_client.get(field)
+            if new_assignee and new_assignee != old_assignee:
+                role_display = field.replace("assigned", "").replace("Id", "")
+                await notify_work_assignment(db, new_assignee, "Client Creative Role Assigned", f"You have been assigned as {role_display} for client '{c_name}'.", "client", client_id)
         
         try:
             await ws_manager.broadcast_all("data_refresh", {"entity": "clients"})
@@ -3669,6 +3716,33 @@ async def create_project(db, project: schemas.ProjectCreate):
     
     await log_activity(db, "Created", performedBy, userName, f"Project '{project_dict['title']}' was created.", projectId=projectId)
     
+    # Send notifications
+    p_title = project_dict.get("title", "Unnamed Project")
+    if project_dict.get("assignedEmployeeId"):
+        await notify_work_assignment(db, project_dict["assignedEmployeeId"], "New Project Assigned", f"You have been assigned to project '{p_title}'.", "project", projectId)
+    if project_dict.get("teamLeaderId"):
+        await notify_work_assignment(db, project_dict["teamLeaderId"], "New Project TL Assignment", f"You have been assigned as Team Leader for project '{p_title}'.", "project", projectId)
+    
+    dm_roles = {
+        "revenueAssigneeId": "Revenue tracking",
+        "followerAssigneeId": "Follower tracking",
+        "userRemarkAssigneeId": "User Remark tracking",
+        "clientRemarkAssigneeId": "Client Remark tracking"
+    }
+    for field, role_name in dm_roles.items():
+        if project_dict.get(field):
+            await notify_work_assignment(db, project_dict[field], "Project Role Assigned", f"You have been assigned to {role_name} for project '{p_title}'.", "project", projectId)
+
+    creative_fields = [
+        "assignedScriptwriterId", "assignedReelEditorId", "assignedPostDesignerId",
+        "assignedShooterId", "assignedApproverId", "assignedPosterId",
+        "assignedCaptionWriterId", "assignedThumbnailDesignerId"
+    ]
+    for field in creative_fields:
+        if project_dict.get(field):
+            role_display = field.replace("assigned", "").replace("Id", "")
+            await notify_work_assignment(db, project_dict[field], "Project Creative Role Assigned", f"You have been assigned as {role_display} for project '{p_title}'.", "project", projectId)
+    
     try:
         await ws_manager.broadcast_all("data_refresh", {"entity": "projects"})
     except Exception:
@@ -3742,6 +3816,42 @@ async def update_project(db, project_id: str, project_update: schemas.ProjectUpd
         
         log_details, diffs = format_field_changes(old_project, update_data, f"Project '{old_project.get('title')}'")
         await log_activity(db, "Updated", performedBy, userName, log_details, diffs=diffs, projectId=project_id)
+
+        # Check if assignments changed and send notifications
+        p_title = old_project.get("title", "Unnamed Project")
+        new_tl = update_data.get("teamLeaderId")
+        old_tl = old_project.get("teamLeaderId")
+        if new_tl and new_tl != old_tl:
+            await notify_work_assignment(db, new_tl, "Project TL Assignment", f"You have been assigned as Team Leader for project '{p_title}'.", "project", project_id)
+
+        new_emp = update_data.get("assignedEmployeeId")
+        old_emp = old_project.get("assignedEmployeeId")
+        if new_emp and new_emp != old_emp:
+            await notify_work_assignment(db, new_emp, "New Project Assigned", f"You have been assigned to project '{p_title}'.", "project", project_id)
+
+        dm_roles = {
+            "revenueAssigneeId": "Revenue tracking",
+            "followerAssigneeId": "Follower tracking",
+            "userRemarkAssigneeId": "User Remark tracking",
+            "clientRemarkAssigneeId": "Client Remark tracking"
+        }
+        for field, role_name in dm_roles.items():
+            new_assignee = update_data.get(field)
+            old_assignee = old_project.get(field)
+            if new_assignee and new_assignee != old_assignee:
+                await notify_work_assignment(db, new_assignee, "Project Role Assigned", f"You have been assigned to {role_name} for project '{p_title}'.", "project", project_id)
+
+        creative_fields = [
+            "assignedScriptwriterId", "assignedReelEditorId", "assignedPostDesignerId",
+            "assignedShooterId", "assignedApproverId", "assignedPosterId",
+            "assignedCaptionWriterId", "assignedThumbnailDesignerId"
+        ]
+        for field in creative_fields:
+            new_assignee = update_data.get(field)
+            old_assignee = old_project.get(field)
+            if new_assignee and new_assignee != old_assignee:
+                role_display = field.replace("assigned", "").replace("Id", "")
+                await notify_work_assignment(db, new_assignee, "Project Creative Role Assigned", f"You have been assigned as {role_display} for project '{p_title}'.", "project", project_id)
 
         # Log detailed module changes
         if "modules" in update_data:
