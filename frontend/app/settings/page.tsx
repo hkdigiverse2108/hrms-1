@@ -53,6 +53,7 @@ export default function SettingsPage() {
   const [activitiesInput, setActivitiesInput] = useState<string | null>(null);
   const [meetingsInput, setMeetingsInput] = useState<string | null>(null);
   const [categoriesInput, setCategoriesInput] = useState<string | null>(null);
+  const [leadCategoriesInput, setLeadCategoriesInput] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -244,6 +245,7 @@ export default function SettingsPage() {
           otherActivities: activitiesInput !== null ? activitiesInput.split(",").map(s => s.trim()).filter(Boolean) : (settings?.otherActivities || []),
           otherMeetings: meetingsInput !== null ? meetingsInput.split(",").map(s => s.trim()).filter(Boolean) : (settings?.otherMeetings || []),
           otherCategories: categoriesInput !== null ? categoriesInput.split(",").map(s => s.trim()).filter(Boolean) : (settings?.otherCategories || ["Activity", "Meeting"]),
+          leadCategories: leadCategoriesInput !== null ? leadCategoriesInput.split(",").map(s => s.trim()).filter(Boolean) : (settings?.leadCategories || ["Hot Lead", "Warm Lead", "Cold Lead"]),
           companyLetterheadUrl: settings?.companyLetterheadUrl || null,
           companySignatureUrl: settings?.companySignatureUrl || null,
           invoiceColor1: settings?.invoiceColor1 || "#08304b",
@@ -1027,6 +1029,23 @@ export default function SettingsPage() {
                       }}
                       disabled={isUpdating || !canEditSettings}
                       placeholder="e.g. Activity, Meeting, Training"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-sm font-bold">Lead Categories (Comma Separated)</Label>
+                    <p className="text-[10px] text-muted-foreground mb-1">These are the categories used to segregate sales leads.</p>
+                    <input 
+                      type="text" 
+                      className="w-full h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold"
+                      value={leadCategoriesInput !== null ? leadCategoriesInput : (settings?.leadCategories || ["Hot Lead", "Warm Lead", "Cold Lead"]).join(", ")}
+                      onChange={(e) => setLeadCategoriesInput(e.target.value)}
+                      onBlur={(e) => {
+                        setSettings({...settings, leadCategories: e.target.value.split(",").map(s => s.trim()).filter(Boolean)});
+                        setLeadCategoriesInput(null);
+                      }}
+                      disabled={isUpdating || !canEditSettings}
+                      placeholder="e.g. Hot Lead, Warm Lead, Cold Lead"
                     />
                   </div>
                 </div>

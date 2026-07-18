@@ -4791,7 +4791,7 @@ async def update_lead(db, lead_id: str, lead_update: schemas.LeadUpdate):
         
         # Log the update with detailed changes
         changes = []
-        ALLOWED_LOG_FIELDS = ["company", "contact", "email", "phone", "expectedIncome", "status", "priority", "source", "date", "remarks", "assignedTo", "holdResumeDate", "isHot", "nextFollowUpDate"]
+        ALLOWED_LOG_FIELDS = ["company", "contact", "email", "phone", "expectedIncome", "status", "priority", "source", "date", "remarks", "assignedTo", "holdResumeDate", "isHot", "nextFollowUpDate", "category"]
         for key, new_val in update_data.items():
             if key not in ALLOWED_LOG_FIELDS:
                 continue
@@ -4994,10 +4994,15 @@ async def get_system_settings(db):
             "invoiceColor1": "#08304b",
             "invoiceColor2": "#08304b",
             "defaultSac": "",
-            "showNamesInRemarksToAdmin": True
+            "showNamesInRemarksToAdmin": True,
+            "leadCategories": ["Hot Lead", "Warm Lead", "Cold Lead"]
         }
         result = await db.system_settings.insert_one(default_settings)
         settings = await db.system_settings.find_one({"_id": result.inserted_id})
+    else:
+        if "leadCategories" not in settings:
+            settings["leadCategories"] = ["Hot Lead", "Warm Lead", "Cold Lead"]
+            await db.system_settings.update_one({"_id": settings["_id"]}, {"$set": {"leadCategories": ["Hot Lead", "Warm Lead", "Cold Lead"]}})
     return fix_id(settings)
 
 async def update_system_settings(db, settings_update: schemas.SystemSettingsUpdate):

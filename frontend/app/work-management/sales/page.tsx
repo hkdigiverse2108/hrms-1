@@ -134,6 +134,8 @@ export default function SalesPage() {
   const [activeTab, setActiveTab] = useState("active");
   const [hasSetInitialTab, setHasSetInitialTab] = useState(false);
   const [leads, setLeads] = useState<any[]>([]);
+  const [leadCategories, setLeadCategories] = useState<string[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState("all");
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -197,6 +199,7 @@ export default function SalesPage() {
   const [isBulkDialogOpen, setIsBulkDialogOpen] = useState(false);
   const [bulkPreview, setBulkPreview] = useState<any[]>([]);
   const [isBulkSubmitting, setIsBulkSubmitting] = useState(false);
+  const [bulkUploadCategory, setBulkUploadCategory] = useState<string>("");
   const [slabTab, setSlabTab] = useState<"global" | "employee">("global");
   const [selectedSlabEmployee, setSelectedSlabEmployee] = useState<string>("");
 
@@ -233,11 +236,24 @@ export default function SalesPage() {
     }
   }, [router, permissionsLoading, canViewSales]);
 
+  const fetchSettings = async () => {
+    try {
+      const res = await fetch(`${API_URL}/system-settings`);
+      if (res.ok) {
+        const data = await res.json();
+        setLeadCategories(data.leadCategories || ["Hot Lead", "Warm Lead", "Cold Lead"]);
+      }
+    } catch (err) {
+      console.error("Error fetching system settings:", err);
+    }
+  };
+
   useEffect(() => {
     fetchLeads();
     fetchEmployees();
     fetchTargets();
     fetchIncentiveSlabs();
+    fetchSettings();
   }, []);
 
   useEffect(() => {
@@ -491,6 +507,7 @@ export default function SalesPage() {
         phone: item.number,
         status: "Lead",
         priority: "Medium",
+        category: bulkUploadCategory === "none_selected" || !bulkUploadCategory ? null : bulkUploadCategory,
         performedBy: user?.id,
         userName: currentUserName
       }));
@@ -961,28 +978,558 @@ export default function SalesPage() {
       return 2; // Standard (Middle)
     };
 
-    const filteredAndSorted = data
+    const filtered = data
       .filter(l => 
         (l.company || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
         (l.contact || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
         (l.remarks || "").toLowerCase().includes(searchTerm.toLowerCase())
       )
-      .sort((a, b) => {
-        const catA = getLeadCategory(a);
-        const catB = getLeadCategory(b);
-        if (catA !== catB) {
-          return catA - catB;
+      .filter(l => {
+        if (categoryFilter === "Other") {
+          return !l.category;
+        } else if (categoryFilter !== "all") {
+          return l.category === categoryFilter;
         }
-        if (type === 'overdue') {
-          const getDueDate = (l: any) => {
-            if (l.status === "On Hold" && l.holdResumeDate) return dayjs(l.holdResumeDate).valueOf();
-            if (l.nextFollowUpDate) return dayjs(l.nextFollowUpDate).valueOf();
-            return dayjs("2099-12-31").valueOf();
-          };
-          return getDueDate(a) - getDueDate(b);
-        }
-        return new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime();
+        return true;
       });
+
+    const filteredAndSorted = filtered.sort((a, b) => {
+      const catA = getLeadCategory(a);
+      const catB = getLeadCategory(b);
+      if (catA !== catB) {
+        return catA - catB;
+      }
+      if (type === 'overdue') {
+        const getDueDate = (l: any) => {
+          if (l.status === "On Hold" && l.holdResumeDate) return dayjs(l.holdResumeDate).valueOf();
+          if (l.nextFollowUpDate) return dayjs(l.nextFollowUpDate).valueOf();
+          return dayjs("2099-12-31").valueOf();
+        };
+        return getDueDate(a) - getDueDate(b);
+      }
+      return new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime();
+    });
+
+    const categoriesInUse = Array.from(new Set(filteredAndSorted.map(l => l.category || "Other")));
+    categoriesInUse.sort((a, b) => {
+      if (a === "Other") return 1;
+      if (b === "Other") return -1;
+      return a.localeCompare(b);
+    });
+
+    const renderRow = (lead: any) => {
+      const cat = getLeadCategory(lead);
+      return (
+        <tr 
+          key={lead.id} 
+          className={`hover:bg-slate-50/80 transition-colors group relative ${
+            cat === 1 ? 'border-l-4 border-l-rose-500 bg-rose-50/5' : ''
+          }`}
+        >
+          <td className="px-4 py-4 text-center">
+            <input 
+              type="checkbox"
+              checked={!!lead.isHot}
+              onChange={(e) => handleInlineUpdate(lead.id, "isHot", e.target.checked)}
+              disabled={!canEditLead(lead) || lead.status === "On Hold" || lead.status === "Client Won" || lead.status === "Client Lost"}
+              className="rounded border-slate-300 text-orange-500 focus:ring-orange-500 w-4 h-4 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            />
+          </td>
+          <td className="px-6 py-4">
+            <div className="flex items-center gap-3">
+              <div className="flex flex-col flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-slate-800 text-sm">
+                    {lead.createdByUserName || 'Admin'}
+                  </span>
+                  {lead.isHot && (
+                    <span title="Hot Lead">
+                      <Flame className="w-3.5 h-3.5 text-orange-500 fill-orange-500 shrink-0" />
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-medium mt-1">
+                  <Calendar className="w-3 h-3 text-slate-400" />
+                  {inlineEditing?.id === lead.id && inlineEditing?.field === 'date' ? (
+                    <Input 
+                      type="date"
+                      autoFocus
+                      className="h-6 text-[10px] w-32 py-0" 
+                      defaultValue={lead.date} 
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          handleInlineUpdate(lead.id, 'date', e.target.value);
+                        }
+                      }}
+                      onBlur={(e) => {
+                        handleInlineUpdate(lead.id, 'date', e.target.value);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleInlineUpdate(lead.id, 'date', e.currentTarget.value);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <span
+                      onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'date' })}
+                      className="cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
+                    >
+                      Created: {lead.date}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </td>
+          <td className="px-6 py-4">
+            <div className="flex flex-col">
+              {inlineEditing?.id === lead.id && inlineEditing?.field === 'contact' ? (
+                <Input 
+                  autoFocus
+                  className="h-8 text-[13px] font-bold" 
+                  defaultValue={lead.contact} 
+                  onBlur={(e) => handleInlineUpdate(lead.id, 'contact', e.target.value)} 
+                  onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'contact', e.currentTarget.value)}
+                />
+              ) : (
+                <span 
+                  onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'contact' })}
+                  className="text-[13px] font-bold text-slate-700 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
+                >
+                  {lead.contact}
+                </span>
+              )}
+              <div className="flex flex-col gap-1 mt-1">
+                <div className="flex items-center gap-1">
+                  <Mail className="w-3 h-3 text-slate-400" />
+                  {inlineEditing?.id === lead.id && inlineEditing?.field === 'email' ? (
+                    <Input 
+                      autoFocus
+                      className="h-6 text-[10px] w-full py-0" 
+                      defaultValue={lead.email || ''} 
+                      onBlur={(e) => handleInlineUpdate(lead.id, 'email', e.target.value)} 
+                      onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'email', e.currentTarget.value)}
+                      placeholder="Email"
+                    />
+                  ) : (
+                    <span 
+                      onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'email' })}
+                      className="text-[10px] text-slate-500 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
+                    >
+                      {lead.email || 'Add email'}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  <Phone className="w-3 h-3 text-slate-400" />
+                  {inlineEditing?.id === lead.id && inlineEditing?.field === 'phone' ? (
+                    <Input 
+                      autoFocus
+                      className="h-6 text-[10px] w-full py-0" 
+                      defaultValue={lead.phone || ''} 
+                      onBlur={(e) => handleInlineUpdate(lead.id, 'phone', e.target.value)} 
+                      onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'phone', e.currentTarget.value)}
+                      placeholder="Phone"
+                    />
+                  ) : (
+                    <span 
+                      onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'phone' })}
+                      className="text-[10px] text-slate-500 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
+                    >
+                      {lead.phone || 'Add phone'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </td>
+          <td className="px-6 py-4">
+            {inlineEditing?.id === lead.id && inlineEditing?.field === 'source' ? (
+              <Input 
+                autoFocus
+                className="h-8 text-[12px]" 
+                defaultValue={lead.source} 
+                onBlur={(e) => handleInlineUpdate(lead.id, 'source', e.target.value)} 
+                onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'source', e.currentTarget.value)}
+              />
+            ) : (
+              <div 
+                onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'source' })}
+                className="flex items-center gap-1.5 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
+              >
+                {lead.source ? (
+                  <>
+                    <div className="w-1.5 h-1.5 rounded-full bg-brand-teal/40" />
+                    <span className="text-[12px] font-medium text-slate-600">{lead.source}</span>
+                  </>
+                ) : (
+                  <span className="text-[12px] text-slate-400 italic">Add source</span>
+                )}
+              </div>
+            )}
+          </td>
+          <td className="px-6 py-4">
+            {inlineEditing?.id === lead.id && inlineEditing?.field === 'category' ? (
+              <Select 
+                value={lead.category || "none_selected"} 
+                onValueChange={(val) => {
+                  handleInlineUpdate(lead.id, 'category', val === "none_selected" ? null : val);
+                  setInlineEditing(null);
+                }}
+              >
+                <SelectTrigger className="h-8 text-[12px] w-[130px]">
+                  <SelectValue placeholder="Category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none_selected">None</SelectItem>
+                  {leadCategories.map((cat) => (
+                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <span 
+                onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'category' })}
+                className="text-[12px] font-semibold text-slate-600 cursor-pointer hover:bg-slate-100 rounded px-2 py-1 bg-slate-100/70 border border-slate-200/50 inline-block whitespace-nowrap"
+              >
+                {lead.category || "Unassigned"}
+              </span>
+            )}
+          </td>
+          <td className="px-6 py-4">
+            {inlineEditing?.id === lead.id && inlineEditing?.field === 'status' ? (
+              <div ref={statusContainerRef}>
+                <Select 
+                  defaultValue={lead.status} 
+                  defaultOpen={true} 
+                  onValueChange={async (val) => {
+                    if (val === lead.status) return;
+                    if (val === "Client Won") {
+                      setClientFormData({
+                        companyName: lead.company || lead.contact,
+                        name: lead.contact,
+                        phone: lead.phone || "",
+                        email: lead.email || "",
+                        remarks: lead.remarks || "",
+                      });
+                      setConvertingLeadId(lead.id);
+                      setClientDialogOpen(true);
+                    } else {
+                      setStatusChangeData({
+                        leadId: lead.id,
+                        newStatus: val,
+                        keepEditing: val === "On Hold"
+                      });
+                    }
+                  }}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Lead">Lead</SelectItem>
+                    <SelectItem value="Contacted">Contacted</SelectItem>
+                    <SelectItem value="Proposal Sent">Proposal Sent</SelectItem>
+                    <SelectItem value="On Hold">On Hold</SelectItem>
+                    <SelectItem value="Client Won">Client Won</SelectItem>
+                    <SelectItem value="Client Lost">Client Lost</SelectItem>
+                  </SelectContent>
+                </Select>
+                
+                {lead.status === "On Hold" && (
+                  <div className="flex flex-col gap-1 mt-1">
+                    <span className="text-[9px] uppercase font-bold text-slate-400">Resume Date</span>
+                    <Input 
+                      type="date"
+                      defaultValue={lead.holdResumeDate || ""}
+                      className="h-8 text-xs"
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          handleInlineUpdate(lead.id, 'holdResumeDate', e.target.value);
+                        }
+                      }}
+                      onBlur={(e) => {
+                        handleInlineUpdate(lead.id, 'holdResumeDate', e.target.value);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleInlineUpdate(lead.id, 'holdResumeDate', e.currentTarget.value);
+                        }
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            ) : inlineEditing?.id === lead.id && inlineEditing?.field === 'holdResumeDate' ? (
+              <div className="flex flex-col gap-1 min-w-[120px]">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {getStatusBadge(lead.status)}
+                  {lead.status !== "On Hold" && lead.holdResumeDate && (
+                    <Badge className="bg-orange-50 text-orange-600 hover:bg-orange-50 border-orange-200 text-[9px] font-bold px-1.5 py-0.5 shadow-none shrink-0">
+                      Resumed from Hold
+                    </Badge>
+                  )}
+                </div>
+                <span className="text-[9px] uppercase font-bold text-slate-400 mt-1">Resume Date</span>
+                <Input 
+                  type="date"
+                  defaultValue={lead.holdResumeDate || ""}
+                  className="h-8 text-xs"
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      handleInlineUpdate(lead.id, 'holdResumeDate', e.target.value);
+                    }
+                  }}
+                  onBlur={(e) => {
+                    handleInlineUpdate(lead.id, 'holdResumeDate', e.target.value);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleInlineUpdate(lead.id, 'holdResumeDate', e.currentTarget.value);
+                    }
+                  }}
+                  autoFocus
+                />
+              </div>
+            ) : (
+              <div 
+                onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'status' })}
+                className="cursor-pointer flex flex-col gap-1"
+              >
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {getStatusBadge(lead.status)}
+                  {lead.status !== "On Hold" && lead.holdResumeDate && (
+                    <Badge className="bg-orange-50 text-orange-600 hover:bg-orange-50 border-orange-200 text-[9px] font-bold px-1.5 py-0.5 shadow-none shrink-0">
+                      Resumed from Hold
+                    </Badge>
+                  )}
+                </div>
+                {lead.status === "On Hold" && (
+                  <span 
+                    onClick={(e) => {
+                      if (canEditLead(lead)) {
+                        e.stopPropagation();
+                        setInlineEditing({ id: lead.id, field: 'holdResumeDate' });
+                      }
+                    }}
+                    className={`text-[10px] font-semibold mt-1 hover:underline cursor-pointer ${
+                      cat === 1 ? 'text-rose-600 font-bold' : 'text-slate-500'
+                    }`}
+                  >
+                    Resume: {lead.holdResumeDate ? dayjs(lead.holdResumeDate).format("DD MMM YYYY") : "Set Date"}
+                  </span>
+                )}
+              </div>
+            )}
+          </td>
+          <td className="px-6 py-4">
+            {inlineEditing?.id === lead.id && inlineEditing?.field === 'assignedTo' ? (
+              <Popover 
+                open={true} 
+                onOpenChange={(open) => {
+                  if (!open) {
+                    const originalList = (Array.isArray(lead.assignedTo) ? lead.assignedTo : (lead.assignedTo ? [lead.assignedTo] : [])).map(extractName).filter(Boolean);
+                    const hasChanged = originalList.length !== selectedAssignees.length || 
+                      !originalList.every((name: string) => selectedAssignees.includes(name)) ||
+                      !selectedAssignees.every((name: string) => originalList.includes(name));
+                    if (hasChanged) {
+                      handleInlineUpdate(lead.id, 'assignedTo', selectedAssignees);
+                    }
+                    setInlineEditing(null);
+                  }
+                }}
+              >
+                <PopoverTrigger asChild>
+                  <div className="flex flex-wrap gap-1 max-w-[150px] cursor-pointer hover:bg-slate-50 rounded p-1">
+                    {selectedAssignees.length > 0 ? (
+                      selectedAssignees.map((name: string) => (
+                        <Badge key={name} variant="secondary" className="bg-brand-teal/5 text-brand-teal border-brand-teal/10 text-[10px] font-bold py-0.5 pl-1.5 pr-1 hover:bg-brand-teal/5 flex items-center gap-1">
+                          {name}
+                          {canEditLead(lead) && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const updated = selectedAssignees.filter((n: string) => n !== name);
+                                setSelectedAssignees(updated);
+                              }}
+                              className="text-brand-teal/60 hover:text-brand-teal hover:bg-brand-teal/10 rounded-full p-0.5 transition-colors"
+                            >
+                              <X className="w-2.5 h-2.5" />
+                            </button>
+                          )}
+                        </Badge>
+                      ))
+                    ) : (
+                      <span className="text-slate-400 italic text-xs">Unassigned</span>
+                    )}
+                  </div>
+                </PopoverTrigger>
+                <PopoverContent className="w-52 p-3 bg-white shadow-md border border-slate-100 rounded-lg z-50">
+                  <Label className="text-[10px] uppercase font-black text-slate-400 mb-2 block">Assign Employees</Label>
+                  <div className="max-h-40 overflow-y-auto space-y-1.5 bg-slate-50/50 p-2 rounded border border-slate-100">
+                    {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'admin').map(emp => {
+                      const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
+                      return (
+                        <label key={emp.id} className="flex items-center gap-2 text-xs font-semibold text-slate-600 cursor-pointer">
+                          <input 
+                            type="checkbox"
+                            checked={selectedAssignees.includes(empName)}
+                            onChange={(e) => {
+                              const updated = e.target.checked 
+                                ? [...selectedAssignees, empName] 
+                                : selectedAssignees.filter((n: string) => n !== empName);
+                              setSelectedAssignees(updated);
+                            }}
+                            className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-3.5 h-3.5"
+                          />
+                          {empName}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            ) : (
+              <div 
+                onClick={() => {
+                  if (canEditLead(lead)) {
+                    setInlineEditing({ id: lead.id, field: 'assignedTo' });
+                    const assignedList = (Array.isArray(lead.assignedTo) ? lead.assignedTo : (lead.assignedTo ? [lead.assignedTo] : [])).map(extractName).filter(Boolean);
+                    setSelectedAssignees(assignedList);
+                  }
+                }}
+                className="flex flex-wrap gap-1 max-w-[150px] cursor-pointer hover:bg-slate-50 rounded p-1"
+              >
+                {Array.isArray(lead.assignedTo) && lead.assignedTo.length > 0 ? (
+                  lead.assignedTo.map((name: string) => (
+                    <Badge key={name} variant="secondary" className="bg-brand-teal/5 text-brand-teal border-brand-teal/10 text-[10px] font-bold py-0.5 pl-1.5 pr-1 hover:bg-brand-teal/5 flex items-center gap-1">
+                      {name}
+                      {canEditLead(lead) && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const assignedList = Array.isArray(lead.assignedTo) ? lead.assignedTo : (lead.assignedTo ? [lead.assignedTo] : []);
+                            const updated = assignedList.filter((n: string) => n !== name);
+                            handleInlineUpdate(lead.id, 'assignedTo', updated);
+                          }}
+                          className="text-brand-teal/60 hover:text-brand-teal hover:bg-brand-teal/10 rounded-full p-0.5 transition-colors"
+                        >
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      )}
+                    </Badge>
+                  ))
+                ) : (
+                  <span className="text-slate-400 italic text-xs">Unassigned</span>
+                )}
+              </div>
+            )}
+          </td>
+          <td className="px-6 py-4">
+            <div className="flex flex-col">
+              {inlineEditing?.id === lead.id && inlineEditing?.field === 'expectedIncome' ? (
+                <Input 
+                  autoFocus
+                  className="h-8 text-sm font-bold" 
+                  defaultValue={lead.expectedIncome} 
+                  onBlur={(e) => handleInlineUpdate(lead.id, 'expectedIncome', e.target.value)} 
+                  onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'expectedIncome', e.currentTarget.value)}
+                />
+              ) : (
+                <span 
+                  onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'expectedIncome' })}
+                  className="font-bold text-slate-900 text-sm cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
+                >
+                  {lead.expectedIncome ? (lead.expectedIncome.startsWith('₹') ? lead.expectedIncome : `₹${lead.expectedIncome}`) : '--'}
+                </span>
+              )}
+              {type === 'converted' && (
+                <span className="text-[10px] text-emerald-600 font-bold uppercase mt-0.5">Won on {lead.closedDate}</span>
+              )}
+            </div>
+          </td>
+          <td className="px-6 py-4">
+            {inlineEditing?.id === lead.id && inlineEditing?.field === 'remarks' ? (
+              <Input 
+                autoFocus
+                className="h-8 text-[12px]" 
+                defaultValue={lead.remarks} 
+                onBlur={(e) => handleInlineUpdate(lead.id, 'remarks', e.target.value)} 
+                onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'remarks', e.currentTarget.value)}
+              />
+            ) : (
+              <p 
+                onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'remarks' })}
+                className="text-[12px] text-slate-500 italic max-w-[120px] truncate cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
+                title={lead.remarks}
+              >
+                "{lead.remarks || 'No remarks'}"
+              </p>
+            )}
+          </td>
+          <td className="px-6 py-4">
+            <div className="flex items-center gap-2">
+              <FollowUpDialog 
+                lead={lead} 
+                onUpdate={fetchLeads} 
+                userId={user?.id} 
+                userName={currentUserName} 
+              />
+              {lead.nextFollowUpDate && (() => {
+                const today = dayjs().startOf('day');
+                const nextDate = dayjs(lead.nextFollowUpDate).startOf('day');
+                const isMissed = today.isAfter(nextDate);
+                const isDueToday = today.isSame(nextDate);
+                return (
+                  <div className="flex flex-col gap-0.5 shrink-0">
+                    {isMissed ? (
+                      <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100 border-rose-200 animate-pulse text-[9px] font-bold px-1.5 py-0.5 whitespace-nowrap">
+                        Follow-up Missed
+                      </Badge>
+                    ) : isDueToday ? (
+                      <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100 border-orange-200 animate-pulse text-[9px] font-bold px-1.5 py-0.5 whitespace-nowrap">
+                        Follow-up Due
+                      </Badge>
+                    ) : (
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">
+                        Next: {dayjs(lead.nextFollowUpDate).format("DD MMM")}
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          </td>
+          <td className="px-6 py-4 text-right">
+            <div className="flex justify-end gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-600">
+                    <MoreHorizontal className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[180px]">
+                  <DropdownMenuItem onClick={() => fetchLeadLogs(lead)} className="cursor-pointer font-medium">
+                    View History
+                  </DropdownMenuItem>
+                  {canDeleteSales && (
+                    <>
+                      <div className="h-px bg-slate-100 my-1" />
+                      <DropdownMenuItem onClick={() => handleDeleteLead(lead.id)} className="text-red-600 focus:text-red-600 cursor-pointer font-medium">
+                        Delete Lead
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </td>
+        </tr>
+      );
+    };
 
     return (
       <div className="overflow-x-auto">
@@ -993,6 +1540,7 @@ export default function SalesPage() {
               <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Created By</th>
               <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Contact</th>
               <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Source</th>
+              <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Category</th>
               <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
               <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Assigned To</th>
               <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Expected Income</th>
@@ -1002,496 +1550,29 @@ export default function SalesPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {filteredAndSorted.map((lead) => {
-              const cat = getLeadCategory(lead);
-              return (
-                <tr 
-                  key={lead.id} 
-                  className={`hover:bg-slate-50/80 transition-colors group relative ${
-                    cat === 1 ? 'border-l-4 border-l-rose-500 bg-rose-50/5' : ''
-                  }`}
-                >
-                  <td className="px-4 py-4 text-center">
-                    <input 
-                      type="checkbox"
-                      checked={!!lead.isHot}
-                      onChange={(e) => handleInlineUpdate(lead.id, "isHot", e.target.checked)}
-                      disabled={!canEditLead(lead) || lead.status === "On Hold" || lead.status === "Client Won" || lead.status === "Client Lost"}
-                      className="rounded border-slate-300 text-orange-500 focus:ring-orange-500 w-4 h-4 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    />
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex flex-col flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-slate-800 text-sm">
-                            {lead.createdByUserName || 'Admin'}
-                          </span>
-                          {lead.isHot && (
-                            <span title="Hot Lead">
-                              <Flame className="w-3.5 h-3.5 text-orange-500 fill-orange-500 shrink-0" />
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-medium mt-1">
-                          <Calendar className="w-3 h-3 text-slate-400" />
-                          {inlineEditing?.id === lead.id && inlineEditing?.field === 'date' ? (
-                            <Input 
-                              type="date"
-                              autoFocus
-                              className="h-6 text-[10px] w-32 py-0" 
-                              defaultValue={lead.date} 
-                              onChange={(e) => {
-                                if (e.target.value) {
-                                  handleInlineUpdate(lead.id, 'date', e.target.value);
-                                }
-                              }}
-                              onBlur={(e) => {
-                                handleInlineUpdate(lead.id, 'date', e.target.value);
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  handleInlineUpdate(lead.id, 'date', e.currentTarget.value);
-                                }
-                              }}
-                            />
-                          ) : (
-                            <span
-                              onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'date' })}
-                              className="cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
-                            >
-                              Created: {lead.date}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex flex-col">
-                      {inlineEditing?.id === lead.id && inlineEditing?.field === 'contact' ? (
-                        <Input 
-                          autoFocus
-                          className="h-8 text-[13px] font-bold" 
-                          defaultValue={lead.contact} 
-                          onBlur={(e) => handleInlineUpdate(lead.id, 'contact', e.target.value)} 
-                          onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'contact', e.currentTarget.value)}
-                        />
-                      ) : (
-                        <span 
-                          onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'contact' })}
-                          className="text-[13px] font-bold text-slate-700 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
-                        >
-                          {lead.contact}
-                        </span>
-                      )}
-                      <div className="flex flex-col gap-1 mt-1">
-                        <div className="flex items-center gap-1">
-                          <Mail className="w-3 h-3 text-slate-400" />
-                          {inlineEditing?.id === lead.id && inlineEditing?.field === 'email' ? (
-                            <Input 
-                              autoFocus
-                              className="h-6 text-[10px] w-full py-0" 
-                              defaultValue={lead.email || ''} 
-                              onBlur={(e) => handleInlineUpdate(lead.id, 'email', e.target.value)} 
-                              onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'email', e.currentTarget.value)}
-                              placeholder="Email"
-                            />
-                          ) : (
-                            <span 
-                              onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'email' })}
-                              className="text-[10px] text-slate-500 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
-                            >
-                              {lead.email || 'Add email'}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Phone className="w-3 h-3 text-slate-400" />
-                          {inlineEditing?.id === lead.id && inlineEditing?.field === 'phone' ? (
-                            <Input 
-                              autoFocus
-                              className="h-6 text-[10px] w-full py-0" 
-                              defaultValue={lead.phone || ''} 
-                              onBlur={(e) => handleInlineUpdate(lead.id, 'phone', e.target.value)} 
-                              onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'phone', e.currentTarget.value)}
-                              placeholder="Phone"
-                            />
-                          ) : (
-                            <span 
-                              onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'phone' })}
-                              className="text-[10px] text-slate-500 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
-                            >
-                              {lead.phone || 'Add phone'}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    {inlineEditing?.id === lead.id && inlineEditing?.field === 'source' ? (
-                      <Input 
-                        autoFocus
-                        className="h-8 text-[12px]" 
-                        defaultValue={lead.source} 
-                        onBlur={(e) => handleInlineUpdate(lead.id, 'source', e.target.value)} 
-                        onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'source', e.currentTarget.value)}
-                      />
-                    ) : (
-                      <div 
-                        onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'source' })}
-                        className="flex items-center gap-1.5 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
-                      >
-                        {lead.source ? (
-                          <>
-                            <div className="w-1.5 h-1.5 rounded-full bg-brand-teal/40" />
-                            <span className="text-[12px] font-medium text-slate-600">{lead.source}</span>
-                          </>
-                        ) : (
-                          <span className="text-[12px] text-slate-400 italic">Add source</span>
-                        )}
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    {inlineEditing?.id === lead.id && inlineEditing?.field === 'status' ? (
-                      <div ref={statusContainerRef}>
-                        <Select 
-                          defaultValue={lead.status} 
-                          defaultOpen={true} 
-                          onValueChange={async (val) => {
-                            if (val === lead.status) return;
-                            if (val === "Client Won") {
-                              setClientFormData({
-                                companyName: lead.company || lead.contact,
-                                name: lead.contact,
-                                phone: lead.phone || "",
-                                email: lead.email || "",
-                                remarks: lead.remarks || "",
-                              });
-                              setConvertingLeadId(lead.id);
-                              setClientDialogOpen(true);
-                            } else {
-                              setStatusChangeData({
-                                leadId: lead.id,
-                                newStatus: val,
-                                keepEditing: val === "On Hold"
-                              });
-                            }
-                          }}
-                        >
-                          <SelectTrigger className="h-8 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Lead">Lead</SelectItem>
-                            <SelectItem value="Contacted">Contacted</SelectItem>
-                            <SelectItem value="Proposal Sent">Proposal Sent</SelectItem>
-                            <SelectItem value="On Hold">On Hold</SelectItem>
-                            <SelectItem value="Client Won">Client Won</SelectItem>
-                            <SelectItem value="Client Lost">Client Lost</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        
-                        {lead.status === "On Hold" && (
-                          <div className="flex flex-col gap-1 mt-1">
-                            <span className="text-[9px] uppercase font-bold text-slate-400">Resume Date</span>
-                            <Input 
-                              type="date"
-                              defaultValue={lead.holdResumeDate || ""}
-                              className="h-8 text-xs"
-                              onChange={(e) => {
-                                if (e.target.value) {
-                                  handleInlineUpdate(lead.id, 'holdResumeDate', e.target.value);
-                                }
-                              }}
-                              onBlur={(e) => {
-                                handleInlineUpdate(lead.id, 'holdResumeDate', e.target.value);
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  handleInlineUpdate(lead.id, 'holdResumeDate', e.currentTarget.value);
-                                }
-                              }}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    ) : inlineEditing?.id === lead.id && inlineEditing?.field === 'holdResumeDate' ? (
-                      <div className="flex flex-col gap-1 min-w-[120px]">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          {getStatusBadge(lead.status)}
-                          {lead.status !== "On Hold" && lead.holdResumeDate && (
-                            <Badge className="bg-orange-50 text-orange-600 hover:bg-orange-50 border-orange-200 text-[9px] font-bold px-1.5 py-0.5 shadow-none shrink-0">
-                              Resumed from Hold
-                            </Badge>
-                          )}
-                        </div>
-                        <span className="text-[9px] uppercase font-bold text-slate-400 mt-1">Resume Date</span>
-                        <Input 
-                          type="date"
-                          defaultValue={lead.holdResumeDate || ""}
-                          className="h-8 text-xs"
-                          onChange={(e) => {
-                            if (e.target.value) {
-                              handleInlineUpdate(lead.id, 'holdResumeDate', e.target.value);
-                            }
-                          }}
-                          onBlur={(e) => {
-                            handleInlineUpdate(lead.id, 'holdResumeDate', e.target.value);
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              handleInlineUpdate(lead.id, 'holdResumeDate', e.currentTarget.value);
-                            }
-                          }}
-                          autoFocus
-                        />
-                      </div>
-                    ) : (
-                      <div 
-                        onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'status' })}
-                        className="cursor-pointer flex flex-col gap-1"
-                      >
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          {getStatusBadge(lead.status)}
-                          {lead.status !== "On Hold" && lead.holdResumeDate && (
-                            <Badge className="bg-orange-50 text-orange-600 hover:bg-orange-50 border-orange-200 text-[9px] font-bold px-1.5 py-0.5 shadow-none shrink-0">
-                              Resumed from Hold
-                            </Badge>
-                          )}
-                        </div>
-                        {lead.status === "On Hold" && (
-                          <span 
-                            onClick={(e) => {
-                              if (canEditLead(lead)) {
-                                e.stopPropagation();
-                                setInlineEditing({ id: lead.id, field: 'holdResumeDate' });
-                              }
-                            }}
-                            className={`text-[10px] font-semibold mt-1 hover:underline cursor-pointer ${
-                              cat === 1 ? 'text-rose-600 font-bold' : 'text-slate-500'
-                            }`}
-                          >
-                            Resume: {lead.holdResumeDate ? dayjs(lead.holdResumeDate).format("DD MMM YYYY") : "Set Date"}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </td>
-                <td className="px-6 py-4">
-                  {inlineEditing?.id === lead.id && inlineEditing?.field === 'assignedTo' ? (
-                    <Popover 
-                      open={true} 
-                      onOpenChange={(open) => {
-                        if (!open) {
-                          const originalList = (Array.isArray(lead.assignedTo) ? lead.assignedTo : (lead.assignedTo ? [lead.assignedTo] : [])).map(extractName).filter(Boolean);
-                          const hasChanged = originalList.length !== selectedAssignees.length || 
-                            !originalList.every((name: string) => selectedAssignees.includes(name)) ||
-                            !selectedAssignees.every((name: string) => originalList.includes(name));
-                          if (hasChanged) {
-                            handleInlineUpdate(lead.id, 'assignedTo', selectedAssignees);
-                          }
-                          setInlineEditing(null);
-                        }
-                      }}
-                    >
-                      <PopoverTrigger asChild>
-                        <div className="flex flex-wrap gap-1 max-w-[150px] cursor-pointer hover:bg-slate-50 rounded p-1">
-                          {selectedAssignees.length > 0 ? (
-                            selectedAssignees.map((name: string) => (
-                              <Badge key={name} variant="secondary" className="bg-brand-teal/5 text-brand-teal border-brand-teal/10 text-[10px] font-bold py-0.5 pl-1.5 pr-1 hover:bg-brand-teal/5 flex items-center gap-1">
-                                {name}
-                                {canEditLead(lead) && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      const updated = selectedAssignees.filter((n: string) => n !== name);
-                                      setSelectedAssignees(updated);
-                                    }}
-                                    className="text-brand-teal/60 hover:text-brand-teal hover:bg-brand-teal/10 rounded-full p-0.5 transition-colors"
-                                  >
-                                    <X className="w-2.5 h-2.5" />
-                                  </button>
-                                )}
-                              </Badge>
-                            ))
-                          ) : (
-                            <span className="text-slate-400 italic text-xs">Unassigned</span>
-                          )}
-                        </div>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-52 p-3 bg-white shadow-md border border-slate-100 rounded-lg z-50">
-                        <Label className="text-[10px] uppercase font-black text-slate-400 mb-2 block">Assign Employees</Label>
-                        <div className="max-h-40 overflow-y-auto space-y-1.5 bg-slate-50/50 p-2 rounded border border-slate-100">
-                          {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'admin').map(emp => {
-                            const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
-                            return (
-                              <label key={emp.id} className="flex items-center gap-2 text-xs font-semibold text-slate-600 cursor-pointer">
-                                <input 
-                                  type="checkbox"
-                                  checked={selectedAssignees.includes(empName)}
-                                  onChange={(e) => {
-                                    const updated = e.target.checked 
-                                      ? [...selectedAssignees, empName] 
-                                      : selectedAssignees.filter((n: string) => n !== empName);
-                                    setSelectedAssignees(updated);
-                                  }}
-                                  className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-3.5 h-3.5"
-                                />
-                                {empName}
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </PopoverContent>
-                    </Popover>
-                  ) : (
-                    <div 
-                      onClick={() => {
-                        if (canEditLead(lead)) {
-                          setInlineEditing({ id: lead.id, field: 'assignedTo' });
-                          const assignedList = (Array.isArray(lead.assignedTo) ? lead.assignedTo : (lead.assignedTo ? [lead.assignedTo] : [])).map(extractName).filter(Boolean);
-                          setSelectedAssignees(assignedList);
-                        }
-                      }}
-                      className="flex flex-wrap gap-1 max-w-[150px] cursor-pointer hover:bg-slate-50 rounded p-1"
-                    >
-                      {Array.isArray(lead.assignedTo) && lead.assignedTo.length > 0 ? (
-                        lead.assignedTo.map((name: string) => (
-                          <Badge key={name} variant="secondary" className="bg-brand-teal/5 text-brand-teal border-brand-teal/10 text-[10px] font-bold py-0.5 pl-1.5 pr-1 hover:bg-brand-teal/5 flex items-center gap-1">
-                            {name}
-                            {canEditLead(lead) && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const assignedList = Array.isArray(lead.assignedTo) ? lead.assignedTo : (lead.assignedTo ? [lead.assignedTo] : []);
-                                  const updated = assignedList.filter((n: string) => n !== name);
-                                  handleInlineUpdate(lead.id, 'assignedTo', updated);
-                                }}
-                                className="text-brand-teal/60 hover:text-brand-teal hover:bg-brand-teal/10 rounded-full p-0.5 transition-colors"
-                              >
-                                <X className="w-2.5 h-2.5" />
-                              </button>
-                            )}
-                          </Badge>
-                        ))
-                      ) : (
-                        <span className="text-slate-400 italic text-xs">Unassigned</span>
-                      )}
-                    </div>
-                  )}
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex flex-col">
-                    {inlineEditing?.id === lead.id && inlineEditing?.field === 'expectedIncome' ? (
-                      <Input 
-                        autoFocus
-                        className="h-8 text-sm font-bold" 
-                        defaultValue={lead.expectedIncome} 
-                        onBlur={(e) => handleInlineUpdate(lead.id, 'expectedIncome', e.target.value)} 
-                        onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'expectedIncome', e.currentTarget.value)}
-                      />
-                    ) : (
-                      <span 
-                        onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'expectedIncome' })}
-                        className="font-bold text-slate-900 text-sm cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
-                      >
-                        {lead.expectedIncome ? (lead.expectedIncome.startsWith('₹') ? lead.expectedIncome : `₹${lead.expectedIncome}`) : '--'}
-                      </span>
-                    )}
-                    {type === 'converted' && (
-                      <span className="text-[10px] text-emerald-600 font-bold uppercase mt-0.5">Won on {lead.closedDate}</span>
-                    )}
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  {inlineEditing?.id === lead.id && inlineEditing?.field === 'remarks' ? (
-                    <Input 
-                      autoFocus
-                      className="h-8 text-[12px]" 
-                      defaultValue={lead.remarks} 
-                      onBlur={(e) => handleInlineUpdate(lead.id, 'remarks', e.target.value)} 
-                      onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'remarks', e.currentTarget.value)}
-                    />
-                  ) : (
-                    <p 
-                      onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'remarks' })}
-                      className="text-[12px] text-slate-500 italic max-w-[120px] truncate cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
-                      title={lead.remarks}
-                    >
-                      "{lead.remarks || 'No remarks'}"
-                    </p>
-                  )}
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-2">
-                    <FollowUpDialog 
-                      lead={lead} 
-                      onUpdate={fetchLeads} 
-                      userId={user?.id} 
-                      userName={currentUserName} 
-                    />
-                    {lead.nextFollowUpDate && (() => {
-                      const today = dayjs().startOf('day');
-                      const nextDate = dayjs(lead.nextFollowUpDate).startOf('day');
-                      const isMissed = today.isAfter(nextDate);
-                      const isDueToday = today.isSame(nextDate);
-                      return (
-                        <div className="flex flex-col gap-0.5 shrink-0">
-                          {isMissed ? (
-                            <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100 border-rose-200 animate-pulse text-[9px] font-bold px-1.5 py-0.5 whitespace-nowrap">
-                              Follow-up Missed
-                            </Badge>
-                          ) : isDueToday ? (
-                            <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100 border-orange-200 animate-pulse text-[9px] font-bold px-1.5 py-0.5 whitespace-nowrap">
-                              Follow-up Due
-                            </Badge>
-                          ) : (
-                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">
-                              Next: {dayjs(lead.nextFollowUpDate).format("DD MMM")}
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                </td>
-                <td className="px-6 py-4 text-right">
-                  <div className="flex justify-end gap-2">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-600">
-                          <MoreHorizontal className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-[180px]">
-                        <DropdownMenuItem onClick={() => fetchLeadLogs(lead)} className="cursor-pointer font-medium">
-                          View History
-                        </DropdownMenuItem>
-                        {canDeleteSales && (
-                          <>
-                            <div className="h-px bg-slate-100 my-1" />
-                            <DropdownMenuItem onClick={() => handleDeleteLead(lead.id)} className="text-red-600 focus:text-red-600 cursor-pointer font-medium">
-                              Delete Lead
-                            </DropdownMenuItem>
-                          </>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-};
+            {categoryFilter === "all" ? (
+              categoriesInUse.map((catName) => {
+                const catLeads = filteredAndSorted.filter(l => (l.category || "Other") === catName);
+                if (catLeads.length === 0) return null;
+                return (
+                  <React.Fragment key={catName}>
+                    <tr className="bg-slate-100/50 font-bold border-y border-slate-200/50">
+                      <td colSpan={11} className="px-6 py-2 text-xs uppercase tracking-wider text-slate-700 font-bold bg-slate-50">
+                        {catName} ({catLeads.length})
+                      </td>
+                    </tr>
+                    {catLeads.map((lead) => renderRow(lead))}
+                  </React.Fragment>
+                );
+              })
+            ) : (
+              filteredAndSorted.map((lead) => renderRow(lead))
+            )}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
 
   if (permissionsLoading) {
     return (
@@ -1555,7 +1636,10 @@ export default function SalesPage() {
 
                       <Dialog open={isBulkDialogOpen} onOpenChange={(open) => {
                         setIsBulkDialogOpen(open);
-                        if (!open) setBulkPreview([]);
+                        if (!open) {
+                          setBulkPreview([]);
+                          setBulkUploadCategory("");
+                        }
                       }}>
                         <DialogTrigger asChild>
                           <Button variant="outline" className="border-brand-teal text-brand-teal hover:bg-brand-teal/10 shadow-sm transition-all active:scale-95">
@@ -1580,6 +1664,21 @@ export default function SalesPage() {
                                 <span className="text-sm font-semibold text-slate-600">Choose Excel or CSV file</span>
                                 <span className="text-xs text-slate-400">File should contain 'Name' and 'Number' columns</span>
                               </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <Label className="text-xs font-bold text-slate-700">Assign to Category (Optional)</Label>
+                              <Select value={bulkUploadCategory} onValueChange={setBulkUploadCategory}>
+                                <SelectTrigger className="w-full h-9 text-xs">
+                                  <SelectValue placeholder="Select Category (None)" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none_selected">None (Other)</SelectItem>
+                                  {leadCategories.map((cat) => (
+                                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
                             </div>
 
                             {bulkPreview.length > 0 && (
@@ -1695,6 +1794,18 @@ export default function SalesPage() {
                 </SelectContent>
               </Select>
             )}
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="w-[150px] h-9 border-slate-200">
+                <SelectValue placeholder="Category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                <SelectItem value="Other">Other</SelectItem>
+                {leadCategories.map((cat) => (
+                  <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Select value={pipelineDateFilter} onValueChange={setPipelineDateFilter}>
               <SelectTrigger className="w-[120px] h-9 border-slate-200">
                 <SelectValue placeholder="Date Filter" />

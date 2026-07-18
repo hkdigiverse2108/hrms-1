@@ -22,6 +22,7 @@ export interface LeadFormData {
   isHot: boolean;
   holdResumeDate?: string;
   date?: string;
+  category?: string;
 }
 
 import { API_URL } from "@/lib/config";
@@ -48,10 +49,27 @@ export function LeadForm({ initialData, onSubmit, isSubmitting }: LeadFormProps)
       assignedTo: [],
       holdResumeDate: "",
       date: new Date().toISOString().split('T')[0],
+      category: "",
     }
   });
 
   const [employees, setEmployees] = useState<any[]>([]);
+  const [leadCategories, setLeadCategories] = useState<string[]>([]);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const res = await fetch(`${API_URL}/system-settings`);
+        if (res.ok) {
+          const settings = await res.json();
+          setLeadCategories(settings.leadCategories || ["Hot Lead", "Warm Lead", "Cold Lead"]);
+        }
+      } catch (err) {
+        console.error("Error fetching system settings:", err);
+      }
+    };
+    fetchSettings();
+  }, []);
 
   useEffect(() => {
     const fetchEmployees = async () => {
@@ -171,6 +189,26 @@ export function LeadForm({ initialData, onSubmit, isSubmitting }: LeadFormProps)
               <SelectItem value="Low">Low</SelectItem>
               <SelectItem value="Medium">Medium</SelectItem>
               <SelectItem value="High">High</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Category</Label>
+          <Select 
+            value={watch("category") || ""} 
+            onValueChange={(val) => setValue("category", val === "none_selected" ? "" : val)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select Category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none_selected">None</SelectItem>
+              {leadCategories.map((cat) => (
+                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
