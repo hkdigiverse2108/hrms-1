@@ -37,6 +37,11 @@ export interface ProjectFormData {
   assignedEmployeeName?: string;
   isPhaseWise?: boolean;
   phases?: Array<{name: string, assignedToId?: string, assignedToIds?: string[], startDate: string, endDate: string}>;
+  // Digital Marketing fields
+  revenueAssigneeId?: string;
+  followerAssigneeId?: string;
+  userRemarkAssigneeId?: string;
+  clientRemarkAssigneeId?: string;
   // Development fields
   frontendLink?: string;
   thirdPartyIntegrations?: Array<{ name: string; credentials: string; notes?: string }>;
@@ -408,6 +413,74 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
                   </SelectContent>
                 </Select>
               </div>
+            )}
+            {formData.department === "Digital Marketing" && (
+              <>
+                <div className="space-y-2">
+                  <Label>Revenue Assignee</Label>
+                  <Select value={formData.revenueAssigneeId || "none"} onValueChange={(v) => handleChange("revenueAssigneeId", v === "none" ? "" : v)}>
+                    <SelectTrigger className="w-full bg-white">
+                      <SelectValue placeholder="Select Employee" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {allEmployees.map((emp) => (
+                        <SelectItem key={emp.id} value={emp.id}>
+                          {emp.firstName} {emp.lastName} {emp.role ? `(${emp.role})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Followers Assignee</Label>
+                  <Select value={formData.followerAssigneeId || "none"} onValueChange={(v) => handleChange("followerAssigneeId", v === "none" ? "" : v)}>
+                    <SelectTrigger className="w-full bg-white">
+                      <SelectValue placeholder="Select Employee" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {allEmployees.map((emp) => (
+                        <SelectItem key={emp.id} value={emp.id}>
+                          {emp.firstName} {emp.lastName} {emp.role ? `(${emp.role})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>User Remark Assignee</Label>
+                  <Select value={formData.userRemarkAssigneeId || "none"} onValueChange={(v) => handleChange("userRemarkAssigneeId", v === "none" ? "" : v)}>
+                    <SelectTrigger className="w-full bg-white">
+                      <SelectValue placeholder="Select Employee" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {allEmployees.map((emp) => (
+                        <SelectItem key={emp.id} value={emp.id}>
+                          {emp.firstName} {emp.lastName} {emp.role ? `(${emp.role})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Client Remark Assignee</Label>
+                  <Select value={formData.clientRemarkAssigneeId || "none"} onValueChange={(v) => handleChange("clientRemarkAssigneeId", v === "none" ? "" : v)}>
+                    <SelectTrigger className="w-full bg-white">
+                      <SelectValue placeholder="Select Employee" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {allEmployees.map((emp) => (
+                        <SelectItem key={emp.id} value={emp.id}>
+                          {emp.firstName} {emp.lastName} {emp.role ? `(${emp.role})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
             )}
           </div>
 

@@ -61,6 +61,8 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
   const [verifyRecord, setVerifyRecord] = useState<any>(null)
   const [verifyNote, setVerifyNote] = useState('')
   const [verifyRating, setVerifyRating] = useState<number | ''>('')
+  const [pendingTasks, setPendingTasks] = useState<any[]>([])
+  const [isLoadingPendingTasks, setIsLoadingPendingTasks] = useState(false)
   const [logsOpen, setLogsOpen] = useState(false)
   const [reportLogs, setReportLogs] = useState<any[]>([])
   const [isLoadingLogs, setIsLoadingLogs] = useState(false)
@@ -90,6 +92,27 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
       setActiveDeptTab(user.department)
     }
   }, [isTeamLeader, user, activeDeptTab])
+
+  useEffect(() => {
+    if (verifyRecord?.employeeId && verifyRecord?.date) {
+      setIsLoadingPendingTasks(true)
+      fetch(`${API_URL}/wm-tasks?userId=${verifyRecord.employeeId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data)) {
+            const tasks = data.filter((t: any) => 
+              t.status !== 'completed' && t.status !== 'approved' &&
+              (!t.dueDate || t.dueDate <= verifyRecord.date)
+            );
+            setPendingTasks(tasks);
+          }
+        })
+        .catch(err => console.error("Error fetching pending tasks:", err))
+        .finally(() => setIsLoadingPendingTasks(false))
+    } else {
+      setPendingTasks([])
+    }
+  }, [verifyRecord?.employeeId, verifyRecord?.date])
 
   const ratingData = useMemo(() => {
      if (!isAdmin) return []
@@ -670,6 +693,69 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
                 </div>
               );
             })()}
+
+            <div>
+              <Label className="text-xs font-bold text-slate-700 mb-2 block">Today's Pending Tasks</Label>
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-4 max-h-[250px] overflow-y-auto">
+                {isLoadingPendingTasks ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="w-5 h-5 animate-spin text-brand-teal" />
+                  </div>
+                ) : pendingTasks.length > 0 ? (
+                  <>
+                    {/* Development Tasks */}
+                    {pendingTasks.some(t => t.department?.toLowerCase() === 'development') && (
+                      <div className="space-y-1.5">
+                        <h4 className="text-[11px] font-bold text-brand-teal uppercase tracking-wider">Development</h4>
+                        <ul className="list-disc pl-5 space-y-1">
+                          {pendingTasks.filter(t => t.department?.toLowerCase() === 'development').map(t => (
+                            <li key={t.id} className="text-[13px] text-slate-700 leading-snug">{t.title}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    
+                    {/* SMM Tasks */}
+                    {pendingTasks.some(t => ['smm', 'creative'].includes(t.department?.toLowerCase() || '')) && (
+                      <div className="space-y-1.5">
+                        <h4 className="text-[11px] font-bold text-rose-500 uppercase tracking-wider">SMM</h4>
+                        <ul className="list-disc pl-5 space-y-1">
+                          {pendingTasks.filter(t => ['smm', 'creative'].includes(t.department?.toLowerCase() || '')).map(t => (
+                            <li key={t.id} className="text-[13px] text-slate-700 leading-snug">{t.title}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* DM Tasks */}
+                    {pendingTasks.some(t => t.department?.toLowerCase() === 'digital marketing') && (
+                      <div className="space-y-1.5">
+                        <h4 className="text-[11px] font-bold text-indigo-500 uppercase tracking-wider">DM</h4>
+                        <ul className="list-disc pl-5 space-y-1">
+                          {pendingTasks.filter(t => t.department?.toLowerCase() === 'digital marketing').map(t => (
+                            <li key={t.id} className="text-[13px] text-slate-700 leading-snug">{t.title}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Other Tasks if any */}
+                    {pendingTasks.some(t => !['development', 'smm', 'creative', 'digital marketing'].includes(t.department?.toLowerCase() || '')) && (
+                      <div className="space-y-1.5">
+                        <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Other</h4>
+                        <ul className="list-disc pl-5 space-y-1">
+                          {pendingTasks.filter(t => !['development', 'smm', 'creative', 'digital marketing'].includes(t.department?.toLowerCase() || '')).map(t => (
+                            <li key={t.id} className="text-[13px] text-slate-700 leading-snug">{t.title} <span className="text-[10px] text-slate-400">({t.department || 'N/A'})</span></li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-[13px] text-slate-500 italic">No pending tasks for this date.</div>
+                )}
+              </div>
+            </div>
 
             <div>
               <Label className="text-xs font-bold text-slate-700 mb-2 block">Rating (1 to 10) <span className="text-rose-500">*</span></Label>
