@@ -222,6 +222,34 @@ const PLAN_ROWS: RowDefinition[] = [
   { id: "ast_sw_chatgpt_plus", category: "ASSETS", subCategory: "Software", metric: "CHAT GPT PLUS", unit: "Active", type: "select", options: ["Active", "Inactive"] },
 ];
 
+const parseSoftwareValue = (val: string) => {
+  if (!val) return { status: "Inactive", autopay: "No", expiryDate: "" };
+  const parts = String(val).split("|").map(s => s.trim());
+  return {
+    status: parts[0] || "Inactive",
+    autopay: parts[1] || "No",
+    expiryDate: parts[2] || "",
+  };
+};
+
+const formatSoftwareDisplay = (val: string) => {
+  const { status, autopay, expiryDate } = parseSoftwareValue(val);
+  if (status === "Inactive") return <span className="text-slate-400 font-medium">Inactive</span>;
+  return (
+    <div className="flex flex-col items-end text-xs font-bold text-slate-800">
+      <div className="flex items-center gap-1">
+        <span className="text-emerald-600">Active</span>
+        {autopay === "Yes" && (
+          <span className="text-[9px] bg-blue-50 text-blue-600 border border-blue-200/60 px-1 py-0.2 rounded font-black tracking-wider uppercase">Autopay</span>
+        )}
+      </div>
+      {expiryDate && (
+        <span className="text-[9px] text-slate-400 font-semibold mt-0.5">Exp: {new Date(expiryDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
+      )}
+    </div>
+  );
+};
+
 export default function CompanyFinancePlanPage() {
   const [selectedMonth, setSelectedMonth] = useState<string>(() => {
     const d = new Date();
@@ -250,6 +278,8 @@ export default function CompanyFinancePlanPage() {
   const [formMetric, setFormMetric] = useState("");
   const [formUnit, setFormUnit] = useState("INR");
   const [formType, setFormType] = useState<"field" | "multiple">("field");
+  const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
 
   const formatVal = (val: any, unit: string) => {
     if (val === undefined || val === null || val === "") return "-";
@@ -342,6 +372,75 @@ export default function CompanyFinancePlanPage() {
     } catch (err) {
       console.error(err);
       toast.error("Error deleting category/row");
+    }
+  };
+
+  const handleDeleteCategory = async (categoryName: string) => {
+    if (!confirm(`Are you sure you want to delete the entire category "${categoryName}" and all of its rows? This action cannot be undone.`)) return;
+
+    const updatedRows = rows.filter((r) => r.category !== categoryName);
+    setRows(updatedRows);
+
+    try {
+      const res = await fetch(`${API_URL}/company-finance/row-definitions/${selectedMonth}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: updatedRows.map(({ formula, ...r }) => r) }),
+      });
+      if (res.ok) {
+        toast.success(`Category "${categoryName}" deleted successfully`);
+      } else {
+        toast.error("Failed to save updated row configuration");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error deleting category");
+    }
+  };
+
+  const handleAddCategorySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const catName = newCategoryName.trim().toUpperCase();
+    if (!catName) {
+      toast.error("Please enter a category name");
+      return;
+    }
+
+    if (existingCategories.includes(catName)) {
+      toast.error("This category already exists");
+      return;
+    }
+
+    // Create a default placeholder row for the new category
+    const newId = "custom_" + Date.now();
+    const newRow: RowDefinition = {
+      id: newId,
+      category: catName,
+      subCategory: "General",
+      metric: "Default Metric",
+      unit: "INR",
+      type: "field",
+    };
+
+    const updatedRows = [...rows, newRow];
+    setRows(updatedRows);
+
+    try {
+      const res = await fetch(`${API_URL}/company-finance/row-definitions/${selectedMonth}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: updatedRows.map(({ formula, ...r }) => r) }),
+      });
+      if (res.ok) {
+        toast.success(`Category "${catName}" added successfully!`);
+        setIsAddCategoryOpen(false);
+        setNewCategoryName("");
+      } else {
+        toast.error("Failed to save updated configuration");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error saving category");
     }
   };
 
@@ -992,10 +1091,10 @@ export default function CompanyFinancePlanPage() {
                             {row.metric}
                           </td>
                           <td className="px-4 py-2.5 border-r border-slate-100 font-bold text-slate-500">
-                            {row.type === "select" ? (values[row.id] || "Active") : row.unit}
+                            {row.id.startsWith("ast_sw_") ? "Software Status" : (row.type === "select" ? (values[row.id] || "Active") : row.unit)}
                           </td>
                           <td 
-                            className={`px-4 py-1.5 text-right border-r border-slate-100 font-extrabold w-[240px] select-none ${
+                            className={`px-4 py-1.5 text-right border-r border-slate-100 font-extrabold w-[240px] select-none relative ${
                               row.type !== "formula" ? "cursor-pointer hover:bg-slate-50/80 transition-colors group" : ""
                             }`}
                             onDoubleClick={() => {
@@ -1005,7 +1104,61 @@ export default function CompanyFinancePlanPage() {
                             }}
                           >
                             {editingCellId === row.id ? (
-                              row.type === "select" ? (
+                              row.id.startsWith("ast_sw_") ? (
+                                <div className="relative w-full">
+                                  <div className="absolute right-0 top-full z-50 mt-1.5 w-64 bg-white border border-slate-200 rounded-xl shadow-xl p-4 space-y-4 text-left border-t-4 border-t-brand-teal box-border flex flex-col items-stretch text-slate-700 font-sans normal-case font-normal leading-normal">
+                                    <div className="flex flex-col items-start gap-1 w-full text-left">
+                                      <label className="text-[10px] uppercase font-bold text-slate-400 block text-left w-full">Subscription Status</label>
+                                      <select
+                                        value={parseSoftwareValue(values[row.id]).status}
+                                        onChange={(e) => {
+                                          const sw = parseSoftwareValue(values[row.id]);
+                                          handleInputChange(row.id, `${e.target.value} | ${sw.autopay} | ${sw.expiryDate}`);
+                                        }}
+                                        className="w-full box-border h-8 text-xs border border-slate-300 bg-white rounded px-2.5 outline-none focus:border-brand-teal block text-left"
+                                      >
+                                        <option value="Active">Active</option>
+                                        <option value="Inactive">Inactive</option>
+                                      </select>
+                                    </div>
+                                    {parseSoftwareValue(values[row.id]).status === "Active" && (
+                                      <>
+                                        <label className="flex items-center gap-2 cursor-pointer py-0.5 select-none text-left w-full">
+                                          <input
+                                            type="checkbox"
+                                            checked={parseSoftwareValue(values[row.id]).autopay === "Yes"}
+                                            onChange={(e) => {
+                                              const sw = parseSoftwareValue(values[row.id]);
+                                              handleInputChange(row.id, `${sw.status} | ${e.target.checked ? "Yes" : "No"} | ${sw.expiryDate}`);
+                                            }}
+                                            className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-3.5 h-3.5"
+                                          />
+                                          <span className="text-xs font-bold text-slate-700">Autopay Enabled</span>
+                                        </label>
+                                        <div className="flex flex-col items-start gap-1 w-full text-left">
+                                          <label className="text-[10px] uppercase font-bold text-slate-400 block text-left w-full">Expiration Date</label>
+                                          <input
+                                            type="date"
+                                            value={parseSoftwareValue(values[row.id]).expiryDate}
+                                            onChange={(e) => {
+                                              const sw = parseSoftwareValue(values[row.id]);
+                                              handleInputChange(row.id, `${sw.status} | ${sw.autopay} | ${e.target.value}`);
+                                            }}
+                                            className="w-full box-border h-8 text-xs border border-slate-300 rounded px-2.5 outline-none focus:border-brand-teal block text-left"
+                                          />
+                                        </div>
+                                      </>
+                                    )}
+                                    <Button
+                                      size="sm"
+                                      className="w-full box-border h-8 text-xs font-bold bg-brand-teal hover:bg-brand-teal/90 text-white rounded-lg shadow-sm block text-center"
+                                      onClick={() => setEditingCellId(null)}
+                                    >
+                                      Done
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : row.type === "select" ? (
                                 <select
                                   autoFocus
                                   value={values[row.id] || "Active"}
@@ -1038,7 +1191,11 @@ export default function CompanyFinancePlanPage() {
                                 />
                               )
                             ) : (
-                              row.type === "multiple" ? (
+                              row.id.startsWith("ast_sw_") ? (
+                                <span className="text-slate-800 hover:text-brand-teal group-hover:underline group-hover:decoration-dotted">
+                                  {formatSoftwareDisplay(values[row.id])}
+                                </span>
+                              ) : row.type === "multiple" ? (
                                 <div className="flex items-center justify-end gap-2">
                                   <span className={`${
                                     Array.isArray(values[row.id]) && values[row.id].length > 0
