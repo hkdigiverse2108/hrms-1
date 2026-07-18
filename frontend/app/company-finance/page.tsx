@@ -48,6 +48,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import dayjs from "dayjs";
 import { exportToPDF, exportToExcel } from "@/lib/export-utils";
 import { cn } from "@/lib/utils";
 
@@ -77,6 +78,33 @@ interface BalanceData {
   bankOpeningBalance: number;
   cashOpeningBalance: number;
   year?: string;
+}
+
+function convertNumberToWords(num: number): string {
+  const a = [
+    '', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+    'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'
+  ];
+  const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+  const numToWords = (n: number): string => {
+    if (n < 20) return a[n];
+    if (n < 100) return b[Math.floor(n / 10)] + (n % 10 !== 0 ? ' ' + a[n % 10] : '');
+    if (n < 1000) return a[Math.floor(n / 100)] + ' Hundred' + (n % 100 !== 0 ? ' and ' + numToWords(n % 100) : '');
+    if (n < 100000) return numToWords(Math.floor(n / 1000)) + ' Thousand' + (n % 1000 !== 0 ? ' ' + numToWords(n % 1000) : '');
+    if (n < 10000000) return numToWords(Math.floor(n / 100000)) + ' Lakh' + (n % 100000 !== 0 ? ' ' + numToWords(n % 100000) : '');
+    return numToWords(Math.floor(n / 10000000)) + ' Crore' + (n % 10000000 !== 0 ? ' ' + numToWords(n % 10000000) : '');
+  };
+
+  const roundedNum = Math.floor(num);
+  const paisa = Math.round((num - roundedNum) * 100);
+  
+  let words = numToWords(roundedNum) + ' Rupees';
+  if (paisa > 0) {
+    words += ' and ' + numToWords(paisa) + ' Paisa';
+  }
+  words += ' Only';
+  return words;
 }
 
 export default function CompanyFinanceTransactionsPage() {
@@ -186,6 +214,31 @@ export default function CompanyFinanceTransactionsPage() {
     bankOpeningBalance: "0",
     cashOpeningBalance: "0",
   });
+
+  const [previewInvoiceId, setPreviewInvoiceId] = useState<string | null>(null);
+  const [previewInvoice, setPreviewInvoice] = useState<any>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+
+  useEffect(() => {
+    if (previewInvoiceId) {
+      const fetchPreview = async () => {
+        setLoadingPreview(true);
+        try {
+          const res = await fetch(`${API_URL}/invoices/${previewInvoiceId}`);
+          if (res.ok) {
+            setPreviewInvoice(await res.json());
+          }
+        } catch (err) {
+          console.error("Error fetching invoice preview:", err);
+        } finally {
+          setLoadingPreview(false);
+        }
+      };
+      fetchPreview();
+    } else {
+      setPreviewInvoice(null);
+    }
+  }, [previewInvoiceId]);
 
   useEffect(() => {
     fetchData();
@@ -1012,10 +1065,13 @@ export default function CompanyFinanceTransactionsPage() {
                         {activeTab === "bank" && (
                           <td className="px-3.5 py-3 font-bold text-slate-800">
                             {t.isSyncedInvoice ? (
-                              <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60 font-mono">
+                              <button 
+                                onClick={() => setPreviewInvoiceId(t.invoiceId || null)}
+                                className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 hover:text-emerald-800 hover:scale-105 cursor-pointer px-2 py-0.5 rounded-md border border-emerald-200/60 font-mono transition-all duration-200 shadow-none border-none outline-none"
+                              >
                                 {t.invoiceNumber || "INV"}
                                 <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                              </span>
+                              </button>
                             ) : (
                               <span className="font-mono text-slate-700">{t.invoiceNumber || "-"}</span>
                             )}
@@ -1643,6 +1699,127 @@ export default function CompanyFinanceTransactionsPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Invoice Preview Dialog */}
+      <Dialog open={!!previewInvoiceId} onOpenChange={(open) => !open && setPreviewInvoiceId(null)}>
+        <DialogContent className="max-w-[750px] max-h-[85vh] overflow-y-auto p-0 rounded-2xl border-slate-200 bg-white">
+          {loadingPreview ? (
+            <div className="flex flex-col items-center justify-center py-24 gap-3">
+              <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
+              <span className="text-xs text-slate-400 font-semibold">Fetching invoice details...</span>
+            </div>
+          ) : previewInvoice ? (
+            <div className="flex flex-col bg-white rounded-2xl overflow-hidden shadow-2xl p-6 md:p-8 space-y-6">
+              {/* Header */}
+              <div className="flex justify-between items-start border-b border-slate-100 pb-4">
+                <div>
+                  <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">
+                    {previewInvoice.invoiceType || "Tax Invoice"}
+                  </h3>
+                  <p className="text-xs text-slate-500 font-bold mt-1">
+                    Invoice No: <span className="font-mono text-slate-800">{previewInvoice.invoiceNumber}</span>
+                  </p>
+                  <p className="text-[11px] text-slate-400 font-medium mt-0.5">
+                    Date: {previewInvoice.issueDate ? dayjs(previewInvoice.issueDate).format('YYYY-MM-DD') : "-"}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <h4 className="font-bold text-slate-800 text-sm">Harikrushn DigiVerse LLP</h4>
+                  <p className="text-[10px] text-slate-500 max-w-[200px] leading-relaxed ml-auto">
+                    FLAT-204, WING-A, HARIKRUSHANA COMPLEX, KATARGAM, SURAT- 395004, GUJARAT.
+                  </p>
+                </div>
+              </div>
+
+              {/* Bill To */}
+              <div className="bg-slate-50 rounded-xl p-4 border border-slate-100/80 flex flex-col md:flex-row justify-between gap-4">
+                <div>
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Bill To</span>
+                  <h5 className="font-extrabold text-slate-800 text-xs">{previewInvoice.clientName}</h5>
+                  {previewInvoice.clientAddress && (
+                    <p className="text-[11px] text-slate-500 mt-1 max-w-[280px] leading-normal">{previewInvoice.clientAddress}</p>
+                  )}
+                </div>
+                <div className="text-left md:text-right space-y-0.5">
+                  {previewInvoice.clientGstin && (
+                    <p className="text-xs text-slate-500">
+                      GSTIN: <span className="font-mono font-bold text-slate-700">{previewInvoice.clientGstin}</span>
+                    </p>
+                  )}
+                  {previewInvoice.clientPhone && (
+                    <p className="text-xs text-slate-500">
+                      Phone: <span className="font-bold text-slate-700">{previewInvoice.clientPhone}</span>
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Line Items */}
+              <div className="border border-slate-100 rounded-xl overflow-hidden">
+                <table className="w-full text-xs text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 font-extrabold">
+                      <th className="px-4 py-2.5">Description</th>
+                      <th className="px-4 py-2.5 text-right w-[80px]">Qty</th>
+                      <th className="px-4 py-2.5 text-right w-[100px]">Rate</th>
+                      <th className="px-4 py-2.5 text-right w-[120px]">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700">
+                    {previewInvoice.lineItems?.map((item: any, idx: number) => (
+                      <tr key={idx} className="hover:bg-slate-50/50">
+                        <td className="px-4 py-3">
+                          <p className="font-bold text-slate-800">{item.description}</p>
+                          {item.subDescription && (
+                            <p className="text-[10px] text-slate-400 mt-0.5 leading-normal">{item.subDescription}</p>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right font-semibold">{item.qty}</td>
+                        <td className="px-4 py-3 text-right font-semibold">₹{item.rate?.toLocaleString("en-IN")}</td>
+                        <td className="px-4 py-3 text-right font-bold">₹{(item.qty * item.rate).toLocaleString("en-IN")}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Totals */}
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pt-4 border-t border-slate-100">
+                <div className="max-w-[340px]">
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Amount In Words</span>
+                  <p className="text-[11px] font-semibold text-slate-500 italic leading-snug">
+                    {convertNumberToWords(previewInvoice.total)}
+                  </p>
+                </div>
+                <div className="w-full md:w-[240px] space-y-1.5 text-xs text-slate-600 font-semibold">
+                  <div className="flex justify-between">
+                    <span>Subtotal</span>
+                    <span>₹{previewInvoice.subtotal?.toLocaleString("en-IN")}</span>
+                  </div>
+                  {previewInvoice.discount > 0 && (
+                    <div className="flex justify-between text-rose-600">
+                      <span>Discount</span>
+                      <span>-₹{previewInvoice.discount?.toLocaleString("en-IN")}</span>
+                    </div>
+                  )}
+                  {previewInvoice.tax > 0 && (
+                    <div className="flex justify-between">
+                      <span>Tax ({previewInvoice.tax}%)</span>
+                      <span>₹{(previewInvoice.subtotal * (previewInvoice.tax / 100))?.toLocaleString("en-IN")}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between border-t border-slate-100 pt-2 text-sm font-black text-slate-900">
+                    <span>Grand Total</span>
+                    <span className="text-emerald-600">₹{previewInvoice.total?.toLocaleString("en-IN")}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-12 text-slate-400 font-semibold text-xs">Failed to load preview</div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
