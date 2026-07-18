@@ -240,12 +240,17 @@ export default function CompanyFinanceSummaryPage() {
     const mm = String(d.getMonth() + 1).padStart(2, "0");
     return [`${d.getFullYear()}-${mm}`];
   });
+  const sortedMonths = useMemo(() => {
+    return [...selectedMonths].sort();
+  }, [selectedMonths]);
   const [showMonthDropdown, setShowMonthDropdown] = useState(false);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [assets, setAssets] = useState<any[]>([]);
   const [jobOpenings, setJobOpenings] = useState<any[]>([]);
   const [planValues, setPlanValues] = useState<Record<string, any>>({});
+  const [plansByMonth, setPlansByMonth] = useState<Record<string, any>>({});
+  const [overridesByMonth, setOverridesByMonth] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
 
   const [rows, setRows] = useState<RowDefinition[]>(PLAN_ROWS);
@@ -546,6 +551,15 @@ export default function CompanyFinanceSummaryPage() {
         Promise.all(selectedMonths.map(m => fetch(`${API_URL}/company-finance/monthly-plans/${m}`).then(r => r.ok ? r.json() : {}))),
         Promise.all(selectedMonths.map(m => fetch(`${API_URL}/company-finance/actual-overrides/${m}`).then(r => r.ok ? r.json() : {})))
       ]);
+
+      const plansMap: Record<string, any> = {};
+      const overridesMap: Record<string, any> = {};
+      selectedMonths.forEach((m, idx) => {
+        plansMap[m] = plansArray[idx] || {};
+        overridesMap[m] = overridesArray[idx] || {};
+      });
+      setPlansByMonth(plansMap);
+      setOverridesByMonth(overridesMap);
 
       const aggregatedOverrides: Record<string, any> = {};
       overridesArray.forEach((o: any) => {
@@ -878,6 +892,254 @@ export default function CompanyFinanceSummaryPage() {
     return computed;
   }, [planValues, rows]);
 
+  const evaluatedPlanValuesByMonth = useMemo(() => {
+    const scale = getScaleFactor();
+    const result: Record<string, Record<string, any>> = {};
+
+    selectedMonths.forEach((monthStr) => {
+      const p = plansByMonth[monthStr] || {};
+      const rawPlan = p.values || {};
+      const computed: Record<string, any> = {};
+
+      Object.entries(rawPlan).forEach(([k, v]) => {
+        if (Array.isArray(v)) {
+          computed[k] = v.map((item: any) => {
+            const scaledRate = String(parseFloat(item.rate || 0) / scale);
+            return { ...item, rate: scaledRate };
+          });
+        } else if (v !== undefined && v !== null && v !== "" && !isNaN(parseFloat(String(v)))) {
+          computed[k] = parseFloat(String(v)) / scale;
+        } else {
+          computed[k] = v;
+        }
+      });
+
+      for (let pass = 0; pass < 3; pass++) {
+        rows.forEach((row) => {
+          if (row.type === "formula" && row.formula) {
+            computed[row.id] = row.formula(computed);
+          }
+        });
+      }
+
+      result[monthStr] = computed;
+    });
+
+    return result;
+  }, [plansByMonth, selectedMonths, rows, settings]);
+
+  const actualValuesByMonth = useMemo(() => {
+    const scale = getScaleFactor();
+    const result: Record<string, Record<string, any>> = {};
+
+    selectedMonths.forEach((monthStr) => {
+      const computed: Record<string, any> = {};
+      const monthlyTxs = transactions.filter((tx) => tx.date && tx.date.substring(0, 7) === monthStr);
+
+      const [targetYear, targetMonth] = monthStr.split("-").map(Number);
+      const monthStart = new Date(targetYear, targetMonth - 1, 1);
+      const monthEnd = new Date(targetYear, targetMonth, 0, 23, 59, 59);
+
+      const activeEmployees = employees.filter((emp) => {
+        if (emp.status === "inactive") {
+          const resignationDate = emp.resignationDate ? new Date(emp.resignationDate) : null;
+          if (resignationDate && resignationDate < monthStart) return false;
+        }
+        const joinDate = emp.joinDate ? new Date(emp.joinDate) : null;
+        if (joinDate && joinDate > monthEnd) return false;
+        return true;
+      });
+
+      const newHires = activeEmployees.filter((emp) => {
+        if (!emp.joinDate) return false;
+        const joinDate = new Date(emp.joinDate);
+        return joinDate >= monthStart && joinDate <= monthEnd;
+      });
+
+      let payroll = 0;
+      activeEmployees.forEach((emp) => {
+        payroll += parseFloat(emp.salary) || 0;
+      });
+
+      let newHiresPayroll = 0;
+      newHires.forEach((emp) => {
+        newHiresPayroll += parseFloat(emp.salary) || 0;
+      });
+
+      const activeAssets = assets.filter((ast) => (ast.status || "").toLowerCase() !== "maintenance");
+
+      let devs = 0, creative = 0, mkt = 0, bde = 0, call = 0, qa = 0, hr = 0;
+      activeEmployees.forEach((emp) => {
+        const dept = (emp.department || "").toLowerCase().trim();
+        if (dept.includes("dev")) devs++;
+        else if (dept.includes("creative") || dept.includes("design") || dept.includes("graphics")) creative++;
+        else if (dept.includes("market") || dept.includes("mkt") || dept.includes("smm")) mkt++;
+        else if (dept.includes("bde") || dept.includes("sales") || dept.includes("business")) bde++;
+        else if (dept.includes("call") || dept.includes("telecall")) call++;
+        else if (dept.includes("qa") || dept.includes("test")) qa++;
+        else if (dept.includes("hr") || dept.includes("recruiter")) hr++;
+      });
+
+      let ac = 0, chair = 0, table = 0, fans = 0, cards = 0, tv = 0;
+      let cpu = 0, display = 0, keyboard = 0, phone = 0, headset = 0, laptop = 0;
+      let sw_chatgpt_go = "Inactive", sw_google_ai = "Inactive", sw_heygen = "Inactive",
+          sw_vasyerp = "Inactive", sw_filmora = "Inactive", sw_suno_ai = "Inactive",
+          sw_vps = "Inactive", sw_chatgpt_plus = "Inactive";
+
+      activeAssets.forEach((asset) => {
+        const name = (asset.name || "").toLowerCase();
+        const cat = (asset.category || "").toLowerCase();
+        const text = `${name} ${cat}`;
+
+        if (text.includes("air conditioner") || cat === "ac" || name === "ac") ac++;
+        else if (text.includes("chair")) chair++;
+        else if (text.includes("table") || text.includes("desk")) table++;
+        else if (text.includes("fan")) fans++;
+        else if (text.includes("parking card")) cards++;
+        else if (text.includes("tv") || text.includes("television")) tv++;
+        else if (text.includes("cpu")) cpu++;
+        else if (text.includes("display") || text.includes("monitor")) display++;
+        else if (text.includes("keyboard") || text.includes("mouse")) keyboard++;
+        else if (text.includes("phone") || text.includes("mobile")) phone++;
+        else if (text.includes("headset") || text.includes("headphone")) headset++;
+        else if (text.includes("laptop")) laptop++;
+
+        if (text.includes("chatgpt go") || text.includes("chat gpt go")) sw_chatgpt_go = "Active";
+        else if (text.includes("google ai")) sw_google_ai = "Active";
+        else if (text.includes("heygen")) sw_heygen = "Active";
+        else if (text.includes("vasyerp") || text.includes("vasy erp")) sw_vasyerp = "Active";
+        else if (text.includes("filmora")) sw_filmora = "Active";
+        else if (text.includes("suno")) sw_suno_ai = "Active";
+        else if (text.includes("vps")) sw_vps = "Active";
+        else if (text.includes("chatgpt plus") || text.includes("chat gpt plus")) sw_chatgpt_plus = "Active";
+      });
+
+      rows.forEach((row) => {
+        if (row.id.startsWith("rev_bef_revenue")) {
+          computed[row.id] = monthlyTxs.filter((t) => t.type === "credit" && t.category?.toLowerCase().includes("bef")).reduce((sum, t) => sum + (t.amount || 0), 0);
+        } else if (row.id.startsWith("rev_bef_acquisitions")) {
+          computed[row.id] = monthlyTxs.filter((t) => t.type === "credit" && t.category?.toLowerCase().includes("bef")).length;
+        } else if (row.id.startsWith("rev_erp_revenue")) {
+          computed[row.id] = monthlyTxs.filter((t) => t.type === "credit" && (t.category?.toLowerCase().includes("erp") || t.category?.toLowerCase().includes("ai"))).reduce((sum, t) => sum + (t.amount || 0), 0);
+        } else if (row.id.startsWith("rev_erp_acquisitions")) {
+          computed[row.id] = monthlyTxs.filter((t) => t.type === "credit" && (t.category?.toLowerCase().includes("erp") || t.category?.toLowerCase().includes("ai"))).length;
+        } else if (row.id.startsWith("rev_course_revenue")) {
+          computed[row.id] = monthlyTxs.filter((t) => t.type === "credit" && (t.category?.toLowerCase().includes("course") || t.category?.toLowerCase().includes("client") || t.category?.toLowerCase().includes("hk"))).reduce((sum, t) => sum + (t.amount || 0), 0);
+        } else if (row.id.startsWith("rev_course_acquisitions")) {
+          computed[row.id] = monthlyTxs.filter((t) => t.type === "credit" && (t.category?.toLowerCase().includes("course") || t.category?.toLowerCase().includes("client") || t.category?.toLowerCase().includes("hk"))).length;
+        }
+
+        else if (row.id === "exp_capex_digital_onetime") {
+          computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("capex") && t.category?.toLowerCase().includes("digital") && t.category?.toLowerCase().includes("one")).reduce((sum, t) => sum + (t.amount || 0), 0);
+        } else if (row.id === "exp_capex_architecture_onetime") {
+          computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("capex") && t.category?.toLowerCase().includes("architecture") && t.category?.toLowerCase().includes("one")).reduce((sum, t) => sum + (t.amount || 0), 0);
+        } else if (row.id === "exp_capex_digital") {
+          computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("capex") && t.category?.toLowerCase().includes("digital") && !t.category?.toLowerCase().includes("one")).reduce((sum, t) => sum + (t.amount || 0), 0);
+        } else if (row.id === "exp_capex_architecture") {
+          computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("capex") && t.category?.toLowerCase().includes("architecture") && !t.category?.toLowerCase().includes("one")).reduce((sum, t) => sum + (t.amount || 0), 0);
+        }
+        
+        else if (row.id === "exp_opex_rent") {
+          computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("rent")).reduce((sum, t) => sum + (t.amount || 0), 0);
+        } else if (row.id === "exp_opex_maintenance") {
+          computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("maintenance")).reduce((sum, t) => sum + (t.amount || 0), 0);
+        } else if (row.id === "exp_opex_electricity") {
+          computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("electricity")).reduce((sum, t) => sum + (t.amount || 0), 0);
+        } else if (row.id === "exp_opex_internet") {
+          computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && (t.category?.toLowerCase().includes("internet") || t.category?.toLowerCase().includes("communication"))).reduce((sum, t) => sum + (t.amount || 0), 0);
+        } else if (row.id === "exp_opex_refreshments") {
+          computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("refreshment")).reduce((sum, t) => sum + (t.amount || 0), 0);
+        } else if (row.id === "exp_opex_cleaning") {
+          computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("cleaning")).reduce((sum, t) => sum + (t.amount || 0), 0);
+        }
+        
+        else if (row.id === "exp_salary_current") computed[row.id] = payroll;
+        else if (row.id === "exp_salary_new") computed[row.id] = newHiresPayroll;
+        
+        else if (row.id === "exp_mkt_digital") {
+          computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("marketing") && t.category?.toLowerCase().includes("digital")).reduce((sum, t) => sum + (t.amount || 0), 0);
+        } else if (row.id === "exp_mkt_collab") {
+          computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("collaboration")).reduce((sum, t) => sum + (t.amount || 0), 0);
+        } else if (row.id === "exp_ops_misc") {
+          computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("miscellaneous")).reduce((sum, t) => sum + (t.amount || 0), 0);
+        } else if (row.id === "exp_ops_travel") {
+          computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("travel")).reduce((sum, t) => sum + (t.amount || 0), 0);
+        }
+        
+        else if (row.id === "cf_opening") {
+          const prevMonthStr = getPreviousMonthString(monthStr);
+          const prevMonthTxs = transactions.filter((t) => t.date && t.date.substring(0, 7) === prevMonthStr);
+          const prevCredits = prevMonthTxs.filter((t) => t.type === "credit").reduce((sum, t) => sum + (t.amount || 0), 0);
+          const prevDebits = prevMonthTxs.filter((t) => t.type === "debit").reduce((sum, t) => sum + (t.amount || 0), 0);
+          computed[row.id] = prevCredits - prevDebits;
+        }
+        else if (row.id === "cf_cash") {
+          computed[row.id] = monthlyTxs.filter((t) => t.paymentMethod?.toLowerCase() === "cash").reduce((sum, t) => sum + (t.type === "credit" ? t.amount : -t.amount), 0);
+        }
+        
+        else if (row.id === "stf_devs") computed[row.id] = devs;
+        else if (row.id === "stf_creative") computed[row.id] = creative;
+        else if (row.id === "stf_mkt") computed[row.id] = mkt;
+        else if (row.id === "stf_bde") computed[row.id] = bde;
+        else if (row.id === "stf_call") computed[row.id] = call;
+        else if (row.id === "stf_qa") computed[row.id] = qa;
+        else if (row.id === "stf_hr") computed[row.id] = hr;
+        else if (row.id === "stf_open") computed[row.id] = jobOpenings.filter((job) => (job.status || "").toLowerCase() === "active").length;
+        else if (row.id === "stf_payroll") computed[row.id] = payroll;
+        
+        else if (row.id === "ast_phy_ac") computed[row.id] = ac;
+        else if (row.id === "ast_phy_chair") computed[row.id] = chair;
+        else if (row.id === "ast_phy_table") computed[row.id] = table;
+        else if (row.id === "ast_phy_fans") computed[row.id] = fans;
+        else if (row.id === "ast_phy_cards") computed[row.id] = cards;
+        else if (row.id === "ast_phy_tv") computed[row.id] = tv;
+        
+        else if (row.id === "ast_dig_cpu") computed[row.id] = cpu;
+        else if (row.id === "ast_dig_display") computed[row.id] = display;
+        else if (row.id === "ast_dig_keyboard") computed[row.id] = keyboard;
+        else if (row.id === "ast_dig_phone") computed[row.id] = phone;
+        else if (row.id === "ast_dig_headset") computed[row.id] = headset;
+        else if (row.id === "ast_dig_laptop") computed[row.id] = laptop;
+        
+        else if (row.id === "ast_sw_chatgpt_go") computed[row.id] = sw_chatgpt_go;
+        else if (row.id === "ast_sw_google_ai") computed[row.id] = sw_google_ai;
+        else if (row.id === "ast_sw_heygen") computed[row.id] = sw_heygen;
+        else if (row.id === "ast_sw_vasyerp") computed[row.id] = sw_vasyerp;
+        else if (row.id === "ast_sw_filmora") computed[row.id] = sw_filmora;
+        else if (row.id === "ast_sw_suno_ai") computed[row.id] = sw_suno_ai;
+        else if (row.id === "ast_sw_vps") computed[row.id] = sw_vps;
+        else if (row.id === "ast_sw_chatgpt_plus") computed[row.id] = sw_chatgpt_plus;
+      });
+
+      Object.keys(computed).forEach((k) => {
+        const val = computed[k];
+        if (typeof val === "number") {
+          computed[k] = val / scale;
+        }
+      });
+
+      const overrideObj = overridesByMonth[monthStr] || {};
+      const rawOverrides = overrideObj.values || {};
+      Object.entries(rawOverrides).forEach(([key, val]) => {
+        if (val !== undefined && val !== null && val !== "") {
+          computed[key] = isNaN(parseFloat(String(val))) ? val : parseFloat(String(val)) / scale;
+        }
+      });
+
+      for (let pass = 0; pass < 3; pass++) {
+        rows.forEach((row) => {
+          if (row.type === "formula" && row.formula) {
+            computed[row.id] = row.formula(computed);
+          }
+        });
+      }
+
+      result[monthStr] = computed;
+    });
+
+    return result;
+  }, [transactions, employees, assets, jobOpenings, selectedMonths, rows, overridesByMonth, settings]);
+
   // Group by category
   const groupedRows = useMemo(() => {
     const groups: Record<string, RowDefinition[]> = {};
@@ -1134,13 +1396,24 @@ export default function CompanyFinanceSummaryPage() {
                   <th className="px-4 py-3 border-r border-red-800/30">Sub-Category</th>
                   <th className="px-4 py-3 border-r border-red-800/30">Metric</th>
                   <th className="px-4 py-3 border-r border-red-800/30">Unit</th>
+                  {selectedMonths.length > 1 && sortedMonths.map((m) => {
+                    const monthLabel = monthOptions.find((opt) => opt.value === m)?.label || m;
+                    return (
+                      <React.Fragment key={m}>
+                        <th className="px-4 py-3 text-right border-r border-red-800/30 w-[150px]">{monthLabel} Plan</th>
+                        <th className="px-4 py-3 text-right border-r border-red-800/30 w-[150px]">{monthLabel} Actual</th>
+                      </React.Fragment>
+                    );
+                  })}
                   <th className="px-4 py-3 text-right border-r border-red-800/30 w-[180px]">
-                    {selectedMonths.length === 1 ? `${selectedMonths[0]} Plan` : "Plan (Aggregated)"}
+                    {selectedMonths.length === 1 ? `${selectedMonths[0]} Plan` : "Combined Plan"}
                   </th>
                   <th className="px-4 py-3 text-right border-r border-red-800/30 w-[180px]">
-                    {selectedMonths.length === 1 ? `${selectedMonths[0]} Actual` : "Actual (Aggregated)"}
+                    {selectedMonths.length === 1 ? `${selectedMonths[0]} Actual` : "Combined Actual"}
                   </th>
-                  <th className="px-4 py-3 text-right border-r border-red-800/30 w-[150px]">Variance</th>
+                  <th className="px-4 py-3 text-right border-r border-red-800/30 w-[150px]">
+                    {selectedMonths.length === 1 ? "Variance" : "Overall Variance"}
+                  </th>
                   <th className="px-4 py-3 w-[60px] text-center">Actions</th>
                 </tr>
               </thead>
@@ -1148,7 +1421,7 @@ export default function CompanyFinanceSummaryPage() {
                 {Object.entries(groupedRows).map(([categoryName, rows]) => (
                   <React.Fragment key={categoryName}>
                     <tr className="bg-slate-100/90 font-extrabold text-slate-700 group">
-                      <td colSpan={8} className="px-4 py-2 uppercase tracking-wide border-y border-slate-300">
+                      <td colSpan={8 + (selectedMonths.length > 1 ? sortedMonths.length * 2 : 0)} className="px-4 py-2 uppercase tracking-wide border-y border-slate-300">
                         <div className="flex items-center justify-between">
                           <span>{categoryName}</span>
                           <button
@@ -1215,6 +1488,27 @@ export default function CompanyFinanceSummaryPage() {
                             {row.id.startsWith("ast_sw_") ? "Software Status" : (row.type === "select" ? (planVal || "Active") : row.unit)}
                           </td>
                           
+                          {selectedMonths.length > 1 && sortedMonths.map((m) => {
+                            const monthPlan = evaluatedPlanValuesByMonth[m]?.[row.id];
+                            const monthActual = actualValuesByMonth[m]?.[row.id];
+                            return (
+                              <React.Fragment key={m}>
+                                <td className="px-4 py-2.5 text-right border-r border-slate-100 font-bold text-slate-700 bg-slate-50/30">
+                                  {row.id.startsWith("ast_sw_") ? (
+                                    formatSoftwareDisplay(monthPlan)
+                                  ) : row.type === "multiple" && Array.isArray(monthPlan) ? (
+                                    formatVal(monthPlan.reduce((sum: number, it: any) => sum + (parseFloat(it.qty) * parseFloat(it.rate) || 0), 0), row.unit)
+                                  ) : (
+                                    formatVal(monthPlan, row.unit)
+                                  )}
+                                </td>
+                                <td className="px-4 py-2.5 text-right border-r border-slate-100 font-extrabold text-slate-800 bg-slate-50/50">
+                                  {formatVal(monthActual, row.unit)}
+                                </td>
+                              </React.Fragment>
+                            );
+                          })}
+
                           <td className="px-4 py-2.5 text-right border-r border-slate-100 font-bold text-slate-800">
                             {row.id.startsWith("ast_sw_") ? (
                               formatSoftwareDisplay(planVal)
@@ -1233,10 +1527,10 @@ export default function CompanyFinanceSummaryPage() {
 
                           <td 
                             className={`px-4 py-1.5 text-right border-r border-slate-100 font-extrabold w-[240px] select-none relative ${
-                              row.type !== "formula" ? "cursor-pointer hover:bg-slate-50/80 transition-colors group" : ""
+                              selectedMonths.length === 1 && row.type !== "formula" ? "cursor-pointer hover:bg-slate-50/80 transition-colors group" : ""
                             }`}
                             onDoubleClick={() => {
-                              if (row.type !== "formula") {
+                              if (selectedMonths.length === 1 && row.type !== "formula") {
                                 setEditingCellId(row.id);
                               }
                             }}
@@ -1343,7 +1637,7 @@ export default function CompanyFinanceSummaryPage() {
                                   </button>
                                 )}
                                 <span className={`${
-                                  actualOverrides[row.id] !== undefined 
+                                  selectedMonths.length === 1 && actualOverrides[row.id] !== undefined 
                                     ? "text-blue-600 underline decoration-dotted font-black" 
                                     : row.type !== "formula" 
                                       ? "text-slate-800 hover:text-blue-600 group-hover:underline group-hover:decoration-dotted" 
