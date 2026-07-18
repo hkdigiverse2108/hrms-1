@@ -34,12 +34,26 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
   });
 
   const [projects, setProjects] = useState<any[]>([]);
+  const [globalTasks, setGlobalTasks] = useState<any[]>([]);
+  const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
+    setIsClient(true);
     fetchPresets();
     fetchProjects();
     fetchEmployees();
+    fetchGlobalTasks();
   }, []);
+
+  const fetchGlobalTasks = async () => {
+    try {
+      const res = await fetch(`${API_URL}/wm-tasks`);
+      if (res.ok) {
+        const data = await res.json();
+        setGlobalTasks(Array.isArray(data) ? data : data.value || []);
+      }
+    } catch (err) {}
+  };
 
   const fetchPresets = async () => {
     try {
@@ -441,74 +455,122 @@ export function TaskPresetsView({ onBack }: { onBack?: () => void }) {
           </div>
         ) : (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm flex-1 flex flex-col overflow-hidden">
-            <Table>
-              <TableHeader className="bg-slate-50">
-                <TableRow>
-                  <TableHead className="font-bold">Preset Name</TableHead>
-                  <TableHead className="font-bold">Description</TableHead>
-                  <TableHead className="font-bold text-center">{activeTab === "normal" ? "Modules" : "Tasks"}</TableHead>
-                  <TableHead className="font-bold text-center">Total Duration</TableHead>
-                  <TableHead className="text-right font-bold">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {presets.filter(p => (p.presetType || "intern") === activeTab).length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-slate-500">
-                      No presets found. Create one to get started!
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  presets.filter(p => (p.presetType || "intern") === activeTab).map((preset) => (
-                    <TableRow key={preset._id || preset.id}>
-                      <TableCell className="font-semibold text-slate-900">{preset.name}</TableCell>
-                      <TableCell className="text-slate-500">{preset.description || "-"}</TableCell>
-                      <TableCell className="text-center">
-                        <span className="bg-brand-teal/10 text-brand-teal px-2.5 py-1 rounded-full text-xs font-bold">
-                          {activeTab === "normal" ? `${preset.modules?.length || 0} modules` : `${preset.tasks?.length || 0} tasks`}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-center text-xs font-semibold text-slate-600">
-                        {(() => {
-                          let totalMinutes = 0;
-                          if (activeTab === "intern" && preset.tasks) {
-                            totalMinutes = preset.tasks.reduce((sum: number, t: any) => sum + (parseFloat(t.estimatedHours || 0) * 60) + parseFloat(t.estimatedMinutes || 0), 0);
-                          } else if (activeTab === "normal" && preset.modules) {
-                            preset.modules.forEach((mod: any) => {
-                              if (mod.tasks) {
-                                totalMinutes += mod.tasks.reduce((sum: number, t: any) => sum + (parseFloat(t.estimatedHours || 0) * 60) + parseFloat(t.estimatedMinutes || 0), 0);
-                              }
-                            });
-                          }
+            <div className="p-4 bg-slate-50/50 flex-1 overflow-y-auto">
+              {presets.filter(p => (p.presetType || "intern") === activeTab).length === 0 ? (
+                <div className="flex justify-center items-center h-40 text-slate-500">
+                  No presets found. Create one to get started!
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                  {presets.filter(p => (p.presetType || "intern") === activeTab).map((preset) => {
+                    let totalMinutes = 0;
+                    let allTasks: any[] = [];
+                    if (activeTab === "intern" && preset.tasks) {
+                      allTasks = preset.tasks;
+                      totalMinutes = preset.tasks.reduce((sum: number, t: any) => sum + (parseFloat(t.estimatedHours || 0) * 60) + parseFloat(t.estimatedMinutes || 0), 0);
+                    } else if (activeTab === "normal" && preset.modules) {
+                      allTasks = preset.modules.flatMap((m: any) => m.tasks || []);
+                      preset.modules.forEach((mod: any) => {
+                        if (mod.tasks) {
+                          totalMinutes += mod.tasks.reduce((sum: number, t: any) => sum + (parseFloat(t.estimatedHours || 0) * 60) + parseFloat(t.estimatedMinutes || 0), 0);
+                        }
+                      });
+                    }
+
+                    return (
+                      <div key={preset._id || preset.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-md transition-shadow flex flex-col">
+                        <div className="p-5 border-b border-slate-100 flex-1">
+                          <div className="flex justify-between items-start mb-2">
+                            <h3 className="font-bold text-lg text-slate-900">{preset.name}</h3>
+                            <span className="bg-brand-teal/10 text-brand-teal px-2.5 py-1 rounded-full text-[10px] font-bold shrink-0">
+                              {activeTab === "normal" ? `${preset.modules?.length || 0} modules` : `${preset.tasks?.length || 0} tasks`}
+                            </span>
+                          </div>
+                          {preset.description && <p className="text-sm text-slate-500 line-clamp-2 mb-4">{preset.description}</p>}
                           
-                          if (totalMinutes > 0) {
-                            const h = Math.floor(totalMinutes / 60);
-                            const m = Math.floor(totalMinutes % 60);
-                            return (
-                              <span className="bg-amber-50 text-amber-600 border border-amber-200 px-2 py-0.5 rounded-md">
-                                {h > 0 ? `${h}h ` : ""}{m > 0 ? `${m}m` : ""}
+                          <div className="space-y-2 mt-4">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Total Duration</span>
+                              <span className="text-xs font-bold text-amber-600">
+                                {totalMinutes > 0 ? (
+                                  <>
+                                    {Math.floor(totalMinutes / 60) > 0 ? `${Math.floor(totalMinutes / 60)}h ` : ""}
+                                    {Math.floor(totalMinutes % 60) > 0 ? `${Math.floor(totalMinutes % 60)}m` : ""}
+                                  </>
+                                ) : "-"}
                               </span>
+                            </div>
+                            
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Total Tasks</span>
+                              <span className="text-xs font-bold text-slate-700">
+                                {allTasks.length}
+                              </span>
+                            </div>
+                          </div>
+                          
+                          {isClient && activeTab === "intern" && (() => {
+                            let assignedIds: string[] = [];
+                            try {
+                              const local = localStorage.getItem(`preset_assigned_${preset._id || preset.id}`);
+                              if (local) assignedIds = JSON.parse(local);
+                            } catch(e) {}
+                            
+                            if (assignedIds.length === 0) return null;
+                            
+                            return (
+                              <div className="mt-5 pt-4 border-t border-slate-100 space-y-3">
+                                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-2">Intern Progress</span>
+                                <div className="space-y-3">
+                                  {assignedIds.map(empId => {
+                                    const emp = employees.find((e: any) => e.id === empId);
+                                    const empName = emp ? `${emp.firstName} ${emp.lastName}` : "Unknown Intern";
+                                    const presetTaskTitles = allTasks.map((t: any) => t.title);
+                                    
+                                    const eTasks = globalTasks.filter((t: any) => t.assignedToId === empId && presetTaskTitles.includes(t.title));
+                                    const completedTasks = eTasks.filter((t: any) => t.status === "completed").length;
+                                    const totalPresetTasks = allTasks.length;
+                                    
+                                    const percent = totalPresetTasks > 0 ? Math.round((completedTasks / totalPresetTasks) * 100) : 0;
+                                    
+                                    return (
+                                      <div key={empId} className="space-y-1.5">
+                                        <div className="flex justify-between items-center text-xs mb-1">
+                                          <span className="font-medium text-slate-700 truncate pr-2">{empName}</span>
+                                          <span className={`font-semibold shrink-0 text-[10px] ${percent === 100 ? 'text-green-600' : 'text-slate-500'}`}>{completedTasks}/{totalPresetTasks} ({percent}%)</span>
+                                        </div>
+                                        <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                                          <div 
+                                            className={`h-full rounded-full transition-all duration-500 ${percent === 100 ? 'bg-green-500' : 'bg-brand-teal'}`}
+                                            style={{ width: `${percent}%` }}
+                                          />
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
                             );
-                          }
-                          return "-";
-                        })()}
-                      </TableCell>
-                      <TableCell className="text-right space-x-2">
-                        <Button variant="outline" size="sm" onClick={() => openAssignModal(preset)} title="Assign Preset">
-                          <UserPlus className="w-4 h-4 text-brand-teal" />
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => openModal(preset)}>
-                          <Edit2 className="w-4 h-4 text-slate-600" />
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => deletePreset(preset._id || preset.id)}>
-                          <Trash2 className="w-4 h-4 text-red-500" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                          })()}
+                        </div>
+                        
+                        <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
+                          <Button variant="outline" size="sm" onClick={() => openAssignModal(preset)} title="Assign Preset" className="h-8 hover:bg-brand-teal/10 hover:text-brand-teal hover:border-brand-teal/30">
+                            <UserPlus className="w-4 h-4 mr-1.5" /> Assign
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => openModal(preset)} className="h-8 hover:bg-slate-200">
+                            <Edit2 className="w-4 h-4" />
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => deletePreset(preset._id || preset.id)} className="h-8 hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-slate-500">
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         )}
         </>

@@ -227,7 +227,16 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
   };
 
   const handleChange = (field: keyof ProjectFormData, value: any) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFormData((prev) => {
+      const newData = { ...prev, [field]: value };
+      if (field === "department") {
+        const isDev = typeof value === "string" && (value.toLowerCase() === "development" || value.toLowerCase().includes("dev"));
+        if (isDev && !["in-progress", "on-hold", "completed", "testing"].includes(newData.status as string)) {
+          newData.status = "in-progress";
+        }
+      }
+      return newData;
+    });
   };
 
   const handleAddPhase = () => {
@@ -482,13 +491,20 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="planning">Planning</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="in-progress">In Progress</SelectItem>
-              <SelectItem value="on-hold">On Hold</SelectItem>
-              <SelectItem value="rejected">Rejected</SelectItem>
-              {(!formData.department || formData.department.toLowerCase() === "development" || formData.department.toLowerCase().includes("dev")) && (isAdmin || currentUser?.role?.toLowerCase() === "cto" || formData.teamLeaderId === currentUser?.id || formData.status === "testing" || formData.status === "completed") && (
+              {formData.department?.toLowerCase() === "development" || formData.department?.toLowerCase().includes("dev") ? (
                 <>
+                  <SelectItem value="in-progress">In Progress</SelectItem>
+                  <SelectItem value="on-hold">On Hold</SelectItem>
+                  {(formData.status === "testing") && <SelectItem value="testing" disabled>Testing Phase</SelectItem>}
+                  <SelectItem value="completed" disabled={!isAdmin && currentUser?.role?.toLowerCase() !== "cto"}>Completed</SelectItem>
+                </>
+              ) : (
+                <>
+                  <SelectItem value="planning">Planning</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="in-progress">In Progress</SelectItem>
+                  <SelectItem value="on-hold">On Hold</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
                   <SelectItem value="testing" disabled={!isAdmin && currentUser?.role?.toLowerCase() !== "cto" && formData.teamLeaderId !== currentUser?.id}>Testing Phase</SelectItem>
                   <SelectItem value="completed" disabled={!isAdmin && currentUser?.role?.toLowerCase() !== "cto"}>Completed</SelectItem>
                 </>

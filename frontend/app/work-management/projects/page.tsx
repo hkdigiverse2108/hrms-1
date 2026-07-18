@@ -510,6 +510,31 @@ export default function ProjectsPage() {
     const matchesCompany = selectedCompany === "all" || p.clientName === selectedCompany;
 
     return matchesSearch && matchesDept && matchesStatus && matchesPriority && matchesCompany;
+  }).sort((a, b) => {
+    const isDev = selectedDept.toLowerCase() === "development" || selectedDept.toLowerCase().includes("dev");
+    if (isDev) {
+      const statusOrder: Record<string, number> = {
+        "in-progress": 1,
+        "on-hold": 2,
+        "completed": 3,
+      };
+      
+      const statusA = a.status?.toLowerCase() || "";
+      const statusB = b.status?.toLowerCase() || "";
+      
+      const orderA = statusOrder[statusA] || 99;
+      const orderB = statusOrder[statusB] || 99;
+      
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+      
+      const progressA = getProjectStats(a).percent;
+      const progressB = getProjectStats(b).percent;
+      
+      return progressB - progressA;
+    }
+    return 0;
   });
 
   const uniqueCompanies = Array.from(new Set(projects.map(p => p.clientName).filter(Boolean))).sort();
@@ -1069,13 +1094,21 @@ export default function ProjectsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="planning">Planning</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="on-hold">On Hold</SelectItem>
-              {(selectedDept === "all" || selectedDept.toLowerCase() === "development" || selectedDept.toLowerCase().includes("dev")) && (
+              {(selectedDept.toLowerCase() === "development" || selectedDept.toLowerCase().includes("dev")) ? (
                 <>
-                  <SelectItem value="testing">Testing</SelectItem>
+                  <SelectItem value="in-progress">In Progress</SelectItem>
+                  <SelectItem value="on-hold">On Hold</SelectItem>
                   <SelectItem value="completed">Completed</SelectItem>
+                </>
+              ) : (
+                <>
+                  <SelectItem value="planning">Planning</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="in-progress">In Progress</SelectItem>
+                  <SelectItem value="on-hold">On Hold</SelectItem>
+                  <SelectItem value="testing">Testing Phase</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
                 </>
               )}
             </SelectContent>
@@ -1162,6 +1195,21 @@ export default function ProjectsPage() {
             const overdue = isOverdue(project.endDate, project.status, progress);
             const isManagementOrTL = isAdmin || user?.role === "HR" || project.teamLeaderId === user?.id;
             
+            const getDaysLeftText = (dateString: string) => {
+              if (!dateString || project.status === "completed" || progress === 100) return null;
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const target = new Date(dateString);
+              target.setHours(0, 0, 0, 0);
+              const diffTime = target.getTime() - today.getTime();
+              const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+              if (diffDays < 0) return `(${Math.abs(diffDays)} days overdue)`;
+              if (diffDays === 0) return "(Due today)";
+              if (diffDays === 1) return "(1 day left)";
+              return `(${diffDays} days left)`;
+            };
+            const clientDaysLeftText = getDaysLeftText(project.endDate);
+
             return (
               <Card key={project.id} className={`group hover:shadow-md transition-shadow border-border ${
                 overdue ? "border-red-300 bg-red-50/20" : ""
@@ -1386,7 +1434,7 @@ export default function ProjectsPage() {
                       </div>
                     ) : null)}
 
-                    <div className="flex items-center justify-between pt-2 border-t border-border/50 text-[12px] text-muted-foreground">
+                    <div className="flex items-start justify-between pt-2 border-t border-border/50 text-[12px] text-muted-foreground">
                       {isAdmin ? (
                         <div className="flex flex-col gap-1">
                           <div className="flex items-center gap-1.5 text-slate-600 font-medium text-[11px] flex-wrap">
@@ -1414,13 +1462,20 @@ export default function ProjectsPage() {
                           </div>
                         </div>
                       )}
-                      <Badge variant="outline" className={`text-[10px] ${
-                        project.priority === 'high' ? 'border-red-200 text-red-600 bg-red-50' : 
-                        project.priority === 'medium' ? 'border-amber-200 text-amber-600 bg-amber-50' : 
-                        'border-green-200 text-green-600 bg-green-50'
-                      }`}>
-                        {project.priority.toUpperCase()}
-                      </Badge>
+                      <div className="flex flex-col items-end gap-1 mt-0.5">
+                        <Badge variant="outline" className={`text-[10px] ${
+                          project.priority === 'high' ? 'border-red-200 text-red-600 bg-red-50' : 
+                          project.priority === 'medium' ? 'border-amber-200 text-amber-600 bg-amber-50' : 
+                          'border-green-200 text-green-600 bg-green-50'
+                        }`}>
+                          {project.priority.toUpperCase()}
+                        </Badge>
+                        {isAdmin && clientDaysLeftText && (
+                          <span className={`text-[11px] font-bold ${overdue ? 'text-red-600' : 'text-slate-600'}`}>
+                            {clientDaysLeftText}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </CardContent>

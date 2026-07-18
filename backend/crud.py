@@ -4153,7 +4153,7 @@ async def create_wm_task(db, task: schemas.WMTaskCreate):
         if project:
             task_dict["projectName"] = project.get("title")
     
-    if task_dict.get("moduleName") and task_dict.get("projectId"):
+    if task_dict.get("moduleName") and task_dict.get("projectId") and not task_dict.get("assignedToId"):
         try:
             project_obj = await db.projects.find_one({"_id": ObjectId(task_dict["projectId"])})
             if project_obj and project_obj.get("modules"):
@@ -4163,17 +4163,9 @@ async def create_wm_task(db, task: schemas.WMTaskCreate):
                         if mod_assignee and mod_assignee != "unassigned":
                             task_dict["assignedToId"] = mod_assignee
                             task_dict["assignedToName"] = m.get("assignedToName") or "Unassigned"
-                        else:
-                            task_dict["assignedToId"] = ""
-                            task_dict["assignedToName"] = "Unassigned"
                         break
         except Exception as e_mod_sync:
             print(f"Error syncing module assignee on task creation: {e_mod_sync}")
-
-    if not task_dict.get("assignedToId") and not task_dict.get("moduleName"):
-        fallback_id = performedBy if performedBy and performedBy != "Unknown" else task_dict.get("createdBy")
-        if fallback_id and fallback_id != "Unknown":
-            task_dict["assignedToId"] = fallback_id
 
     if task_dict.get("assignedToId"):
         try:
@@ -4358,7 +4350,7 @@ async def update_wm_task(db, task_id: str, task_update: schemas.WMTaskUpdate):
             if project:
                 update_data["projectName"] = project.get("title")
         
-        if update_data.get("moduleName") and update_data.get("moduleName") != (old_task.get("moduleName") if old_task else None):
+        if update_data.get("moduleName") and update_data.get("moduleName") != (old_task.get("moduleName") if old_task else None) and not update_data.get("assignedToId"):
             p_id = update_data.get("projectId") or (old_task.get("projectId") if old_task else None)
             if p_id:
                 try:
@@ -4370,9 +4362,6 @@ async def update_wm_task(db, task_id: str, task_update: schemas.WMTaskUpdate):
                                 if mod_assignee and mod_assignee != "unassigned":
                                     update_data["assignedToId"] = mod_assignee
                                     update_data["assignedToName"] = m.get("assignedToName") or "Unassigned"
-                                else:
-                                    update_data["assignedToId"] = ""
-                                    update_data["assignedToName"] = "Unassigned"
                                 break
                 except Exception as e_mod_update_sync:
                     print(f"Error syncing module assignee on task update: {e_mod_update_sync}")
