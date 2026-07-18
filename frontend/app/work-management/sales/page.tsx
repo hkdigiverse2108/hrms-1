@@ -230,6 +230,11 @@ export default function SalesPage() {
   ]);
   const [selectedExportCategories, setSelectedExportCategories] = useState<string[]>([]);
 
+  const [quickAddName, setQuickAddName] = useState("");
+  const [quickAddPhone, setQuickAddPhone] = useState("");
+  const [quickAddCategory, setQuickAddCategory] = useState("none_selected");
+  const [isQuickAdding, setIsQuickAdding] = useState(false);
+
   const [isBreakdownOpen, setIsBreakdownOpen] = useState(false);
   const [selectedBreakdown, setSelectedBreakdown] = useState<any[]>([]);
 
@@ -466,6 +471,49 @@ export default function SalesPage() {
       toast.error("An error occurred");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleQuickAddLead = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickAddPhone.trim()) {
+      toast.error("Please enter a phone number");
+      return;
+    }
+    setIsQuickAdding(true);
+    try {
+      const payload = {
+        company: quickAddName.trim() || `Lead (${quickAddPhone.trim()})`,
+        contact: quickAddName.trim() || `Lead (${quickAddPhone.trim()})`,
+        phone: quickAddPhone.trim(),
+        category: quickAddCategory === "none_selected" || !quickAddCategory ? null : quickAddCategory,
+        status: "Lead",
+        priority: "Medium",
+        performedBy: user?.id,
+        userName: currentUserName
+      };
+      
+      const res = await fetch(`${API_URL}/leads`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      
+      if (res.ok) {
+        toast.success("Lead added successfully");
+        setQuickAddName("");
+        setQuickAddPhone("");
+        setQuickAddCategory("none_selected");
+        fetchLeads();
+      } else {
+        const errorData = await res.json().catch(() => null);
+        toast.error(errorData?.detail || "Failed to add lead");
+      }
+    } catch (err) {
+      console.error("Error quick adding lead:", err);
+      toast.error("An error occurred");
+    } finally {
+      setIsQuickAdding(false);
     }
   };
 
@@ -1941,6 +1989,54 @@ export default function SalesPage() {
           </Card>
         ))}
       </div>
+
+      {activeTab !== 'targets' && canAddSales && (
+        <form onSubmit={handleQuickAddLead} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex flex-wrap items-center gap-3">
+          <div className="flex-1 min-w-[200px]">
+            <input 
+              type="text" 
+              placeholder="Name / Company (Optional)..." 
+              value={quickAddName}
+              onChange={(e) => setQuickAddName(e.target.value)}
+              className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-brand-teal focus:bg-white transition-all text-slate-800 placeholder:text-slate-400"
+            />
+          </div>
+          <div className="w-[180px]">
+            <input 
+              type="text" 
+              placeholder="Phone (Compulsory)..." 
+              value={quickAddPhone}
+              onChange={(e) => setQuickAddPhone(e.target.value)}
+              className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-brand-teal focus:bg-white transition-all text-slate-800 placeholder:text-slate-400"
+            />
+          </div>
+          <div className="w-[160px]">
+            <Select value={quickAddCategory} onValueChange={setQuickAddCategory}>
+              <SelectTrigger className="w-full h-8 text-xs font-semibold border-slate-200 bg-slate-50">
+                <SelectValue placeholder="Category (None)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none_selected">None (Other)</SelectItem>
+                {leadCategories.map((cat) => (
+                  <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button 
+            type="submit" 
+            disabled={isQuickAdding || !quickAddPhone.trim()}
+            className="bg-brand-teal hover:bg-brand-teal-light text-white text-xs font-bold px-4 h-8 rounded-lg transition-all active:scale-95 flex items-center gap-1.5"
+          >
+            {isQuickAdding ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Plus className="w-3.5 h-3.5" />
+            )}
+            Quick Add
+          </Button>
+        </form>
+      )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <div className="flex flex-row items-center justify-between gap-4 mb-4 bg-white p-2 rounded-xl border border-slate-100 shadow-sm overflow-x-auto">
