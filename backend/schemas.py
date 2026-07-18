@@ -1996,6 +1996,7 @@ class SalesTargetBase(BaseModel):
     breakdown: Optional[List[dict]] = []
     status: Optional[str] = "Active"
     createdAt: Optional[str] = None
+    category: Optional[str] = "Overall"
 
 class SalesTargetCreate(SalesTargetBase):
     pass
@@ -2009,6 +2010,7 @@ class SalesTargetUpdate(BaseModel):
     startDate: Optional[str] = None
     endDate: Optional[str] = None
     status: Optional[str] = None
+    category: Optional[str] = None
 
 class SalesTarget(SalesTargetBase):
     id: str

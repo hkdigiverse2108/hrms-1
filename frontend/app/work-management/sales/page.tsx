@@ -175,7 +175,8 @@ export default function SalesPage() {
     week: 1,
     startDate: dayjs().format("YYYY-MM-DD"),
     endDate: dayjs().add(14, 'day').format("YYYY-MM-DD"),
-    targetAmount: 0
+    targetAmount: 0,
+    category: "Overall"
   });
 
   const [slabForm, setSlabForm] = useState<{ minAmount: number; maxAmount: number; percentage: number; employees: string[]; clientCategories: string[]; isRecurring: boolean }>({
@@ -261,6 +262,7 @@ export default function SalesPage() {
   useEffect(() => {
     const existing = targets.find(t => {
       if (t.employeeId !== targetForm.employeeId || t.type !== targetForm.type) return false;
+      if ((t.category || "Overall") !== (targetForm.category || "Overall")) return false;
       if (targetForm.type === "Custom") {
         return t.startDate === targetForm.startDate && t.endDate === targetForm.endDate;
       } else if (targetForm.type === "Weekly") {
@@ -274,7 +276,7 @@ export default function SalesPage() {
     } else {
       setTargetForm(prev => ({ ...prev, targetAmount: 0 }));
     }
-  }, [targetForm.employeeId, targetForm.month, targetForm.year, targetForm.type, targetForm.week, targetForm.startDate, targetForm.endDate, targets]);
+  }, [targetForm.employeeId, targetForm.month, targetForm.year, targetForm.type, targetForm.week, targetForm.startDate, targetForm.endDate, targetForm.category, targets]);
 
   const fetchLeadLogs = async (lead: any) => {
     setSelectedLeadForLogs(lead);
@@ -1983,9 +1985,29 @@ export default function SalesPage() {
                         )}
 
                         <div className="space-y-1.5">
+                          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Target Category</label>
+                          <Select 
+                            value={targetForm.category || "Overall"} 
+                            onValueChange={(val) => setTargetForm({...targetForm, category: val})}
+                          >
+                            <SelectTrigger className="h-10 text-sm">
+                              <SelectValue placeholder="Overall" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Overall">Overall</SelectItem>
+                              <SelectItem value="Other">Other</SelectItem>
+                              {leadCategories.map(cat => (
+                                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-1.5">
                           <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
                             Target Amount (₹) {targets.some(t => {
                               if (t.employeeId !== targetForm.employeeId || t.type !== targetForm.type) return false;
+                              if ((t.category || "Overall") !== (targetForm.category || "Overall")) return false;
                               if (targetForm.type === "Custom") {
                                 return t.startDate === targetForm.startDate && t.endDate === targetForm.endDate;
                               } else if (targetForm.type === "Weekly") {
@@ -2058,7 +2080,7 @@ export default function SalesPage() {
                                 <div className="space-y-1.5">
                                   <Label className="text-[10px] uppercase font-black text-slate-400">Client Categories (Leave empty for All)</Label>
                                   <div className="flex flex-wrap gap-2 pt-1 border border-slate-100 rounded-lg p-2 max-h-32 overflow-y-auto bg-slate-50/50">
-                                    {['Marketing', 'Development', 'Graphics'].map(cat => (
+                                    {["Other", ...leadCategories].map(cat => (
                                       <label key={cat} className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 cursor-pointer">
                                         <input 
                                           type="checkbox"
@@ -2122,7 +2144,7 @@ export default function SalesPage() {
                               <div className="space-y-1.5">
                                 <Label className="text-[10px] uppercase font-black text-slate-400">Client Categories (Leave empty for All)</Label>
                                 <div className="flex flex-wrap gap-2 pt-1 border border-slate-100 rounded-lg p-2 max-h-32 overflow-y-auto bg-slate-50/50">
-                                  {['Marketing', 'Development', 'Graphics'].map(cat => (
+                                  {["Other", ...leadCategories].map(cat => (
                                     <label key={cat} className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 cursor-pointer">
                                       <input 
                                         type="checkbox"
@@ -2335,7 +2357,10 @@ export default function SalesPage() {
                                         <div className="w-7 h-7 rounded-full bg-brand-teal/10 text-brand-teal flex items-center justify-center text-[10px] font-bold uppercase">
                                           {t.employeeName?.substring(0, 2)}
                                         </div>
-                                        <span className="font-bold text-slate-700 text-sm">{t.employeeName}</span>
+                                        <div className="flex flex-col">
+                                          <span className="font-bold text-slate-700 text-sm">{t.employeeName}</span>
+                                          <span className="text-[10px] text-slate-400 font-bold uppercase">{t.category || "Overall"}</span>
+                                        </div>
                                       </div>
                                     </td>
                                     <td className="px-6 py-4 text-center">
