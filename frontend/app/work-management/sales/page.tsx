@@ -228,6 +228,7 @@ export default function SalesPage() {
     { key: 'createdByUserName', label: 'Created By', selected: true },
     { key: 'date', label: 'Created Date', selected: true },
   ]);
+  const [selectedExportCategories, setSelectedExportCategories] = useState<string[]>([]);
 
   const [isBreakdownOpen, setIsBreakdownOpen] = useState(false);
   const [selectedBreakdown, setSelectedBreakdown] = useState<any[]>([]);
@@ -273,6 +274,10 @@ export default function SalesPage() {
       console.error("Error fetching system settings:", err);
     }
   };
+
+  useEffect(() => {
+    setSelectedExportCategories(['Other', ...leadCategories]);
+  }, [leadCategories]);
 
   useEffect(() => {
     fetchLeads();
@@ -563,7 +568,12 @@ export default function SalesPage() {
   };
 
   const handleExportLeads = () => {
-    const dataToExport = leads.map(l => {
+    const filteredLeadsForExport = leads.filter(l => {
+      const cat = l.category || 'Other';
+      return selectedExportCategories.includes(cat);
+    });
+
+    const dataToExport = filteredLeadsForExport.map(l => {
       const row: any = {};
       exportColumns.forEach(col => {
         if (col.selected) {
@@ -1818,6 +1828,41 @@ export default function SalesPage() {
                                     <SelectItem value="csv">CSV (.csv)</SelectItem>
                                   </SelectContent>
                                 </Select>
+                              </div>
+
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <Label className="text-xs font-bold text-slate-700">Filter Categories to Include</Label>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const allCats = ['Other', ...leadCategories];
+                                      const allSelected = selectedExportCategories.length === allCats.length;
+                                      setSelectedExportCategories(allSelected ? [] : allCats);
+                                    }}
+                                    className="text-[10px] font-bold text-brand-teal uppercase hover:underline"
+                                  >
+                                    {selectedExportCategories.length === ['Other', ...leadCategories].length ? "Deselect All" : "Select All"}
+                                  </button>
+                                </div>
+                                <div className="flex flex-wrap gap-2 border border-slate-100 rounded-lg p-3 bg-slate-50/50 max-h-32 overflow-y-auto">
+                                  {['Other', ...leadCategories].map((cat) => (
+                                    <label key={cat} className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 cursor-pointer">
+                                      <input 
+                                        type="checkbox"
+                                        checked={selectedExportCategories.includes(cat)}
+                                        onChange={(e) => {
+                                          setSelectedExportCategories(prev => e.target.checked 
+                                            ? [...prev, cat] 
+                                            : prev.filter(c => c !== cat)
+                                          );
+                                        }}
+                                        className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-3.5 h-3.5"
+                                      />
+                                      {cat}
+                                    </label>
+                                  ))}
+                                </div>
                               </div>
 
                               <div className="space-y-2">
