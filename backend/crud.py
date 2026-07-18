@@ -4592,6 +4592,24 @@ def format_field_changes(old_doc: dict, update_data: dict, entity_prefix: str = 
     return prefix_str + ", ".join(details), diffs
 
 # Activity Log CRUD
+async def resolve_performer(db, current_user) -> tuple:
+    """Returns (user_id, user_name) based on current_user token payload."""
+    if not current_user:
+        return "System", "System User"
+    
+    user_id = current_user.get("sub")
+    if not user_id:
+        return "Unknown", "Unknown User"
+        
+    try:
+        user = await db.employees.find_one({"_id": ObjectId(user_id) if len(user_id) == 24 else user_id})
+        if user:
+            name = f"{user.get('firstName', '')} {user.get('lastName', '')}".strip()
+            return user_id, name or "Unknown User"
+    except Exception:
+        pass
+    return user_id, "Unknown User"
+
 async def log_activity(db, action: str, performedBy: str, userName: str, details: str, diffs: list = None, taskId: str = None, projectId: str = None, clientId: str = None, leadId: str = None, dailyReportId: str = None, monthlyReportId: str = None, applicationId: str = None, assetId: str = None, categoryId: str = None, employeeId: str = None, leaveId: str = None, attendanceId: str = None, remarkId: str = None):
     log_entry = {
         "action": action,
@@ -9234,7 +9252,7 @@ async def resequence_all_expenses(db):
     except Exception as e:
         print(f"Error during resequencing: {e}")
 
-async def create_finance_transaction(db, tx_data: dict):
+async def create_finance_transaction(db, tx_data: dict, current_user=None):
     if not tx_data.get("date"):
         now = datetime.now(pytz.timezone('Asia/Kolkata'))
         tx_data["date"] = now.strftime("%Y-%m-%d")
@@ -9246,17 +9264,28 @@ async def create_finance_transaction(db, tx_data: dict):
     if tx_data.get("type") == "debit":
         await resequence_all_expenses(db)
     created = await db.company_finance_transactions.find_one({"_id": result.inserted_id})
+    
+    # Log activity
+    performed_by_id, performed_by_name = await resolve_performer(db, current_user)
+    tx_type = tx_data.get("type", "transaction").capitalize()
+    details = f"{tx_type} transaction created: {tx_data.get('category', 'General')} - {tx_data.get('description', '')} (Amount: {tx_data.get('amount')}, Method: {tx_data.get('paymentMethod')})"
+    await log_activity(db, "Finance Transaction Created", performed_by_id, performed_by_name, details)
+    
     return fix_id(created)
 
-async def update_finance_transaction(db, tx_id: str, update_data: dict):
+async def update_finance_transaction(db, tx_id: str, update_data: dict, current_user=None):
     # Remove None values
     clean_update = {k: v for k, v in update_data.items() if v is not None}
     if not clean_update:
         return await get_finance_transaction_by_id(db, tx_id)
         
+    performed_by_id, performed_by_name = await resolve_performer(db, current_user)
+    
     if tx_id.startswith("inv_"):
         # If updating a synced invoice, update the underlying invoice notes/remarks/clientName
         inv_id = tx_id[4:]
+        existing = await get_finance_transaction_by_id(db, tx_id)
+        
         inv_update = {}
         if "category" in clean_update:
             inv_update["clientName"] = clean_update["category"]
@@ -9268,14 +9297,23 @@ async def update_finance_transaction(db, tx_id: str, update_data: dict):
         if inv_update:
             try:
                 await db.invoices.update_one({"_id": ObjectId(inv_id)}, {"$set": inv_update})
+                if existing:
+                    log_details, diffs = format_field_changes(existing, clean_update, f"Synced Invoice Transaction '{tx_id}'")
+                    await log_activity(db, "Finance Transaction Updated", performed_by_id, performed_by_name, log_details, diffs=diffs)
             except Exception as e:
                 print(f"Error updating synced invoice: {e}")
         return await get_finance_transaction_by_id(db, tx_id)
     else:
         try:
+            existing = await db.company_finance_transactions.find_one({"_id": ObjectId(tx_id)})
             await db.company_finance_transactions.update_one({"_id": ObjectId(tx_id)}, {"$set": clean_update})
             await resequence_all_expenses(db)
             updated = await db.company_finance_transactions.find_one({"_id": ObjectId(tx_id)})
+            
+            if existing:
+                log_details, diffs = format_field_changes(existing, clean_update, f"Finance Transaction")
+                await log_activity(db, "Finance Transaction Updated", performed_by_id, performed_by_name, log_details, diffs=diffs)
+                
             return fix_id(updated)
         except Exception as e:
             print(f"Error updating transaction {tx_id}: {e}")
@@ -9318,11 +9356,16 @@ async def get_finance_transaction_by_id(db, tx_id: str):
         except Exception:
             return None
 
-async def delete_finance_transaction(db, tx_id: str):
+async def delete_finance_transaction(db, tx_id: str, current_user=None):
+    performed_by_id, performed_by_name = await resolve_performer(db, current_user)
     if tx_id.startswith("inv_"):
         inv_id = tx_id[4:]
         try:
+            existing = await get_finance_transaction_by_id(db, tx_id)
             res = await db.invoices.delete_one({"_id": ObjectId(inv_id)})
+            if res.deleted_count > 0 and existing:
+                details = f"Deleted synced invoice transaction: {existing.get('category')} - {existing.get('description')} (Amount: {existing.get('amount')})"
+                await log_activity(db, "Finance Transaction Deleted", performed_by_id, performed_by_name, details)
             return res.deleted_count > 0
         except Exception as e:
             print(f"Error deleting synced invoice: {e}")
@@ -9334,6 +9377,10 @@ async def delete_finance_transaction(db, tx_id: str):
             if res.deleted_count > 0:
                 if tx and tx.get("type") == "debit":
                     await resequence_all_expenses(db)
+                if tx:
+                    tx_type = tx.get("type", "transaction").capitalize()
+                    details = f"Deleted {tx_type.lower()} transaction: {tx.get('category')} - {tx.get('description')} (Amount: {tx.get('amount')})"
+                    await log_activity(db, "Finance Transaction Deleted", performed_by_id, performed_by_name, details)
                 return True
             return False
         except Exception:
@@ -9347,7 +9394,8 @@ async def get_finance_balances(db):
         doc = await db.company_finance_balances.find_one({"year": "Global"})
     return fix_id(doc)
 
-async def update_finance_balances(db, balance_data: dict):
+async def update_finance_balances(db, balance_data: dict, current_user=None):
+    existing = await db.company_finance_balances.find_one({"year": "Global"})
     clean_data = {k: float(v) if k in ["bankOpeningBalance", "cashOpeningBalance"] else v for k, v in balance_data.items() if v is not None}
     await db.company_finance_balances.update_one(
         {"year": "Global"},
@@ -9355,19 +9403,40 @@ async def update_finance_balances(db, balance_data: dict):
         upsert=True
     )
     doc = await db.company_finance_balances.find_one({"year": "Global"})
+    
+    performed_by_id, performed_by_name = await resolve_performer(db, current_user)
+    log_details, diffs = format_field_changes(existing, clean_data, f"Finance Balances")
+    await log_activity(db, "Finance Balances Updated", performed_by_id, performed_by_name, log_details, diffs=diffs)
+    
     return fix_id(doc)
 
 async def get_finance_plans(db):
     return await get_items(db, "company_finance_plans", 0, 1000)
 
-async def create_finance_plan(db, plan_data: dict):
-    return await create_item(db, "company_finance_plans", plan_data)
+async def create_finance_plan(db, plan_data: dict, current_user=None):
+    created = await create_item(db, "company_finance_plans", plan_data)
+    performed_by_id, performed_by_name = await resolve_performer(db, current_user)
+    details = f"Created finance plan for category '{plan_data.get('category')}' with amount {plan_data.get('amount')}"
+    await log_activity(db, "Finance Plan Created", performed_by_id, performed_by_name, details)
+    return created
 
-async def update_finance_plan(db, plan_id: str, update_data: dict):
-    return await update_item(db, "company_finance_plans", plan_id, update_data)
+async def update_finance_plan(db, plan_id: str, update_data: dict, current_user=None):
+    existing = await db.company_finance_plans.find_one({"_id": ObjectId(plan_id) if len(plan_id) == 24 else plan_id})
+    updated = await update_item(db, "company_finance_plans", plan_id, update_data)
+    performed_by_id, performed_by_name = await resolve_performer(db, current_user)
+    if existing:
+        log_details, diffs = format_field_changes(existing, update_data, f"Finance Plan")
+        await log_activity(db, "Finance Plan Updated", performed_by_id, performed_by_name, log_details, diffs=diffs)
+    return updated
 
-async def delete_finance_plan(db, plan_id: str):
-    return await delete_item(db, "company_finance_plans", plan_id)
+async def delete_finance_plan(db, plan_id: str, current_user=None):
+    existing = await db.company_finance_plans.find_one({"_id": ObjectId(plan_id) if len(plan_id) == 24 else plan_id})
+    deleted = await delete_item(db, "company_finance_plans", plan_id)
+    performed_by_id, performed_by_name = await resolve_performer(db, current_user)
+    if deleted and existing:
+        details = f"Deleted finance plan for category '{existing.get('category')}' with amount {existing.get('amount')}"
+        await log_activity(db, "Finance Plan Deleted", performed_by_id, performed_by_name, details)
+    return deleted
 
 async def get_monthly_plan(db, month: str):
     doc = await db.company_finance_monthly_plans.find_one({"month": month})
@@ -9375,13 +9444,23 @@ async def get_monthly_plan(db, month: str):
         return {"month": month, "values": {}}
     return fix_id(doc)
 
-async def save_monthly_plan(db, month: str, values: dict):
+async def save_monthly_plan(db, month: str, values: dict, current_user=None):
+    existing = await db.company_finance_monthly_plans.find_one({"month": month})
     await db.company_finance_monthly_plans.update_one(
         {"month": month},
         {"$set": {"month": month, "values": values}},
         upsert=True
     )
     doc = await db.company_finance_monthly_plans.find_one({"month": month})
+    
+    performed_by_id, performed_by_name = await resolve_performer(db, current_user)
+    if existing:
+        log_details, diffs = format_field_changes(existing, {"values": values}, f"Monthly Plan for {month}")
+        await log_activity(db, "Finance Monthly Plan Saved", performed_by_id, performed_by_name, log_details, diffs=diffs)
+    else:
+        details = f"Saved initial monthly plan values for {month}"
+        await log_activity(db, "Finance Monthly Plan Saved", performed_by_id, performed_by_name, details)
+        
     return fix_id(doc)
 
 async def get_finance_summary(db):
@@ -9539,7 +9618,8 @@ async def get_row_definitions(db, month: str):
         return {"month": month, "rows": []}
     return fix_id(doc)
 
-async def save_row_definitions(db, month: str, rows: list):
+async def save_row_definitions(db, month: str, rows: list, current_user=None):
+    existing = await db.company_finance_row_definitions.find_one({"month": month})
     await db.company_finance_row_definitions.update_one(
         {"month": month},
         {"$set": {"month": month, "rows": rows}},
@@ -9552,6 +9632,15 @@ async def save_row_definitions(db, month: str, rows: list):
         upsert=True
     )
     doc = await db.company_finance_row_definitions.find_one({"month": month})
+    
+    performed_by_id, performed_by_name = await resolve_performer(db, current_user)
+    if existing:
+        log_details, diffs = format_field_changes(existing, {"rows": rows}, f"Row Definitions for {month}")
+        await log_activity(db, "Finance Row Definitions Saved", performed_by_id, performed_by_name, log_details, diffs=diffs)
+    else:
+        details = f"Saved initial row definitions for {month}"
+        await log_activity(db, "Finance Row Definitions Saved", performed_by_id, performed_by_name, details)
+        
     return fix_id(doc)
 
 
@@ -9562,13 +9651,23 @@ async def get_summary_actual_overrides(db, month: str):
         return {"month": month, "values": {}}
     return fix_id(doc)
 
-async def save_summary_actual_overrides(db, month: str, values: dict):
+async def save_summary_actual_overrides(db, month: str, values: dict, current_user=None):
+    existing = await db.company_finance_actual_overrides.find_one({"month": month})
     await db.company_finance_actual_overrides.update_one(
         {"month": month},
         {"$set": {"month": month, "values": values}},
         upsert=True
     )
     doc = await db.company_finance_actual_overrides.find_one({"month": month})
+    
+    performed_by_id, performed_by_name = await resolve_performer(db, current_user)
+    if existing:
+        log_details, diffs = format_field_changes(existing, {"values": values}, f"Actual Overrides for {month}")
+        await log_activity(db, "Finance Actual Overrides Saved", performed_by_id, performed_by_name, log_details, diffs=diffs)
+    else:
+        details = f"Saved initial actual overrides for {month}"
+        await log_activity(db, "Finance Actual Overrides Saved", performed_by_id, performed_by_name, details)
+        
     return fix_id(doc)
 
 

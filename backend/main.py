@@ -3723,19 +3723,19 @@ async def get_finance_transactions_endpoint(
     return {"transactions": txs}
 
 @app.post("/company-finance/transactions", response_model=schemas.FinanceTransaction)
-async def create_finance_transaction_endpoint(tx: schemas.FinanceTransactionCreate, db=Depends(get_db)):
-    return await crud.create_finance_transaction(db, tx.model_dump())
+async def create_finance_transaction_endpoint(tx: schemas.FinanceTransactionCreate, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
+    return await crud.create_finance_transaction(db, tx.model_dump(), current_user)
 
 @app.put("/company-finance/transactions/{tx_id}", response_model=schemas.FinanceTransaction)
-async def update_finance_transaction_endpoint(tx_id: str, tx_update: schemas.FinanceTransactionUpdate, db=Depends(get_db)):
-    updated = await crud.update_finance_transaction(db, tx_id, tx_update.model_dump(exclude_unset=True))
+async def update_finance_transaction_endpoint(tx_id: str, tx_update: schemas.FinanceTransactionUpdate, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
+    updated = await crud.update_finance_transaction(db, tx_id, tx_update.model_dump(exclude_unset=True), current_user)
     if not updated:
         raise HTTPException(status_code=404, detail="Transaction not found")
     return updated
 
 @app.delete("/company-finance/transactions/{tx_id}")
-async def delete_finance_transaction_endpoint(tx_id: str, db=Depends(get_db)):
-    success = await crud.delete_finance_transaction(db, tx_id)
+async def delete_finance_transaction_endpoint(tx_id: str, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
+    success = await crud.delete_finance_transaction(db, tx_id, current_user)
     if not success:
         raise HTTPException(status_code=404, detail="Transaction not found")
     return {"message": "Transaction deleted successfully"}
@@ -3745,16 +3745,16 @@ async def get_finance_balances_endpoint(db=Depends(get_db)):
     return await crud.get_finance_balances(db)
 
 @app.put("/company-finance/balances", response_model=schemas.FinanceBalance)
-async def update_finance_balances_endpoint(payload: dict, db=Depends(get_db)):
-    return await crud.update_finance_balances(db, payload)
+async def update_finance_balances_endpoint(payload: dict, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
+    return await crud.update_finance_balances(db, payload, current_user)
 
 @app.get("/company-finance/monthly-plans/{month}")
 async def get_monthly_plan_endpoint(month: str, db=Depends(get_db)):
     return await crud.get_monthly_plan(db, month)
 
 @app.post("/company-finance/monthly-plans/{month}")
-async def save_monthly_plan_endpoint(month: str, payload: dict, db=Depends(get_db)):
-    return await crud.save_monthly_plan(db, month, payload.get("values", {}))
+async def save_monthly_plan_endpoint(month: str, payload: dict, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
+    return await crud.save_monthly_plan(db, month, payload.get("values", {}), current_user)
 
 @app.get("/company-finance/plans", response_model=dict)
 async def get_finance_plans_endpoint(db=Depends(get_db)):
@@ -3762,19 +3762,19 @@ async def get_finance_plans_endpoint(db=Depends(get_db)):
     return {"plans": plans}
 
 @app.post("/company-finance/plans", response_model=schemas.FinancePlan)
-async def create_finance_plan_endpoint(plan: schemas.FinancePlanCreate, db=Depends(get_db)):
-    return await crud.create_finance_plan(db, plan.model_dump())
+async def create_finance_plan_endpoint(plan: schemas.FinancePlanCreate, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
+    return await crud.create_finance_plan(db, plan.model_dump(), current_user)
 
 @app.put("/company-finance/plans/{plan_id}", response_model=schemas.FinancePlan)
-async def update_finance_plan_endpoint(plan_id: str, plan_update: schemas.FinancePlanUpdate, db=Depends(get_db)):
-    updated = await crud.update_finance_plan(db, plan_id, plan_update.model_dump(exclude_unset=True))
+async def update_finance_plan_endpoint(plan_id: str, plan_update: schemas.FinancePlanUpdate, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
+    updated = await crud.update_finance_plan(db, plan_id, plan_update.model_dump(exclude_unset=True), current_user)
     if not updated:
         raise HTTPException(status_code=404, detail="Plan not found")
     return updated
 
 @app.delete("/company-finance/plans/{plan_id}")
-async def delete_finance_plan_endpoint(plan_id: str, db=Depends(get_db)):
-    success = await crud.delete_finance_plan(db, plan_id)
+async def delete_finance_plan_endpoint(plan_id: str, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
+    success = await crud.delete_finance_plan(db, plan_id, current_user)
     if not success:
         raise HTTPException(status_code=404, detail="Plan not found")
     return {"message": "Plan deleted successfully"}
@@ -3789,9 +3789,9 @@ async def get_row_definitions_endpoint(month: str, db=Depends(get_db)):
     return await crud.get_row_definitions(db, month)
 
 @app.post("/company-finance/row-definitions/{month}")
-async def save_row_definitions_endpoint(month: str, payload: schemas.RowDefinitionsConfigUpdate, db=Depends(get_db)):
+async def save_row_definitions_endpoint(month: str, payload: schemas.RowDefinitionsConfigUpdate, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
     rows_data = [row.model_dump() for row in payload.rows]
-    return await crud.save_row_definitions(db, month, rows_data)
+    return await crud.save_row_definitions(db, month, rows_data, current_user)
 
 # --- Summary Overrides Endpoints ---
 @app.get("/company-finance/actual-overrides/{month}")
@@ -3799,8 +3799,8 @@ async def get_summary_actual_overrides_endpoint(month: str, db=Depends(get_db)):
     return await crud.get_summary_actual_overrides(db, month)
 
 @app.post("/company-finance/actual-overrides/{month}")
-async def save_summary_actual_overrides_endpoint(month: str, payload: schemas.SummaryOverridesUpdate, db=Depends(get_db)):
-    return await crud.save_summary_actual_overrides(db, month, payload.values)
+async def save_summary_actual_overrides_endpoint(month: str, payload: schemas.SummaryOverridesUpdate, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
+    return await crud.save_summary_actual_overrides(db, month, payload.values, current_user)
 
 # --- Task Preset Endpoints ---
 @app.get("/task-presets")
