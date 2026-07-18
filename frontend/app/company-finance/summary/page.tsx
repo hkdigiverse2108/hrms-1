@@ -659,10 +659,12 @@ export default function CompanyFinanceSummaryPage() {
         const plan = evaluatedPlanValues[row.id] || 0;
         const actual = actualValues[row.id] || 0;
         let variance = "-";
-        if (row.unit === "INR" || row.unit === "Number") {
-          const numPlan = parseFloat(plan) || 0;
-          const numActual = parseFloat(actual) || 0;
-          variance = String(numActual - numPlan);
+        const numPlan = parseFloat(plan);
+        const numActual = parseFloat(actual);
+        if (!isNaN(numPlan) || !isNaN(numActual)) {
+          const p = isNaN(numPlan) ? 0 : numPlan;
+          const a = isNaN(numActual) ? 0 : numActual;
+          variance = String(a - p);
         }
         rowsList.push([
           row.category,
@@ -842,16 +844,18 @@ export default function CompanyFinanceSummaryPage() {
                       const planVal = evaluatedPlanValues[row.id];
                       const actualVal = actualValues[row.id];
 
+                      const pNum = parseFloat(planVal);
+                      const aNum = parseFloat(actualVal);
                       let varianceVal: any = "-";
                       let varianceColor = "text-slate-500";
                       
-                      if (row.unit === "INR" || row.unit === "Number") {
-                        const pNum = parseFloat(planVal) || 0;
-                        const aNum = parseFloat(actualVal) || 0;
-                        const diff = aNum - pNum;
+                      if (!isNaN(pNum) || !isNaN(aNum)) {
+                        const p = isNaN(pNum) ? 0 : pNum;
+                        const a = isNaN(aNum) ? 0 : aNum;
+                        const diff = a - p;
                         varianceVal = diff;
 
-                        if (row.category === "FINANCIAL - REVENUE" || row.id === "prof_ebitda") {
+                        if (row.category.toUpperCase().includes("REVENUE") || row.id === "prof_ebitda" || row.category.toUpperCase().includes("PROFITABILITY")) {
                           varianceColor = diff >= 0 ? "text-emerald-600 font-bold" : "text-rose-600 font-bold";
                         } else {
                           varianceColor = diff <= 0 ? "text-emerald-600 font-bold" : "text-rose-600 font-bold";
