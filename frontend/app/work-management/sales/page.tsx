@@ -44,6 +44,8 @@ import { LeadForm, LeadFormData } from "@/components/hrms/LeadForm";
 import { ClientForm, ClientFormData } from "@/components/hrms/ClientForm";
 import { FollowUpDialog } from "@/components/hrms/FollowUpDialog";
 import { toast } from "sonner";
+import * as XLSX from "xlsx";
+import { FileSpreadsheet, Upload } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { 
   DropdownMenu, 
@@ -191,6 +193,10 @@ export default function SalesPage() {
     clientCategories: [],
     isRecurring: false
   });
+
+  const [isBulkDialogOpen, setIsBulkDialogOpen] = useState(false);
+  const [bulkPreview, setBulkPreview] = useState<any[]>([]);
+  const [isBulkSubmitting, setIsBulkSubmitting] = useState(false);
   const [slabTab, setSlabTab] = useState<"global" | "employee">("global");
   const [selectedSlabEmployee, setSelectedSlabEmployee] = useState<string>("");
 
@@ -412,6 +418,103 @@ export default function SalesPage() {
       toast.error("An error occurred");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleBulkFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: "binary" });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+
+        if (data.length === 0) {
+          toast.error("The file is empty");
+          return;
+        }
+
+        // Find header indices
+        const headers = data[0].map(h => String(h || "").trim().toLowerCase());
+        const nameIdx = headers.findIndex(h => h.includes("name") || h.includes("contact") || h.includes("company"));
+        const phoneIdx = headers.findIndex(h => h.includes("number") || h.includes("phone") || h.includes("mobile"));
+
+        if (nameIdx === -1) {
+          toast.error("Could not find a 'Name', 'Contact', or 'Company' column in the Excel file");
+          return;
+        }
+        if (phoneIdx === -1) {
+          toast.error("Could not find a 'Number', 'Phone', or 'Mobile' column in the Excel file");
+          return;
+        }
+
+        const parsed: any[] = [];
+        for (let i = 1; i < data.length; i++) {
+          const row = data[i];
+          const nameVal = row[nameIdx];
+          const phoneVal = row[phoneIdx];
+          if (nameVal || phoneVal) {
+            parsed.push({
+              name: nameVal ? String(nameVal).trim() : "",
+              number: phoneVal ? String(phoneVal).trim() : ""
+            });
+          }
+        }
+
+        if (parsed.length === 0) {
+          toast.error("No valid rows found in the Excel file");
+          return;
+        }
+
+        setBulkPreview(parsed);
+        toast.success(`Successfully parsed ${parsed.length} rows`);
+      } catch (err) {
+        console.error(err);
+        toast.error("Failed to parse Excel file");
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  const handleBulkUploadSubmit = async () => {
+    if (bulkPreview.length === 0) return;
+    setIsBulkSubmitting(true);
+    try {
+      const leadsToUpload = bulkPreview.map(item => ({
+        company: item.name,
+        contact: item.name,
+        phone: item.number,
+        status: "Lead",
+        priority: "Medium",
+        performedBy: user?.id,
+        userName: currentUserName
+      }));
+
+      const res = await fetch(`${API_URL}/leads/bulk`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(leadsToUpload),
+      });
+
+      if (res.ok) {
+        toast.success(`Successfully imported ${bulkPreview.length} leads`);
+        setIsBulkDialogOpen(false);
+        setBulkPreview([]);
+        fetchLeads();
+      } else {
+        const errorData = await res.json().catch(() => null);
+        toast.error(errorData?.detail || "Failed to bulk upload leads");
+      }
+    } catch (err) {
+      console.error("Error bulk uploading leads:", err);
+      toast.error("An error occurred");
+    } finally {
+      setIsBulkSubmitting(false);
     }
   };
 
@@ -1434,21 +1537,83 @@ export default function SalesPage() {
 
 
                   {canAddSales && (
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button className="bg-brand-teal hover:bg-brand-teal-light text-white shadow-sm transition-all active:scale-95">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add New Lead
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl">
-                <DialogHeader>
-                  <DialogTitle>Add New Sales Lead</DialogTitle>
-                </DialogHeader>
-                <LeadForm onSubmit={handleAddLead} isSubmitting={isSubmitting} />
-              </DialogContent>
-            </Dialog>
-          )}
+                    <div className="flex gap-2">
+                      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button className="bg-brand-teal hover:bg-brand-teal-light text-white shadow-sm transition-all active:scale-95">
+                            <Plus className="w-4 h-4 mr-2" />
+                            Add New Lead
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-2xl">
+                          <DialogHeader>
+                            <DialogTitle>Add New Sales Lead</DialogTitle>
+                          </DialogHeader>
+                          <LeadForm onSubmit={handleAddLead} isSubmitting={isSubmitting} />
+                        </DialogContent>
+                      </Dialog>
+
+                      <Dialog open={isBulkDialogOpen} onOpenChange={(open) => {
+                        setIsBulkDialogOpen(open);
+                        if (!open) setBulkPreview([]);
+                      }}>
+                        <DialogTrigger asChild>
+                          <Button variant="outline" className="border-brand-teal text-brand-teal hover:bg-brand-teal/10 shadow-sm transition-all active:scale-95">
+                            <Upload className="w-4 h-4 mr-2" />
+                            Bulk Upload Leads
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-md">
+                          <DialogHeader>
+                            <DialogTitle>Bulk Upload Sales Leads</DialogTitle>
+                          </DialogHeader>
+                          <div className="space-y-4 py-2">
+                            <div className="border-2 border-dashed border-slate-200 hover:border-brand-teal rounded-xl p-6 transition-colors text-center relative cursor-pointer group">
+                              <input 
+                                type="file" 
+                                accept=".xlsx,.xls,.csv" 
+                                onChange={handleBulkFileChange}
+                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                              />
+                              <div className="flex flex-col items-center justify-center gap-2">
+                                <FileSpreadsheet className="w-8 h-8 text-slate-400 group-hover:text-brand-teal transition-colors" />
+                                <span className="text-sm font-semibold text-slate-600">Choose Excel or CSV file</span>
+                                <span className="text-xs text-slate-400">File should contain 'Name' and 'Number' columns</span>
+                              </div>
+                            </div>
+
+                            {bulkPreview.length > 0 && (
+                              <div className="space-y-3">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Preview ({bulkPreview.length} leads)</span>
+                                </div>
+                                <div className="max-h-[200px] overflow-y-auto border border-slate-100 rounded-lg divide-y divide-slate-50 bg-slate-50/50">
+                                  {bulkPreview.slice(0, 50).map((p, idx) => (
+                                    <div key={idx} className="p-2 flex justify-between text-xs">
+                                      <span className="font-semibold text-slate-700">{p.name || <span className="text-slate-400 italic">No Name</span>}</span>
+                                      <span className="text-slate-500">{p.number || <span className="text-slate-400 italic">No Number</span>}</span>
+                                    </div>
+                                  ))}
+                                  {bulkPreview.length > 50 && (
+                                    <div className="p-2 text-center text-[10px] font-bold text-slate-400 uppercase">
+                                      + {bulkPreview.length - 50} more leads
+                                    </div>
+                                  )}
+                                </div>
+                                <Button 
+                                  className="w-full bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-9 text-xs"
+                                  onClick={handleBulkUploadSubmit}
+                                  disabled={isBulkSubmitting}
+                                >
+                                  {isBulkSubmitting ? "Importing..." : `Confirm & Import ${bulkPreview.length} Leads`}
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+                  )}
         </div>
       </PageHeader>
 
