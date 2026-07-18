@@ -91,6 +91,7 @@ import { useUser } from "@/hooks/useUser";
 import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { TodaysWorkView } from "@/components/hrms/TodaysWorkView";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useConfirm } from "@/context/ConfirmContext";
 import { DailyProgressView } from "@/components/hrms/DailyProgressView";
@@ -233,6 +234,38 @@ export default function MarketingReportsPage() {
   const [projectRemarks, setProjectRemarks] = useState<any[]>([]);
   const [showAddForm, setShowAddForm] = useState(true);
   const [editingRemarks, setEditingRemarks] = useState<string[]>([]);
+  const [popoverEdits, setPopoverEdits] = useState<Record<string, string>>({});
+
+  const handleSavePopoverRemark = async (projectId: string, dateStr: string, clientId: string | undefined, type: 'userRemark' | 'clientRemark', text: string) => {
+    try {
+      const existing = projectRemarks.find(pr => pr.projectId === projectId && pr.date === dateStr);
+      
+      const payload = {
+        projectId,
+        clientId,
+        date: dateStr,
+        userRemark: type === 'userRemark' ? text : (existing?.userRemark || ""),
+        clientRemark: type === 'clientRemark' ? text : (existing?.clientRemark || ""),
+        revenue: existing?.revenue || 0,
+        followers: existing?.followers || 0,
+        remark: existing?.remark || ""
+      };
+
+      const res = await fetch(`${API_URL}/marketing/project-remarks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        toast.success(type === 'userRemark' ? "User remark updated" : "Client remark updated");
+        fetchData();
+      } else {
+        toast.error("Failed to update remark");
+      }
+    } catch (e) {
+      toast.error("Error updating remark");
+    }
+  };
 
   const handleUpdateProjectRemark = async (projectId: string, dateStr: string, remark: string, clientId?: string) => {
     try {
@@ -398,6 +431,131 @@ export default function MarketingReportsPage() {
     clientRemark: "",
     remark: ""
   });
+  const [dailyMetricsStandalone, setDailyMetricsStandalone] = useState({
+    date: "",
+    projectId: "",
+    revenue: 0,
+    followers: 0,
+    userRemark: "",
+    clientRemark: ""
+  });
+  const [isSavingStandaloneMetrics, setIsSavingStandaloneMetrics] = useState(false);
+  
+  const handleSaveStandaloneMetrics = async () => {
+    if (!dailyMetricsStandalone.date) {
+      toast.error("Please select a date.");
+      return;
+    }
+    const clientProjects = projects.filter((p: any) => p.clientId === selectedClientFilter);
+    const project = dailyMetricsStandalone.projectId 
+      ? clientProjects.find((p: any) => p.id === dailyMetricsStandalone.projectId) 
+      : clientProjects[0];
+    const projectId = project?.id;
+    if(!projectId) {
+      toast.error("No project found for this client.");
+      return;
+    }
+
+    setIsSavingStandaloneMetrics(true);
+    try {
+      const res = await fetch(`${API_URL}/marketing/project-remarks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: projectId,
+          clientId: selectedClientFilter,
+          date: dailyMetricsStandalone.date,
+          revenue: dailyMetricsStandalone.revenue,
+          followers: dailyMetricsStandalone.followers,
+          userRemark: dailyMetricsStandalone.userRemark,
+          clientRemark: dailyMetricsStandalone.clientRemark,
+          remark: ""
+        })
+      });
+      if (res.ok) {
+        // Save detailed task log
+        await fetch(`${API_URL}/task-logs`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "Daily Metrics Updated",
+            details: `Date: ${dailyMetricsStandalone.date} - Rev: ${dailyMetricsStandalone.revenue}, Follows: ${dailyMetricsStandalone.followers}` + (dailyMetricsStandalone.userRemark ? `\nUser Remark: ${dailyMetricsStandalone.userRemark}` : "") + (dailyMetricsStandalone.clientRemark ? `\nClient Remark: ${dailyMetricsStandalone.clientRemark}` : ""),
+            projectId: projectId,
+            clientId: selectedClientFilter,
+            performedBy: user?.id || user?._id,
+            userName: user?.name || `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Unknown User",
+          })
+        });
+
+        toast.success("Daily project metrics saved successfully");
+        fetchData();
+      } else {
+        toast.error("Failed to save metrics");
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error("An error occurred while saving metrics");
+    } finally {
+      setIsSavingStandaloneMetrics(false);
+    }
+  };
+
+  useEffect(() => {
+    const clientProjects = projects.filter((p: any) => p.clientId === selectedClientFilter);
+    const currentProjectId = dailyMetricsStandalone.projectId || clientProjects[0]?.id;
+    
+    if (currentProjectId && dailyMetricsStandalone.date) {
+      // First try to find it in locally loaded projectRemarks
+      const existingLocal = projectRemarks.find(pr => pr.projectId === currentProjectId && pr.date === dailyMetricsStandalone.date);
+      if (existingLocal) {
+        setDailyMetricsStandalone(prev => ({
+          ...prev,
+          revenue: existingLocal.revenue || 0,
+          followers: existingLocal.followers || 0,
+          userRemark: existingLocal.userRemark || "",
+          clientRemark: existingLocal.clientRemark || ""
+        }));
+      } else {
+        // Fetch from API directly
+        fetch(`${API_URL}/marketing/project-remarks?projectId=${currentProjectId}&startDate=${dailyMetricsStandalone.date}&endDate=${dailyMetricsStandalone.date}`)
+          .then(res => res.ok ? res.json() : [])
+          .then(data => {
+            const existing = data[0];
+            if (existing) {
+              setDailyMetricsStandalone(prev => ({
+                ...prev,
+                revenue: existing.revenue || 0,
+                followers: existing.followers || 0,
+                userRemark: existing.userRemark || "",
+                clientRemark: existing.clientRemark || ""
+              }));
+            } else {
+              setDailyMetricsStandalone(prev => ({
+                ...prev,
+                revenue: 0,
+                followers: 0,
+                userRemark: "",
+                clientRemark: ""
+              }));
+            }
+          })
+          .catch(err => {
+            console.error("Failed to fetch specific remark for standalone form", err);
+            setDailyMetricsStandalone(prev => ({
+              ...prev, revenue: 0, followers: 0, userRemark: "", clientRemark: ""
+            }));
+          });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dailyMetricsStandalone.date, dailyMetricsStandalone.projectId, projects, selectedClientFilter]);
+
+  useEffect(() => {
+    if (dateRange?.from) {
+      setDailyMetricsStandalone(prev => ({ ...prev, date: format(dateRange.from, 'yyyy-MM-dd') }));
+    }
+  }, [dateRange?.from]);
+
   const [projectEndDate, setProjectEndDate] = useState<string>("");
   const [isSavingDailyMetrics, setIsSavingDailyMetrics] = useState(false);
   
@@ -825,7 +983,14 @@ export default function MarketingReportsPage() {
     cpl: 0,
     remarks: "",
     leadsFileUrl: "",
+    leadsFileName: "",
+    leadsFileSize: 0,
+    revenue: 0,
+    followers: 0,
+    userRemark: "",
+    clientRemark: "",
   });
+
   const [isQuickAdding, setIsQuickAdding] = useState(false);
 
   const [monthlyFormData, setMonthlyFormData] = useState({
@@ -1045,8 +1210,8 @@ export default function MarketingReportsPage() {
           projectId,
           projectName,
           date: submitDateStr,
-          revenue: 0,
-          followers: 0,
+          revenue: quickAddData.revenue || 0,
+          followers: quickAddData.followers || 0,
           campaignOptimization: false,
           performedBy: user?.id,
           userName: user?.name || user?.firstName || "Unknown User",
@@ -1068,6 +1233,7 @@ export default function MarketingReportsPage() {
           remarks: "",
           leadsFileUrl: "",
         });
+        
         fetchData();
         fetchClients();
       } else {
@@ -1606,7 +1772,7 @@ export default function MarketingReportsPage() {
 
   const fetchLogs = async (
     report: any,
-    type: "daily" | "monthly" | "client" | "project-remark",
+    type: "daily" | "monthly" | "client" | "project-remark" | "client-remark",
   ) => {
     setIsLoadingLogs(true);
     setLogsOpen(true);
@@ -1616,6 +1782,7 @@ export default function MarketingReportsPage() {
       if (type === "daily") param = `dailyReportId=${report.id}`;
       else if (type === "monthly") param = `monthlyReportId=${report.id}`;
       else if (type === "project-remark") param = `projectId=${report.id}`;
+      else if (type === "client-remark") param = `clientId=${report.id}`;
       else {
         const clientProjs = projects.filter((p: any) => p.clientId === report.id);
         if (clientProjs.length > 0) {
@@ -1631,8 +1798,8 @@ export default function MarketingReportsPage() {
       const res = await fetch(`${API_URL}/task-logs?${param}`);
       if (res.ok) {
         const data = await res.json();
-        if (type === "project-remark") {
-          setReportLogs(data.filter((d: any) => d.action === "Daily Follow-up Completed"));
+        if (type === "project-remark" || type === "client-remark") {
+          setReportLogs(data.filter((d: any) => d.action === "Daily Follow-up Completed" || d.action === "Daily Metrics Updated"));
         } else {
           setReportLogs(data);
         }
@@ -1829,17 +1996,34 @@ export default function MarketingReportsPage() {
     {},
   );
 
-  const dailyTotals = filteredDaily.reduce(
-    (acc, curr) => ({
-      reach: acc.reach + (curr.reach || 0),
-      impression: acc.impression + (curr.impression || 0),
-      leads: acc.leads + (curr.leads || 0),
-      revenue: acc.revenue + (curr.revenue || 0),
-      followers: acc.followers + (curr.followers || 0),
-      spend: acc.spend + (curr.spend || 0),
-    }),
-    { reach: 0, impression: 0, leads: 0, revenue: 0, followers: 0, spend: 0 },
-  );
+  const dailyTotals = (() => {
+    let reach = 0, impression = 0, leads = 0, spend = 0;
+    const uniqueProjectDates = new Set<string>();
+
+    filteredDaily.forEach((curr: any) => {
+      reach += (curr.reach || 0);
+      impression += (curr.impression || 0);
+      leads += (curr.leads || 0);
+      spend += (curr.spend || 0);
+
+      const targetDate = curr.date ? format(new Date(curr.date), "yyyy-MM-dd") : (dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd"));
+      const targetProjectId = curr.projectId || curr.clientId || "unknown";
+      uniqueProjectDates.add(`${targetProjectId}_${targetDate}`);
+    });
+
+    let revenue = 0, followers = 0;
+    uniqueProjectDates.forEach(key => {
+      const [pId, ...dateParts] = key.split('_');
+      const d = dateParts.join('_');
+      const remarkObj = projectRemarks.find(pr => String(pr.projectId) === String(pId) && pr.date === d);
+      if (remarkObj) {
+        revenue += (remarkObj.revenue || 0);
+        followers += (remarkObj.followers || 0);
+      }
+    });
+
+    return { reach, impression, leads, revenue, followers, spend };
+  })();
 
   const dailyClientTotals = filteredDaily.reduce(
     (acc: Record<string, any>, curr) => {
@@ -2387,6 +2571,12 @@ export default function MarketingReportsPage() {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
           <TabsList className="bg-slate-100 p-1 rounded-lg">
             <TabsTrigger
+              value="todays-work"
+              className="px-6 py-2 rounded-md transition-all"
+            >
+              Today's Work
+            </TabsTrigger>
+            <TabsTrigger
               value="daily"
               className="px-6 py-2 rounded-md transition-all"
             >
@@ -2670,6 +2860,51 @@ export default function MarketingReportsPage() {
 
                 
         <TabsContent
+          value="todays-work"
+          className="mt-0 flex-1 flex flex-col overflow-auto data-[state=active]:flex-1 data-[state=active]:flex data-[state=active]:flex-col min-h-0"
+        >
+          <TodaysWorkView 
+            projects={projects} 
+            allEmployees={employees} 
+            clients={clients} 
+            taskFilterType={taskFilterType} 
+            currentUser={user}
+            dailyReports={dailyReports}
+            projectRemarks={projectRemarks}
+            onTaskActionClick={(client, project, taskId, dateStr) => {
+              setActiveTab("daily");
+              setSelectedClientFilter(client.id);
+              
+              if (taskId === "data_fill") {
+                setShowAddForm(true);
+                setQuickAddData({
+                  date: dateStr || new Date().toISOString().split("T")[0],
+                  campaignName: "",
+                  reach: 0,
+                  impression: 0,
+                  leads: 0,
+                  followers: 0,
+                  spend: 0,
+                  cpl: 0,
+                  revenue: 0,
+                  remarks: "",
+                  projectId: project.id,
+                  projectName: project.name,
+                });
+              } else {
+                // For other tasks, just redirect to the tab and scroll to metrics section if needed
+                // The metrics form is always visible on the page when client is selected
+                setShowAddForm(false);
+                setDailyMetricsStandalone(prev => ({ ...prev, date: dateStr || new Date().toISOString().split("T")[0] }));
+                setTimeout(() => {
+                  document.getElementById("daily-project-metrics-form")?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 100);
+              }
+            }}
+          />
+        </TabsContent>
+
+        <TabsContent
           value="daily"
           className={isDailyFullScreen ? "fixed inset-0 z-50 bg-slate-100 flex flex-col p-6 overflow-hidden" : "mt-0 flex-1 flex flex-col overflow-hidden data-[state=active]:flex-1 data-[state=active]:flex data-[state=active]:flex-col min-h-0"}
         >
@@ -2861,20 +3096,6 @@ export default function MarketingReportsPage() {
                                                         >
                                                           <History className="w-[18px] h-[18px]" />
                                                         </button>
-                                                        <button
-                                                          onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setDailyMetricsProject(p);
-                                                            setProjectEndDate(p.endDate ? p.endDate.split('T')[0] : "");
-                                                            const dateStr = dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : new Date().toISOString().split("T")[0];
-                                                            fetchDailyMetricsData(p.id, dateStr);
-                                                            setDailyMetricsOpen(true);
-                                                          }}
-                                                          className="p-1.5 text-slate-500 hover:text-brand-teal hover:bg-brand-teal/10 rounded transition-all"
-                                                          title="Daily Project Metrics"
-                                                        >
-                                                          <Settings className="w-[18px] h-[18px]" />
-                                                        </button>
                                                       </>
                                                     )}
                                                     {(p.assignedEmployeeId === user?.id || isAdmin || !isRegularEmployee) && (
@@ -2975,8 +3196,12 @@ export default function MarketingReportsPage() {
                       <TableHead className="text-center font-bold text-slate-700">
                         Cost Metric (₹)
                       </TableHead>
+
                       <TableHead className="text-center font-bold text-slate-700">
-                        Remarks
+                        User Remark
+                      </TableHead>
+                      <TableHead className="text-center font-bold text-slate-700">
+                        Client Remark
                       </TableHead>
                       <TableHead className="text-center font-bold text-slate-700">
                         Actions
@@ -2992,7 +3217,7 @@ export default function MarketingReportsPage() {
                         {loading ? (
                           <TableRow>
                             <TableCell
-                              colSpan={14}
+                              colSpan={15}
                               className="text-center py-20"
                             >
                               <Loader2 className="w-8 h-8 animate-spin mx-auto text-brand-teal" />
@@ -3353,29 +3578,9 @@ export default function MarketingReportsPage() {
 
 
 
-                                                  <TableCell
-                                                    className={`text-center ${canEditMarketing ? "cursor-text hover:bg-slate-50" : ""}`}
-                                                    onClick={() =>
-                                                      startEditingRow(report)
-                                                    }
-                                                  >
-                                                    {editingRowId ===
-                                                    report.id ? (
-                                                      <Input
-                                                        className="h-8 text-xs bg-white"
-                                                        placeholder="Remark"
-                                                        value={editFormData.remarks || ""}
-                                                        onChange={(e) =>
-                                                          setEditFormData({
-                                                            ...editFormData,
-                                                            remarks: e.target.value,
-                                                          })
-                                                        }
-                                                      />
-                                                    ) : (
-                                                      report.remarks || "-"
-                                                    )}
-                                                  </TableCell>
+
+                                                  <TableCell className="text-center text-slate-500">-</TableCell>
+                                                  <TableCell className="text-center text-slate-500">-</TableCell>
 
                                                   <TableCell className="text-center">
                                                     <div className="flex justify-center items-center gap-1">
@@ -3490,130 +3695,109 @@ export default function MarketingReportsPage() {
                                           );
                                         })}
                                         {/* Subtotal row for the group */}
-                                        <TableRow className="bg-slate-50/80 font-medium">
-                                          <TableCell
-                                            colSpan={5}
-                                            className="text-right text-slate-600"
-                                          >
-                                            Total
-                                          </TableCell>
-                                          <TableCell className="text-center text-slate-600">
-                                            {groupTotals.reach.toLocaleString()}
-                                          </TableCell>
-                                          <TableCell className="text-center text-slate-600">
-                                            {groupTotals.impression.toLocaleString()}
-                                          </TableCell>
-                                          <TableCell className="text-center text-slate-600">
-                                            {groupTotals.leads.toLocaleString()}
-                                          </TableCell>
-                                          <TableCell className="text-center font-semibold text-brand-teal">
-                                            ₹
-                                            {(
-                                              groupTotals.revenue || 0
-                                            ).toLocaleString()}
-                                          </TableCell>
-                                          <TableCell className="text-center text-slate-600">
-                                            {groupTotals.followers.toLocaleString()}
-                                          </TableCell>
-                                          <TableCell className="text-center text-brand-teal">
-                                            ₹
-                                            {groupTotals.spend.toLocaleString()}
-                                          </TableCell>
-                                          <TableCell className="text-center font-semibold text-rose-500">
-                                            ₹
-                                            {(groupTotals.leads > 0
-                                              ? groupTotals.spend /
-                                                groupTotals.leads
-                                              : 0
-                                            ).toLocaleString(undefined, {
-                                              minimumFractionDigits: 2,
-                                              maximumFractionDigits: 2,
-                                            })}
-                                          </TableCell>
-                                          <TableCell>
-                                            <div className="flex items-center gap-1">
-                                              {(() => {
-                                                const targetDate = dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd");
-                                                const targetProjectId = reports[0]?.projectId || reports[0]?.clientId || "unknown";
-                                                const remarkObj = projectRemarks.find(pr => pr.projectId === targetProjectId && pr.date === targetDate);
-                                                const remarkText = remarkObj?.remark || "";
-                                                const isEditing = editingRemarks.includes(`${targetProjectId}_${targetDate}`);
-                                                const showInput = !remarkObj || isEditing || remarkObj.isDirty || !remarkText;
-
-                                                if (!showInput) {
-                                                  return (
-                                                    <div 
-                                                      className="text-xs text-slate-700 cursor-text hover:bg-slate-50 px-2 py-1.5 rounded border border-transparent hover:border-slate-200 transition-colors w-[150px] truncate"
-                                                      onClick={() => setEditingRemarks(prev => [...prev, `${targetProjectId}_${targetDate}`])}
-                                                      title={remarkText}
-                                                    >
-                                                      {remarkText}
-                                                    </div>
-                                                  );
-                                                }
-
-                                                return (
-                                                  <>
-                                                    <Input
-                                                      placeholder="Daily follow-up / remark"
-                                                      className="w-[150px] h-8 text-xs bg-white/50 focus:bg-white"
-                                                      value={remarkText}
-                                                      onChange={(e) => {
-                                                        const newVal = e.target.value;
-                                                        setProjectRemarks(prev => {
-                                                          const filtered = prev.filter(p => !(p.projectId === targetProjectId && p.date === targetDate));
-                                                          return [...filtered, { projectId: targetProjectId, date: targetDate, remark: newVal, isDirty: true }];
-                                                        });
-                                                      }}
-                                                      autoFocus={isEditing}
-                                                      onBlur={() => {
-                                                        if (!remarkObj?.isDirty) {
-                                                          setEditingRemarks(prev => prev.filter(id => id !== `${targetProjectId}_${targetDate}`));
-                                                        }
-                                                      }}
-                                                    />
-                                                    {remarkObj?.isDirty && (
-                                                      <Button
-                                                        size="icon"
-                                                        variant="ghost"
-                                                        className="h-8 w-8 text-emerald-600 hover:bg-emerald-50 shrink-0"
-                                                        onMouseDown={(e) => e.preventDefault()}
-                                                        onClick={() => {
-                                                          handleUpdateProjectRemark(
-                                                            targetProjectId,
-                                                            targetDate,
-                                                            remarkText,
-                                                            reports[0]?.clientId
-                                                          );
-                                                          setEditingRemarks(prev => prev.filter(id => id !== `${targetProjectId}_${targetDate}`));
-                                                        }}
-                                                      >
-                                                        <Check className="w-4 h-4" />
-                                                      </Button>
-                                                    )}
-                                                  </>
-                                                );
-                                              })()}
-                                            </div>
-                                          </TableCell>
-                                          <TableCell className="text-center">
-                                            <Button
-                                              variant="ghost"
-                                              size="icon"
-                                              className="h-8 w-8 text-slate-500 hover:text-slate-700 hover:bg-slate-100"
-                                              onClick={() => {
-                                                const targetProjectId = reports[0]?.projectId || reports[0]?.clientId || "unknown";
-                                                fetchLogs(
-                                                  { id: targetProjectId, type: "project" },
-                                                  "project-remark"
-                                                );
-                                              }}
+                                        {(() => {
+                                          const targetDate = reports[0]?.date ? format(new Date(reports[0].date), "yyyy-MM-dd") : (dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd"));
+                                          const targetProjectId = reports[0]?.projectId || reports[0]?.clientId || "unknown";
+                                          const remarkObj = projectRemarks.find(pr => pr.projectId === targetProjectId && pr.date === targetDate);
+                                          
+                                          return (
+                                          <TableRow className="bg-slate-50/80 font-medium">
+                                            <TableCell
+                                              colSpan={5}
+                                              className="text-right text-slate-600"
                                             >
-                                              <History className="w-4 h-4" />
-                                            </Button>
-                                          </TableCell>
-                                          <TableCell></TableCell>
-                                        </TableRow>
+                                              Total
+                                            </TableCell>
+                                            <TableCell className="text-center text-slate-600">
+                                              {groupTotals.reach.toLocaleString()}
+                                            </TableCell>
+                                            <TableCell className="text-center text-slate-600">
+                                              {groupTotals.impression.toLocaleString()}
+                                            </TableCell>
+                                            <TableCell className="text-center text-slate-600">
+                                              {groupTotals.leads.toLocaleString()}
+                                            </TableCell>
+                                            <TableCell className="text-center font-semibold text-brand-teal">
+                                              ₹
+                                              {(
+                                                remarkObj?.revenue || 0
+                                              ).toLocaleString()}
+                                            </TableCell>
+                                            <TableCell className="text-center text-slate-600">
+                                              {(remarkObj?.followers || 0).toLocaleString()}
+                                            </TableCell>
+                                            <TableCell className="text-center text-brand-teal">
+                                              ₹
+                                              {groupTotals.spend.toLocaleString()}
+                                            </TableCell>
+                                            <TableCell className="text-center font-semibold text-rose-500">
+                                              ₹
+                                              {(groupTotals.leads > 0
+                                                ? groupTotals.spend /
+                                                  groupTotals.leads
+                                                : 0
+                                              ).toLocaleString(undefined, {
+                                                minimumFractionDigits: 2,
+                                                maximumFractionDigits: 2,
+                                              })}
+                                            </TableCell>
+
+                                            <TableCell className="text-center">
+                                              {remarkObj?.userRemark ? (
+                                                <Popover>
+                                                  <PopoverTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-sky-500 hover:text-sky-700 hover:bg-sky-50 rounded-full mx-auto" title="View User Remark">
+                                                      <FileText className="w-4 h-4" />
+                                                    </Button>
+                                                  </PopoverTrigger>
+                                                  <PopoverContent className="w-80 p-4 text-sm whitespace-pre-wrap break-words border-sky-100 shadow-md z-[100]">
+                                                    <div className="font-semibold mb-2 text-slate-700 flex items-center gap-2">
+                                                      <FileText className="w-4 h-4 text-sky-500"/> User Remark
+                                                    </div>
+                                                    <div className="text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-100">{remarkObj.userRemark}</div>
+                                                  </PopoverContent>
+                                                </Popover>
+                                              ) : (
+                                                <span className="text-slate-300">-</span>
+                                              )}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                              {remarkObj?.clientRemark ? (
+                                                <Popover>
+                                                  <PopoverTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded-full mx-auto" title="View Client Remark">
+                                                      <FileText className="w-4 h-4" />
+                                                    </Button>
+                                                  </PopoverTrigger>
+                                                  <PopoverContent className="w-80 p-4 text-sm whitespace-pre-wrap break-words border-indigo-100 shadow-md z-[100]">
+                                                    <div className="font-semibold mb-2 text-slate-700 flex items-center gap-2">
+                                                      <FileText className="w-4 h-4 text-indigo-500"/> Client Remark
+                                                    </div>
+                                                    <div className="text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-100">{remarkObj.clientRemark}</div>
+                                                  </PopoverContent>
+                                                </Popover>
+                                              ) : (
+                                                <span className="text-slate-300">-</span>
+                                              )}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                                                onClick={() => {
+                                                  fetchLogs(
+                                                    { id: targetProjectId, type: "project" },
+                                                    "project-remark"
+                                                  );
+                                                }}
+                                              >
+                                                <History className="w-4 h-4" />
+                                              </Button>
+                                            </TableCell>
+                                          </TableRow>
+                                          );
+                                        })()}
                                       </React.Fragment>
                                     );
                                   },
@@ -3664,7 +3848,24 @@ export default function MarketingReportsPage() {
                             maximumFractionDigits: 2,
                           })}
                         </TableCell>
-                        <TableCell colSpan={2}></TableCell>
+                        <TableCell colSpan={3}>
+                          <div className="flex items-center justify-center">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                              title="View Total Logs"
+                              onClick={() => {
+                                fetchLogs(
+                                  { id: filteredDaily[0]?.clientId || selectedClientFilter, type: "client" },
+                                  "client-remark"
+                                );
+                              }}
+                            >
+                              <History className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
                       </TableRow>
                     </tfoot>
                   )}
@@ -3841,7 +4042,7 @@ export default function MarketingReportsPage() {
                       </div>
                     </div>
 
-                    <div className="pt-4 flex justify-end gap-3 border-t">
+                    <div className="pt-4 flex justify-end gap-3 border-t mt-4">
                       <Button variant="outline" onClick={() => setShowAddForm(false)}>Cancel</Button>
                       <Button 
                          className="bg-brand-teal hover:bg-brand-teal/90 text-white" 
@@ -3853,6 +4054,77 @@ export default function MarketingReportsPage() {
                       >
                         {isQuickAdding ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : null}
                         Submit Entry
+                      </Button>
+                    </div>
+                  </div>
+                  <div id="daily-project-metrics-form" className="p-6 m-4 mt-8 bg-white rounded-2xl shadow-sm border border-slate-200">
+                    <div className="flex items-center gap-2 mb-6">
+                      <div className="w-8 h-8 rounded-full bg-brand-teal/10 flex items-center justify-center">
+                        <Settings className="w-4 h-4 text-brand-teal"/>
+                      </div>
+                      <h3 className="text-lg font-bold text-slate-800">Daily Project Metrics <span className="text-sm font-normal text-slate-500 ml-1">(Once per day)</span></h3>
+                    </div>
+                    <div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                        <div className="space-y-2">
+                          <Label className="text-slate-600 font-semibold">Date</Label>
+                          <Input 
+                            type="date"
+                            className="h-11 bg-slate-50/50 border-slate-200 hover:border-brand-teal/50 focus:border-brand-teal transition-colors text-sm font-bold text-slate-700"
+                            value={dailyMetricsStandalone.date || (dateRange?.from ? format(dateRange.from, 'yyyy-MM-dd') : "")}
+                            onChange={(e) => setDailyMetricsStandalone({...dailyMetricsStandalone, date: e.target.value})}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-slate-600 font-semibold">Revenue (₹)</Label>
+                          <Input 
+                            type="number" step="0.01"
+                            className="h-11 bg-slate-50/50 border-slate-200 hover:border-brand-teal/50 focus:border-brand-teal transition-colors" 
+                            placeholder="0.00"
+                            value={dailyMetricsStandalone.revenue || ""}
+                            onChange={(e) => setDailyMetricsStandalone({...dailyMetricsStandalone, revenue: parseFloat(e.target.value) || 0})}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-slate-600 font-semibold">Followers</Label>
+                          <Input 
+                            type="number"
+                            className="h-11 bg-slate-50/50 border-slate-200 hover:border-brand-teal/50 focus:border-brand-teal transition-colors" 
+                            placeholder="0"
+                            value={dailyMetricsStandalone.followers || ""}
+                            onChange={(e) => setDailyMetricsStandalone({...dailyMetricsStandalone, followers: parseInt(e.target.value) || 0})}
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <Label className="text-slate-600 font-semibold">User Remark</Label>
+                          <Textarea
+                            className="min-h-[80px] bg-slate-50/50 border-slate-200 hover:border-brand-teal/50 focus:border-brand-teal transition-colors resize-y" 
+                            placeholder="Add user remark..."
+                            value={dailyMetricsStandalone.userRemark || ""}
+                            onChange={(e) => setDailyMetricsStandalone({...dailyMetricsStandalone, userRemark: e.target.value})}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-slate-600 font-semibold">Client Remark</Label>
+                          <Textarea
+                            className="min-h-[80px] bg-slate-50/50 border-slate-200 hover:border-brand-teal/50 focus:border-brand-teal transition-colors resize-y" 
+                            placeholder="Add client remark..."
+                            value={dailyMetricsStandalone.clientRemark || ""}
+                            onChange={(e) => setDailyMetricsStandalone({...dailyMetricsStandalone, clientRemark: e.target.value})}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="pt-6 flex justify-end mt-6 border-t border-slate-100">
+                      <Button 
+                        className="bg-brand-teal hover:bg-brand-teal/90 text-white px-6 h-11 rounded-lg font-semibold shadow-sm transition-all active:scale-95"
+                        disabled={isSavingStandaloneMetrics}
+                        onClick={handleSaveStandaloneMetrics}
+                      >
+                        {isSavingStandaloneMetrics ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : null}
+                        Submit Metrics
                       </Button>
                     </div>
                   </div>
