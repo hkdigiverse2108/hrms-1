@@ -27,7 +27,9 @@ import {
   Flame,
   X,
   BarChart2,
-  RefreshCw
+  RefreshCw,
+  ChevronDown,
+  ChevronRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -945,6 +947,14 @@ export default function SalesPage() {
 
   const LeadTable = ({ data, type }: { data: any[], type: 'active' | 'converted' | 'hot' | 'overdue' }) => {
     const statusContainerRef = React.useRef<HTMLDivElement>(null);
+    const [collapsedCategories, setCollapsedCategories] = React.useState<Record<string, boolean>>({});
+
+    const toggleCategory = (catName: string) => {
+      setCollapsedCategories(prev => ({
+        ...prev,
+        [catName]: !prev[catName]
+      }));
+    };
 
     React.useEffect(() => {
       const handleClickOutside = (event: MouseEvent) => {
@@ -1554,14 +1564,25 @@ export default function SalesPage() {
               categoriesInUse.map((catName) => {
                 const catLeads = filteredAndSorted.filter(l => (l.category || "Other") === catName);
                 if (catLeads.length === 0) return null;
+                const isCollapsed = !!collapsedCategories[catName];
                 return (
                   <React.Fragment key={catName}>
-                    <tr className="bg-slate-100/50 font-bold border-y border-slate-200/50">
+                    <tr 
+                      className="bg-slate-100/50 font-bold border-y border-slate-200/50 cursor-pointer hover:bg-slate-100 transition-colors select-none"
+                      onClick={() => toggleCategory(catName)}
+                    >
                       <td colSpan={11} className="px-6 py-2 text-xs uppercase tracking-wider text-slate-700 font-bold bg-slate-50">
-                        {catName} ({catLeads.length})
+                        <span className="flex items-center gap-1.5">
+                          {isCollapsed ? (
+                            <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
+                          ) : (
+                            <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+                          )}
+                          {catName} ({catLeads.length})
+                        </span>
                       </td>
                     </tr>
-                    {catLeads.map((lead) => renderRow(lead))}
+                    {!isCollapsed && catLeads.map((lead) => renderRow(lead))}
                   </React.Fragment>
                 );
               })
