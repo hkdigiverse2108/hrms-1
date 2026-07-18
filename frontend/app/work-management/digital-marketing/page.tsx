@@ -1090,7 +1090,7 @@ export default function MarketingReportsPage() {
     setLoading(true);
     try {
       let endpoint =
-        activeTab === "daily" || activeTab === "analysis"
+        activeTab === "daily" || activeTab === "analysis" || activeTab === "todays-work"
           ? "/marketing/reports/daily"
           : "/marketing/reports/monthly";
       const params = new URLSearchParams();
@@ -1101,10 +1101,20 @@ export default function MarketingReportsPage() {
         const roleParam = user.role === 'HR' || user.role?.toLowerCase() === 'hr' ? 'Admin' : user.role;
         params.append("role", roleParam);
       }
-      if (activeTab === "daily" || activeTab === "analysis") {
-        if (dateRange?.from) {
-          const startStr = format(dateRange.from, "yyyy-MM-dd");
-          const endStr = dateRange.to ? format(dateRange.to, "yyyy-MM-dd") : startStr;
+      if (activeTab === "daily" || activeTab === "analysis" || activeTab === "todays-work") {
+        let startStr = "";
+        let endStr = "";
+        if (activeTab === "todays-work") {
+          const start = new Date();
+          start.setDate(start.getDate() - 10);
+          startStr = format(start, "yyyy-MM-dd");
+          endStr = format(new Date(), "yyyy-MM-dd");
+        } else if (dateRange?.from) {
+          startStr = format(dateRange.from, "yyyy-MM-dd");
+          endStr = dateRange.to ? format(dateRange.to, "yyyy-MM-dd") : startStr;
+        }
+
+        if (startStr && endStr) {
           params.append("start_date", startStr);
           params.append("end_date", endStr);
         }
@@ -1127,7 +1137,7 @@ export default function MarketingReportsPage() {
             const rData = await remarksRes.json();
             setProjectRemarks(rData);
           }
-          if (dateRange?.from) {
+          if (activeTab !== "todays-work" && dateRange?.from) {
             const startStr = format(dateRange.from, "yyyy-MM-dd");
             const endStr = dateRange.to ? format(dateRange.to, "yyyy-MM-dd") : startStr;
             fetchedDateRef.current = `${startStr}_${endStr}`;

@@ -68,7 +68,20 @@ export function TodaysWorkView({
     if (proj) {
       const dates = getPastDates(6); // Today + past 6 days
       dates.forEach(dateStr => {
-        const hasDataFill = dailyReports.some(r => r.clientId === client.id && normalizeDate(r.date) === dateStr);
+        const hasDataFill = dailyReports.some(r => {
+          if (r.clientId !== client.id || normalizeDate(r.date) !== dateStr) return false;
+          const isFilled = (val: any) => val !== undefined && val !== null && val !== 0 && val !== "" && val !== "0" && val !== 0.0;
+          return (
+            isFilled(r.reach) ||
+            isFilled(r.impression) ||
+            isFilled(r.leads) ||
+            isFilled(r.spend) ||
+            isFilled(r.revenue) ||
+            isFilled(r.followers) ||
+            isFilled(r.cpl) ||
+            (r.remarks && r.remarks.toString().trim() !== "")
+          );
+        });
         const hasMetrics = projectRemarks.some(r => r.projectId === proj.id && normalizeDate(r.date) === dateStr);
 
         let dayTasks = [
