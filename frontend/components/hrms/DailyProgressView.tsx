@@ -61,6 +61,8 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
   const [verifyRecord, setVerifyRecord] = useState<any>(null)
   const [verifyNote, setVerifyNote] = useState('')
   const [verifyRating, setVerifyRating] = useState<number | ''>('')
+  const [pendingTasks, setPendingTasks] = useState<any[]>([])
+  const [isLoadingPendingTasks, setIsLoadingPendingTasks] = useState(false)
   const [logsOpen, setLogsOpen] = useState(false)
   const [reportLogs, setReportLogs] = useState<any[]>([])
   const [isLoadingLogs, setIsLoadingLogs] = useState(false)
@@ -90,6 +92,213 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
       setActiveDeptTab(user.department)
     }
   }, [isTeamLeader, user, activeDeptTab])
+
+  useEffect(() => {
+    if (verifyRecord?.employeeId && verifyRecord?.date) {
+      setIsLoadingPendingTasks(true);
+      
+      const employeeDept = verifyRecord.department?.toLowerCase() || '';
+      const isSmmDept = ['smm', 'creative'].includes(employeeDept);
+      const isDmDept = ['dm', 'digital marketing'].includes(employeeDept);
+      
+      if (isSmmDept) {
+        Promise.all([
+          fetch(`${API_URL}/content-calendar/all`).then(res => res.json()),
+          fetch(`${API_URL}/other-work/all`).then(res => res.json()),
+          fetch(`${API_URL}/projects`).then(res => res.json()),
+          fetch(`${API_URL}/clients`).then(res => res.json())
+        ])
+        .then(([ccData, owData, projectsData, clientsData]) => {
+          let smmTasks: any[] = [];
+          const targetId = verifyRecord.employeeId;
+          const targetDate = verifyRecord.date;
+          
+          const projects = Array.isArray(projectsData) ? projectsData : [];
+          const clients = Array.isArray(clientsData) ? clientsData : [];
+          
+          if (Array.isArray(ccData)) {
+            ccData.forEach(entry => {
+              const project = projects.find((p: any) => p.id === entry.projectId) || {};
+              const client = clients.find((c: any) => c.id === (entry.clientId || project.clientId)) || {};
+              
+              const addIfMatches = (stage: string, date: string, assigneeId: string, isCompleted: boolean) => {
+                if (!date || date > targetDate || isCompleted) return;
+                if (assigneeId !== targetId) return;
+                smmTasks.push({
+                  id: `${entry.id}-${stage}`,
+                  title: `${entry.concept || entry.topic || 'Content Task'} - ${stage}`,
+                  department: 'SMM'
+                });
+              };
+              
+              const isGraphicPost = entry.postReel === 'Post';
+              
+              const scriptAssignee = entry.assignedScriptwriterId || project.assignedScriptwriterId || client.assignedScriptwriterId;
+              addIfMatches('Script', entry.scriptDate, scriptAssignee, !!entry.scriptLink || isGraphicPost);
+              
+              const shootDate = entry.shootDate || entry.scriptDate;
+              const shootLink = entry.shootLink || entry.shootingLink;
+              const shootAssignee = entry.assignedShooterId || project.assignedShooterId || client.assignedShooterId;
+              addIfMatches('Shoot', shootDate, shootAssignee, !!shootLink || isGraphicPost);
+              
+              if (entry.assignedBrandPersonIds && (!shootLink || shootLink === '-')) {
+                const bpIdsRaw = entry.assignedBrandPersonIds;
+                const bpIds = Array.isArray(bpIdsRaw) ? bpIdsRaw : (typeof bpIdsRaw === 'string' ? bpIdsRaw.split(',').map((id: string) => id.trim()).filter(Boolean) : []);
+                if (bpIds.includes(targetId)) {
+                  const taskDeadline = entry.shootDate || entry.postingDate || (entry.monthYear ? `${entry.monthYear}-28` : new Date().toISOString().split('T')[0]);
+                  if (taskDeadline && taskDeadline <= targetDate) {
+                    smmTasks.push({
+                      id: `${entry.id}-BrandPerson`,
+                      title: `${entry.concept || entry.topic || 'Content Task'} - Brand Person`,
+                      department: 'SMM'
+                    });
+                  }
+                }
+              }
+
+              const editAssignee = isGraphicPost 
+                ? (entry.assignedPostDesignerId || project.assignedPostDesignerId || client.assignedPostDesignerId)
+                : (entry.assignedReelEditorId || project.assignedReelEditorId || client.assignedReelEditorId);
+              addIfMatches('Editing', entry.editingStart, editAssignee, isGraphicPost ? !!entry.finalPostLink : !!entry.finalReelLink);
+              
+              const captionAssignee = entry.assignedCaptionWriterId || project.assignedCaptionWriterId || client.assignedCaptionWriterId;
+              addIfMatches('Caption', entry.captionDate || entry.editingStart, captionAssignee, !!entry.caption);
+              
+              if (!isGraphicPost) {
+                const thumbAssignee = entry.assignedThumbnailDesignerId || project.assignedThumbnailDesignerId || client.assignedThumbnailDesignerId;
+                addIfMatches('Thumbnail', entry.thumbnailDate || entry.editingStart, thumbAssignee, !!entry.thumbnailLink);
+              }
+              
+              const approverAssignee = entry.assignedApproverId || project.assignedApproverId || client.assignedApproverId;
+              addIfMatches('Approval', entry.approval, approverAssignee, entry.isApproved === 'Yes');
+              
+              const posterAssignee = entry.assignedPosterId || project.assignedPosterId || client.assignedPosterId;
+              addIfMatches('Posting', entry.postingDate, posterAssignee, !!entry.postingLinkOfIg);
+            });
+          }
+          
+          if (Array.isArray(projects)) {
+            projects.forEach((p: any) => {
+              if (p.department?.toLowerCase() === 'digital marketing') return; // Skip DM projects for SMM employees
+              
+              const client = clients.find((c: any) => c.id === p.clientId) || {};
+              const followUpAssignee = p.assignedFollowUpId || client.assignedFollowUpId;
+              
+              if (followUpAssignee === targetId && p.nextFollowupDate) {
+                const nextDate = p.nextFollowupDate.split("T")[0].split(" ")[0];
+                if (nextDate <= targetDate) {
+                  smmTasks.push({
+                    id: `${p.id}-FollowUp`,
+                    title: `${client.companyName || p.title || 'Client'} - Follow-up`,
+                    department: 'SMM'
+                  });
+                }
+              }
+            });
+          }
+          
+          if (Array.isArray(owData)) {
+            owData.forEach(ow => {
+              if (ow.assigneeId === targetId && ow.deadline && ow.deadline <= targetDate) {
+                if (ow.status !== 'Approved' && ow.status !== 'Completed') {
+                  smmTasks.push({
+                    id: ow.id,
+                    title: ow.title || 'Other Work',
+                    department: 'SMM'
+                  });
+                }
+              }
+            });
+          }
+          setPendingTasks(smmTasks);
+        })
+        .catch(err => console.error("Error fetching SMM pending tasks:", err))
+        .finally(() => setIsLoadingPendingTasks(false));
+      } else if (isDmDept) {
+        Promise.all([
+          fetch(`${API_URL}/marketing/project-remarks`).then(res => res.json()),
+          fetch(`${API_URL}/projects`).then(res => res.json()),
+          fetch(`${API_URL}/clients`).then(res => res.json())
+        ])
+        .then(([prData, projectsData, clientsData]) => {
+          let dmTasks: any[] = [];
+          const targetId = verifyRecord.employeeId;
+          const targetDate = verifyRecord.date;
+          
+          const projects = Array.isArray(projectsData) ? projectsData : [];
+          const clients = Array.isArray(clientsData) ? clientsData : [];
+          const projectRemarks = Array.isArray(prData) ? prData : [];
+          
+          const normalizeDate = (d: string) => d ? d.split(" ")[0].split("T")[0] : "";
+          
+          clients.forEach(client => {
+            const clientProjects = projects.filter((p: any) => p.clientId === client.id && p.department?.toLowerCase() === "digital marketing");
+            const proj = clientProjects[0];
+            
+            if (proj) {
+              const hasDataFill = allReports.some((r: any) => r.clientId === client.id && normalizeDate(r.date) === targetDate);
+              const hasMetrics = projectRemarks.some((r: any) => r.projectId === proj.id && normalizeDate(r.date) === targetDate);
+              
+              let dayTasks = [
+                { id: "data_fill", name: "Data Fill", assigneeId: proj.assignedEmployeeId, date: targetDate },
+                { id: "revenue", name: "Revenue", assigneeId: proj.revenueAssigneeId, date: targetDate },
+                { id: "follower", name: "Follower", assigneeId: proj.followerAssigneeId, date: targetDate },
+                { id: "user_remark", name: "User Remark", assigneeId: proj.userRemarkAssigneeId, date: targetDate },
+                { id: "client_remark", name: "Client Remark", assigneeId: proj.clientRemarkAssigneeId, date: targetDate },
+              ].filter(t => t.assigneeId === targetId);
+              
+              if (hasDataFill) {
+                dayTasks = dayTasks.filter(t => t.id !== "data_fill");
+              }
+              if (hasMetrics) {
+                dayTasks = dayTasks.filter(t => !["revenue", "follower", "user_remark", "client_remark"].includes(t.id));
+              }
+              
+              dayTasks.forEach(t => {
+                dmTasks.push({
+                  id: `${proj.id}-${t.id}`,
+                  title: `${client.companyName || 'Client'} - ${t.name}`,
+                  department: 'Digital Marketing'
+                });
+              });
+            }
+          });
+          
+          setPendingTasks(dmTasks);
+        })
+        .catch(err => console.error("Error fetching DM pending tasks:", err))
+        .finally(() => setIsLoadingPendingTasks(false));
+      } else {
+        fetch(`${API_URL}/wm-tasks`)
+          .then(res => res.json())
+          .then(data => {
+            if (Array.isArray(data)) {
+              const tasks = data.filter((t: any) => {
+                // Must be assigned to this employee
+                if (t.assignedToId !== verifyRecord.employeeId) return false;
+
+                const taskDate = t.dueDate || t.postingDate;
+                const isDev = t.department?.toLowerCase() === 'development' || employeeDept === 'development';
+                
+                if (isDev) {
+                  if (!taskDate || taskDate > verifyRecord.date) return false;
+                  return true;
+                } else {
+                  if (t.status === 'completed' || t.status === 'approved') return false;
+                  if (!taskDate || taskDate > verifyRecord.date) return false;
+                  return true;
+                }
+              });
+              setPendingTasks(tasks);
+            }
+          })
+          .catch(err => console.error("Error fetching pending tasks:", err))
+          .finally(() => setIsLoadingPendingTasks(false))
+      }
+    } else {
+      setPendingTasks([])
+    }
+  }, [verifyRecord?.employeeId, verifyRecord?.date])
 
   const ratingData = useMemo(() => {
      if (!isAdmin) return []
@@ -670,6 +879,61 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
                 </div>
               );
             })()}
+
+            <div>
+              <Label className="text-xs font-bold text-slate-700 mb-2 block">Today's Pending Tasks</Label>
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-4 max-h-[250px] overflow-y-auto">
+                {isLoadingPendingTasks ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="w-5 h-5 animate-spin text-brand-teal" />
+                  </div>
+                ) : pendingTasks.length > 0 ? (
+                  <>
+                    {(() => {
+                      const employeeDept = verifyRecord?.department?.toLowerCase() || '';
+                      
+                      // Normalize department names for matching
+                      const isSmm = (dept: string) => ['smm', 'creative'].includes(dept);
+                      const isDm = (dept: string) => dept === 'digital marketing' || dept === 'dm';
+                      
+                      const filtered = pendingTasks.filter(t => {
+                        const taskDept = t.department?.toLowerCase() || '';
+                        if (!employeeDept) return true;
+                        
+                        if (isSmm(employeeDept) && isSmm(taskDept)) return true;
+                        if (isDm(employeeDept) && isDm(taskDept)) return true;
+                        return taskDept === employeeDept;
+                      });
+
+                      if (filtered.length === 0) {
+                        return <div className="text-[13px] text-slate-500 italic">No pending tasks found for their department.</div>;
+                      }
+
+                      // Group by task department name
+                      const grouped = filtered.reduce((acc: any, task: any) => {
+                        const dept = task.department || 'Other';
+                        if (!acc[dept]) acc[dept] = [];
+                        acc[dept].push(task);
+                        return acc;
+                      }, {});
+
+                      return Object.entries(grouped).map(([dept, tasks]: [string, any]) => (
+                        <div key={dept} className="space-y-1.5">
+                          <h4 className="text-[11px] font-bold text-brand-teal uppercase tracking-wider">{dept}</h4>
+                          <ul className="list-disc pl-5 space-y-1">
+                            {tasks.map((t: any) => (
+                              <li key={t.id} className="text-[13px] text-slate-700 leading-snug">{t.title}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ));
+                    })()}
+                  </>
+                ) : (
+                  <div className="text-[13px] text-slate-500 italic">No pending tasks for this date.</div>
+                )}
+              </div>
+            </div>
 
             <div>
               <Label className="text-xs font-bold text-slate-700 mb-2 block">Rating (1 to 10) <span className="text-rose-500">*</span></Label>

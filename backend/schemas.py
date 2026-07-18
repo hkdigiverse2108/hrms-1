@@ -802,6 +802,8 @@ class ReviewBase(BaseModel):
     date: Optional[RobustDate] = None
     logs: Optional[List[dict]] = None
     updatedBy: Optional[str] = None
+    query: Optional[str] = None
+    adminReply: Optional[str] = None
 
 class ReviewCreate(ReviewBase):
     pass
@@ -810,6 +812,8 @@ class ReviewUpdate(BaseModel):
     summary: Optional[str] = None
     rating: Optional[int] = None
     updatedBy: Optional[str] = None
+    query: Optional[str] = None
+    adminReply: Optional[str] = None
 
 class Review(ReviewBase):
     id: str

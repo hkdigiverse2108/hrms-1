@@ -1878,6 +1878,10 @@ async def update_review(db, review_id: str, update: schemas.ReviewUpdate):
         return None
         
     update_data = update.dict(exclude_unset=True)
+    if hasattr(update, "adminReply") and update.adminReply is not None:
+        update_data["adminReply"] = update.adminReply
+    if hasattr(update, "query") and update.query is not None:
+        update_data["query"] = update.query
     changes = []
     updated_by = update_data.pop("updatedBy", "Unknown User") or "Unknown User"
     

@@ -512,6 +512,38 @@ export function PendingWorkEmbedded({
       if (entry.postingDate && !entry.postingLinkOfIg && canSeeTask('Posting')) tasks.push(enrich('Posting', entry.postingDate, 'posts'));
     });
 
+    if (projects) {
+      projects.forEach(project => {
+        if (!project.nextFollowupDate) return;
+        const nextDate = project.nextFollowupDate.split("T")[0].split(" ")[0];
+        const client = clients.find(c => c.id === project.clientId) || {};
+        
+        const followUpAssigneeId = project.assignedFollowUpId || client.assignedFollowUpId;
+        
+        const isEmployeeOrIntern = ['intern', 'employee'].includes(user?.role?.toLowerCase() || "");
+        if (isEmployeeOrIntern && user?.id !== followUpAssigneeId) return;
+
+        const assignerId = project.teamLeaderId || client.teamLeaderId;
+        const assignee = employees.find((e: any) => e.id === followUpAssigneeId);
+        const assigner = employees.find((e: any) => e.id === assignerId);
+
+        tasks.push({
+          id: `${project.id}-Followup`,
+          clientDisplayName: client.companyName || client.name || project.title || "Client",
+          clientId: project.clientId || project.id,
+          stage: 'Follow-up',
+          deadline: nextDate,
+          type: 'followup',
+          taskName: `Follow-up for ${project.title || client.companyName || 'Project'}`,
+          assigneeName: assignee ? (assignee.name || `${assignee.firstName} ${assignee.lastName}`) : null,
+          assignerName: assigner ? (assigner.name || `${assigner.firstName} ${assigner.lastName}`) : null,
+          assigneeId: followUpAssigneeId,
+          assignerId: assignerId,
+          projectId: project.id
+        });
+      });
+    }
+
     otherWorkEntries.forEach(ow => {
       const uId = user?.id;
       const isAssignee = ow.assigneeId === uId;
