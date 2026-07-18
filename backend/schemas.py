@@ -1499,7 +1499,7 @@ class Meeting(BaseModel):
 
 class LeadBase(BaseModel):
     company: Optional[str] = ""
-    contact: str
+    contact: Optional[str] = ""
     email: Optional[str] = None
     phone: Optional[str] = None
     expectedIncome: Optional[str] = None
