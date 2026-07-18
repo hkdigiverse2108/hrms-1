@@ -177,6 +177,26 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
             });
           }
           
+          if (Array.isArray(projects)) {
+            projects.forEach((p: any) => {
+              if (p.department?.toLowerCase() === 'digital marketing') return; // Skip DM projects for SMM employees
+              
+              const client = clients.find((c: any) => c.id === p.clientId) || {};
+              const followUpAssignee = p.assignedFollowUpId || client.assignedFollowUpId;
+              
+              if (followUpAssignee === targetId && p.nextFollowupDate) {
+                const nextDate = p.nextFollowupDate.split("T")[0].split(" ")[0];
+                if (nextDate <= targetDate) {
+                  smmTasks.push({
+                    id: `${p.id}-FollowUp`,
+                    title: `${client.companyName || p.title || 'Client'} - Follow-up`,
+                    department: 'SMM'
+                  });
+                }
+              }
+            });
+          }
+          
           if (Array.isArray(owData)) {
             owData.forEach(ow => {
               if (ow.assigneeId === targetId && ow.deadline && ow.deadline <= targetDate) {
