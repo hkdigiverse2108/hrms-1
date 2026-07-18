@@ -11,6 +11,7 @@ import {
   Plus,
   Trash2,
   ListPlus,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -234,6 +235,105 @@ export default function CompanyFinancePlanPage() {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved" | "idle">("idle");
 
+  const [rows, setRows] = useState<RowDefinition[]>(PLAN_ROWS);
+  const [isAddRowOpen, setIsAddRowOpen] = useState(false);
+  const [formCategory, setFormCategory] = useState("");
+  const [formCustomCategory, setFormCustomCategory] = useState("");
+  const [formSubCategory, setFormSubCategory] = useState("");
+  const [formMetric, setFormMetric] = useState("");
+  const [formUnit, setFormUnit] = useState("INR");
+  const [formType, setFormType] = useState<"field" | "multiple">("field");
+
+  const existingCategories = useMemo(() => {
+    return Array.from(new Set(rows.map((r) => r.category)));
+  }, [rows]);
+
+  const handleAddRowSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const finalCategory = formCategory === "CUSTOM" ? formCustomCategory.trim() : formCategory;
+    if (!finalCategory || !formSubCategory.trim() || !formMetric.trim() || !formUnit.trim()) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
+    const newId = "custom_" + Date.now();
+    const newRow: RowDefinition = {
+      id: newId,
+      category: finalCategory.toUpperCase(),
+      subCategory: formSubCategory.trim(),
+      metric: formMetric.trim(),
+      unit: formUnit.trim(),
+      type: formType,
+    };
+
+    const updatedRows = [...rows, newRow];
+    setRows(updatedRows);
+    
+    try {
+      const res = await fetch(`${API_URL}/company-finance/row-definitions/${selectedMonth}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: updatedRows.map(({ formula, ...r }) => r) }),
+      });
+      if (res.ok) {
+        toast.success("Category/Row added successfully!");
+        setIsAddRowOpen(false);
+        setFormSubCategory("");
+        setFormMetric("");
+        setFormCustomCategory("");
+      } else {
+        toast.error("Failed to save updated row configuration");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error saving category/row");
+    }
+  };
+
+  const handleDeleteRow = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this category/row?")) return;
+
+    const updatedRows = rows.filter((r) => r.id !== id);
+    setRows(updatedRows);
+
+    try {
+      const res = await fetch(`${API_URL}/company-finance/row-definitions/${selectedMonth}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: updatedRows.map(({ formula, ...r }) => r) }),
+      });
+      if (res.ok) {
+        toast.success("Category/Row removed successfully");
+      } else {
+        toast.error("Failed to save updated row configuration");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error deleting category/row");
+    }
+  };
+
+  const handleRestoreDefaults = async () => {
+    if (!confirm("Are you sure you want to restore all categories/rows to system defaults? Any custom categories will be lost.")) return;
+
+    try {
+      const res = await fetch(`${API_URL}/company-finance/row-definitions/${selectedMonth}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: PLAN_ROWS.map(({ formula, ...r }) => r) }),
+      });
+      if (res.ok) {
+        toast.success("Categories restored to system defaults!");
+        setRows(PLAN_ROWS);
+      } else {
+        toast.error("Failed to restore defaults");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error restoring defaults");
+    }
+  };
+
   // States for nested multiple items modal
   const [activeMultipleId, setActiveMultipleId] = useState<string | null>(null);
   const [modalItems, setModalItems] = useState<MultipleItem[]>([]);
@@ -270,6 +370,26 @@ export default function CompanyFinancePlanPage() {
     try {
       setLoading(true);
       setIsInitialLoad(true);
+
+      // Fetch row definitions
+      try {
+        const rowDefsRes = await fetch(`${API_URL}/company-finance/row-definitions/${selectedMonth}`);
+        if (rowDefsRes.ok) {
+          const rowDefsData = await rowDefsRes.json();
+          if (rowDefsData && Array.isArray(rowDefsData.rows) && rowDefsData.rows.length > 0) {
+            const activeRows = rowDefsData.rows.map((r: any) => {
+              const defaultRow = PLAN_ROWS.find((dr) => dr.id === r.id);
+              if (defaultRow && defaultRow.formula) {
+                return { ...r, formula: defaultRow.formula };
+              }
+              return r;
+            });
+            setRows(activeRows);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching row definitions:", err);
+      }
       
       const res = await fetch(`${API_URL}/company-finance/monthly-plans/${selectedMonth}`);
       let targetValues: Record<string, any> = {};
@@ -618,19 +738,19 @@ export default function CompanyFinancePlanPage() {
   const computedValues = useMemo(() => {
     const computed: Record<string, any> = { ...values };
     for (let pass = 0; pass < 3; pass++) {
-      PLAN_ROWS.forEach((row) => {
+      rows.forEach((row) => {
         if (row.type === "formula" && row.formula) {
           computed[row.id] = row.formula(computed);
         }
       });
     }
     return computed;
-  }, [values]);
+  }, [values, rows]);
 
   const activeRowDetails = useMemo(() => {
     if (!activeMultipleId) return null;
-    return PLAN_ROWS.find((row) => row.id === activeMultipleId) || null;
-  }, [activeMultipleId]);
+    return rows.find((row) => row.id === activeMultipleId) || null;
+  }, [activeMultipleId, rows]);
 
   const modalTotal = useMemo(() => {
     return modalItems.reduce(
@@ -641,14 +761,14 @@ export default function CompanyFinancePlanPage() {
 
   const groupedRows = useMemo(() => {
     const groups: Record<string, RowDefinition[]> = {};
-    PLAN_ROWS.forEach((row) => {
+    rows.forEach((row) => {
       if (!groups[row.category]) {
         groups[row.category] = [];
       }
       groups[row.category].push(row);
     });
     return groups;
-  }, []);
+  }, [rows]);
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto pb-16">
@@ -689,6 +809,35 @@ export default function CompanyFinancePlanPage() {
               ⚠ Unsaved changes
             </span>
           )}
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              if (existingCategories.length > 0 && !formCategory) {
+                setFormCategory(existingCategories[0]);
+              } else if (existingCategories.length === 0) {
+                setFormCategory("CUSTOM");
+              }
+              setIsAddRowOpen(true);
+            }}
+            disabled={loading}
+            className="h-9 font-bold border-blue-600 text-blue-600 hover:bg-blue-50 shadow-sm flex items-center gap-1.5"
+          >
+            <Plus className="w-4 h-4" />
+            Add Row
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleRestoreDefaults}
+            disabled={loading}
+            className="h-9 font-bold border-slate-300 text-slate-600 hover:bg-slate-50 shadow-sm flex items-center gap-1.5"
+          >
+            <RotateCcw className="w-4 h-4" />
+            Restore Defaults
+          </Button>
 
           <Button
             size="sm"
@@ -737,13 +886,14 @@ export default function CompanyFinancePlanPage() {
                   <th className="px-4 py-3 border-r border-red-800/30">Metric</th>
                   <th className="px-4 py-3 border-r border-red-800/30">Unit</th>
                   <th className="px-4 py-3 w-[240px] text-right">Plan Target Value</th>
+                  <th className="px-4 py-3 w-[60px] text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {Object.entries(groupedRows).map(([categoryName, rows]) => (
                   <React.Fragment key={categoryName}>
                     <tr className="bg-slate-100/90 font-extrabold text-slate-700">
-                      <td colSpan={5} className="px-4 py-2 uppercase tracking-wide border-y border-slate-300">
+                      <td colSpan={6} className="px-4 py-2 uppercase tracking-wide border-y border-slate-300">
                         {categoryName}
                       </td>
                     </tr>
@@ -820,6 +970,15 @@ export default function CompanyFinancePlanPage() {
                                 {Number(computedValues[row.id] || 0).toLocaleString("en-IN")}
                               </span>
                             )}
+                          </td>
+                          <td className="px-4 py-1.5 text-center w-[60px]">
+                            <button
+                              onClick={() => handleDeleteRow(row.id)}
+                              className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded transition-colors"
+                              title="Delete Row"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </td>
                         </tr>
                       );
@@ -969,7 +1128,7 @@ export default function CompanyFinancePlanPage() {
           </DialogHeader>
 
           <div className="p-6 overflow-y-auto space-y-6 flex-1">
-            {PLAN_ROWS.filter((row) => row.type === "multiple").map((row) => {
+            {rows.filter((row) => row.type === "multiple").map((row) => {
               const items: MultipleItem[] = Array.isArray(values[row.id]) ? values[row.id] : [];
               const total = items.reduce(
                 (sum, item) => sum + (parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0),
@@ -1054,6 +1213,121 @@ export default function CompanyFinancePlanPage() {
               Close
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- ADD ROW POPUP DIALOG --- */}
+      <Dialog open={isAddRowOpen} onOpenChange={setIsAddRowOpen}>
+        <DialogContent className="max-w-md bg-white p-6">
+          <DialogHeader>
+            <DialogTitle className="text-base font-black text-slate-900 flex items-center gap-2">
+              <Plus className="w-5 h-5 text-blue-600" />
+              Add Category/Row
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              Define a new category, sub-category, or custom financial/operational metric.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleAddRowSubmit} className="mt-4 space-y-4">
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Category</label>
+              <select
+                value={formCategory}
+                onChange={(e) => setFormCategory(e.target.value)}
+                className="w-full h-9 font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg text-xs px-2.5 focus:outline-none focus:ring-1 focus:ring-blue-600"
+              >
+                {existingCategories.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+                <option value="CUSTOM">+ Create Custom Category...</option>
+              </select>
+            </div>
+
+            {formCategory === "CUSTOM" && (
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Custom Category Name</label>
+                <Input
+                  required
+                  placeholder="e.g. OPERATIONAL EXPENSES"
+                  value={formCustomCategory}
+                  onChange={(e) => setFormCustomCategory(e.target.value)}
+                  className="h-9 font-semibold text-slate-700 bg-white border-slate-200 text-xs"
+                />
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Sub-Category</label>
+              <Input
+                required
+                placeholder="e.g. Digital Marketing, SaaS, Office Rent"
+                value={formSubCategory}
+                onChange={(e) => setFormSubCategory(e.target.value)}
+                className="h-9 font-semibold text-slate-700 bg-white border-slate-200 text-xs"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Metric / Item Name</label>
+              <Input
+                required
+                placeholder="e.g. Facebook Ads, Google Suite, Internet"
+                value={formMetric}
+                onChange={(e) => setFormMetric(e.target.value)}
+                className="h-9 font-semibold text-slate-700 bg-white border-slate-200 text-xs"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Unit</label>
+                <select
+                  value={formUnit}
+                  onChange={(e) => setFormUnit(e.target.value)}
+                  className="w-full h-9 font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg text-xs px-2.5 focus:outline-none focus:ring-1 focus:ring-blue-600"
+                >
+                  <option value="INR">INR (Currency)</option>
+                  <option value="Number">Number (Count)</option>
+                  <option value="Percentage">Percentage (%)</option>
+                  <option value="Active">Active/Inactive</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Entry Type</label>
+                <select
+                  value={formType}
+                  onChange={(e) => setFormType(e.target.value as any)}
+                  className="w-full h-9 font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg text-xs px-2.5 focus:outline-none focus:ring-1 focus:ring-blue-600"
+                >
+                  <option value="field">Single Value Input</option>
+                  <option value="multiple">Itemized List (Quantity & Rate)</option>
+                </select>
+              </div>
+            </div>
+
+            <DialogFooter className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2 bg-white">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsAddRowOpen(false)}
+                className="font-bold border-slate-300 text-slate-600 hover:bg-slate-100"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                className="font-bold bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                Add Category/Row
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

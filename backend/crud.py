@@ -9483,3 +9483,30 @@ async def delete_client_transaction(db, tx_id: str):
     result = await db.client_transactions.delete_one({"_id": ObjectId(tx_id)})
     return result.deleted_count > 0
 
+
+# --- Row Definitions ---
+async def get_row_definitions(db, month: str):
+    doc = await db.company_finance_row_definitions.find_one({"month": month})
+    if not doc:
+        global_doc = await db.company_finance_row_definitions.find_one({"id": "config"})
+        if global_doc:
+            return fix_id(global_doc)
+        return {"month": month, "rows": []}
+    return fix_id(doc)
+
+async def save_row_definitions(db, month: str, rows: list):
+    await db.company_finance_row_definitions.update_one(
+        {"month": month},
+        {"$set": {"month": month, "rows": rows}},
+        upsert=True
+    )
+    # Update global config so new months start with the latest configuration
+    await db.company_finance_row_definitions.update_one(
+        {"id": "config"},
+        {"$set": {"id": "config", "rows": rows}},
+        upsert=True
+    )
+    doc = await db.company_finance_row_definitions.find_one({"month": month})
+    return fix_id(doc)
+
+

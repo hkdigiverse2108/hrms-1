@@ -3783,6 +3783,16 @@ async def delete_finance_plan_endpoint(plan_id: str, db=Depends(get_db)):
 async def get_finance_summary_endpoint(db=Depends(get_db)):
     return await crud.get_finance_summary(db)
 
+# --- Row Definitions Endpoints ---
+@app.get("/company-finance/row-definitions/{month}")
+async def get_row_definitions_endpoint(month: str, db=Depends(get_db)):
+    return await crud.get_row_definitions(db, month)
+
+@app.post("/company-finance/row-definitions/{month}")
+async def save_row_definitions_endpoint(month: str, payload: schemas.RowDefinitionsConfigUpdate, db=Depends(get_db)):
+    rows_data = [row.model_dump() for row in payload.rows]
+    return await crud.save_row_definitions(db, month, rows_data)
+
 # --- Task Preset Endpoints ---
 @app.get("/task-presets")
 async def read_task_presets(skip: int = 0, limit: int = 100, db=Depends(get_db)):

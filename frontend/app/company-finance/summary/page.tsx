@@ -13,14 +13,19 @@ import {
   Briefcase,
   Laptop,
   Coins,
+  Plus,
+  Trash2,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 
@@ -214,6 +219,113 @@ export default function CompanyFinanceSummaryPage() {
   const [jobOpenings, setJobOpenings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [rows, setRows] = useState<RowDefinition[]>(PLAN_ROWS);
+  const [isAddRowOpen, setIsAddRowOpen] = useState(false);
+  const [formCategory, setFormCategory] = useState("");
+  const [formCustomCategory, setFormCustomCategory] = useState("");
+  const [formSubCategory, setFormSubCategory] = useState("");
+  const [formMetric, setFormMetric] = useState("");
+  const [formUnit, setFormUnit] = useState("INR");
+  const [formType, setFormType] = useState<"field" | "multiple">("field");
+
+  const getPreviousMonthString = (monthStr: string): string => {
+    const [year, month] = monthStr.split("-").map(Number);
+    const date = new Date(year, month - 2, 1);
+    const prevYear = date.getFullYear();
+    const prevMonth = String(date.getMonth() + 1).padStart(2, "0");
+    return `${prevYear}-${prevMonth}`;
+  };
+
+  const existingCategories = useMemo(() => {
+    return Array.from(new Set(rows.map((r) => r.category)));
+  }, [rows]);
+
+  const handleAddRowSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const finalCategory = formCategory === "CUSTOM" ? formCustomCategory.trim() : formCategory;
+    if (!finalCategory || !formSubCategory.trim() || !formMetric.trim() || !formUnit.trim()) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
+    const newId = "custom_" + Date.now();
+    const newRow: RowDefinition = {
+      id: newId,
+      category: finalCategory.toUpperCase(),
+      subCategory: formSubCategory.trim(),
+      metric: formMetric.trim(),
+      unit: formUnit.trim(),
+      type: formType,
+    };
+
+    const updatedRows = [...rows, newRow];
+    setRows(updatedRows);
+    
+    try {
+      const res = await fetch(`${API_URL}/company-finance/row-definitions/${selectedMonth}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: updatedRows.map(({ formula, ...r }) => r) }),
+      });
+      if (res.ok) {
+        toast.success("Category/Row added successfully!");
+        setIsAddRowOpen(false);
+        setFormSubCategory("");
+        setFormMetric("");
+        setFormCustomCategory("");
+      } else {
+        toast.error("Failed to save updated row configuration");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error saving category/row");
+    }
+  };
+
+  const handleDeleteRow = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this category/row?")) return;
+
+    const updatedRows = rows.filter((r) => r.id !== id);
+    setRows(updatedRows);
+
+    try {
+      const res = await fetch(`${API_URL}/company-finance/row-definitions/${selectedMonth}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: updatedRows.map(({ formula, ...r }) => r) }),
+      });
+      if (res.ok) {
+        toast.success("Category/Row removed successfully");
+      } else {
+        toast.error("Failed to save updated row configuration");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error deleting category/row");
+    }
+  };
+
+  const handleRestoreDefaults = async () => {
+    if (!confirm("Are you sure you want to restore all categories/rows to system defaults? Any custom categories will be lost.")) return;
+
+    try {
+      const res = await fetch(`${API_URL}/company-finance/row-definitions/${selectedMonth}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: PLAN_ROWS.map(({ formula, ...r }) => r) }),
+      });
+      if (res.ok) {
+        toast.success("Categories restored to system defaults!");
+        setRows(PLAN_ROWS);
+      } else {
+        toast.error("Failed to restore defaults");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error restoring defaults");
+    }
+  };
+
   // Drilldown Modal states
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const [modalTitle, setModalTitle] = useState("");
@@ -242,6 +354,27 @@ export default function CompanyFinanceSummaryPage() {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
+
+      // Fetch row definitions
+      try {
+        const rowDefsRes = await fetch(`${API_URL}/company-finance/row-definitions/${selectedMonth}`);
+        if (rowDefsRes.ok) {
+          const rowDefsData = await rowDefsRes.json();
+          if (rowDefsData && Array.isArray(rowDefsData.rows) && rowDefsData.rows.length > 0) {
+            const activeRows = rowDefsData.rows.map((r: any) => {
+              const defaultRow = PLAN_ROWS.find((dr) => dr.id === r.id);
+              if (defaultRow && defaultRow.formula) {
+                return { ...r, formula: defaultRow.formula };
+              }
+              return r;
+            });
+            setRows(activeRows);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching row definitions:", err);
+      }
+
       const [planRes, txRes, empRes, astRes, jobsRes] = await Promise.all([
         fetch(`${API_URL}/company-finance/monthly-plans/${selectedMonth}`),
         fetch(`${API_URL}/company-finance/transactions`),
@@ -376,7 +509,7 @@ export default function CompanyFinanceSummaryPage() {
     });
 
     // Populate calculations for actual values
-    PLAN_ROWS.forEach((row) => {
+    rows.forEach((row) => {
       if (row.id.startsWith("rev_bef_revenue")) {
         computed[row.id] = monthlyTxs.filter((t) => t.type === "credit" && t.category?.toLowerCase().includes("bef")).reduce((sum, t) => sum + (t.amount || 0), 0);
       } else if (row.id.startsWith("rev_bef_acquisitions")) {
@@ -391,41 +524,58 @@ export default function CompanyFinanceSummaryPage() {
         computed[row.id] = monthlyTxs.filter((t) => t.type === "credit" && (t.category?.toLowerCase().includes("course") || t.category?.toLowerCase().includes("client") || t.category?.toLowerCase().includes("hk"))).length;
       }
 
-      // CAPEX & OPEX
-      else if (row.id === "exp_capex_digital_onetime" || row.id === "exp_capex_digital") {
-        computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("capex") && t.description?.toLowerCase().includes("digital")).reduce((sum, t) => sum + (t.amount || 0), 0);
-      } else if (row.id === "exp_capex_architecture_onetime" || row.id === "exp_capex_architecture") {
-        computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("capex") && (t.description?.toLowerCase().includes("architecture") || t.description?.toLowerCase().includes("facility"))).reduce((sum, t) => sum + (t.amount || 0), 0);
-      } else if (row.id === "exp_opex_rent") {
-        computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && (t.category?.toLowerCase().includes("rent") || t.description?.toLowerCase().includes("rent"))).reduce((sum, t) => sum + (t.amount || 0), 0);
-      } else if (row.id === "exp_opex_maintenance") {
-        computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && (t.category?.toLowerCase().includes("maintenance") || t.description?.toLowerCase().includes("maintenance"))).reduce((sum, t) => sum + (t.amount || 0), 0);
-      } else if (row.id === "exp_opex_electricity") {
-        computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && (t.category?.toLowerCase().includes("electricity") || t.description?.toLowerCase().includes("electricity") || t.category?.toLowerCase().includes("power"))).reduce((sum, t) => sum + (t.amount || 0), 0);
-      } else if (row.id === "exp_opex_internet") {
-        computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && (t.category?.toLowerCase().includes("internet") || t.category?.toLowerCase().includes("wifi") || t.description?.toLowerCase().includes("internet"))).reduce((sum, t) => sum + (t.amount || 0), 0);
-      } else if (row.id === "exp_opex_refreshments") {
-        computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && (t.category?.toLowerCase().includes("refreshment") || t.description?.toLowerCase().includes("tea") || t.description?.toLowerCase().includes("coffee"))).reduce((sum, t) => sum + (t.amount || 0), 0);
-      } else if (row.id === "exp_opex_cleaning") {
-        computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && (t.category?.toLowerCase().includes("cleaning") || t.description?.toLowerCase().includes("cleaning") || t.category?.toLowerCase().includes("housekeeping"))).reduce((sum, t) => sum + (t.amount || 0), 0);
+      // Expenses actual computation
+      else if (row.id === "exp_capex_digital_onetime") {
+        computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("capex") && t.category?.toLowerCase().includes("digital") && t.category?.toLowerCase().includes("one")).reduce((sum, t) => sum + (t.amount || 0), 0);
+      } else if (row.id === "exp_capex_architecture_onetime") {
+        computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("capex") && t.category?.toLowerCase().includes("architecture") && t.category?.toLowerCase().includes("one")).reduce((sum, t) => sum + (t.amount || 0), 0);
+      } else if (row.id === "exp_capex_digital") {
+        computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("capex") && t.category?.toLowerCase().includes("digital") && !t.category?.toLowerCase().includes("one")).reduce((sum, t) => sum + (t.amount || 0), 0);
+      } else if (row.id === "exp_capex_architecture") {
+        computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("capex") && t.category?.toLowerCase().includes("architecture") && !t.category?.toLowerCase().includes("one")).reduce((sum, t) => sum + (t.amount || 0), 0);
       }
-
-      // Salaries
+      
+      else if (row.id === "exp_opex_rent") {
+        computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("rent")).reduce((sum, t) => sum + (t.amount || 0), 0);
+      } else if (row.id === "exp_opex_maintenance") {
+        computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("maintenance")).reduce((sum, t) => sum + (t.amount || 0), 0);
+      } else if (row.id === "exp_opex_electricity") {
+        computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("electricity")).reduce((sum, t) => sum + (t.amount || 0), 0);
+      } else if (row.id === "exp_opex_internet") {
+        computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && (t.category?.toLowerCase().includes("internet") || t.category?.toLowerCase().includes("communication"))).reduce((sum, t) => sum + (t.amount || 0), 0);
+      } else if (row.id === "exp_opex_refreshments") {
+        computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("refreshment")).reduce((sum, t) => sum + (t.amount || 0), 0);
+      } else if (row.id === "exp_opex_cleaning") {
+        computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("cleaning")).reduce((sum, t) => sum + (t.amount || 0), 0);
+      }
+      
       else if (row.id === "exp_salary_current") computed[row.id] = payroll;
       else if (row.id === "exp_salary_new") computed[row.id] = newHiresPayroll;
-
-      // Marketing & Ops
+      
       else if (row.id === "exp_mkt_digital") {
-        computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("marketing") && t.description?.toLowerCase().includes("digital")).reduce((sum, t) => sum + (t.amount || 0), 0);
+        computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("marketing") && t.category?.toLowerCase().includes("digital")).reduce((sum, t) => sum + (t.amount || 0), 0);
       } else if (row.id === "exp_mkt_collab") {
-        computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("marketing") && t.description?.toLowerCase().includes("collab")).reduce((sum, t) => sum + (t.amount || 0), 0);
+        computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("collaboration")).reduce((sum, t) => sum + (t.amount || 0), 0);
       } else if (row.id === "exp_ops_misc") {
-        computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && (t.category?.toLowerCase().includes("operations") || t.category?.toLowerCase().includes("misc")) && !t.category?.toLowerCase().includes("travel")).reduce((sum, t) => sum + (t.amount || 0), 0);
+        computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("miscellaneous")).reduce((sum, t) => sum + (t.amount || 0), 0);
       } else if (row.id === "exp_ops_travel") {
-        computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && (t.category?.toLowerCase().includes("travel") || t.category?.toLowerCase().includes("conveyance") || t.description?.toLowerCase().includes("travel"))).reduce((sum, t) => sum + (t.amount || 0), 0);
+        computed[row.id] = monthlyTxs.filter((t) => t.type === "debit" && t.category?.toLowerCase().includes("travel")).reduce((sum, t) => sum + (t.amount || 0), 0);
       }
-
-      // Staffing Actual counts
+      
+      else if (row.id === "cf_opening") {
+        // Find previous month closing
+        const prevMonthStr = getPreviousMonthString(selectedMonth);
+        const prevMonthTxs = transactions.filter((t) => t.date && t.date.substring(0, 7) === prevMonthStr);
+        const prevCredits = prevMonthTxs.filter((t) => t.type === "credit").reduce((sum, t) => sum + (t.amount || 0), 0);
+        const prevDebits = prevMonthTxs.filter((t) => t.type === "debit").reduce((sum, t) => sum + (t.amount || 0), 0);
+        computed[row.id] = prevCredits - prevDebits;
+      }
+      else if (row.id === "cf_cash") {
+        // Simply filter cash ledger transactions of target month
+        computed[row.id] = monthlyTxs.filter((t) => t.paymentMethod?.toLowerCase() === "cash").reduce((sum, t) => sum + (t.type === "credit" ? t.amount : -t.amount), 0);
+      }
+      
+      // Staffing actual counts
       else if (row.id === "stf_devs") computed[row.id] = devs;
       else if (row.id === "stf_creative") computed[row.id] = creative;
       else if (row.id === "stf_mkt") computed[row.id] = mkt;
@@ -433,9 +583,9 @@ export default function CompanyFinanceSummaryPage() {
       else if (row.id === "stf_call") computed[row.id] = call;
       else if (row.id === "stf_qa") computed[row.id] = qa;
       else if (row.id === "stf_hr") computed[row.id] = hr;
-      else if (row.id === "stf_open") computed[row.id] = jobOpenings.filter((j) => (j.status || "").toLowerCase() === "active").length;
+      else if (row.id === "stf_open") computed[row.id] = jobOpenings.filter((job) => (job.status || "").toLowerCase() === "active").length;
       else if (row.id === "stf_payroll") computed[row.id] = payroll;
-
+      
       // Assets counts
       else if (row.id === "ast_phy_ac") computed[row.id] = ac;
       else if (row.id === "ast_phy_chair") computed[row.id] = chair;
@@ -443,15 +593,14 @@ export default function CompanyFinanceSummaryPage() {
       else if (row.id === "ast_phy_fans") computed[row.id] = fans;
       else if (row.id === "ast_phy_cards") computed[row.id] = cards;
       else if (row.id === "ast_phy_tv") computed[row.id] = tv;
-
+      
       else if (row.id === "ast_dig_cpu") computed[row.id] = cpu;
       else if (row.id === "ast_dig_display") computed[row.id] = display;
       else if (row.id === "ast_dig_keyboard") computed[row.id] = keyboard;
       else if (row.id === "ast_dig_phone") computed[row.id] = phone;
       else if (row.id === "ast_dig_headset") computed[row.id] = headset;
       else if (row.id === "ast_dig_laptop") computed[row.id] = laptop;
-
-      // Software active states
+      
       else if (row.id === "ast_sw_chatgpt_go") computed[row.id] = sw_chatgpt_go;
       else if (row.id === "ast_sw_google_ai") computed[row.id] = sw_google_ai;
       else if (row.id === "ast_sw_heygen") computed[row.id] = sw_heygen;
@@ -464,7 +613,7 @@ export default function CompanyFinanceSummaryPage() {
 
     // Calculate actual formulas
     for (let pass = 0; pass < 3; pass++) {
-      PLAN_ROWS.forEach((row) => {
+      rows.forEach((row) => {
         if (row.type === "formula" && row.formula) {
           computed[row.id] = row.formula(computed);
         }
@@ -472,40 +621,40 @@ export default function CompanyFinanceSummaryPage() {
     }
 
     return computed;
-  }, [transactions, employees, assets, jobOpenings, selectedMonth]);
+  }, [transactions, employees, assets, jobOpenings, selectedMonth, rows]);
 
   // Plan Values including evaluated formulas
   const evaluatedPlanValues = useMemo(() => {
     const computed = { ...planValues };
     for (let pass = 0; pass < 3; pass++) {
-      PLAN_ROWS.forEach((row) => {
+      rows.forEach((row) => {
         if (row.type === "formula" && row.formula) {
           computed[row.id] = row.formula(computed);
         }
       });
     }
     return computed;
-  }, [planValues]);
+  }, [planValues, rows]);
 
   // Group by category
   const groupedRows = useMemo(() => {
     const groups: Record<string, RowDefinition[]> = {};
-    PLAN_ROWS.forEach((row) => {
+    rows.forEach((row) => {
       if (!groups[row.category]) {
         groups[row.category] = [];
       }
       groups[row.category].push(row);
     });
     return groups;
-  }, []);
+  }, [rows]);
 
   // Export to Excel-like CSV format
   const handleExportCSV = () => {
     const headers = ["Category", "Sub-Category", "Metric", "Unit", `${selectedMonth} Plan`, `${selectedMonth} Actual`, "Variance"];
-    const rows = [];
+    const rowsList: any[] = [];
 
     Object.entries(groupedRows).forEach(([categoryName, items]) => {
-      rows.push([categoryName.toUpperCase(), "", "", "", "", "", ""]);
+      rowsList.push([categoryName.toUpperCase(), "", "", "", "", "", ""]);
       items.forEach((row) => {
         const plan = evaluatedPlanValues[row.id] || 0;
         const actual = actualValues[row.id] || 0;
@@ -515,7 +664,7 @@ export default function CompanyFinanceSummaryPage() {
           const numActual = parseFloat(actual) || 0;
           variance = String(numActual - numPlan);
         }
-        rows.push([
+        rowsList.push([
           row.category,
           row.subCategory,
           row.metric,
@@ -529,7 +678,7 @@ export default function CompanyFinanceSummaryPage() {
 
     const csvContent =
       "data:text/csv;charset=utf-8," +
-      [headers.join(","), ...rows.map((e) => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))].join("\n");
+      [headers.join(","), ...rowsList.map((e) => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))].join("\n");
 
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -614,6 +763,33 @@ export default function CompanyFinanceSummaryPage() {
           <Button
             size="sm"
             variant="outline"
+            onClick={() => {
+              if (existingCategories.length > 0 && !formCategory) {
+                setFormCategory(existingCategories[0]);
+              } else if (existingCategories.length === 0) {
+                setFormCategory("CUSTOM");
+              }
+              setIsAddRowOpen(true);
+            }}
+            className="h-9 font-bold border-blue-600 text-blue-600 hover:bg-blue-50 shadow-sm flex items-center gap-1.5"
+          >
+            <Plus className="w-4 h-4" />
+            Add Row
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleRestoreDefaults}
+            className="h-9 font-bold border-slate-300 text-slate-600 hover:bg-slate-50 shadow-sm flex items-center gap-1.5"
+          >
+            <RotateCcw className="w-4 h-4" />
+            Restore Defaults
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
             onClick={handleExportCSV}
             className="h-9 font-bold bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm flex items-center gap-1.5"
           >
@@ -644,14 +820,15 @@ export default function CompanyFinanceSummaryPage() {
                   <th className="px-4 py-3 border-r border-red-800/30">Unit</th>
                   <th className="px-4 py-3 text-right border-r border-red-800/30 w-[180px]">{selectedMonth} Plan</th>
                   <th className="px-4 py-3 text-right border-r border-red-800/30 w-[180px]">{selectedMonth} Actual</th>
-                  <th className="px-4 py-3 text-right w-[150px]">Variance</th>
+                  <th className="px-4 py-3 text-right border-r border-red-800/30 w-[150px]">Variance</th>
+                  <th className="px-4 py-3 w-[60px] text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {Object.entries(groupedRows).map(([categoryName, rows]) => (
                   <React.Fragment key={categoryName}>
                     <tr className="bg-slate-100/90 font-extrabold text-slate-700">
-                      <td colSpan={7} className="px-4 py-2 uppercase tracking-wide border-y border-slate-300">
+                      <td colSpan={8} className="px-4 py-2 uppercase tracking-wide border-y border-slate-300">
                         {categoryName}
                       </td>
                     </tr>
@@ -737,6 +914,15 @@ export default function CompanyFinanceSummaryPage() {
                             ) : (
                               varianceVal
                             )}
+                          </td>
+                          <td className="px-4 py-1.5 text-center w-[60px]">
+                            <button
+                              onClick={() => handleDeleteRow(row.id)}
+                              className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded transition-colors"
+                              title="Delete Row"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </td>
                         </tr>
                       );
@@ -916,6 +1102,121 @@ export default function CompanyFinanceSummaryPage() {
               </div>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- ADD ROW POPUP DIALOG --- */}
+      <Dialog open={isAddRowOpen} onOpenChange={setIsAddRowOpen}>
+        <DialogContent className="max-w-md bg-white p-6">
+          <DialogHeader>
+            <DialogTitle className="text-base font-black text-slate-900 flex items-center gap-2">
+              <Plus className="w-5 h-5 text-blue-600" />
+              Add Category/Row
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              Define a new category, sub-category, or custom financial/operational metric.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleAddRowSubmit} className="mt-4 space-y-4">
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Category</label>
+              <select
+                value={formCategory}
+                onChange={(e) => setFormCategory(e.target.value)}
+                className="w-full h-9 font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg text-xs px-2.5 focus:outline-none focus:ring-1 focus:ring-blue-600"
+              >
+                {existingCategories.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+                <option value="CUSTOM">+ Create Custom Category...</option>
+              </select>
+            </div>
+
+            {formCategory === "CUSTOM" && (
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Custom Category Name</label>
+                <Input
+                  required
+                  placeholder="e.g. OPERATIONAL EXPENSES"
+                  value={formCustomCategory}
+                  onChange={(e) => setFormCustomCategory(e.target.value)}
+                  className="h-9 font-semibold text-slate-700 bg-white border-slate-200 text-xs"
+                />
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Sub-Category</label>
+              <Input
+                required
+                placeholder="e.g. Digital Marketing, SaaS, Office Rent"
+                value={formSubCategory}
+                onChange={(e) => setFormSubCategory(e.target.value)}
+                className="h-9 font-semibold text-slate-700 bg-white border-slate-200 text-xs"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Metric / Item Name</label>
+              <Input
+                required
+                placeholder="e.g. Facebook Ads, Google Suite, Internet"
+                value={formMetric}
+                onChange={(e) => setFormMetric(e.target.value)}
+                className="h-9 font-semibold text-slate-700 bg-white border-slate-200 text-xs"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Unit</label>
+                <select
+                  value={formUnit}
+                  onChange={(e) => setFormUnit(e.target.value)}
+                  className="w-full h-9 font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg text-xs px-2.5 focus:outline-none focus:ring-1 focus:ring-blue-600"
+                >
+                  <option value="INR">INR (Currency)</option>
+                  <option value="Number">Number (Count)</option>
+                  <option value="Percentage">Percentage (%)</option>
+                  <option value="Active">Active/Inactive</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Entry Type</label>
+                <select
+                  value={formType}
+                  onChange={(e) => setFormType(e.target.value as any)}
+                  className="w-full h-9 font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg text-xs px-2.5 focus:outline-none focus:ring-1 focus:ring-blue-600"
+                >
+                  <option value="field">Single Value Input</option>
+                  <option value="multiple">Itemized List (Quantity & Rate)</option>
+                </select>
+              </div>
+            </div>
+
+            <DialogFooter className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2 bg-white">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsAddRowOpen(false)}
+                className="font-bold border-slate-300 text-slate-600 hover:bg-slate-100"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                className="font-bold bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                Add Category/Row
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

@@ -2725,3 +2725,18 @@ class ClientTransaction(ClientTransactionBase):
         from_attributes = True
 
 
+# --- Row Definition Schemas ---
+class RowDefinitionSchema(BaseModel):
+    id: str
+    category: str
+    subCategory: str
+    metric: str
+    unit: str
+    type: str
+    options: Optional[List[str]] = None
+
+class RowDefinitionsConfigUpdate(BaseModel):
+    rows: List[RowDefinitionSchema]
+
+
+
