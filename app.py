@@ -35,7 +35,24 @@ def load_env():
     return False
 
 def get_venv_python():
-    return "python"
+    base_dir = Path(__file__).resolve().parent
+    venv_dir = base_dir / ".venv"
+    if venv_dir.exists():
+        if os.name == 'nt':
+            windows_python = venv_dir / "Scripts" / "python.exe"
+            if windows_python.exists():
+                return str(windows_python)
+        else:
+            unix_python = venv_dir / "bin" / "python"
+            if unix_python.exists():
+                return str(unix_python)
+            
+    # Fallback to system python/python3
+    if shutil.which("python3"):
+        return "python3"
+    elif shutil.which("python"):
+        return "python"
+    return "python3" if os.name != 'nt' else "python"
 
 def kill_port_owner(port):
     """Clean up any process using the port before starting (cross-platform)."""
