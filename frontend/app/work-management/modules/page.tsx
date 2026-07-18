@@ -78,7 +78,18 @@ export default function ModulesPage() {
   const [projects, setProjects] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("modules_selectedProjectId") || null;
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (selectedProjectId) {
+      localStorage.setItem("modules_selectedProjectId", selectedProjectId);
+    }
+  }, [selectedProjectId]);
 
   const selectedProject = projects.find(p => p.id === selectedProjectId);
   const canManageModule = Boolean(user && (
@@ -563,8 +574,10 @@ export default function ModulesPage() {
         const data = await pRes.json();
         const devProjects = data.filter((p: any) => p.department === "Development");
         setProjects(devProjects);
-        if (devProjects.length > 0 && !selectedProjectId) {
-          setSelectedProjectId(devProjects[0].id);
+        if (devProjects.length > 0) {
+          if (!selectedProjectId || !devProjects.find((p: any) => p.id === selectedProjectId)) {
+            setSelectedProjectId(devProjects[0].id);
+          }
         }
       }
       
