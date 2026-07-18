@@ -584,6 +584,41 @@ export default function CompanyFinanceTransactionsPage() {
   // Edit Transaction
   const handleEditTx = (tx: Transaction) => {
     setEditingTx(tx);
+    
+    // Robust date formatting for HTML5 input type="date" (YYYY-MM-DD)
+    const getFormattedDateForInput = (dateStr: any): string => {
+      if (!dateStr) return new Date().toISOString().split("T")[0];
+      const str = String(dateStr).trim();
+      
+      // If it matches YYYY-MM-DD
+      const yyyymmddRegex = /^\d{4}-\d{2}-\d{2}/;
+      if (yyyymmddRegex.test(str)) {
+        return str.substring(0, 10);
+      }
+
+      // If it matches DD/MM/YYYY or DD-MM-YYYY
+      const dmyRegex = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/;
+      const match = str.match(dmyRegex);
+      if (match) {
+        const day = match[1].padStart(2, '0');
+        const month = match[2].padStart(2, '0');
+        const year = match[3];
+        return `${year}-${month}-${day}`;
+      }
+
+      // Try parsing with Date object
+      try {
+        const d = new Date(str);
+        if (!isNaN(d.getTime())) {
+          return d.toISOString().split("T")[0];
+        }
+      } catch (e) {}
+
+      return new Date().toISOString().split("T")[0];
+    };
+
+    const normalizedDate = getFormattedDateForInput(tx.date);
+
     if (tx.type === "credit") {
       const brandVal = tx.category || "";
       if (brandOptions.includes(brandVal)) {
@@ -593,7 +628,7 @@ export default function CompanyFinanceTransactionsPage() {
       }
       setCreditForm({
         invoiceNumber: tx.invoiceNumber || "",
-        date: tx.date || new Date().toISOString().split("T")[0],
+        date: normalizedDate,
         amount: String(tx.amount || 0),
         category: brandVal,
         descriptions: tx.descriptions || tx.description || "",
@@ -606,7 +641,7 @@ export default function CompanyFinanceTransactionsPage() {
     } else {
       setDebitForm({
         expenseNo: tx.expenseNo || "",
-        date: tx.date || new Date().toISOString().split("T")[0],
+        date: normalizedDate,
         amount: String(tx.amount || 0),
         category: tx.category || "",
         things: tx.things || tx.description || "",
@@ -1174,17 +1209,15 @@ export default function CompanyFinanceTransactionsPage() {
                             >
                               <Pencil className="w-3.5 h-3.5" />
                             </Button>
-                            {!t.isSyncedInvoice && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleDeleteTx(t)}
-                                className="h-7 w-7 text-rose-500 hover:text-rose-700"
-                                title="Delete"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
-                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteTx(t)}
+                              className="h-7 w-7 text-rose-500 hover:text-rose-700"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
                           </div>
                         </td>
                       </tr>

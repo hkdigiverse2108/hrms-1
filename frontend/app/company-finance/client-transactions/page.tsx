@@ -248,9 +248,39 @@ export default function ClientTransactionsPage() {
 
   const handleOpenEditModal = (tx: ClientTransaction) => {
     setEditingTx(tx);
+    
+    const getFormattedDateForInput = (dateStr: any): string => {
+      if (!dateStr) return new Date().toISOString().split("T")[0];
+      const str = String(dateStr).trim();
+      
+      const yyyymmddRegex = /^\d{4}-\d{2}-\d{2}/;
+      if (yyyymmddRegex.test(str)) {
+        return str.substring(0, 10);
+      }
+
+      const dmyRegex = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/;
+      const match = str.match(dmyRegex);
+      if (match) {
+        const day = match[1].padStart(2, '0');
+        const month = match[2].padStart(2, '0');
+        const year = match[3];
+        return `${year}-${month}-${day}`;
+      }
+
+      try {
+        const d = new Date(str);
+        if (!isNaN(d.getTime())) {
+          return d.toISOString().split("T")[0];
+        }
+      } catch (e) {}
+
+      return new Date().toISOString().split("T")[0];
+    };
+
+    const normalizedDate = getFormattedDateForInput(tx.date);
     setForm({
       personName: tx.personName,
-      date: tx.date,
+      date: normalizedDate,
       amount: String(tx.amount),
       type: tx.type,
       description: tx.description || "",
