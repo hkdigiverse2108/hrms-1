@@ -1023,11 +1023,21 @@ export default function MarketingReportsPage() {
 
   useEffect(() => {
     if (permissionsLoading || userLoading || !canViewMarketing) return;
-    fetchData();
     fetchClients();
     fetchProjects();
     fetchEmployees();
     fetchTransferRequests();
+  }, [
+    permissionsLoading,
+    canViewMarketing,
+    userLoading,
+    user?.id,
+    user?.role,
+  ]);
+
+  useEffect(() => {
+    if (permissionsLoading || userLoading || !canViewMarketing) return;
+    fetchData();
   }, [
     activeTab,
     selectedClientFilter,

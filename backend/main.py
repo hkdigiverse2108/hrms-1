@@ -545,6 +545,18 @@ async def lifespan(app):
         await db.task_logs.create_index([("taskId", 1), ("timestamp", -1)])
         await db.task_logs.create_index([("projectId", 1), ("timestamp", -1)])
         await db.clients.create_index([("department", 1)])
+
+        # Marketing Reports & Remarks
+        await db.marketing_daily_reports.create_index([("clientId", 1), ("date", -1)])
+        await db.marketing_daily_reports.create_index([("projectId", 1), ("date", -1)])
+        await db.marketing_monthly_reports.create_index([("clientId", 1), ("month", 1)])
+        await db.marketing_project_daily_remarks.create_index([("projectId", 1), ("date", -1)])
+
+        # Notifications, Content Calendar, User Input Stats, and general log timestamps
+        await db.notifications.create_index([("userId", 1), ("_id", -1)])
+        await db.content_calendar_entries.create_index([("postingDate", 1)])
+        await db.user_input_stats.create_index([("employeeId", 1), ("date", -1)])
+        await db.task_logs.create_index([("timestamp", -1)])
         
         print("[Database Indexing] All database indexes verified/created successfully.", flush=True)
     except Exception as e:
