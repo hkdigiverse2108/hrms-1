@@ -227,6 +227,7 @@ class EmployeeBase(BaseModel):
     status: Optional[str] = "active"
     gender: Optional[str] = "Male"
     position: Optional[str] = "Intern"
+    quickActions: Optional[List[str]] = []
     salary: RobustFloat = None
     company: Optional[str] = None
     role: Optional[str] = None
@@ -242,6 +243,7 @@ class EmployeeBase(BaseModel):
     panCard: Optional[str] = None
     startTime: Optional[str] = None
     endTime: Optional[str] = None
+    signatureUrl: Optional[str] = None
     profilePhoto: Optional[str] = None
     customStatus: Optional[str] = None
     customEmoji: Optional[str] = None
@@ -280,6 +282,7 @@ class EmployeeUpdate(BaseModel):
     gender: Optional[str] = None
     salary: RobustFloat = None
     company: Optional[str] = None
+    quickActions: Optional[List[str]] = None
     role: Optional[str] = None
     upiId: Optional[str] = None
     accountNumber: Optional[str] = None
@@ -293,6 +296,7 @@ class EmployeeUpdate(BaseModel):
     panCard: Optional[str] = None
     startTime: Optional[str] = None
     endTime: Optional[str] = None
+    signatureUrl: Optional[str] = None
     profilePhoto: Optional[str] = None
     customStatus: Optional[str] = None
     customEmoji: Optional[str] = None
@@ -1935,6 +1939,7 @@ class EmployeeDailyReportBase(BaseModel):
     hoursWorked: float = 8.0
     status: str = "Submitted" # Submitted, Reviewed
     note: Optional[str] = None
+    rating: Optional[int] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
 
@@ -1949,6 +1954,7 @@ class EmployeeDailyReportUpdate(BaseModel):
     hoursWorked: Optional[float] = None
     status: Optional[str] = None
     note: Optional[str] = None
+    rating: Optional[int] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
 

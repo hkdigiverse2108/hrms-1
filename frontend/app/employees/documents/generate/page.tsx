@@ -221,9 +221,34 @@ export default function DocumentGeneratorPage() {
     
     // Replace all currentEmployee fields
     Object.keys(currentEmployee).forEach(key => {
-      const regex = new RegExp(`\{\{currentEmployee\.${key}\}\}`, 'g')
+      const regex = new RegExp(`\\{\\{currentEmployee\.${key}\\}\\}`, 'g')
       htmlContent = htmlContent.replace(regex, currentEmployee[key] || '')
     })
+
+    // Add employee signature image
+    if (htmlContent.includes('{{employeeSignature}}')) {
+      if (currentEmployee.signatureUrl) {
+        const signUrl = currentEmployee.signatureUrl.startsWith('http') ? currentEmployee.signatureUrl : `${API_URL}${currentEmployee.signatureUrl}`
+        const signHtml = `<span style="display: inline-block; text-align: center; border-bottom: 1px solid black; margin: 0 5px; min-width: 100px; vertical-align: baseline;"><img src="${signUrl}" alt="Employee Signature" style="display: inline-block; max-height: 25px; max-width: 100px; object-fit: contain; vertical-align: bottom;" /></span>`
+        htmlContent = htmlContent.replace(/\{\{employeeSignature\}\}/g, signHtml)
+      } else {
+        htmlContent = htmlContent.replace(/\{\{employeeSignature\}\}/g, '<span style="display: inline-block; border-bottom: 1px solid black; color: #999; font-style: italic; min-width: 100px; text-align: center; margin: 0 5px; vertical-align: baseline;">[Signature Not Uploaded]</span>')
+      }
+    }
+
+    // Add admin/company signature image
+    if (htmlContent.includes('{{adminSignature}}') || htmlContent.includes('{{companySignature}}')) {
+      if (systemSettings && systemSettings.companySignatureUrl) {
+        const signUrl = systemSettings.companySignatureUrl.startsWith('http') ? systemSettings.companySignatureUrl : `${API_URL}${systemSettings.companySignatureUrl}`
+        const signHtml = `<span style="display: inline-block; text-align: center; border-bottom: 1px solid black; margin: 0 5px; min-width: 100px; vertical-align: baseline;"><img src="${signUrl}" alt="Authorized Signature" style="display: inline-block; max-height: 25px; max-width: 100px; object-fit: contain; vertical-align: bottom;" /></span>`
+        htmlContent = htmlContent.replace(/\{\{adminSignature\}\}/g, signHtml)
+        htmlContent = htmlContent.replace(/\{\{companySignature\}\}/g, signHtml)
+      } else {
+        const placeholder = '<span style="display: inline-block; border-bottom: 1px solid black; color: #999; font-style: italic; min-width: 100px; text-align: center; margin: 0 5px; vertical-align: baseline;">[Signature Not Uploaded]</span>'
+        htmlContent = htmlContent.replace(/\{\{adminSignature\}\}/g, placeholder)
+        htmlContent = htmlContent.replace(/\{\{companySignature\}\}/g, placeholder)
+      }
+    }
 
     // Include Acceptance
     const acceptanceHtml = includeAcceptance ? `
