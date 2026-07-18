@@ -209,7 +209,6 @@ import { useUserContext } from '@/context/UserContext'
      moduleName: 'training',
      children: [
        { title: 'Course Library', href: '/training', moduleName: 'training' },
-       { title: 'Progress & Access', href: '/training/progress', moduleName: 'course-progress' },
        { title: 'Manage Courses', href: '/admin/courses', moduleName: 'admin-courses' },
      ],
    },

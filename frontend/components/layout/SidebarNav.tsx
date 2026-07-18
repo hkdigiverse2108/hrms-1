@@ -268,10 +268,6 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       trainingChildren.push(getItem(<Link href="/training">Course Library</Link>, "/training"));
     }
     
-    if (isAdmin || checkPermission('course-progress', 'canView')) {
-      trainingChildren.push(getItem(<Link href="/training/progress">Progress & Access</Link>, "/training/progress"));
-    }
-    
     if (isAdmin || checkPermission('admin-courses', 'canView')) {
       trainingChildren.push(getItem(<Link href="/admin/courses">Manage Courses</Link>, "/admin/courses"));
     }
