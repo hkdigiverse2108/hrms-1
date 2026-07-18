@@ -487,14 +487,16 @@ export default function CreativeClientsPage() {
           if (entry.postingDate && !entry.postingLinkOfIg) pending++;
 
           if (pending > 0) {
-            counts[entry.clientId] = (counts[entry.clientId] || 0) + pending;
+            const key = entry.projectId || entry.clientId;
+            counts[key] = (counts[key] || 0) + pending;
           }
 
           if (entry.postingDate) {
             const d = new Date(entry.postingDate);
             if (!isNaN(d.getTime())) {
-              if (!maxDatesLocal[entry.clientId] || d > maxDatesLocal[entry.clientId]) {
-                maxDatesLocal[entry.clientId] = d;
+              const dateKey = entry.projectId || entry.clientId;
+              if (!maxDatesLocal[dateKey] || d > maxDatesLocal[dateKey]) {
+                maxDatesLocal[dateKey] = d;
               }
             }
           }
@@ -1156,22 +1158,43 @@ export default function CreativeClientsPage() {
                       <div className="flex flex-col gap-1.5 items-start">
                         <div className="flex items-center gap-3">
                           <div 
-                            className="font-semibold text-brand-teal text-base underline underline-offset-2 hover:text-brand-teal/80 transition-colors cursor-pointer pl-2"
+                            className="font-semibold text-brand-teal text-base hover:text-brand-teal/80 transition-colors cursor-pointer pl-2"
                             onClick={() => router.push(`/work-management/smm/${client.id}${project ? `?projectId=${project.id}` : ''}`)}
                           >
-                            {project?.title ? `${project.title} — ${client.companyName}` : (client.companyName || "N/A")}
+                            {project?.title || project?.name ? (
+                              <div className="flex flex-col gap-0.5">
+                                <span className="underline underline-offset-2 leading-tight">{project.title || project.name}</span>
+                                <span className="text-xs text-slate-500 font-medium no-underline">{client.companyName}</span>
+                              </div>
+                            ) : (
+                              <span className="underline underline-offset-2">{client.companyName || client.name || "N/A"}</span>
+                            )}
                           </div>
-                          {pendingCounts[client.id] > 0 && (
-                            <Badge 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                router.push(`/work-management/smm/pending?client=${client.id}`);
-                              }}
-                              className="bg-rose-700 hover:bg-rose-800 text-[10px] px-1.5 py-0 cursor-pointer"
-                            >
-                              {pendingCounts[client.id]} Pending
-                            </Badge>
-                          )}
+                          {(() => {
+                            const clientProjs = clientProjects[client.id] || [];
+                            const oldestProject = clientProjs.reduce((oldest: any, p: any) => {
+                              if (!oldest) return p;
+                              return (p._id || p.id) < (oldest._id || oldest.id) ? p : oldest;
+                            }, null);
+                            const isOldestProject = oldestProject?.id === project?.id;
+                            const legacyCount = isOldestProject || !project ? (pendingCounts[client.id] || 0) : 0;
+                            const totalPending = (project ? (pendingCounts[project.id] || 0) : 0) + legacyCount;
+                            
+                            if (totalPending > 0) {
+                              return (
+                                <Badge 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    router.push(`/work-management/smm/pending?client=${client.id}${project ? `&projectId=${project.id}` : ''}`);
+                                  }}
+                                  className="bg-rose-700 hover:bg-rose-800 text-[10px] px-1.5 py-0 cursor-pointer"
+                                >
+                                  {totalPending} Pending
+                                </Badge>
+                              );
+                            }
+                            return null;
+                          })()}
                         </div>
                       </div>
                       {calendarSettings[client.id] && calendarSettings[client.id].approvalStatus && calendarSettings[client.id].approvalStatus !== "Approved by Client" && calendarSettings[client.id].approvalStatus !== "Pending" && (
@@ -1186,15 +1209,28 @@ export default function CreativeClientsPage() {
                       )}
                     </td>
                     <td className="px-6 py-4 text-center whitespace-nowrap sticky left-[250px] z-10 bg-white group-hover:bg-slate-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] transition-colors min-w-[120px] w-[120px] max-w-[120px]">
-                      {clientMaxDates[client.id] ? (
-                        <div className="inline-flex">
-                          <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 shadow-sm text-xs font-semibold px-2.5 py-0.5 rounded-md">
-                            {clientMaxDates[client.id].toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                          </Badge>
-                        </div>
-                      ) : (
-                        <span className="text-slate-400 italic text-xs">N/A</span>
-                      )}
+                      {(() => {
+                        const clientProjs = clientProjects[client.id] || [];
+                        const oldestProject = clientProjs.reduce((oldest: any, p: any) => {
+                          if (!oldest) return p;
+                          return (p._id || p.id) < (oldest._id || oldest.id) ? p : oldest;
+                        }, null);
+                        const isOldestProject = oldestProject?.id === project?.id;
+                        const legacyDate = isOldestProject || !project ? clientMaxDates[client.id] : null;
+                        const projectDate = project ? clientMaxDates[project.id] : null;
+                        const finalDate = (projectDate && legacyDate) ? (projectDate > legacyDate ? projectDate : legacyDate) : (projectDate || legacyDate);
+                        
+                        if (finalDate) {
+                          return (
+                            <div className="inline-flex">
+                              <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 shadow-sm text-xs font-semibold px-2.5 py-0.5 rounded-md">
+                                {finalDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              </Badge>
+                            </div>
+                          );
+                        }
+                        return <span className="text-slate-400 italic text-xs">N/A</span>;
+                      })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex flex-col items-start gap-1">
@@ -1248,12 +1284,12 @@ export default function CreativeClientsPage() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-3">
                         <div 
-                          className={`line-clamp-2 max-w-[220px] font-medium text-slate-700 ${!isEmployeeOrIntern ? 'cursor-pointer hover:text-brand-teal transition-colors' : ''}`}
-                          onClick={() => !isEmployeeOrIntern && setInlineEditing({ id: client.id, field: 'services' })}
+                          className={`line-clamp-2 max-w-[220px] font-medium text-slate-700 ${!isEmployeeOrIntern && !project ? 'cursor-pointer hover:text-brand-teal transition-colors' : ''}`}
+                          onClick={() => !isEmployeeOrIntern && !project && setInlineEditing({ id: client.id, field: 'services' })}
                         >
-                          {project?.services || client.services || "N/A"}
+                          {(project ? project.services : client.services) || "N/A"}
                         </div>
-                        {(project?.festivalPost === "Yes" || client.festivalPost === "Yes") && (
+                        {((project ? project.festivalPost : client.festivalPost) === "Yes") && (
                           <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200/60 font-medium px-2 py-0.5 shadow-sm">
                             Festival Post
                           </Badge>

@@ -831,6 +831,9 @@ class RemarkUpdate(BaseModel):
 
 class Remark(RemarkBase):
     id: str
+    amount: Optional[float] = None
+    computedAmount: Optional[float] = None
+    isWarning: Optional[bool] = False
 
 class PenaltyTypeBase(BaseModel):
     name: str
@@ -1348,6 +1351,7 @@ class TaskPresetBase(BaseModel):
     presetType: Optional[str] = "intern"
     tasks: Optional[List[PresetTask]] = []
     modules: Optional[List[dict]] = []
+    assignedToIds: Optional[List[str]] = []
 
 class TaskPresetCreate(TaskPresetBase):
     pass
@@ -2376,6 +2380,7 @@ class RegisteredPC(RegisteredPCBase):
 # Content Calendar Schemas
 class ContentCalendarEntryBase(BaseModel):
     clientId: str
+    projectId: Optional[str] = None
     monthYear: str  # Format: "YYYY-MM"
     postingDate: Optional[str] = None
     postingDay: Optional[str] = None
@@ -2470,6 +2475,7 @@ class WorkTransferRequest(WorkTransferRequestBase):
 
 class ContentCalendarSettingsBase(BaseModel):
     clientId: str
+    projectId: Optional[str] = None
     monthYear: str
     scriptDateOffset: Optional[int] = None
     shootDateOffset: Optional[int] = None
@@ -2507,6 +2513,8 @@ class OtherWorkBase(BaseModel):
     deadline: str
     status: str = "Pending"
     taskType: Optional[str] = "other-work"
+    remark: Optional[str] = None
+    remarkStage: Optional[str] = None
     logs: Optional[List[dict]] = None
 
 class OtherWorkCreate(OtherWorkBase):
@@ -2519,6 +2527,9 @@ class OtherWorkUpdate(BaseModel):
     assigneeName: Optional[str] = None
     deadline: Optional[str] = None
     status: Optional[str] = None
+    remark: Optional[str] = None
+    remarkStage: Optional[str] = None
+    updatedBy: Optional[str] = None
     logs: Optional[List[dict]] = None
 
 class OtherWork(OtherWorkBase):

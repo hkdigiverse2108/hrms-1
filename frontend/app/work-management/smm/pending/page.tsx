@@ -17,7 +17,7 @@ export default function PendingWorkPage() {
   
   const [entries, setEntries] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
-  const [clientProjects, setClientProjects] = useState<Record<string, string>>({});
+  const [clientProjects, setClientProjects] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [activeClientId, setActiveClientId] = useState<string | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
@@ -50,10 +50,10 @@ export default function PendingWorkPage() {
       
       if (pRes.ok) {
         const projects = await pRes.json();
-        const projectMap: Record<string, string> = {};
+        const projectMap: Record<string, any> = {};
         projects.forEach((p: any) => {
-          if (p.clientId && p.department === 'Creative') {
-            projectMap[p.clientId] = p.title;
+          if (p.department === 'Creative') {
+            projectMap[p.id] = p;
           }
         });
         setClientProjects(projectMap);
@@ -99,17 +99,18 @@ export default function PendingWorkPage() {
   };
 
   const pendingData = useMemo(() => {
-    const clientsMap: Record<string, { id: string, name: string, count: number, tasks: any[] }> = {};
+    const clientsMap: Record<string, { id: string, name: string, count: number, tasks: any[], projectId?: string, clientId: string }> = {};
 
     entries.forEach(entry => {
       const client = clients.find(c => c.id === entry.clientId);
       const clientName = client ? (client.companyName || client.clientName || 'Unknown Client') : 'Unknown Client';
-      const projectName = clientProjects[entry.clientId];
-      const displayName = projectName ? `${projectName} (${clientName})` : clientName;
-      const clientId = entry.clientId;
+      const projectId = entry.projectId;
+      const project = projectId ? clientProjects[projectId] : null;
+      const displayName = project ? `${project.title} (${clientName})` : clientName;
+      const key = projectId || entry.clientId;
 
-      if (!clientsMap[clientId]) {
-        clientsMap[clientId] = { id: clientId, name: displayName, count: 0, tasks: [] };
+      if (!clientsMap[key]) {
+        clientsMap[key] = { id: key, name: displayName, count: 0, tasks: [], projectId, clientId: entry.clientId };
       }
 
       const enrich = (stage: string, deadline: string, type: string) => ({
@@ -121,23 +122,23 @@ export default function PendingWorkPage() {
       });
 
       const isPost = entry.postReel === 'Post';
-      if (!isPost && entry.scriptDate && !entry.scriptLink) clientsMap[clientId].tasks.push(enrich('Script', entry.scriptDate, 'scripts'));
-      if (!isPost && entry.shootDate && !entry.shootLink) clientsMap[clientId].tasks.push(enrich('Shoot', entry.shootDate, 'shoots'));
+      if (!isPost && entry.scriptDate && !entry.scriptLink) clientsMap[key].tasks.push(enrich('Script', entry.scriptDate, 'scripts'));
+      if (!isPost && entry.shootDate && !entry.shootLink) clientsMap[key].tasks.push(enrich('Shoot', entry.shootDate, 'shoots'));
       
       const captionDate = entry.captionDate || entry.editingStart;
-      if (captionDate && !entry.caption) clientsMap[clientId].tasks.push(enrich('Caption', captionDate, 'captions'));
+      if (captionDate && !entry.caption) clientsMap[key].tasks.push(enrich('Caption', captionDate, 'captions'));
       
       const thumbnailDate = entry.thumbnailDate || entry.editingStart;
-      if (!isPost && thumbnailDate && !entry.thumbnailLink) clientsMap[clientId].tasks.push(enrich('Thumbnail', thumbnailDate, 'thumbnails'));
+      if (!isPost && thumbnailDate && !entry.thumbnailLink) clientsMap[key].tasks.push(enrich('Thumbnail', thumbnailDate, 'thumbnails'));
       
       const isEditingPending = entry.editingStart && (isPost ? !entry.finalPostLink : !entry.finalReelLink);
-      if (isEditingPending) clientsMap[clientId].tasks.push(enrich('Editing', entry.editingStart, 'edits'));
-      if (entry.approval && entry.isApproved !== 'Yes') clientsMap[clientId].tasks.push(enrich('Approval', entry.approval, 'approvals'));
-      if (entry.postingDate && !entry.postingLinkOfIg) clientsMap[clientId].tasks.push(enrich('Posting', entry.postingDate, 'posts'));
+      if (isEditingPending) clientsMap[key].tasks.push(enrich('Editing', entry.editingStart, 'edits'));
+      if (entry.approval && entry.isApproved !== 'Yes') clientsMap[key].tasks.push(enrich('Approval', entry.approval, 'approvals'));
+      if (entry.postingDate && !entry.postingLinkOfIg) clientsMap[key].tasks.push(enrich('Posting', entry.postingDate, 'posts'));
     });
 
     return Object.values(clientsMap)
-      .filter(c => c.tasks.length > 0 && clientProjects[c.id])
+      .filter(c => c.tasks.length > 0)
       .map(c => {
         c.count = c.tasks.length;
         c.tasks.sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
@@ -149,8 +150,13 @@ export default function PendingWorkPage() {
   useEffect(() => {
     if (pendingData.length > 0 && !activeClientId) {
       const clientParam = searchParams.get('client');
-      if (clientParam && pendingData.find(c => c.id === clientParam)) {
-        setActiveClientId(clientParam);
+      const projectParam = searchParams.get('projectId');
+      const targetId = projectParam || clientParam;
+      
+      if (targetId && pendingData.find(c => c.id === targetId)) {
+        setActiveClientId(targetId);
+      } else if (clientParam && pendingData.find(c => c.clientId === clientParam)) {
+        setActiveClientId(pendingData.find(c => c.clientId === clientParam)!.id);
       } else {
         setActiveClientId(pendingData[0].id);
       }
@@ -288,7 +294,7 @@ export default function PendingWorkPage() {
                   <p className="text-sm text-slate-500 mt-0.5">{currentList.length} total pending tasks</p>
                 </div>
                 <Button 
-                  onClick={() => router.push(`/work-management/smm/${activeClientId}`)}
+                  onClick={() => router.push(`/work-management/smm/${currentClient?.clientId}${currentClient?.projectId ? `?projectId=${currentClient.projectId}` : ''}`)}
                   variant="outline"
                   size="sm"
                   className="text-brand-teal border-brand-teal/20 hover:bg-brand-teal/5 h-9 gap-2"

@@ -1206,37 +1206,92 @@ async def run_payroll_processing(db, month: str, year: int, performed_by: str = 
         
         remark_query = {
             "employeeId": emp_id,
-            "isDeleted": {"$nin": [True, "true", "True"]},
-            "$or": [
-                {"date": {"$gte": rem_start_dt_naive, "$lte": rem_end_dt_naive}},
-                {"date": {"$gte": rem_start_dt_aware, "$lte": rem_end_dt_aware}}
-            ]
+            "isDeleted": {"$nin": [True, "true", "True"]}
         }
-        remarks_cursor = db.remarks.find(remark_query)
-        emp_remarks = await remarks_cursor.to_list(length=100)
+        all_emp_remarks = await db.remarks.find(remark_query).to_list(length=1000)
+        
+        emp_remarks = []
+        for mr in all_emp_remarks:
+            mr_dt = mr.get("date")
+            mr_m = None
+            mr_y = None
+            if mr_dt:
+                try:
+                    if isinstance(mr_dt, datetime):
+                        mr_m = mr_dt.month
+                        mr_y = mr_dt.year
+                    elif isinstance(mr_dt, str):
+                        if "T" in mr_dt or "-" in mr_dt:
+                            parts = mr_dt.split("T")[0].split("-")
+                            if len(parts[0]) == 4:
+                                mr_y = int(parts[0])
+                                mr_m = int(parts[1])
+                            else:
+                                mr_y = int(parts[2])
+                                mr_m = int(parts[1])
+                        else:
+                            date_parts = mr_dt.split(" ")
+                            r_month_name = date_parts[0].replace(",", "")
+                            mr_y = int(date_parts[-1])
+                            try:
+                                mr_m = list(calendar.month_abbr).index(r_month_name)
+                            except ValueError:
+                                mr_m = list(calendar.month_name).index(r_month_name)
+                except Exception:
+                    pass
             
+            if mr_m == rem_month_num and mr_y == year:
+                # Normalize date for sorting
+                if isinstance(mr_dt, str):
+                    try:
+                        if "-" in mr_dt and len(mr_dt.split("-")[0]) != 4:
+                            mr["_sort_date"] = datetime.strptime(mr_dt, "%d-%m-%Y")
+                        else:
+                            from dateutil.parser import parse
+                            mr["_sort_date"] = parse(mr_dt)
+                    except:
+                        mr["_sort_date"] = datetime.min
+                elif isinstance(mr_dt, datetime):
+                    mr["_sort_date"] = mr_dt
+                else:
+                    mr["_sort_date"] = datetime.min
+                emp_remarks.append(mr)
+                
+        # Sort by parsed date
+        emp_remarks.sort(key=lambda x: x["_sort_date"])
+            
+        penalty_count = 0
+        
         for r in emp_remarks:
             remark_type = r.get("type")
             r_date_val = r.get("date")
             r_date_str = r_date_val.strftime("%d-%m-%Y") if isinstance(r_date_val, (date, datetime)) else str(r_date_val)
             
-            if remark_type == "Late Punch-in":
-                if late_punch_deduction_enabled:
-                    if per_day_gross > 0:
-                        penalty_total += per_day_gross
-                        deduction_details.append(f"Late Punch-in ({r_date_str}): ₹{round(per_day_gross, 2)}")
+            try:
+                r_amount = float(r.get("amount", 0) or 0)
+            except:
+                r_amount = 0
+                
+            is_penalty = r_amount > 0 or remark_type in [p["name"] for p in penalty_types] or remark_type == "Late Punch-in"
+            
+            if is_penalty:
+                if remark_type == "Late Punch-in" and not late_punch_deduction_enabled:
+                    continue
+                    
+                penalty_count += 1
+                amount_to_deduct = r_amount
+                if amount_to_deduct <= 0:
+                    amount_to_deduct = next((p["amount"] for p in penalty_types if p["name"] == remark_type), 0)
+                
+                if remark_type == "Late Punch-in" and amount_to_deduct <= 0:
+                    amount_to_deduct = per_day_gross if per_day_gross > 0 else 0
+                
+                if amount_to_deduct > 0:
+                    if penalty_count <= 3:
+                        deduction_details.append(f"Warning: {remark_type} ({r_date_str})")
                     else:
-                        # Salary is 0, so deduct the penalty given in penalty_types for Late Punch-in
-                        p_amount = next((p["amount"] for p in penalty_types if p["name"] == remark_type), 0)
-                        if p_amount > 0:
-                            penalty_total += p_amount
-                            deduction_details.append(f"Late Punch-in ({r_date_str}): ₹{p_amount}")
-                continue
-
-            p_amount = next((p["amount"] for p in penalty_types if p["name"] == remark_type), 0)
-            if p_amount > 0:
-                penalty_total += p_amount
-                deduction_details.append(f"{r['type']} ({r_date_str}): ₹{p_amount}")
+                        penalty_total += amount_to_deduct
+                        deduction_details.append(f"{remark_type} ({r_date_str}): ₹{round(amount_to_deduct, 2)}")
         
         # Fetch existing payroll to preserve custom security deposit and return amounts
         existing_payroll = await db.payroll.find_one({"employeeId": emp_id, "month": month, "year": year})
@@ -1882,51 +1937,52 @@ async def get_remarks(db, skip: int = 0, limit: int = 100):
     
     # Cache salary structures to avoid repeated DB calls
     salary_cache = {}
-    
+    # Cache for employee month remarks to compute warnings
+    emp_month_remarks_cache = {}
+
     for item in items:
         p_amount = next((p["amount"] for p in penalty_types if p["name"] == item.get("type")), 0)
         
+        month_num = None
+        r_year = None
+        emp_id = item.get("employeeId")
+        
+        # Parse date to find month and year
+        itm_date = item.get("date")
+        if itm_date:
+            try:
+                if isinstance(itm_date, datetime):
+                    month_num = itm_date.month
+                    r_year = itm_date.year
+                elif isinstance(itm_date, str):
+                    if "T" in itm_date or "-" in itm_date:
+                        parts = itm_date.split("T")[0].split("-")
+                        if len(parts[0]) == 4:
+                            r_year = int(parts[0])
+                            month_num = int(parts[1])
+                        else:
+                            r_year = int(parts[2])
+                            month_num = int(parts[1])
+                    else:
+                        date_parts = itm_date.split(" ")
+                        r_month_name = date_parts[0].replace(",", "")
+                        r_year = int(date_parts[-1])
+                        try:
+                            month_num = list(calendar.month_abbr).index(r_month_name)
+                        except ValueError:
+                            month_num = list(calendar.month_name).index(r_month_name)
+            except Exception:
+                pass
+
         # Calculate one-day salary for Late Punch-in if amount is 0
-        if item.get("type") == "Late Punch-in" and p_amount == 0:
-            emp_id = item.get("employeeId")
+        if item.get("type") == "Late Punch-in" and p_amount == 0 and month_num and r_year:
             if emp_id not in salary_cache:
                 salary_cache[emp_id] = await get_salary_structure_by_employee(db, emp_id)
             
             salary_struct = salary_cache[emp_id]
             if salary_struct:
                 try:
-                    itm_date = item.get("date")
-                    if isinstance(itm_date, datetime):
-                        month_num = itm_date.month
-                        r_year = itm_date.year
-                    elif isinstance(itm_date, str):
-                        if "T" in itm_date or "-" in itm_date:
-                            try:
-                                parts = itm_date.split("T")[0].split("-")
-                                if len(parts[0]) == 4:
-                                    r_year = int(parts[0])
-                                    month_num = int(parts[1])
-                                else:
-                                    r_year = int(parts[2])
-                                    month_num = int(parts[1])
-                            except Exception:
-                                from dateutil.parser import parse
-                                parsed_dt = parse(itm_date)
-                                month_num = parsed_dt.month
-                                r_year = parsed_dt.year
-                        else:
-                            date_parts = itm_date.split(" ")
-                            r_month_name = date_parts[0].replace(",", "")
-                            r_year = int(date_parts[-1])
-                            try:
-                                month_num = list(calendar.month_abbr).index(r_month_name)
-                            except ValueError:
-                                month_num = list(calendar.month_name).index(r_month_name)
-                    else:
-                        raise ValueError("Unknown date type")
-
                     _, num_days = calendar.monthrange(r_year, month_num)
-                    
                     sundays = sum(1 for d in range(1, num_days + 1) if calendar.weekday(r_year, month_num, d) == 6)
                     total_working_days = max(1, num_days - sundays)
                     p_amount = round(salary_struct["monthlyGross"] / total_working_days, 2)
@@ -1934,7 +1990,98 @@ async def get_remarks(db, skip: int = 0, limit: int = 100):
                     print(f"Error calculating p_amount in remarks list: {e}")
                     p_amount = round(salary_struct["monthlyGross"] / 30, 2)
         
+        is_warning = False
+        remark_type = item.get("type")
+        pt_names = [p["name"] for p in penalty_types]
+        is_in_penalty_types = remark_type in pt_names
+        is_penalty = p_amount > 0 or is_in_penalty_types or remark_type == "Late Punch-in"
+        
+        if is_in_penalty_types and month_num and r_year and emp_id:
+            cache_key = (str(emp_id), month_num, r_year, remark_type)
+            if cache_key not in emp_month_remarks_cache:
+                _, num_days = calendar.monthrange(r_year, month_num)
+                r_start_dt_naive = datetime(r_year, month_num, 1)
+                r_end_dt_naive = datetime(r_year, month_num, num_days, 23, 59, 59)
+                r_start_dt_aware = r_start_dt_naive.replace(tzinfo=IST)
+                r_end_dt_aware = r_end_dt_naive.replace(tzinfo=IST)
+                
+                try:
+                    emp_obj_id = ObjectId(str(emp_id))
+                except:
+                    emp_obj_id = str(emp_id)
+
+                q = {
+                    "employeeId": {"$in": [str(emp_id), emp_obj_id]},
+                    "type": remark_type,
+                    "isDeleted": {"$nin": [True, "true", "True"]}
+                }
+                all_remarks = await db.remarks.find(q).to_list(length=1000)
+                
+                # Filter by month and year in python
+                month_remarks = []
+                for mr in all_remarks:
+                    mr_dt = mr.get("date")
+                    mr_m = None
+                    mr_y = None
+                    if mr_dt:
+                        try:
+                            if isinstance(mr_dt, datetime):
+                                mr_m = mr_dt.month
+                                mr_y = mr_dt.year
+                            elif isinstance(mr_dt, str):
+                                if "T" in mr_dt or "-" in mr_dt:
+                                    parts = mr_dt.split("T")[0].split("-")
+                                    if len(parts[0]) == 4:
+                                        mr_y = int(parts[0])
+                                        mr_m = int(parts[1])
+                                    else:
+                                        mr_y = int(parts[2])
+                                        mr_m = int(parts[1])
+                                else:
+                                    date_parts = mr_dt.split(" ")
+                                    r_month_name = date_parts[0].replace(",", "")
+                                    mr_y = int(date_parts[-1])
+                                    try:
+                                        mr_m = list(calendar.month_abbr).index(r_month_name)
+                                    except ValueError:
+                                        mr_m = list(calendar.month_name).index(r_month_name)
+                        except Exception:
+                            pass
+                    
+                    if mr_m == month_num and mr_y == r_year:
+                        # Normalize date for sorting
+                        if isinstance(mr_dt, str):
+                            try:
+                                if "-" in mr_dt and len(mr_dt.split("-")[0]) != 4:
+                                    mr["_sort_date"] = datetime.strptime(mr_dt, "%d-%m-%Y")
+                                else:
+                                    from dateutil.parser import parse
+                                    mr["_sort_date"] = parse(mr_dt)
+                            except:
+                                mr["_sort_date"] = datetime.min
+                        elif isinstance(mr_dt, datetime):
+                            mr["_sort_date"] = mr_dt
+                        else:
+                            mr["_sort_date"] = datetime.min
+                        month_remarks.append(mr)
+                
+                # Sort by parsed date
+                month_remarks.sort(key=lambda x: x["_sort_date"])
+                emp_month_remarks_cache[cache_key] = [str(r["_id"]) for r in month_remarks]
+                
+            month_remark_ids = emp_month_remarks_cache[cache_key]
+            try:
+                item_id = item.get("id") or item.get("_id")
+                rank = month_remark_ids.index(str(item_id)) + 1
+            except ValueError:
+                rank = 999
+                
+            if rank <= 3:
+                is_warning = True
+
         item["amount"] = p_amount
+        item["computedAmount"] = 0 if is_warning else p_amount
+        item["isWarning"] = is_warning
         
     return items
 async def create_remark(db, remark: schemas.RemarkCreate, performed_by: str = "System", user_name: str = "System User"): 
@@ -3532,15 +3679,40 @@ async def update_project(db, project_id: str, project_update: schemas.ProjectUpd
     if update_data:
         old_project = await db.projects.find_one({"_id": ObjectId(project_id)})
         
-        if update_data.get("clientId") and not update_data.get("clientName"):
+        if update_data.get("clientId") and update_data.get("clientId") != old_project.get("clientId"):
             client = await db.clients.find_one({"_id": ObjectId(update_data["clientId"])})
             if client:
                 update_data["clientName"] = client.get("companyName")
         
-        if update_data.get("teamLeaderId") and not update_data.get("teamLeaderName"):
+        if update_data.get("teamLeaderId") and update_data.get("teamLeaderId") != old_project.get("teamLeaderId"):
             employee = await db.employees.find_one({"_id": ObjectId(update_data["teamLeaderId"])})
             if employee:
                 update_data["teamLeaderName"] = f"{employee.get('firstName')} {employee.get('lastName')}"
+                
+        # Reassign tasks and modules if team leader changed
+        if update_data.get("teamLeaderId") and old_project.get("teamLeaderId") and update_data["teamLeaderId"] != old_project.get("teamLeaderId"):
+            old_tl = old_project.get("teamLeaderId")
+            new_tl = update_data["teamLeaderId"]
+            new_tl_name = update_data.get("teamLeaderName", "Team Leader")
+            
+            # 1. Reassign modules in the project
+            if "modules" in old_project and "modules" not in update_data:
+                updated_modules = []
+                modules_changed = False
+                for mod in old_project["modules"]:
+                    if mod.get("assignedToId") == old_tl:
+                        mod["assignedToId"] = new_tl
+                        mod["assignedToName"] = new_tl_name
+                        modules_changed = True
+                    updated_modules.append(mod)
+                if modules_changed:
+                    update_data["modules"] = updated_modules
+            
+            # 2. Reassign wm_tasks
+            await db.wm_tasks.update_many(
+                {"projectId": project_id, "assignedToId": old_tl},
+                {"$set": {"assignedToId": new_tl, "assignedToName": new_tl_name}}
+            )
                 
         # Calculate nextFollowupDate
         followup_keys = ["followupType", "followupIntervalDays", "followupDaysOfWeek", "followupDatesOfMonth", "lastFollowupDate"]
@@ -3981,7 +4153,7 @@ async def create_wm_task(db, task: schemas.WMTaskCreate):
         if project:
             task_dict["projectName"] = project.get("title")
     
-    if task_dict.get("moduleName") and task_dict.get("projectId"):
+    if task_dict.get("moduleName") and task_dict.get("projectId") and not task_dict.get("assignedToId"):
         try:
             project_obj = await db.projects.find_one({"_id": ObjectId(task_dict["projectId"])})
             if project_obj and project_obj.get("modules"):
@@ -3991,17 +4163,9 @@ async def create_wm_task(db, task: schemas.WMTaskCreate):
                         if mod_assignee and mod_assignee != "unassigned":
                             task_dict["assignedToId"] = mod_assignee
                             task_dict["assignedToName"] = m.get("assignedToName") or "Unassigned"
-                        else:
-                            task_dict["assignedToId"] = ""
-                            task_dict["assignedToName"] = "Unassigned"
                         break
         except Exception as e_mod_sync:
             print(f"Error syncing module assignee on task creation: {e_mod_sync}")
-
-    if not task_dict.get("assignedToId") and not task_dict.get("moduleName"):
-        fallback_id = performedBy if performedBy and performedBy != "Unknown" else task_dict.get("createdBy")
-        if fallback_id and fallback_id != "Unknown":
-            task_dict["assignedToId"] = fallback_id
 
     if task_dict.get("assignedToId"):
         try:
@@ -4186,7 +4350,7 @@ async def update_wm_task(db, task_id: str, task_update: schemas.WMTaskUpdate):
             if project:
                 update_data["projectName"] = project.get("title")
         
-        if update_data.get("moduleName") and update_data.get("moduleName") != (old_task.get("moduleName") if old_task else None):
+        if update_data.get("moduleName") and update_data.get("moduleName") != (old_task.get("moduleName") if old_task else None) and not update_data.get("assignedToId"):
             p_id = update_data.get("projectId") or (old_task.get("projectId") if old_task else None)
             if p_id:
                 try:
@@ -4198,9 +4362,6 @@ async def update_wm_task(db, task_id: str, task_update: schemas.WMTaskUpdate):
                                 if mod_assignee and mod_assignee != "unassigned":
                                     update_data["assignedToId"] = mod_assignee
                                     update_data["assignedToName"] = m.get("assignedToName") or "Unassigned"
-                                else:
-                                    update_data["assignedToId"] = ""
-                                    update_data["assignedToName"] = "Unassigned"
                                 break
                 except Exception as e_mod_update_sync:
                     print(f"Error syncing module assignee on task update: {e_mod_update_sync}")
@@ -8432,18 +8593,43 @@ async def get_all_content_calendar_entries(db):
     except Exception as e:
         raise e
 
-async def get_content_calendar_entries(db, client_id: str, month_year: str = None):
+async def get_content_calendar_entries(db, client_id: str, project_id: str = None, month_year: str = None, include_legacy: bool = False):
     try:
         query = {"clientId": client_id}
+        and_conditions = []
+        
+        if project_id:
+            if include_legacy:
+                and_conditions.append({
+                    "$or": [
+                        {"projectId": project_id},
+                        {"projectId": {"$exists": False}},
+                        {"projectId": None},
+                        {"projectId": ""}
+                    ]
+                })
+            else:
+                query["projectId"] = project_id
+                
         if month_year:
-            query["$or"] = [
-                {"monthYear": month_year},
-                {"postingDate": {"$regex": f"^{month_year}"}},
-                {"scriptDate": {"$regex": f"^{month_year}"}},
-                {"shootDate": {"$regex": f"^{month_year}"}},
-                {"editingStart": {"$regex": f"^{month_year}"}},
-                {"actualPostingDate": {"$regex": f"^{month_year}"}}
-            ]
+            month_cond = {
+                "$or": [
+                    {"monthYear": month_year},
+                    {"postingDate": {"$regex": f"^{month_year}"}},
+                    {"scriptDate": {"$regex": f"^{month_year}"}},
+                    {"shootDate": {"$regex": f"^{month_year}"}},
+                    {"editingStart": {"$regex": f"^{month_year}"}},
+                    {"actualPostingDate": {"$regex": f"^{month_year}"}}
+                ]
+            }
+            if "$or" in query:
+                and_conditions.append(month_cond)
+            else:
+                and_conditions.append(month_cond)
+                
+        if and_conditions:
+            query["$and"] = and_conditions
+            
         cursor = db.content_calendar_entries.find(query)
         entries = await cursor.to_list(length=1000)
         return [fix_id(e) for e in entries]
@@ -8513,11 +8699,14 @@ async def delete_content_calendar_entry(db, entry_id: str):
     res = await db.content_calendar_entries.delete_one({"_id": ObjectId(entry_id)})
     return res.deleted_count > 0
 
-async def get_content_calendar_settings(db, client_id: str, month_year: str):
-    settings = await db.content_calendar_settings.find_one({
+async def get_content_calendar_settings(db, client_id: str, month_year: str, project_id: str = None):
+    query = {
         "clientId": client_id,
         "monthYear": month_year
-    })
+    }
+    if project_id:
+        query["projectId"] = project_id
+    settings = await db.content_calendar_settings.find_one(query)
     if settings:
         return fix_id(settings)
     return None
@@ -8527,15 +8716,23 @@ async def get_all_content_calendar_settings(db, month_year: str):
     settings = await cursor.to_list(length=1000)
     return [fix_id(s) for s in settings]
 
-async def upsert_content_calendar_settings(db, client_id: str, month_year: str, update_data: dict):
+async def upsert_content_calendar_settings(db, client_id: str, month_year: str, project_id: str, update_data: dict):
+    query = {
+        "clientId": client_id,
+        "monthYear": month_year
+    }
+    if project_id:
+        query["projectId"] = project_id
+
     if "_id" in update_data:
         del update_data["_id"]
+
     await db.content_calendar_settings.update_one(
-        {"clientId": client_id, "monthYear": month_year},
+        query,
         {"$set": update_data},
         upsert=True
     )
-    return await get_content_calendar_settings(db, client_id, month_year)
+    return await get_content_calendar_settings(db, client_id, month_year, project_id)
 
 # Dynamic Feedback Forms
 

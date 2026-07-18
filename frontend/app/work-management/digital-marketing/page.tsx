@@ -49,6 +49,7 @@ import { DateRange } from "react-day-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { startOfToday, subDays, format, isSameDay, differenceInDays, parseISO, isAfter, startOfDay } from "date-fns";
 import { OtherWorkDialog } from "@/components/hrms/OtherWorkDialog";
+import { DMOtherWorkDialog } from "@/components/hrms/DMOtherWorkDialog";
 import { PendingWorkEmbedded } from "@/components/hrms/PendingWorkEmbedded";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -2365,6 +2366,7 @@ export default function MarketingReportsPage() {
                 )}
               </Button>
               {(isAdmin || user?.role === 'Team Leader' || user?.role === 'HR') && <OtherWorkDialog source="digital-marketing" />}
+              <DMOtherWorkDialog />
             </div>
           </div>
         );
@@ -2402,6 +2404,12 @@ export default function MarketingReportsPage() {
               className="px-6 py-2 rounded-md transition-all"
             >
               Creative Tasks
+            </TabsTrigger>
+            <TabsTrigger
+              value="other-work"
+              className="px-6 py-2 rounded-md transition-all"
+            >
+              Other Work
             </TabsTrigger>
             {user?.role?.toLowerCase() === 'admin' && (
               <TabsTrigger
@@ -4172,7 +4180,7 @@ export default function MarketingReportsPage() {
             />
           </div>
         </TabsContent>
-        <TabsContent value="tasks" className="flex-1 overflow-hidden mt-0">
+        <TabsContent value="tasks" className="flex-1 overflow-hidden min-h-0 mt-0">
           <PendingWorkEmbedded 
             type="all" 
             defaultTaskType="digital-marketing" 
@@ -4182,6 +4190,15 @@ export default function MarketingReportsPage() {
             showTransferRequests={showTransfers}
             onShowTransferRequestsChange={setShowTransfers}
             onRespond={fetchTransferRequests}
+          />
+        </TabsContent>
+        <TabsContent value="other-work" className="flex-1 overflow-hidden min-h-0 mt-0">
+          <PendingWorkEmbedded 
+            type="all" 
+            defaultTaskType="dm-other-work" 
+            hideTaskTypeFilter 
+            hideStageFilter 
+            hideProjectFilter 
           />
         </TabsContent>
         {user?.role?.toLowerCase() === 'admin' && (

@@ -22,10 +22,13 @@ import dayjs from "dayjs";
 
 interface ContentCalendarTableProps {
   clientId: string;
+  projectId?: string;
+  projectName?: string;
   clientName?: string;
+  isOldestProject?: boolean;
 }
 
-export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTableProps) {
+export function ContentCalendarTable({ clientId, clientName, projectId, projectName, isOldestProject }: ContentCalendarTableProps) {
   const searchParams = useSearchParams();
   const highlightTask = searchParams.get('highlightTask');
   const [entries, setEntries] = useState<any[]>([]);
@@ -103,7 +106,7 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
 
   const fetchOverallMaxDate = async () => {
     try {
-      const res = await fetch(`${API_URL}/content-calendar?clientId=${clientId}`);
+      const res = await fetch(`${API_URL}/content-calendar?clientId=${clientId}${projectId ? `&projectId=${projectId}` : ''}`);
       if (res.ok) {
         const data = await res.json();
         let max = new Date(0);
@@ -202,7 +205,7 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
         }
       }
 
-      const res = await fetch(`${API_URL}/content-calendar-settings?clientId=${clientId}&monthYear=${monthYear}`);
+      const res = await fetch(`${API_URL}/content-calendar-settings?clientId=${clientId}&monthYear=${monthYear}${projectId ? `&projectId=${projectId}` : ''}`);
       let customSettings = {};
       if (res.ok) {
         const data = await res.json();
@@ -235,7 +238,10 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
     try {
       const res = await fetch(`${API_URL}/content-calendar?clientId=${clientId}&monthYear=${monthYear}`);
       if (res.ok) {
-        const data = await res.json();
+        let data = await res.json();
+        if (projectId) {
+           data = data.filter((entry: any) => entry.projectId === projectId || (isOldestProject && !entry.projectId));
+        }
         data.sort((a: any, b: any) => {
           if (!a.postingDate) return 1;
           if (!b.postingDate) return -1;
@@ -260,7 +266,10 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
         })
         .then(data => {
           if (Array.isArray(data)) {
-            const task = data.find(t => t.id === highlightTask);
+            if (projectId) {
+               data = data.filter((entry: any) => entry.projectId === projectId || (isOldestProject && !entry.projectId));
+            }
+            const task = data.find((t: any) => t.id === highlightTask);
             if (task) {
               const dateVal = task.postingDate || task.scriptDate || task.shootDate || task.editingStart || task.actualPostingDate || task.monthYear;
               if (dateVal && typeof dateVal === 'string') {
@@ -275,12 +284,12 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
         })
         .catch(err => console.error(err));
     }
-  }, [highlightTask, clientId]);
+  }, [highlightTask, clientId, projectId]);
 
   useEffect(() => {
     fetchEntries();
     fetchSettings();
-  }, [clientId, monthYear]);
+  }, [clientId, monthYear, projectId]);
 
   useEffect(() => {
     if (entries.length > 0 && highlightTask) {
@@ -319,6 +328,7 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           clientId,
+          projectId,
           monthYear,
           updatedBy: userName,
           postReel: typeFilter !== "all" ? typeFilter : undefined
@@ -342,6 +352,7 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
 
       let payload: any = {
         clientId,
+        projectId,
         monthYear,
         postingDate: dateString,
         updatedBy: userName,
@@ -498,7 +509,7 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
         reason: reason
       };
       const updatedLogs = [...(settings?.statusLogs || []), newLog];
-      const updatedSettings = { ...settings, clientId, monthYear, approvalStatus: newStatus, statusLogs: updatedLogs };
+      const updatedSettings = { ...settings, clientId, projectId, monthYear, approvalStatus: newStatus, statusLogs: updatedLogs };
       
       const res = await fetch(`${API_URL}/content-calendar-settings`, {
         method: "POST",
@@ -582,6 +593,7 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
       const payload = {
         ...settingsForm,
         clientId,
+        projectId,
         monthYear,
         scriptDateOffset: Number(settingsForm.scriptDateOffset),
         shootDateOffset: Number(settingsForm.shootDateOffset),
@@ -936,7 +948,15 @@ export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTa
     <div className={containerClasses}>
       <div className="p-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4 bg-white">
         <div>
-          <h2 className="text-lg font-bold text-slate-800">Content Calendar</h2>
+          <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+            Content Calendar
+            {projectName && (
+              <>
+                <span className="text-slate-300">|</span>
+                <span className="text-brand-teal text-base">{projectName}</span>
+              </>
+            )}
+          </h2>
           <p className="text-xs text-slate-500">Plan and track content creation and posting</p>
         </div>
         <div className="flex items-start gap-3">

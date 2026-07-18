@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
-import { ClipboardList, Plus, Pencil, Trash2, Calendar, User, Loader2, Search, Briefcase, CheckCircle2, Circle, History, AlertTriangle, MoreHorizontal, X, FilePlus, Check, ChevronsUpDown, ChevronLeft, ArrowLeftRight } from "lucide-react";
+import { ClipboardList, Plus, Pencil, Trash2, Calendar, User, Loader2, Search, Briefcase, CheckCircle2, Circle, History, AlertTriangle, MoreHorizontal, X, FilePlus, Check, ChevronsUpDown, ChevronLeft, ArrowLeftRight, Brush } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DailyProgressView } from "@/components/hrms/DailyProgressView";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -29,6 +29,8 @@ import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { TaskPresetsView } from "@/components/work-management/TaskPresetsView";
 import EmployeeAnalytics from "@/components/work-management/EmployeeAnalytics";
 import { usePermissions } from "@/hooks/usePermissions";
+import { DevCreativeWorkDialog } from "@/components/hrms/DevCreativeWorkDialog";
+import { PendingWorkEmbedded } from "@/components/hrms/PendingWorkEmbedded";
 import { TablePagination } from "@/components/common/TablePagination";
 import { toast } from "sonner";
 import { useConfirm } from "@/context/ConfirmContext";
@@ -113,7 +115,7 @@ export default function TasksPage() {
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferringTask, setTransferringTask] = useState<any>(null);
   const [selectedReceiverId, setSelectedReceiverId] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<"tasks" | "progress" | "presets">("tasks");
+  const [activeTab, setActiveTab] = useState<"tasks" | "progress" | "presets" | "analytics" | "creative">("tasks");
   const isRealAdmin = user?.role?.toLowerCase() === "admin";
 
   useEffect(() => {
@@ -750,7 +752,6 @@ export default function TasksPage() {
     const todayStr = new Date().toISOString().split('T')[0];
     const taskDate = t.dueDate || t.postingDate;
     if (taskTimeFilter === "today") {
-      if (t.status === "completed" || t.status === "pending" || t.status === "onhold") return false;
       if (!taskDate || taskDate > todayStr) return false;
     } else if (taskTimeFilter === "pending") {
       const isPendingStatus = t.status === "pending" || t.status === "onhold";
@@ -802,6 +803,15 @@ export default function TasksPage() {
         description="Manage software & web development sprints. Click any card to update details."
       >
         <div className="flex gap-2">
+          {activeTab === "tasks" && !isRealAdmin && (
+            <DevCreativeWorkDialog />
+          )}
+          {activeTab === "tasks" && (
+            <Button onClick={() => setActiveTab("creative")} variant="outline" className="gap-2 border-brand-teal text-brand-teal hover:bg-brand-teal/10 font-bold">
+              <Brush className="w-4 h-4" />
+              Creative Work
+            </Button>
+          )}
           {activeTab === "tasks" && !isRealAdmin && (
             <Button 
               variant="default" 
@@ -954,6 +964,25 @@ export default function TasksPage() {
       ) : activeTab === "presets" ? (
         <div className="space-y-4 flex-1 flex flex-col">
           <TaskPresetsView onBack={() => setActiveTab('tasks')} />
+        </div>
+      ) : activeTab === "creative" ? (
+        <div className="space-y-4 flex-1 flex flex-col min-h-0 overflow-hidden">
+          <div className="flex items-center">
+            <Button 
+              variant="ghost" 
+              className="gap-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 font-bold"
+              onClick={() => setActiveTab('tasks')}
+            >
+              <ChevronLeft className="w-4 h-4" /> Back to Board
+            </Button>
+          </div>
+          <PendingWorkEmbedded 
+            defaultTaskType="dev-creative-work" 
+            type="all" 
+            hideTaskTypeFilter={true} 
+            hideStageFilter={true} 
+            hideProjectFilter={true} 
+          />
         </div>
       ) : activeTab === "progress" ? (
         <div className="space-y-4 flex-1 flex flex-col">
@@ -1315,7 +1344,7 @@ export default function TasksPage() {
               </Popover>
             );
           })()}
-          {user && (['admin', 'super admin', 'superadmin', 'team leader'].includes(user.role?.toLowerCase() || '') || user.designation?.toLowerCase() === 'team leader') && (
+          {user && (['admin', 'super admin', 'superadmin', 'team leader', 'hr'].includes(user.role?.toLowerCase() || '') || user.designation?.toLowerCase() === 'team leader' || user.designation?.toLowerCase() === 'hr') && (
             <div className="flex items-center bg-slate-100 border border-slate-200 rounded-lg p-1 gap-1">
               <button 
                 type="button"
