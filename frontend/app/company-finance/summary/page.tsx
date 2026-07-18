@@ -16,6 +16,7 @@ import {
   Plus,
   Trash2,
   RotateCcw,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -206,17 +207,17 @@ const PLAN_ROWS: RowDefinition[] = [
 ];
 
 export default function CompanyFinanceSummaryPage() {
-  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+  const [selectedMonths, setSelectedMonths] = useState<string[]>(() => {
     const d = new Date();
     const mm = String(d.getMonth() + 1).padStart(2, "0");
-    return `${d.getFullYear()}-${mm}`;
+    return [`${d.getFullYear()}-${mm}`];
   });
-
-  const [planValues, setPlanValues] = useState<Record<string, any>>({});
+  const [showMonthDropdown, setShowMonthDropdown] = useState(false);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [assets, setAssets] = useState<any[]>([]);
   const [jobOpenings, setJobOpenings] = useState<any[]>([]);
+  const [planValues, setPlanValues] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
 
   const [rows, setRows] = useState<RowDefinition[]>(PLAN_ROWS);
@@ -237,6 +238,9 @@ export default function CompanyFinanceSummaryPage() {
   const [formType, setFormType] = useState<"field" | "multiple">("field");
 
   const handleOverrideChange = async (id: string, value: string) => {
+    if (selectedMonths.length > 1) return;
+    const targetMonth = selectedMonths[0];
+
     const updatedOverrides = {
       ...actualOverrides,
       [id]: value === "" ? undefined : value,
@@ -256,7 +260,7 @@ export default function CompanyFinanceSummaryPage() {
     });
 
     try {
-      await fetch(`${API_URL}/company-finance/actual-overrides/${selectedMonth}`, {
+      await fetch(`${API_URL}/company-finance/actual-overrides/${targetMonth}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ values: rawOverrides }),
@@ -299,8 +303,9 @@ export default function CompanyFinanceSummaryPage() {
     const updatedRows = [...rows, newRow];
     setRows(updatedRows);
     
+    const targetMonth = selectedMonths[0] || new Date().toISOString().substring(0, 7);
     try {
-      const res = await fetch(`${API_URL}/company-finance/row-definitions/${selectedMonth}`, {
+      const res = await fetch(`${API_URL}/company-finance/row-definitions/${targetMonth}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rows: updatedRows.map(({ formula, ...r }) => r) }),
@@ -326,8 +331,9 @@ export default function CompanyFinanceSummaryPage() {
     const updatedRows = rows.filter((r) => r.id !== id);
     setRows(updatedRows);
 
+    const targetMonth = selectedMonths[0] || new Date().toISOString().substring(0, 7);
     try {
-      const res = await fetch(`${API_URL}/company-finance/row-definitions/${selectedMonth}`, {
+      const res = await fetch(`${API_URL}/company-finance/row-definitions/${targetMonth}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rows: updatedRows.map(({ formula, ...r }) => r) }),
@@ -346,8 +352,9 @@ export default function CompanyFinanceSummaryPage() {
   const handleRestoreDefaults = async () => {
     if (!confirm("Are you sure you want to restore all categories/rows to system defaults? Any custom categories will be lost.")) return;
 
+    const targetMonth = selectedMonths[0] || new Date().toISOString().substring(0, 7);
     try {
-      const res = await fetch(`${API_URL}/company-finance/row-definitions/${selectedMonth}`, {
+      const res = await fetch(`${API_URL}/company-finance/row-definitions/${targetMonth}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rows: PLAN_ROWS.map(({ formula, ...r }) => r) }),
@@ -387,15 +394,19 @@ export default function CompanyFinanceSummaryPage() {
 
   useEffect(() => {
     fetchDashboardData();
-  }, [selectedMonth]);
+  }, [selectedMonths]);
 
   const fetchDashboardData = async () => {
+    if (selectedMonths.length === 0) return;
     try {
       setLoading(true);
 
-      // Fetch row definitions
+      const sortedMonths = [...selectedMonths].sort();
+      const latestMonth = sortedMonths[sortedMonths.length - 1];
+
+      // Fetch row definitions of latest selected month
       try {
-        const rowDefsRes = await fetch(`${API_URL}/company-finance/row-definitions/${selectedMonth}`);
+        const rowDefsRes = await fetch(`${API_URL}/company-finance/row-definitions/${latestMonth}`);
         if (rowDefsRes.ok) {
           const rowDefsData = await rowDefsRes.json();
           if (rowDefsData && Array.isArray(rowDefsData.rows) && rowDefsData.rows.length > 0) {
@@ -413,13 +424,11 @@ export default function CompanyFinanceSummaryPage() {
         console.error("Error fetching row definitions:", err);
       }
 
-      const [planRes, txRes, empRes, astRes, jobsRes, overridesRes, settingsRes] = await Promise.all([
-        fetch(`${API_URL}/company-finance/monthly-plans/${selectedMonth}`),
+      const [txRes, empRes, astRes, jobsRes, settingsRes] = await Promise.all([
         fetch(`${API_URL}/company-finance/transactions`),
         fetch(`${API_URL}/employees`),
         fetch(`${API_URL}/assets`),
         fetch(`${API_URL}/job-openings`),
-        fetch(`${API_URL}/company-finance/actual-overrides/${selectedMonth}`),
         fetch(`${API_URL}/system-settings`),
       ]);
 
@@ -431,38 +440,44 @@ export default function CompanyFinanceSummaryPage() {
         scale = Math.pow(10, decimals);
       }
 
-      if (overridesRes.ok) {
-        const overridesData = await overridesRes.json();
-        const rawOverrides = overridesData?.values || {};
-        const scaledOverrides: Record<string, any> = {};
+      // Fetch monthly plans and overrides for each month in parallel and sum them up
+      const [plansArray, overridesArray] = await Promise.all([
+        Promise.all(selectedMonths.map(m => fetch(`${API_URL}/company-finance/monthly-plans/${m}`).then(r => r.ok ? r.json() : {}))),
+        Promise.all(selectedMonths.map(m => fetch(`${API_URL}/company-finance/actual-overrides/${m}`).then(r => r.ok ? r.json() : {})))
+      ]);
+
+      const aggregatedOverrides: Record<string, any> = {};
+      overridesArray.forEach((o: any) => {
+        const rawOverrides = o?.values || {};
         Object.entries(rawOverrides).forEach(([k, v]) => {
           if (v !== undefined && v !== null && v !== "" && !isNaN(parseFloat(String(v)))) {
-            scaledOverrides[k] = String(parseFloat(String(v)) / scale);
+            aggregatedOverrides[k] = (aggregatedOverrides[k] || 0) + (parseFloat(String(v)) / scale);
           } else {
-            scaledOverrides[k] = v;
+            aggregatedOverrides[k] = v;
           }
         });
-        setActualOverrides(scaledOverrides);
-      }
+      });
+      setActualOverrides(aggregatedOverrides);
 
-      if (planRes.ok) {
-        const planData = await planRes.json();
-        const rawPlan = planData?.values || {};
-        const scaledPlan: Record<string, any> = {};
+      const aggregatedPlan: Record<string, any> = {};
+      plansArray.forEach((p: any) => {
+        const rawPlan = p?.values || {};
         Object.entries(rawPlan).forEach(([k, v]) => {
           if (Array.isArray(v)) {
-            scaledPlan[k] = v.map((item: any) => ({
-              ...item,
-              rate: String(parseFloat(item.rate || 0) / scale)
-            }));
+            if (!aggregatedPlan[k]) aggregatedPlan[k] = [];
+            v.forEach((item: any) => {
+              const scaledRate = String(parseFloat(item.rate || 0) / scale);
+              aggregatedPlan[k].push({ ...item, rate: scaledRate });
+            });
           } else if (v !== undefined && v !== null && v !== "" && !isNaN(parseFloat(String(v)))) {
-            scaledPlan[k] = String(parseFloat(String(v)) / scale);
+            aggregatedPlan[k] = (aggregatedPlan[k] || 0) + (parseFloat(String(v)) / scale);
           } else {
-            scaledPlan[k] = v;
+            aggregatedPlan[k] = v;
           }
         });
-        setPlanValues(scaledPlan);
-      }
+      });
+      setPlanValues(aggregatedPlan);
+
       if (txRes.ok) {
         const txData = await txRes.json();
         setTransactions(txData.transactions || []);
@@ -510,40 +525,67 @@ export default function CompanyFinanceSummaryPage() {
   // Calculate actuals dynamically for a row based on database listings
   const actualValues = useMemo(() => {
     const computed: Record<string, any> = {};
-    const [targetYear, targetMonth] = selectedMonth.split("-").map(Number);
-    const monthStart = new Date(targetYear, targetMonth - 1, 1);
-    const monthEnd = new Date(targetYear, targetMonth, 0, 23, 59, 59);
-    const targetMonthStr = selectedMonth;
 
-    // Filter transactions for selected month
-    const monthlyTxs = transactions.filter((tx) => tx.date && tx.date.substring(0, 7) === targetMonthStr);
+    // Filter transactions for any of the selected months
+    const monthlyTxs = transactions.filter((tx) => tx.date && selectedMonths.includes(tx.date.substring(0, 7)));
 
-    // Active employees in target month
-    const activeEmployees = employees.filter((emp) => {
-      if (emp.status === "inactive") {
-        const resignationDate = emp.resignationDate ? new Date(emp.resignationDate) : null;
-        if (resignationDate && resignationDate < monthStart) return false;
-      }
-      const joinDate = emp.joinDate ? new Date(emp.joinDate) : null;
-      if (joinDate && joinDate > monthEnd) return false;
-      return true;
+    // 1. Compute aggregate payroll costs across all selected months
+    let totalPayroll = 0;
+    let totalNewHiresPayroll = 0;
+
+    selectedMonths.forEach((monthStr) => {
+      const [targetYear, targetMonth] = monthStr.split("-").map(Number);
+      const monthStart = new Date(targetYear, targetMonth - 1, 1);
+      const monthEnd = new Date(targetYear, targetMonth, 0, 23, 59, 59);
+
+      const activeEmployees = employees.filter((emp) => {
+        if (emp.status === "inactive") {
+          const resignationDate = emp.resignationDate ? new Date(emp.resignationDate) : null;
+          if (resignationDate && resignationDate < monthStart) return false;
+        }
+        const joinDate = emp.joinDate ? new Date(emp.joinDate) : null;
+        if (joinDate && joinDate > monthEnd) return false;
+        return true;
+      });
+
+      const newHires = activeEmployees.filter((emp) => {
+        if (!emp.joinDate) return false;
+        const joinDate = new Date(emp.joinDate);
+        return joinDate >= monthStart && joinDate <= monthEnd;
+      });
+
+      activeEmployees.forEach((emp) => {
+        totalPayroll += parseFloat(emp.salary) || 0;
+      });
+
+      newHires.forEach((emp) => {
+        totalNewHiresPayroll += parseFloat(emp.salary) || 0;
+      });
     });
 
-    // New hire employees (joined in target month)
-    const newHires = activeEmployees.filter((emp) => {
-      if (!emp.joinDate) return false;
-      const joinDate = new Date(emp.joinDate);
-      return joinDate >= monthStart && joinDate <= monthEnd;
+    // 2. Headcount & Assets calculations are done for the LATEST selected month
+    const sortedMonths = [...selectedMonths].sort();
+    const latestMonthStr = sortedMonths[sortedMonths.length - 1] || new Date().toISOString().substring(0, 7);
+    const [latestYear, latestMonth] = latestMonthStr.split("-").map(Number);
+    const latestMonthStart = new Date(latestYear, latestMonth - 1, 1);
+    const latestMonthEnd = new Date(latestYear, latestMonth, 0, 23, 59, 59);
+
+    const latestActiveEmployees = employees.filter((emp) => {
+      if (emp.status === "inactive") {
+        const resignationDate = emp.resignationDate ? new Date(emp.resignationDate) : null;
+        if (resignationDate && resignationDate < latestMonthStart) return false;
+      }
+      const joinDate = emp.joinDate ? new Date(emp.joinDate) : null;
+      if (joinDate && joinDate > latestMonthEnd) return false;
+      return true;
     });
 
     const activeAssets = assets.filter((ast) => (ast.status || "").toLowerCase() !== "maintenance");
 
-    // Headcount variables
-    let devs = 0, creative = 0, mkt = 0, bde = 0, call = 0, qa = 0, hr = 0, payroll = 0, newHiresPayroll = 0;
-    activeEmployees.forEach((emp) => {
+    // Headcount variables (Latest Month)
+    let devs = 0, creative = 0, mkt = 0, bde = 0, call = 0, qa = 0, hr = 0, payroll = totalPayroll, newHiresPayroll = totalNewHiresPayroll;
+    latestActiveEmployees.forEach((emp) => {
       const dept = (emp.department || "").toLowerCase().trim();
-      const salary = parseFloat(emp.salary) || 0;
-      payroll += salary;
 
       if (dept.includes("dev")) devs++;
       else if (dept.includes("creative") || dept.includes("design") || dept.includes("graphics")) creative++;
@@ -552,10 +594,6 @@ export default function CompanyFinanceSummaryPage() {
       else if (dept.includes("call") || dept.includes("telecall")) call++;
       else if (dept.includes("qa") || dept.includes("test")) qa++;
       else if (dept.includes("hr") || dept.includes("recruiter")) hr++;
-    });
-
-    newHires.forEach((emp) => {
-      newHiresPayroll += parseFloat(emp.salary) || 0;
     });
 
     // Asset variables
@@ -649,7 +687,9 @@ export default function CompanyFinanceSummaryPage() {
       
       else if (row.id === "cf_opening") {
         // Find previous month closing
-        const prevMonthStr = getPreviousMonthString(selectedMonth);
+        const sorted = [...selectedMonths].sort();
+        const earliestMonthStr = sorted[0] || new Date().toISOString().substring(0, 7);
+        const prevMonthStr = getPreviousMonthString(earliestMonthStr);
         const prevMonthTxs = transactions.filter((t) => t.date && t.date.substring(0, 7) === prevMonthStr);
         const prevCredits = prevMonthTxs.filter((t) => t.type === "credit").reduce((sum, t) => sum + (t.amount || 0), 0);
         const prevDebits = prevMonthTxs.filter((t) => t.type === "debit").reduce((sum, t) => sum + (t.amount || 0), 0);
@@ -722,7 +762,7 @@ export default function CompanyFinanceSummaryPage() {
     }
 
     return computed;
-  }, [transactions, employees, assets, jobOpenings, selectedMonth, rows, actualOverrides, settings]);
+  }, [transactions, employees, assets, jobOpenings, selectedMonths, rows, actualOverrides, settings]);
 
   // Plan Values including evaluated formulas
   const evaluatedPlanValues = useMemo(() => {
@@ -751,7 +791,9 @@ export default function CompanyFinanceSummaryPage() {
 
   // Export to Excel-like CSV format
   const handleExportCSV = () => {
-    const headers = ["Category", "Sub-Category", "Metric", "Unit", `${selectedMonth} Plan`, `${selectedMonth} Actual`, "Variance"];
+    const sorted = [...selectedMonths].sort();
+    const rangeLabel = sorted.length === 1 ? sorted[0] : `${sorted[0]}_to_${sorted[sorted.length - 1]}`;
+    const headers = ["Category", "Sub-Category", "Metric", "Unit", "Plan Total", "Actual Total", "Variance"];
     const rowsList: any[] = [];
 
     Object.entries(groupedRows).forEach(([categoryName, items]) => {
@@ -786,7 +828,7 @@ export default function CompanyFinanceSummaryPage() {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Finance_Summary_${selectedMonth}.csv`);
+    link.setAttribute("download", `Finance_Summary_${rangeLabel}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -847,20 +889,71 @@ export default function CompanyFinanceSummaryPage() {
         description="Spreadsheet-style summary comparing targets against computed database actuals"
       >
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-sm text-xs font-bold text-slate-700">
-            <CalendarIcon className="w-4 h-4 text-[#cc0000]" />
-            <span>Select Month:</span>
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="bg-transparent border-none focus:outline-none focus:ring-0 cursor-pointer font-extrabold text-[#cc0000]"
+          {/* Custom Checkbox Multi-Select Month Picker */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowMonthDropdown(!showMonthDropdown)}
+              className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-4 py-2 shadow-sm text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
             >
-              {monthOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+              <CalendarIcon className="w-4 h-4 text-[#cc0000]" />
+              <span>Months:</span>
+              <span className="font-extrabold text-[#cc0000]">
+                {selectedMonths.length === 1
+                  ? monthOptions.find((m) => m.value === selectedMonths[0])?.label || selectedMonths[0]
+                  : `${selectedMonths.length} Months Selected`}
+              </span>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-500 ml-1" />
+            </button>
+            
+            {showMonthDropdown && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowMonthDropdown(false)} />
+                <div className="absolute right-0 z-50 mt-1 w-64 max-h-80 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl p-3 space-y-2">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-1">
+                    <span className="text-[10px] uppercase font-bold text-slate-400">Select Months</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = new Date();
+                        const mm = String(d.getMonth() + 1).padStart(2, "0");
+                        setSelectedMonths([`${d.getFullYear()}-${mm}`]);
+                      }}
+                      className="text-[10px] text-blue-600 hover:underline font-semibold"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                  {monthOptions.map((opt) => {
+                    const isChecked = selectedMonths.includes(opt.value);
+                    return (
+                      <label
+                        key={opt.value}
+                        className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer select-none text-xs font-bold text-slate-700 transition-colors w-full text-left"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {
+                            if (isChecked) {
+                              if (selectedMonths.length > 1) {
+                                setSelectedMonths(selectedMonths.filter((m) => m !== opt.value));
+                              } else {
+                                toast.error("At least one month must be selected");
+                              }
+                            } else {
+                              setSelectedMonths([...selectedMonths, opt.value]);
+                            }
+                          }}
+                          className="rounded border-slate-300 text-[#cc0000] focus:ring-[#cc0000] w-3.5 h-3.5"
+                        />
+                        <span>{opt.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
 
           <Button
@@ -902,6 +995,12 @@ export default function CompanyFinanceSummaryPage() {
         </div>
       </PageHeader>
 
+      {selectedMonths.length > 1 && (
+        <div className="bg-amber-50 border border-amber-200/80 rounded-xl p-3 text-xs font-bold text-amber-800 flex items-center gap-2 shadow-sm animate-pulse">
+          <span>⚠️ Multi-month aggregation is active. Manual actual overrides are read-only. Switch to a single month to edit actual overrides.</span>
+        </div>
+      )}
+
       {loading ? (
         <div className="flex items-center justify-center py-32">
           <Loader2 className="w-8 h-8 animate-spin text-[#cc0000]" />
@@ -921,8 +1020,12 @@ export default function CompanyFinanceSummaryPage() {
                   <th className="px-4 py-3 border-r border-red-800/30">Sub-Category</th>
                   <th className="px-4 py-3 border-r border-red-800/30">Metric</th>
                   <th className="px-4 py-3 border-r border-red-800/30">Unit</th>
-                  <th className="px-4 py-3 text-right border-r border-red-800/30 w-[180px]">{selectedMonth} Plan</th>
-                  <th className="px-4 py-3 text-right border-r border-red-800/30 w-[180px]">{selectedMonth} Actual</th>
+                  <th className="px-4 py-3 text-right border-r border-red-800/30 w-[180px]">
+                    {selectedMonths.length === 1 ? `${selectedMonths[0]} Plan` : "Plan (Aggregated)"}
+                  </th>
+                  <th className="px-4 py-3 text-right border-r border-red-800/30 w-[180px]">
+                    {selectedMonths.length === 1 ? `${selectedMonths[0]} Actual` : "Actual (Aggregated)"}
+                  </th>
                   <th className="px-4 py-3 text-right border-r border-red-800/30 w-[150px]">Variance</th>
                   <th className="px-4 py-3 w-[60px] text-center">Actions</th>
                 </tr>
@@ -1007,7 +1110,7 @@ export default function CompanyFinanceSummaryPage() {
                               row.type !== "formula" ? "cursor-pointer hover:bg-slate-50/80 transition-colors group" : ""
                             }`}
                             onDoubleClick={() => {
-                              if (row.type !== "formula") {
+                              if (row.type !== "formula" && selectedMonths.length === 1) {
                                 setEditingCellId(row.id);
                               }
                             }}
