@@ -197,6 +197,7 @@ export default function CompanyFinanceTransactionsPage() {
     services: "",
     remarks: "",
     paymentMethod: "bank" as "bank" | "cash",
+    billAttachment: "",
   });
 
   const [debitForm, setDebitForm] = useState({
@@ -399,6 +400,7 @@ export default function CompanyFinanceTransactionsPage() {
       services: "",
       remarks: "",
       paymentMethod: activeTab,
+      billAttachment: "",
     });
     setIsCreditModalOpen(true);
   };
@@ -546,6 +548,7 @@ export default function CompanyFinanceTransactionsPage() {
         services: tx.services || "",
         remarks: tx.remarks || "",
         paymentMethod: tx.paymentMethod || activeTab,
+        billAttachment: tx.billAttachment || "",
       });
       setIsCreditModalOpen(true);
     } else {
@@ -1072,6 +1075,16 @@ export default function CompanyFinanceTransactionsPage() {
                                 {t.invoiceNumber || "INV"}
                                 <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                               </button>
+                            ) : t.billAttachment ? (
+                              <a 
+                                href={t.billAttachment}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-blue-700 bg-blue-50 hover:bg-blue-100 hover:text-blue-800 hover:scale-105 cursor-pointer px-2 py-0.5 rounded-md border border-blue-200/60 font-mono transition-all duration-200 font-bold"
+                              >
+                                {t.invoiceNumber || "CR-DOC"}
+                                <Paperclip className="w-3 h-3" />
+                              </a>
                             ) : (
                               <span className="font-mono text-slate-700">{t.invoiceNumber || "-"}</span>
                             )}
@@ -1180,21 +1193,20 @@ export default function CompanyFinanceTransactionsPage() {
                     )}
                     <th className="px-3.5 py-3">Things</th>
                     <th className="px-3.5 py-3">Narrative</th>
-                    <th className="px-3.5 py-3">Bill Attachment</th>
                     <th className="px-3.5 py-3 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {loading ? (
                     <tr>
-                      <td colSpan={8} className="py-16 text-center">
+                      <td colSpan={7} className="py-16 text-center">
                         <Loader2 className="w-6 h-6 animate-spin text-rose-600 mx-auto mb-2" />
                         <span className="text-xs text-slate-400 font-medium">Loading debt ledger...</span>
                       </td>
                     </tr>
                   ) : debitTransactions.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-16 text-center">
+                      <td colSpan={7} className="py-16 text-center">
                         <p className="font-bold text-slate-600 text-sm">No debt transactions</p>
                         <p className="text-xs text-slate-400 mt-1">Record company expenses and bills here</p>
                       </td>
@@ -1203,9 +1215,21 @@ export default function CompanyFinanceTransactionsPage() {
                     debitTransactions.map((t, idx) => (
                       <tr key={t._id || t.id || idx} className="hover:bg-slate-50/70 transition-colors">
                         <td className="px-3.5 py-3 font-bold text-slate-800">
-                          <span className="font-mono bg-slate-100 px-2 py-0.5 rounded text-slate-700 font-bold">
-                            {t.expenseNo || `EXP-${idx + 1}`}
-                          </span>
+                          {t.billAttachment ? (
+                            <a
+                              href={t.billAttachment}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-blue-700 bg-blue-50 hover:bg-blue-100 hover:text-blue-800 hover:scale-105 cursor-pointer px-2 py-0.5 rounded-md border border-blue-200/60 font-mono transition-all duration-200 font-bold"
+                            >
+                              {t.expenseNo || `EXP-${idx + 1}`}
+                              <Paperclip className="w-3 h-3" />
+                            </a>
+                          ) : (
+                            <span className="font-mono bg-slate-100 px-2 py-0.5 rounded text-slate-700 font-bold">
+                              {t.expenseNo || `EXP-${idx + 1}`}
+                            </span>
+                          )}
                         </td>
                         <td className="px-3.5 py-3 font-medium text-slate-600">
                           {t.date ? new Date(t.date).toLocaleDateString("en-IN") : "-"}
@@ -1223,20 +1247,6 @@ export default function CompanyFinanceTransactionsPage() {
                         </td>
                         <td className="px-3.5 py-3 font-medium text-slate-600 max-w-[160px] truncate" title={t.narrative}>
                           {t.narrative || "-"}
-                        </td>
-                        <td className="px-3.5 py-3">
-                          {t.billAttachment ? (
-                            <a
-                              href={t.billAttachment}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1 text-blue-600 hover:underline font-semibold"
-                            >
-                              <Paperclip className="w-3.5 h-3.5" /> View Bill
-                            </a>
-                          ) : (
-                            <span className="text-slate-400">-</span>
-                          )}
                         </td>
                         <td className="px-3.5 py-3 text-center">
                           <div className="flex items-center justify-center gap-1">
@@ -1466,6 +1476,32 @@ export default function CompanyFinanceTransactionsPage() {
               </div>
             </div>
 
+            {!editingTx?.isSyncedInvoice && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">Document Attachment (URL or Filename)</label>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="e.g. https://... or invoice_bill.pdf"
+                    value={creditForm.billAttachment}
+                    onChange={(e) => setCreditForm({ ...creditForm, billAttachment: e.target.value })}
+                    className="h-9 text-xs flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9 px-3 text-xs shrink-0"
+                    onClick={() => {
+                      const url = prompt("Enter online link or Google Drive URL for Document Attachment:");
+                      if (url) setCreditForm({ ...creditForm, billAttachment: url });
+                    }}
+                  >
+                    <Upload className="w-3.5 h-3.5 mr-1" /> Attach
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <DialogFooter className="pt-4 border-t border-slate-100">
               <Button type="button" variant="outline" size="sm" onClick={() => setIsCreditModalOpen(false)}>
                 Cancel
@@ -1614,7 +1650,7 @@ export default function CompanyFinanceTransactionsPage() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700">Bill Attachment (URL or Filename)</label>
+              <label className="text-xs font-bold text-slate-700">Document Attachment (URL or Filename)</label>
               <div className="flex gap-2">
                 <Input
                   placeholder="e.g. https://... or invoice_bill.pdf"
@@ -1628,8 +1664,7 @@ export default function CompanyFinanceTransactionsPage() {
                   size="sm"
                   className="h-9 px-3 text-xs shrink-0"
                   onClick={() => {
-                    // Simple simulated file upload alert / prompt
-                    const url = prompt("Enter online link or Google Drive URL for Bill Attachment:");
+                    const url = prompt("Enter online link or Google Drive URL for Document Attachment:");
                     if (url) setDebitForm({ ...debitForm, billAttachment: url });
                   }}
                 >
