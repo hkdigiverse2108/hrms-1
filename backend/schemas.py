@@ -1904,6 +1904,7 @@ class DocumentRequestBase(BaseModel):
     fileUrl: Optional[str] = None
     generatedDate: Optional[RobustDate] = None
     sentDate: Optional[RobustDate] = None
+    neededByDate: Optional[RobustDate] = None
 
 class DocumentRequestCreate(DocumentRequestBase):
     pass
@@ -1914,6 +1915,7 @@ class DocumentRequestUpdate(BaseModel):
     fileUrl: Optional[str] = None
     generatedDate: Optional[RobustDate] = None
     sentDate: Optional[RobustDate] = None
+    neededByDate: Optional[RobustDate] = None
 
 class DocumentRequest(DocumentRequestBase):
     id: str
