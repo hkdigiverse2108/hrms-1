@@ -51,7 +51,7 @@ export function TodaysWorkView({
     const dates = [];
     for (let i = 0; i <= maxDays; i++) {
       const d = new Date();
-      d.setDate(d.getDate() - i);
+      d.setDate(d.getDate() - 1 - i);
       dates.push(d.toISOString().split("T")[0]);
     }
     return dates;
@@ -191,14 +191,16 @@ export function TodaysWorkView({
                 <TableBody>
                   {(() => {
                     const sortedTasks = [...selectedData.tasks].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                    const todayStr = new Date().toISOString().split("T")[0];
+                    const yesterday = new Date();
+                    yesterday.setDate(yesterday.getDate() - 1);
+                    const yesterdayStr = yesterday.toISOString().split("T")[0];
                     const assignBy = selectedData.project?.teamLeaderName || "Admin";
 
                     return sortedTasks.map((task: any, idx: number) => {
                       const empName = getEmpName(task.assigneeId);
                       const isAssignedToMe = task.assigneeId === (currentUser?.id || currentUser?._id);
                       const isUnassigned = task.assigneeId == null || task.assigneeId === "";
-                      const isToday = task.date === todayStr;
+                      const isToday = task.date === yesterdayStr;
                       const displayDate = new Date(task.date).toLocaleDateString('en-GB');
                       
                       return (
