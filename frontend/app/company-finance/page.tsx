@@ -186,6 +186,7 @@ export default function CompanyFinanceTransactionsPage() {
   const [isDebitModalOpen, setIsDebitModalOpen] = useState(false);
   const [isBalanceModalOpen, setIsBalanceModalOpen] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+  const [creditBrandSelect, setCreditBrandSelect] = useState("");
 
   // Form states
   const [creditForm, setCreditForm] = useState({
@@ -219,6 +220,14 @@ export default function CompanyFinanceTransactionsPage() {
   const [previewInvoiceId, setPreviewInvoiceId] = useState<string | null>(null);
   const [previewInvoice, setPreviewInvoice] = useState<any>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
+  const [settings, setSettings] = useState<any>(null);
+
+  const brandOptions = useMemo(() => {
+    if (settings && Array.isArray(settings.invoiceClientDepartments) && settings.invoiceClientDepartments.length > 0) {
+      return settings.invoiceClientDepartments;
+    }
+    return ["Harikrushn DigiVerse LLP", "HK DigiVerse", "Harikrushn Academy", "HK Academy", "General"];
+  }, [settings]);
 
   useEffect(() => {
     if (previewInvoiceId) {
@@ -249,14 +258,19 @@ export default function CompanyFinanceTransactionsPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [txRes, balRes] = await Promise.all([
+      const [txRes, balRes, settingsRes] = await Promise.all([
         fetch(`${API_URL}/company-finance/transactions`),
         fetch(`${API_URL}/company-finance/balances`),
+        fetch(`${API_URL}/system-settings`),
       ]);
 
       if (txRes.ok) {
         const txData = await txRes.json();
         setTransactions(txData.transactions || []);
+      }
+      if (settingsRes.ok) {
+        const settingsData = await settingsRes.json();
+        setSettings(settingsData);
       }
       if (balRes.ok) {
         const balData = await balRes.json();
@@ -391,6 +405,7 @@ export default function CompanyFinanceTransactionsPage() {
   // Handlers for Credit Modal
   const handleOpenCreditModal = () => {
     setEditingTx(null);
+    setCreditBrandSelect("");
     setCreditForm({
       invoiceNumber: "",
       date: new Date().toISOString().split("T")[0],
@@ -409,14 +424,15 @@ export default function CompanyFinanceTransactionsPage() {
     const found = invoicesList.find((i) => i.invoiceNumber === invNum || i.id === invNum);
     if (found) {
       const lineItems = found.lineItems || [];
-      const descs = lineItems.map((li: any) => li.description).filter(Boolean).join(", ");
       const srvs = lineItems.map((li: any) => li.subDescription || li.description).filter(Boolean).join(", ");
+      const brand = found.clientDepartment || found.category || "General";
+      setCreditBrandSelect(brand);
       setCreditForm((prev) => ({
         ...prev,
         invoiceNumber: found.invoiceNumber || prev.invoiceNumber,
         amount: String(found.total || 0),
-        category: found.clientName || prev.category,
-        descriptions: descs || found.clientName || "",
+        category: brand,
+        descriptions: found.clientName || "",
         services: srvs || "Services",
         remarks: found.notes || found.remarks || `Status: ${found.status || "Paid"}`,
       }));
@@ -539,11 +555,17 @@ export default function CompanyFinanceTransactionsPage() {
   const handleEditTx = (tx: Transaction) => {
     setEditingTx(tx);
     if (tx.type === "credit") {
+      const brandVal = tx.category || "";
+      if (brandOptions.includes(brandVal)) {
+        setCreditBrandSelect(brandVal);
+      } else {
+        setCreditBrandSelect(brandVal ? "CUSTOM" : "");
+      }
       setCreditForm({
         invoiceNumber: tx.invoiceNumber || "",
         date: tx.date || new Date().toISOString().split("T")[0],
         amount: String(tx.amount || 0),
-        category: tx.category || "",
+        category: brandVal,
         descriptions: tx.descriptions || tx.description || "",
         services: tx.services || "",
         remarks: tx.remarks || "",
@@ -1383,65 +1405,46 @@ export default function CompanyFinanceTransactionsPage() {
                 />
               </div>
 
-              {activeTab === "bank" && (
-                <div className="space-y-1.5 relative">
-                  <label className="text-xs font-bold text-slate-700">Category / Client Name</label>
-                  <div className="relative">
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700">Category / Brand Name *</label>
+                  <select
+                    value={creditBrandSelect}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setCreditBrandSelect(val);
+                      if (val !== "CUSTOM") {
+                        setCreditForm({ ...creditForm, category: val });
+                      } else {
+                        setCreditForm({ ...creditForm, category: "" });
+                      }
+                    }}
+                    required
+                    className="w-full h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="">-- Select Category/Brand --</option>
+                    {brandOptions.map((brand: string) => (
+                      <option key={brand} value={brand}>
+                        {brand}
+                      </option>
+                    ))}
+                    <option value="CUSTOM">-- Add Custom Brand... --</option>
+                  </select>
+                </div>
+
+                {creditBrandSelect === "CUSTOM" && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700">Enter Custom Brand Name *</label>
                     <Input
-                      placeholder="e.g. HK DigiVerse LLP"
+                      required
+                      placeholder="Enter custom brand name..."
                       value={creditForm.category}
                       onChange={(e) => setCreditForm({ ...creditForm, category: e.target.value })}
-                      onFocus={() => setShowCreditCatDropdown(true)}
-                      onBlur={() => setTimeout(() => setShowCreditCatDropdown(false), 200)}
-                      className="h-9 text-xs pr-8"
+                      className="h-9 text-xs"
                     />
-                    {creditForm.category && (
-                      <button
-                        type="button"
-                        onClick={() => setCreditForm({ ...creditForm, category: "" })}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
                   </div>
-                  {showCreditCatDropdown && (
-                    <div className="absolute z-50 w-full mt-1 max-h-40 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg divide-y divide-slate-100">
-                      {creditForm.category && !allExistingCategories.includes(creditForm.category) && (
-                        <button
-                          type="button"
-                          onMouseDown={() => setCreditForm({ ...creditForm, category: creditForm.category })}
-                          className="w-full px-3 py-2 text-left text-xs text-emerald-600 font-bold hover:bg-slate-50 flex items-center justify-between"
-                        >
-                          <span>Add new: "{creditForm.category}"</span>
-                          <span className="text-[10px] bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">New</span>
-                        </button>
-                      )}
-                      {allExistingCategories
-                        .filter((cat) =>
-                          cat.toLowerCase().includes((creditForm.category || "").toLowerCase())
-                        )
-                        .map((cat) => (
-                          <button
-                            key={cat}
-                            type="button"
-                            onMouseDown={() => setCreditForm({ ...creditForm, category: cat })}
-                            className="w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
-                          >
-                            {cat}
-                          </button>
-                        ))}
-                      {allExistingCategories.filter((cat) =>
-                        cat.toLowerCase().includes((creditForm.category || "").toLowerCase())
-                      ).length === 0 && !creditForm.category && (
-                        <div className="px-3 py-2 text-xs text-slate-400 text-center">
-                          No categories found. Type to add new.
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
+                )}
+              </div>
             </div>
 
             <div className="space-y-1.5">
