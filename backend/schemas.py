@@ -838,6 +838,7 @@ class Remark(RemarkBase):
 class PenaltyTypeBase(BaseModel):
     name: str
     amount: int
+    warningLimit: Optional[int] = 3
 
 class PenaltyTypeCreate(PenaltyTypeBase):
     pass
@@ -845,6 +846,7 @@ class PenaltyTypeCreate(PenaltyTypeBase):
 class PenaltyTypeUpdate(BaseModel):
     name: Optional[str] = None
     amount: Optional[int] = None
+    warningLimit: Optional[int] = None
 
 class PenaltyType(PenaltyTypeBase):
     id: str

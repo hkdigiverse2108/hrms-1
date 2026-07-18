@@ -1260,7 +1260,7 @@ async def run_payroll_processing(db, month: str, year: int, performed_by: str = 
         # Sort by parsed date
         emp_remarks.sort(key=lambda x: x["_sort_date"])
             
-        penalty_count = 0
+        penalty_counts = {}
         
         for r in emp_remarks:
             remark_type = r.get("type")
@@ -1278,7 +1278,8 @@ async def run_payroll_processing(db, month: str, year: int, performed_by: str = 
                 if remark_type == "Late Punch-in" and not late_punch_deduction_enabled:
                     continue
                     
-                penalty_count += 1
+                penalty_counts[remark_type] = penalty_counts.get(remark_type, 0) + 1
+                current_type_count = penalty_counts[remark_type]
                 amount_to_deduct = r_amount
                 if amount_to_deduct <= 0:
                     amount_to_deduct = next((p["amount"] for p in penalty_types if p["name"] == remark_type), 0)
@@ -1287,7 +1288,10 @@ async def run_payroll_processing(db, month: str, year: int, performed_by: str = 
                     amount_to_deduct = per_day_gross if per_day_gross > 0 else 0
                 
                 if amount_to_deduct > 0:
-                    if penalty_count <= 3:
+                    pt_obj = next((p for p in penalty_types if p["name"] == remark_type), None)
+                    type_warning_limit = pt_obj.get("warningLimit", 3) if pt_obj else 3
+                    
+                    if current_type_count <= type_warning_limit:
                         deduction_details.append(f"Warning: {remark_type} ({r_date_str})")
                     else:
                         penalty_total += amount_to_deduct
@@ -2076,7 +2080,9 @@ async def get_remarks(db, skip: int = 0, limit: int = 100):
             except ValueError:
                 rank = 999
                 
-            if rank <= 3:
+            pt_obj = next((p for p in penalty_types if p["name"] == remark_type), None)
+            type_warning_limit = pt_obj.get("warningLimit", 3) if pt_obj else 3
+            if rank <= type_warning_limit:
                 is_warning = True
 
         item["amount"] = p_amount
