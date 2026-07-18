@@ -671,10 +671,24 @@ export default function ModulesPage() {
 
     if (newTaskDueDate) {
       const taskDate = new Date(newTaskDueDate);
-      const refDeadlineStr = selectedModule.dueDate || selectedProject?.endDate;
-      if (refDeadlineStr) {
-        if (taskDate > new Date(refDeadlineStr)) {
-          toast.error(`Task due date cannot exceed ${selectedModule.dueDate ? "Module" : "Project"} deadline (${refDeadlineStr})`);
+      if (selectedModule.dueDate) {
+        const modDate = new Date(selectedModule.dueDate);
+        if (taskDate > modDate) {
+          toast.error(`Task due date cannot exceed Module deadline (${selectedModule.dueDate})`);
+          return;
+        }
+      }
+      if (selectedProject?.endDate) {
+        const clientDate = new Date(selectedProject.endDate);
+        if (taskDate > clientDate) {
+          toast.error(`Task due date cannot exceed Client deadline (${selectedProject.endDate})`);
+          return;
+        }
+      }
+      if (selectedProject?.teamDeadline) {
+        const teamDate = new Date(selectedProject.teamDeadline);
+        if (taskDate > teamDate) {
+          toast.error(`Task due date cannot exceed Team deadline (${selectedProject.teamDeadline})`);
           return;
         }
       }
@@ -794,10 +808,24 @@ export default function ModulesPage() {
 
     if (editTaskDueDate) {
       const taskDate = new Date(editTaskDueDate);
-      const refDeadlineStr = selectedModule?.dueDate || selectedProject?.endDate;
-      if (refDeadlineStr) {
-        if (taskDate > new Date(refDeadlineStr)) {
-          toast.error(`Task due date cannot exceed ${selectedModule?.dueDate ? "Module" : "Project"} deadline (${refDeadlineStr})`);
+      if (selectedModule?.dueDate) {
+        const modDate = new Date(selectedModule.dueDate);
+        if (taskDate > modDate) {
+          toast.error(`Task due date cannot exceed Module deadline (${selectedModule.dueDate})`);
+          return;
+        }
+      }
+      if (selectedProject?.endDate) {
+        const clientDate = new Date(selectedProject.endDate);
+        if (taskDate > clientDate) {
+          toast.error(`Task due date cannot exceed Client deadline (${selectedProject.endDate})`);
+          return;
+        }
+      }
+      if (selectedProject?.teamDeadline) {
+        const teamDate = new Date(selectedProject.teamDeadline);
+        if (taskDate > teamDate) {
+          toast.error(`Task due date cannot exceed Team deadline (${selectedProject.teamDeadline})`);
           return;
         }
       }
