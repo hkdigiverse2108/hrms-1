@@ -545,6 +545,18 @@ async def lifespan(app):
         await db.task_logs.create_index([("taskId", 1), ("timestamp", -1)])
         await db.task_logs.create_index([("projectId", 1), ("timestamp", -1)])
         await db.clients.create_index([("department", 1)])
+
+        # Marketing Reports & Remarks
+        await db.marketing_daily_reports.create_index([("clientId", 1), ("date", -1)])
+        await db.marketing_daily_reports.create_index([("projectId", 1), ("date", -1)])
+        await db.marketing_monthly_reports.create_index([("clientId", 1), ("month", 1)])
+        await db.marketing_project_daily_remarks.create_index([("projectId", 1), ("date", -1)])
+
+        # Notifications, Content Calendar, User Input Stats, and general log timestamps
+        await db.notifications.create_index([("userId", 1), ("_id", -1)])
+        await db.content_calendar_entries.create_index([("postingDate", 1)])
+        await db.user_input_stats.create_index([("employeeId", 1), ("date", -1)])
+        await db.task_logs.create_index([("timestamp", -1)])
         
         print("[Database Indexing] All database indexes verified/created successfully.", flush=True)
     except Exception as e:
@@ -938,6 +950,71 @@ async def delete_employee(employee_id: str, request: Request, db=Depends(get_db)
     performed_by, user_name = await get_actor_from_request(request, db)
     await crud.delete_employee(db, employee_id, performed_by=performed_by, user_name=user_name)
     return {"message": "Employee deleted successfully"}
+
+@app.post("/employees/transfer-responsibilities")
+async def transfer_responsibilities(payload: dict, request: Request, db=Depends(get_db)):
+    from_emp_id = payload.get("fromEmployeeId")
+    to_emp_id = payload.get("toEmployeeId")
+    if not from_emp_id or not to_emp_id:
+        raise HTTPException(status_code=400, detail="Missing fromEmployeeId or toEmployeeId")
+
+    actor_id, actor_name = await get_actor_from_request(request, db)
+    if actor_id != "System":
+        actor = await db.employees.find_one({"_id": ObjectId(actor_id) if len(actor_id) == 24 else actor_id})
+        if not actor or actor.get("role", "").lower() not in ["admin", "super admin", "manager"]:
+            raise HTTPException(status_code=403, detail="Only admins can transfer responsibilities")
+
+    from_emp = await db.employees.find_one({"_id": ObjectId(from_emp_id) if len(from_emp_id) == 24 else from_emp_id})
+    to_emp = await db.employees.find_one({"_id": ObjectId(to_emp_id) if len(to_emp_id) == 24 else to_emp_id})
+    if not from_emp or not to_emp:
+        raise HTTPException(status_code=404, detail="One or both employees not found")
+
+    from_name = f"{from_emp.get('firstName', '')} {from_emp.get('lastName', '')}".strip()
+    to_name = f"{to_emp.get('firstName', '')} {to_emp.get('lastName', '')}".strip()
+
+    # 1. Update Clients
+    await db.clients.update_many({"assignedEmployeeId": from_emp_id}, {"$set": {"assignedEmployeeId": to_emp_id, "assignedEmployeeName": to_name}})
+    creative_roles = [
+        "assignedScriptwriterId", "assignedReelEditorId", "assignedPostDesignerId",
+        "assignedShooterId", "assignedApproverId", "assignedPosterId",
+        "assignedCaptionWriterId", "assignedThumbnailDesignerId"
+    ]
+    for role_id_field in creative_roles:
+        name_field = role_id_field[:-2] + "Name"
+        await db.clients.update_many({role_id_field: from_emp_id}, {"$set": {role_id_field: to_emp_id, name_field: to_name}})
+
+    # 2. Update Projects
+    await db.projects.update_many({"assignedEmployeeId": from_emp_id}, {"$set": {"assignedEmployeeId": to_emp_id, "assignedEmployeeName": to_name}})
+    await db.projects.update_many({"teamLeaderId": from_emp_id}, {"$set": {"teamLeaderId": to_emp_id, "teamLeaderName": to_name}})
+    
+    dm_assignee_fields = ["revenueAssigneeId", "followerAssigneeId", "userRemarkAssigneeId", "clientRemarkAssigneeId"]
+    for dm_field in dm_assignee_fields:
+        await db.projects.update_many({dm_field: from_emp_id}, {"$set": {dm_field: to_emp_id}})
+
+    for role_id_field in creative_roles:
+        name_field = role_id_field[:-2] + "Name"
+        await db.projects.update_many({role_id_field: from_emp_id}, {"$set": {role_id_field: to_emp_id, name_field: to_name}})
+
+    async for proj in db.projects.find({"assignedTeamIds": from_emp_id}):
+        updated_team_ids = [to_emp_id if tid == from_emp_id else tid for tid in proj.get("assignedTeamIds", [])]
+        unique_team_ids = list(dict.fromkeys(updated_team_ids))
+        await db.projects.update_one({"_id": proj["_id"]}, {"$set": {"assignedTeamIds": unique_team_ids}})
+
+    # 3. Update active Tasks
+    await db.wm_tasks.update_many(
+        {"assignedToId": from_emp_id, "status": {"$ne": "completed"}},
+        {"$set": {"assignedToId": to_emp_id, "assignedToName": to_name}}
+    )
+
+    await crud.log_activity(
+        db,
+        action="Employee Responsibilities Transferred",
+        performedBy=actor_id,
+        userName=actor_name,
+        details=f"All work and responsibilities transferred from {from_name} to {to_name}."
+    )
+
+    return {"message": f"Successfully transferred all responsibilities from {from_name} to {to_name}."}
 
 
 # Attendance Endpoints

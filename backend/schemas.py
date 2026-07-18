@@ -1125,6 +1125,10 @@ class ProjectBase(BaseModel):
     teamLeaderName: Optional[str] = None
     assignedEmployeeId: Optional[str] = None
     assignedEmployeeName: Optional[str] = None
+    revenueAssigneeId: Optional[str] = None
+    followerAssigneeId: Optional[str] = None
+    userRemarkAssigneeId: Optional[str] = None
+    clientRemarkAssigneeId: Optional[str] = None
     assignedTeamIds: Optional[List[str]] = []
     startDate: RobustDate
     endDate: Optional[RobustDate] = None
@@ -1206,6 +1210,10 @@ class ProjectUpdate(BaseModel):
     teamLeaderName: Optional[str] = None
     assignedEmployeeId: Optional[str] = None
     assignedEmployeeName: Optional[str] = None
+    revenueAssigneeId: Optional[str] = None
+    followerAssigneeId: Optional[str] = None
+    userRemarkAssigneeId: Optional[str] = None
+    clientRemarkAssigneeId: Optional[str] = None
     assignedTeamIds: Optional[List[str]] = None
     startDate: Optional[RobustDate] = None
     endDate: Optional[RobustDate] = None
@@ -1311,6 +1319,7 @@ class TaskBase(BaseModel):
     remarks: Optional[str] = None
     createdDate: Optional[RobustDate] = None
     department: Optional[str] = None
+    frequency: Optional[str] = "one-time"
 
 class TaskCreate(TaskBase):
     performedBy: Optional[str] = None
@@ -1330,6 +1339,7 @@ class TaskUpdate(BaseModel):
     performedBy: Optional[str] = None
     userName: Optional[str] = None
     department: Optional[str] = None
+    frequency: Optional[str] = None
 
 class Task(TaskBase):
     id: str
@@ -1910,6 +1920,7 @@ class DocumentRequestBase(BaseModel):
     fileUrl: Optional[str] = None
     generatedDate: Optional[RobustDate] = None
     sentDate: Optional[RobustDate] = None
+    neededByDate: Optional[RobustDate] = None
 
 class DocumentRequestCreate(DocumentRequestBase):
     pass
@@ -1920,6 +1931,7 @@ class DocumentRequestUpdate(BaseModel):
     fileUrl: Optional[str] = None
     generatedDate: Optional[RobustDate] = None
     sentDate: Optional[RobustDate] = None
+    neededByDate: Optional[RobustDate] = None
 
 class DocumentRequest(DocumentRequestBase):
     id: str

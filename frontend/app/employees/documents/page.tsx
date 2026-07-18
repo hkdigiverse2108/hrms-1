@@ -281,7 +281,8 @@ export default function EmployeeDocumentsPage() {
   const [templates, setTemplates] = useState<any[]>([])
   const [requestFormData, setRequestFormData] = useState({
     documentType: '',
-    reason: ''
+    reason: '',
+    neededByDate: ''
   })
   const [sendFormData, setSendFormData] = useState({
     fileName: '',
@@ -393,14 +394,15 @@ export default function EmployeeDocumentsPage() {
           documentType: requestFormData.documentType,
           reason: requestFormData.reason,
           status: 'Pending',
-          requestDate: new Date().toISOString().split('T')[0]
+          requestDate: new Date().toISOString().split('T')[0],
+          neededByDate: requestFormData.neededByDate || null
         })
       })
       
       if (response.ok) {
         toast.success('Document request submitted successfully')
         setIsRequestModalOpen(false)
-        setRequestFormData({ documentType: templates[0]?.name || '', reason: '' })
+        setRequestFormData({ documentType: templates[0]?.name || '', reason: '', neededByDate: '' })
         fetchRequests()
       } else {
         toast.error('Failed to submit request')
@@ -1056,6 +1058,11 @@ export default function EmployeeDocumentsPage() {
       </span>
     )},
     { key: 'requestDate' as const, header: 'Date Requested' },
+    { key: 'neededByDate' as const, header: 'Needed By', render: (record: any) => (
+      <span className="text-slate-700">
+        {record.neededByDate || "-"}
+      </span>
+    )},
     { key: 'status' as const, header: 'Status', render: (record: any) => (
       <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
         record.status === 'Sent' ? 'bg-emerald-50 text-emerald-600' :
@@ -1183,7 +1190,7 @@ export default function EmployeeDocumentsPage() {
         )}
         {activeMainTab === 'requests' && !isAdminOrHR && (
           <Button className="bg-brand-teal hover:bg-brand-teal/90 font-bold" onClick={() => {
-            setRequestFormData({ documentType: templates[0]?.name || '', reason: '' })
+            setRequestFormData({ documentType: templates[0]?.name || '', reason: '', neededByDate: '' })
             setIsRequestModalOpen(true)
           }}>
             <Plus className="mr-2 h-4 w-4" />
@@ -1373,6 +1380,11 @@ export default function EmployeeDocumentsPage() {
                   </span>
                 )},
                 { key: 'requestDate' as const, header: 'Requested Date' },
+                { key: 'neededByDate' as const, header: 'Needed By', render: (record: any) => (
+                  <span className="text-slate-700">
+                    {record.neededByDate || "-"}
+                  </span>
+                )},
                 { key: 'status' as const, header: 'Status', render: (record: any) => (
                   <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
                     record.status === 'Sent' ? 'bg-emerald-50 text-emerald-600' :
@@ -1661,6 +1673,14 @@ export default function EmployeeDocumentsPage() {
                 placeholder="e.g. For bank loan, higher education, etc." 
                 value={requestFormData.reason} 
                 onChange={(e) => setRequestFormData({...requestFormData, reason: e.target.value})} 
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Needed By Date (Optional)</Label>
+              <Input 
+                type="date"
+                value={requestFormData.neededByDate} 
+                onChange={(e) => setRequestFormData({...requestFormData, neededByDate: e.target.value})} 
               />
             </div>
           </div>

@@ -7,7 +7,7 @@ import autoTable from "jspdf-autotable";
 import { SearchBar } from "@/components/common/SearchBar";
 import { TablePagination } from "@/components/common/TablePagination";
 import { Button } from "@/components/ui/button";
-import { Plus, Download, Pencil, Trash2, MoreVertical, Loader2, Eye, EyeOff, CreditCard, Shield, SlidersHorizontal } from "lucide-react";
+import { Plus, Download, Pencil, Trash2, MoreVertical, Loader2, Eye, EyeOff, CreditCard, Shield, SlidersHorizontal, ArrowLeftRight } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -96,6 +96,10 @@ export default function EmployeeListPage() {
   });
   const [isColModalOpen, setIsColModalOpen] = useState(false);
   const [tempVisibleColumns, setTempVisibleColumns] = useState<Record<string, boolean>>({});
+  const [isTransferOpen, setIsTransferOpen] = useState(false);
+  const [fromEmployeeId, setFromEmployeeId] = useState("");
+  const [toEmployeeId, setToEmployeeId] = useState("");
+  const [isTransferring, setIsTransferring] = useState(false);
 
   const isColVisible = (colKey: string) => {
     if (!visibleColumns[colKey]) return false;
@@ -264,6 +268,47 @@ export default function EmployeeListPage() {
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, filterDept, filterRole, filterStatus, viewType]);
+
+  const handleTransferSubmit = async () => {
+    if (!fromEmployeeId || !toEmployeeId) {
+      toast.error("Please select both employees");
+      return;
+    }
+    if (fromEmployeeId === toEmployeeId) {
+      toast.error("Source and target employees cannot be the same");
+      return;
+    }
+
+    setIsTransferring(true);
+    try {
+      const res = await fetch(`${API_URL}/employees/transfer-responsibilities`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          fromEmployeeId,
+          toEmployeeId
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        toast.success(data.message || "Responsibilities transferred successfully");
+        setIsTransferOpen(false);
+        setFromEmployeeId("");
+        setToEmployeeId("");
+      } else {
+        const errData = await res.json();
+        toast.error(errData.detail || "Failed to transfer responsibilities");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("An error occurred during transfer");
+    } finally {
+      setIsTransferring(false);
+    }
+  };
 
   const handleExportPDF = async () => {
     setIsExporting(true)
@@ -509,6 +554,16 @@ export default function EmployeeListPage() {
             )}
             Export PDF
           </Button>
+          {isAdmin && (
+            <Button 
+              variant="outline"
+              className="shadow-sm border-brand-teal text-brand-teal hover:bg-brand-teal/10 font-medium h-10 px-4 flex-1 sm:flex-none"
+              onClick={() => setIsTransferOpen(true)}
+            >
+              <ArrowLeftRight className="w-4 h-4 mr-2" />
+              Transfer Work
+            </Button>
+          )}
           {(isAdmin || checkPermission('employee-list', 'canAdd')) && (
             <Link href="/employees/add" className="flex-1 sm:flex-none">
               <Button 
@@ -787,6 +842,71 @@ export default function EmployeeListPage() {
               className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium"
             >
               Apply Columns
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Transfer Responsibilities Dialog */}
+      <Dialog open={isTransferOpen} onOpenChange={setIsTransferOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="text-slate-900 font-bold text-lg">Transfer Employee Responsibilities</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <p className="text-sm text-slate-500">
+              This action will transfer all active projects, clients, creative roles, and pending tasks from the resigning employee to the new employee.
+            </p>
+            <div className="space-y-2">
+              <Label className="text-slate-700 font-medium">Transfer From (Resigning Employee)</Label>
+              <select
+                className="w-full px-3 py-2 border border-border rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal cursor-pointer"
+                value={fromEmployeeId}
+                onChange={(e) => setFromEmployeeId(e.target.value)}
+              >
+                <option value="">Select Employee...</option>
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.firstName} {emp.lastName} ({emp.department || "No Dept"})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-slate-700 font-medium">Transfer To (Replacement Employee)</Label>
+              <select
+                className="w-full px-3 py-2 border border-border rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal cursor-pointer"
+                value={toEmployeeId}
+                onChange={(e) => setToEmployeeId(e.target.value)}
+              >
+                <option value="">Select Employee...</option>
+                {employees
+                  .filter((emp) => emp.id !== fromEmployeeId)
+                  .map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.firstName} {emp.lastName} ({emp.department || "No Dept"})
+                    </option>
+                  ))}
+              </select>
+            </div>
+          </div>
+          <DialogFooter className="border-t border-gray-100 pt-4 flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => setIsTransferOpen(false)} disabled={isTransferring}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-brand-teal hover:bg-brand-teal/80 text-white font-medium shadow-sm"
+              onClick={handleTransferSubmit}
+              disabled={isTransferring || !fromEmployeeId || !toEmployeeId}
+            >
+              {isTransferring ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Transferring...
+                </>
+              ) : (
+                "Confirm Transfer"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

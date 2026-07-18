@@ -4092,6 +4092,54 @@ async def update_task(db, task_id: str, task: schemas.TaskUpdate):
         await log_activity(db, "Updated", performedBy, userName, detail_msg, taskId=task_id)
         
     updated = await db.tasks.find_one({"_id": ObjectId(task_id)})
+    if updated and update_data.get("status") == "completed":
+        freq = updated.get("frequency", "one-time")
+        if freq and freq.lower() in ["daily", "every-2-days", "weekly", "monthly"]:
+            base_date = None
+            if updated.get("dueDate"):
+                due_val = updated["dueDate"]
+                if isinstance(due_val, str):
+                    try:
+                        base_date = datetime.strptime(due_val.split("T")[0], "%Y-%m-%d").date()
+                    except Exception:
+                        pass
+                elif isinstance(due_val, (date, datetime)):
+                    base_date = due_val if isinstance(due_val, date) else due_val.date()
+            
+            if not base_date:
+                base_date = get_now().date()
+                
+            freq_lower = freq.lower()
+            if freq_lower == "daily":
+                next_due = base_date + timedelta(days=1)
+            elif freq_lower == "every-2-days":
+                next_due = base_date + timedelta(days=2)
+            elif freq_lower == "weekly":
+                next_due = base_date + timedelta(days=7)
+            elif freq_lower == "monthly":
+                next_due = base_date + timedelta(days=30)
+            else:
+                next_due = base_date
+                
+            new_task_doc = {
+                "title": updated.get("title"),
+                "description": updated.get("description"),
+                "assignedToId": updated.get("assignedToId"),
+                "assignedToName": updated.get("assignedToName"),
+                "assignedToIds": updated.get("assignedToIds", []),
+                "assignedToNames": updated.get("assignedToNames", []),
+                "assignedById": updated.get("assignedById"),
+                "assignedByName": updated.get("assignedByName"),
+                "dueDate": next_due.strftime("%Y-%m-%d"),
+                "status": "todo",
+                "priority": updated.get("priority", "medium"),
+                "remarks": None,
+                "createdDate": get_now().strftime("%Y-%m-%d"),
+                "department": updated.get("department"),
+                "frequency": freq
+            }
+            await db.tasks.insert_one(new_task_doc)
+
     return fix_id(updated) if updated else None
 
 async def delete_task(db, task_id: str):

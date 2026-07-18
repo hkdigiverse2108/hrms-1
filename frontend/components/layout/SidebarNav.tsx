@@ -105,6 +105,9 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (isAdmin || isHRUser || checkPermission('daily-progress', 'canView')) {
       workManagementChildren.push(getItem(<Link href="/work-management/daily-progress">Daily Progress</Link>, "/work-management/daily-progress"));
     }
+    if (isAdmin || isHRUser) {
+      workManagementChildren.push(getItem(<Link href="/work-management/hr-tasks">HR Tasks</Link>, "/work-management/hr-tasks"));
+    }
     if (isAdmin || checkPermission('sales', 'canView')) {
       workManagementChildren.push(getItem(<Link href="/work-management/sales">Sales</Link>, "/work-management/sales"));
     }
