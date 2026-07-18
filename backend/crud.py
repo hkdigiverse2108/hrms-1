@@ -9510,3 +9510,21 @@ async def save_row_definitions(db, month: str, rows: list):
     return fix_id(doc)
 
 
+# --- Summary Actual Overrides ---
+async def get_summary_actual_overrides(db, month: str):
+    doc = await db.company_finance_actual_overrides.find_one({"month": month})
+    if not doc:
+        return {"month": month, "values": {}}
+    return fix_id(doc)
+
+async def save_summary_actual_overrides(db, month: str, values: dict):
+    await db.company_finance_actual_overrides.update_one(
+        {"month": month},
+        {"$set": {"month": month, "values": values}},
+        upsert=True
+    )
+    doc = await db.company_finance_actual_overrides.find_one({"month": month})
+    return fix_id(doc)
+
+
+

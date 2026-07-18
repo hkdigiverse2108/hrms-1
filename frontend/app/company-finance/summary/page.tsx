@@ -220,6 +220,8 @@ export default function CompanyFinanceSummaryPage() {
   const [loading, setLoading] = useState(true);
 
   const [rows, setRows] = useState<RowDefinition[]>(PLAN_ROWS);
+  const [actualOverrides, setActualOverrides] = useState<Record<string, any>>({});
+  const [editingCellId, setEditingCellId] = useState<string | null>(null);
   const [isAddRowOpen, setIsAddRowOpen] = useState(false);
   const [formCategory, setFormCategory] = useState("");
   const [formCustomCategory, setFormCustomCategory] = useState("");
@@ -227,6 +229,26 @@ export default function CompanyFinanceSummaryPage() {
   const [formMetric, setFormMetric] = useState("");
   const [formUnit, setFormUnit] = useState("INR");
   const [formType, setFormType] = useState<"field" | "multiple">("field");
+
+  const handleOverrideChange = async (id: string, value: string) => {
+    const updatedOverrides = {
+      ...actualOverrides,
+      [id]: value === "" ? undefined : value,
+    };
+    Object.keys(updatedOverrides).forEach(key => updatedOverrides[key] === undefined && delete updatedOverrides[key]);
+    
+    setActualOverrides(updatedOverrides);
+
+    try {
+      await fetch(`${API_URL}/company-finance/actual-overrides/${selectedMonth}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ values: updatedOverrides }),
+      });
+    } catch (err) {
+      console.error("Error saving actual overrides:", err);
+    }
+  };
 
   const getPreviousMonthString = (monthStr: string): string => {
     const [year, month] = monthStr.split("-").map(Number);
@@ -375,13 +397,19 @@ export default function CompanyFinanceSummaryPage() {
         console.error("Error fetching row definitions:", err);
       }
 
-      const [planRes, txRes, empRes, astRes, jobsRes] = await Promise.all([
+      const [planRes, txRes, empRes, astRes, jobsRes, overridesRes] = await Promise.all([
         fetch(`${API_URL}/company-finance/monthly-plans/${selectedMonth}`),
         fetch(`${API_URL}/company-finance/transactions`),
         fetch(`${API_URL}/employees`),
         fetch(`${API_URL}/assets`),
         fetch(`${API_URL}/job-openings`),
+        fetch(`${API_URL}/company-finance/actual-overrides/${selectedMonth}`),
       ]);
+
+      if (overridesRes.ok) {
+        const overridesData = await overridesRes.json();
+        setActualOverrides(overridesData?.values || {});
+      }
 
       if (planRes.ok) {
         const planData = await planRes.json();
@@ -611,6 +639,13 @@ export default function CompanyFinanceSummaryPage() {
       else if (row.id === "ast_sw_chatgpt_plus") computed[row.id] = sw_chatgpt_plus;
     });
 
+    // Merge actual overrides before computing formulas
+    Object.entries(actualOverrides).forEach(([key, val]) => {
+      if (val !== undefined && val !== null && val !== "") {
+        computed[key] = val;
+      }
+    });
+
     // Calculate actual formulas
     for (let pass = 0; pass < 3; pass++) {
       rows.forEach((row) => {
@@ -621,7 +656,7 @@ export default function CompanyFinanceSummaryPage() {
     }
 
     return computed;
-  }, [transactions, employees, assets, jobOpenings, selectedMonth, rows]);
+  }, [transactions, employees, assets, jobOpenings, selectedMonth, rows, actualOverrides]);
 
   // Plan Values including evaluated formulas
   const evaluatedPlanValues = useMemo(() => {
@@ -901,12 +936,74 @@ export default function CompanyFinanceSummaryPage() {
                             )}
                           </td>
 
-                          <td className={`px-4 py-2.5 text-right border-r border-slate-100 font-extrabold ${isDrillable ? "text-blue-600 hover:underline cursor-pointer" : "text-slate-950"}`}
-                              onClick={() => isDrillable && handleDrilldown(row)}>
-                            <div className="flex items-center justify-end gap-1">
-                              {formatVal(actualVal, row.unit)}
-                              {isDrillable && <Eye className="w-3 h-3 text-blue-400" />}
-                            </div>
+                          <td 
+                            className={`px-4 py-1.5 text-right border-r border-slate-100 font-extrabold w-[180px] select-none ${
+                              row.type !== "formula" ? "cursor-pointer hover:bg-slate-50/80 transition-colors group" : ""
+                            }`}
+                            onDoubleClick={() => {
+                              if (row.type !== "formula") {
+                                setEditingCellId(row.id);
+                              }
+                            }}
+                          >
+                            {editingCellId === row.id ? (
+                              row.type === "select" ? (
+                                <select
+                                  autoFocus
+                                  value={actualOverrides[row.id] !== undefined ? actualOverrides[row.id] : (actualVal || "Active")}
+                                  onChange={(e) => handleOverrideChange(row.id, e.target.value)}
+                                  onBlur={() => setEditingCellId(null)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") setEditingCellId(null);
+                                  }}
+                                  className="h-8 font-bold text-slate-800 bg-white border border-slate-300 rounded-lg text-xs px-2.5 w-full ml-auto focus:outline-none focus:ring-1 focus:ring-red-600"
+                                >
+                                  {row.options?.map((opt) => (
+                                    <option key={opt} value={opt}>
+                                      {opt}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <Input
+                                  autoFocus
+                                  type="number"
+                                  step="any"
+                                  value={actualOverrides[row.id] !== undefined ? actualOverrides[row.id] : ""}
+                                  onChange={(e) => handleOverrideChange(row.id, e.target.value)}
+                                  onBlur={() => setEditingCellId(null)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") setEditingCellId(null);
+                                  }}
+                                  className="h-8 text-right font-bold bg-white border border-slate-300 rounded-lg text-xs w-full focus:outline-none focus:ring-1 focus:ring-red-600"
+                                  placeholder={String(actualVal || 0)}
+                                />
+                              )
+                            ) : (
+                              <div className="flex items-center justify-end gap-1.5 w-full">
+                                {isDrillable && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDrilldown(row);
+                                    }}
+                                    className="p-1 hover:bg-slate-100 rounded text-blue-600 flex items-center gap-0.5 shadow-none border-none outline-none flex-shrink-0"
+                                    title="View Drilldown"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                                <span className={`${
+                                  actualOverrides[row.id] !== undefined 
+                                    ? "text-blue-600 underline decoration-dotted font-black" 
+                                    : row.type !== "formula" 
+                                      ? "text-slate-800 hover:text-blue-600 group-hover:underline group-hover:decoration-dotted" 
+                                      : "text-slate-950"
+                                }`}>
+                                  {formatVal(actualVal, row.unit)}
+                                </span>
+                              </div>
+                            )}
                           </td>
 
                           <td className={`px-4 py-2.5 text-right ${varianceColor}`}>

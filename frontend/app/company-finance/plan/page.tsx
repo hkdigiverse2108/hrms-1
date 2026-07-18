@@ -236,6 +236,7 @@ export default function CompanyFinancePlanPage() {
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved" | "idle">("idle");
 
   const [rows, setRows] = useState<RowDefinition[]>(PLAN_ROWS);
+  const [editingCellId, setEditingCellId] = useState<string | null>(null);
   const [isAddRowOpen, setIsAddRowOpen] = useState(false);
   const [formCategory, setFormCategory] = useState("");
   const [formCustomCategory, setFormCustomCategory] = useState("");
@@ -243,6 +244,19 @@ export default function CompanyFinancePlanPage() {
   const [formMetric, setFormMetric] = useState("");
   const [formUnit, setFormUnit] = useState("INR");
   const [formType, setFormType] = useState<"field" | "multiple">("field");
+
+  const formatVal = (val: any, unit: string) => {
+    if (val === undefined || val === null || val === "") return "-";
+    if (unit === "INR") {
+      const num = parseFloat(val);
+      return isNaN(num) ? val : "₹" + num.toLocaleString("en-IN");
+    }
+    if (unit === "Percentage") {
+      const num = parseFloat(val);
+      return isNaN(num) ? val : num + "%";
+    }
+    return val;
+  };
 
   const existingCategories = useMemo(() => {
     return Array.from(new Set(rows.map((r) => r.category)));
@@ -921,54 +935,82 @@ export default function CompanyFinancePlanPage() {
                           <td className="px-4 py-2.5 border-r border-slate-100 font-bold text-slate-500">
                             {row.type === "select" ? (values[row.id] || "Active") : row.unit}
                           </td>
-                          <td className="px-4 py-1.5 text-right w-[240px]">
-                            {row.type === "field" && (
-                              <Input
-                                type="number"
-                                step="any"
-                                value={values[row.id] || ""}
-                                onChange={(e) => handleInputChange(row.id, e.target.value)}
-                                className="h-8 text-right font-bold text-slate-800 bg-white max-w-[200px] ml-auto border-slate-300/80 rounded-lg text-xs"
-                                placeholder="Enter value..."
-                              />
-                            )}
-
-                            {row.type === "select" && (
-                              <select
-                                value={values[row.id] || "Active"}
-                                onChange={(e) => handleInputChange(row.id, e.target.value)}
-                                className="h-8 font-bold text-slate-800 bg-white border border-slate-300 rounded-lg text-xs px-2.5 max-w-[200px] w-full ml-auto focus:outline-none focus:ring-1 focus:ring-brand-teal"
-                              >
-                                {row.options?.map((opt) => (
-                                  <option key={opt} value={opt}>
-                                    {opt}
-                                  </option>
-                                ))}
-                              </select>
-                            )}
-
-                            {row.type === "multiple" && (
-                              <div className="flex items-center justify-end gap-2">
-                                <span className="font-extrabold text-slate-700 text-xs">
-                                  ₹{getRowSum(row.id, values).toLocaleString("en-IN")}
-                                </span>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleOpenMultipleModal(row.id)}
-                                  className="h-8 text-[11px] font-bold border-brand-teal text-brand-teal hover:bg-brand-light flex items-center gap-1"
+                          <td 
+                            className={`px-4 py-1.5 text-right border-r border-slate-100 font-extrabold w-[240px] select-none ${
+                              row.type !== "formula" ? "cursor-pointer hover:bg-slate-50/80 transition-colors group" : ""
+                            }`}
+                            onDoubleClick={() => {
+                              if (row.type !== "formula") {
+                                setEditingCellId(row.id);
+                              }
+                            }}
+                          >
+                            {editingCellId === row.id ? (
+                              row.type === "select" ? (
+                                <select
+                                  autoFocus
+                                  value={values[row.id] || "Active"}
+                                  onChange={(e) => handleInputChange(row.id, e.target.value)}
+                                  onBlur={() => setEditingCellId(null)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") setEditingCellId(null);
+                                  }}
+                                  className="h-8 font-bold text-slate-800 bg-white border border-slate-300 rounded-lg text-xs px-2.5 w-full ml-auto focus:outline-none focus:ring-1 focus:ring-brand-teal"
                                 >
-                                  <ListPlus className="w-3.5 h-3.5" />
-                                  Manage ({Array.isArray(values[row.id]) ? values[row.id].length : 0})
-                                </Button>
-                              </div>
-                            )}
-
-                            {isFormula && (
-                              <span className={`text-sm font-extrabold ${isTotal ? "text-emerald-700" : "text-slate-700"}`}>
-                                {row.unit === "INR" ? "₹" : ""}
-                                {Number(computedValues[row.id] || 0).toLocaleString("en-IN")}
-                              </span>
+                                  {row.options?.map((opt) => (
+                                    <option key={opt} value={opt}>
+                                      {opt}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <Input
+                                  autoFocus
+                                  type="number"
+                                  step="any"
+                                  value={values[row.id] || ""}
+                                  onChange={(e) => handleInputChange(row.id, e.target.value)}
+                                  onBlur={() => setEditingCellId(null)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") setEditingCellId(null);
+                                  }}
+                                  className="h-8 text-right font-bold bg-white border border-slate-300 rounded-lg text-xs w-full focus:outline-none focus:ring-1 focus:ring-brand-teal"
+                                  placeholder="Enter value..."
+                                />
+                              )
+                            ) : (
+                              row.type === "multiple" ? (
+                                <div className="flex items-center justify-end gap-2">
+                                  <span className={`${
+                                    Array.isArray(values[row.id]) && values[row.id].length > 0
+                                      ? "text-blue-600 underline decoration-dotted font-black"
+                                      : "text-slate-700 font-extrabold"
+                                  } text-xs`}>
+                                    ₹{getRowSum(row.id, values).toLocaleString("en-IN")}
+                                  </span>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenMultipleModal(row.id);
+                                    }}
+                                    className="h-8 text-[11px] font-bold border-brand-teal text-brand-teal hover:bg-brand-light flex items-center gap-1 shadow-none border-none outline-none"
+                                  >
+                                    <ListPlus className="w-3.5 h-3.5" />
+                                    Manage ({Array.isArray(values[row.id]) ? values[row.id].length : 0})
+                                  </Button>
+                                </div>
+                              ) : isFormula ? (
+                                <span className={`text-sm font-extrabold ${isTotal ? "text-emerald-700" : "text-slate-700"}`}>
+                                  {row.unit === "INR" ? "₹" : ""}
+                                  {Number(computedValues[row.id] || 0).toLocaleString("en-IN")}
+                                </span>
+                              ) : (
+                                <span className="text-slate-800 hover:text-brand-teal group-hover:underline group-hover:decoration-dotted">
+                                  {values[row.id] !== undefined && values[row.id] !== "" ? formatVal(values[row.id], row.unit) : "-"}
+                                </span>
+                              )
                             )}
                           </td>
                           <td className="px-4 py-1.5 text-center w-[60px]">

@@ -2739,4 +2739,14 @@ class RowDefinitionsConfigUpdate(BaseModel):
     rows: List[RowDefinitionSchema]
 
 
+# --- Summary Overrides Schemas ---
+class SummaryOverridesBase(BaseModel):
+    month: str
+    values: Dict[str, Any]
+
+class SummaryOverridesUpdate(BaseModel):
+    values: Dict[str, Any]
+
+
+
 

@@ -3793,6 +3793,15 @@ async def save_row_definitions_endpoint(month: str, payload: schemas.RowDefiniti
     rows_data = [row.model_dump() for row in payload.rows]
     return await crud.save_row_definitions(db, month, rows_data)
 
+# --- Summary Overrides Endpoints ---
+@app.get("/company-finance/actual-overrides/{month}")
+async def get_summary_actual_overrides_endpoint(month: str, db=Depends(get_db)):
+    return await crud.get_summary_actual_overrides(db, month)
+
+@app.post("/company-finance/actual-overrides/{month}")
+async def save_summary_actual_overrides_endpoint(month: str, payload: schemas.SummaryOverridesUpdate, db=Depends(get_db)):
+    return await crud.save_summary_actual_overrides(db, month, payload.values)
+
 # --- Task Preset Endpoints ---
 @app.get("/task-presets")
 async def read_task_presets(skip: int = 0, limit: int = 100, db=Depends(get_db)):
