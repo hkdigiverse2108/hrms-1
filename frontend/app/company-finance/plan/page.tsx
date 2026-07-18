@@ -234,6 +234,12 @@ export default function CompanyFinancePlanPage() {
   const [saving, setSaving] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved" | "idle">("idle");
+  const [settings, setSettings] = useState<any>(null);
+
+  const getScaleFactor = () => {
+    const decimals = settings?.financeDecimalScaling !== undefined ? settings.financeDecimalScaling : 0;
+    return Math.pow(10, decimals);
+  };
 
   const [rows, setRows] = useState<RowDefinition[]>(PLAN_ROWS);
   const [editingCellId, setEditingCellId] = useState<string | null>(null);
@@ -247,15 +253,27 @@ export default function CompanyFinancePlanPage() {
 
   const formatVal = (val: any, unit: string) => {
     if (val === undefined || val === null || val === "") return "-";
+    const num = parseFloat(val);
+    if (isNaN(num)) return String(val);
+
+    const decimals = settings?.financeDecimalScaling !== undefined ? settings.financeDecimalScaling : 0;
+
     if (unit === "INR") {
-      const num = parseFloat(val);
-      return isNaN(num) ? val : "₹" + num.toLocaleString("en-IN");
+      return "₹" + num.toLocaleString("en-IN", {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
+      });
     }
     if (unit === "Percentage") {
-      const num = parseFloat(val);
-      return isNaN(num) ? val : num + "%";
+      return num.toLocaleString("en-IN", {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
+      }) + "%";
     }
-    return val;
+    return num.toLocaleString("en-IN", {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals
+    });
   };
 
   const existingCategories = useMemo(() => {
@@ -405,11 +423,32 @@ export default function CompanyFinancePlanPage() {
         console.error("Error fetching row definitions:", err);
       }
       
+      const settingsRes = await fetch(`${API_URL}/system-settings`);
+      let scale = 1;
+      if (settingsRes.ok) {
+        const settingsData = await settingsRes.json();
+        setSettings(settingsData);
+        const decimals = settingsData?.financeDecimalScaling !== undefined ? settingsData.financeDecimalScaling : 0;
+        scale = Math.pow(10, decimals);
+      }
+
       const res = await fetch(`${API_URL}/company-finance/monthly-plans/${selectedMonth}`);
       let targetValues: Record<string, any> = {};
       if (res.ok) {
         const data = await res.json();
-        targetValues = data?.values || {};
+        const rawValues = data?.values || {};
+        Object.entries(rawValues).forEach(([key, val]) => {
+          if (Array.isArray(val)) {
+            targetValues[key] = val.map((item: any) => ({
+              ...item,
+              rate: String(parseFloat(item.rate || 0) / scale)
+            }));
+          } else if (val !== undefined && val !== null && val !== "" && !isNaN(parseFloat(val))) {
+            targetValues[key] = String(parseFloat(val) / scale);
+          } else {
+            targetValues[key] = val;
+          }
+        });
       }
 
       // Fetch actual transactions and balances from the ledger database
@@ -694,13 +733,32 @@ export default function CompanyFinancePlanPage() {
     setActiveMultipleId(null);
   };
 
+  const getRawValues = (scaledValues: Record<string, any>) => {
+    const scale = getScaleFactor();
+    const rawValues: Record<string, any> = {};
+    Object.entries(scaledValues).forEach(([key, val]) => {
+      if (Array.isArray(val)) {
+        rawValues[key] = val.map((item: any) => ({
+          ...item,
+          rate: String(parseFloat(item.rate || 0) * scale)
+        }));
+      } else if (val !== undefined && val !== null && val !== "" && !isNaN(parseFloat(val))) {
+        rawValues[key] = String(parseFloat(val) * scale);
+      } else {
+        rawValues[key] = val;
+      }
+    });
+    return rawValues;
+  };
+
   const autoSave = async (currentValues: Record<string, any>) => {
     try {
       setSaveStatus("saving");
+      const raw = getRawValues(currentValues);
       const res = await fetch(`${API_URL}/company-finance/monthly-plans/${selectedMonth}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ values: currentValues }),
+        body: JSON.stringify({ values: raw }),
       });
       if (res.ok) {
         setSaveStatus("saved");
@@ -728,10 +786,11 @@ export default function CompanyFinancePlanPage() {
     try {
       setSaving(true);
       setSaveStatus("saving");
+      const raw = getRawValues(values);
       const res = await fetch(`${API_URL}/company-finance/monthly-plans/${selectedMonth}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ values }),
+        body: JSON.stringify({ values: raw }),
       });
       if (res.ok) {
         toast.success("Plan saved successfully!");
@@ -1004,7 +1063,10 @@ export default function CompanyFinancePlanPage() {
                               ) : isFormula ? (
                                 <span className={`text-sm font-extrabold ${isTotal ? "text-emerald-700" : "text-slate-700"}`}>
                                   {row.unit === "INR" ? "₹" : ""}
-                                  {Number(computedValues[row.id] || 0).toLocaleString("en-IN")}
+                                  {Number(computedValues[row.id] || 0).toLocaleString("en-IN", {
+                                    minimumFractionDigits: settings?.financeDecimalScaling !== undefined ? settings.financeDecimalScaling : 0,
+                                    maximumFractionDigits: settings?.financeDecimalScaling !== undefined ? settings.financeDecimalScaling : 0,
+                                  })}
                                 </span>
                               ) : (
                                 <span className="text-slate-800 hover:text-brand-teal group-hover:underline group-hover:decoration-dotted">

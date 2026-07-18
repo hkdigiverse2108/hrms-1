@@ -256,7 +256,8 @@ export default function SettingsPage() {
           defaultEditingStartOffset: settings?.defaultEditingStartOffset !== undefined ? settings.defaultEditingStartOffset : null,
           defaultApprovalOffset: settings?.defaultApprovalOffset !== undefined ? settings.defaultApprovalOffset : null,
           addHoldDaysToEndDate: settings?.addHoldDaysToEndDate !== undefined ? settings.addHoldDaysToEndDate : true,
-          otpRequiredRoles: settings?.otpRequiredRoles || []
+          otpRequiredRoles: settings?.otpRequiredRoles || [],
+          financeDecimalScaling: settings?.financeDecimalScaling !== undefined ? Number(settings.financeDecimalScaling) : 0
         })
       });
       if (res.ok) {
@@ -1013,6 +1014,23 @@ export default function SettingsPage() {
                       disabled={isUpdating || !canEditSettings}
                       placeholder="e.g. Brand A, Brand B, Brand C"
                     />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label className="text-sm font-bold">Finance Decimal Scaling</Label>
+                    <p className="text-[10px] text-muted-foreground mb-1">Set the number of decimal places to divide and scale financial reports (Plan & Summary). E.g. setting 3 will divide 12345 by 1000 and display 12.345.</p>
+                    <select
+                      className="w-full h-10 px-3 border border-border rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal cursor-pointer font-medium text-slate-700"
+                      value={settings?.financeDecimalScaling !== undefined ? settings.financeDecimalScaling : 0}
+                      onChange={(e) => setSettings({...settings, financeDecimalScaling: Number(e.target.value)})}
+                      disabled={isUpdating || !canEditSettings}
+                    >
+                      <option value={0}>0 (No Scaling, e.g. 12345)</option>
+                      <option value={1}>1 (Divide by 10, e.g. 1234.5)</option>
+                      <option value={2}>2 (Divide by 100, e.g. 123.45)</option>
+                      <option value={3}>3 (Divide by 1000, e.g. 12.345)</option>
+                      <option value={4}>4 (Divide by 10000, e.g. 1.2345)</option>
+                    </select>
                   </div>
                   
                   <div className="space-y-2">

@@ -1588,6 +1588,7 @@ class SystemSettingsBase(BaseModel):
     showNamesInRemarksToAdmin: Optional[bool] = True
     autoInactiveAfterResignation: Optional[bool] = False
     otpRequiredRoles: Optional[List[str]] = []
+    financeDecimalScaling: Optional[int] = 0
 
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
@@ -1628,6 +1629,7 @@ class SystemSettingsUpdate(BaseModel):
     showNamesInRemarksToAdmin: Optional[bool] = None
     autoInactiveAfterResignation: Optional[bool] = None
     otpRequiredRoles: Optional[List[str]] = None
+    financeDecimalScaling: Optional[int] = None
 
 class SystemSettings(SystemSettingsBase):
     id: str

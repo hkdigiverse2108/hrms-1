@@ -222,6 +222,12 @@ export default function CompanyFinanceSummaryPage() {
   const [rows, setRows] = useState<RowDefinition[]>(PLAN_ROWS);
   const [actualOverrides, setActualOverrides] = useState<Record<string, any>>({});
   const [editingCellId, setEditingCellId] = useState<string | null>(null);
+  const [settings, setSettings] = useState<any>(null);
+
+  const getScaleFactor = () => {
+    const decimals = settings?.financeDecimalScaling !== undefined ? settings.financeDecimalScaling : 0;
+    return Math.pow(10, decimals);
+  };
   const [isAddRowOpen, setIsAddRowOpen] = useState(false);
   const [formCategory, setFormCategory] = useState("");
   const [formCustomCategory, setFormCustomCategory] = useState("");
@@ -239,11 +245,21 @@ export default function CompanyFinanceSummaryPage() {
     
     setActualOverrides(updatedOverrides);
 
+    const scale = getScaleFactor();
+    const rawOverrides: Record<string, any> = {};
+    Object.entries(updatedOverrides).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== "" && !isNaN(parseFloat(String(v)))) {
+        rawOverrides[k] = String(parseFloat(String(v)) * scale);
+      } else {
+        rawOverrides[k] = v;
+      }
+    });
+
     try {
       await fetch(`${API_URL}/company-finance/actual-overrides/${selectedMonth}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ values: updatedOverrides }),
+        body: JSON.stringify({ values: rawOverrides }),
       });
     } catch (err) {
       console.error("Error saving actual overrides:", err);
@@ -397,23 +413,55 @@ export default function CompanyFinanceSummaryPage() {
         console.error("Error fetching row definitions:", err);
       }
 
-      const [planRes, txRes, empRes, astRes, jobsRes, overridesRes] = await Promise.all([
+      const [planRes, txRes, empRes, astRes, jobsRes, overridesRes, settingsRes] = await Promise.all([
         fetch(`${API_URL}/company-finance/monthly-plans/${selectedMonth}`),
         fetch(`${API_URL}/company-finance/transactions`),
         fetch(`${API_URL}/employees`),
         fetch(`${API_URL}/assets`),
         fetch(`${API_URL}/job-openings`),
         fetch(`${API_URL}/company-finance/actual-overrides/${selectedMonth}`),
+        fetch(`${API_URL}/system-settings`),
       ]);
+
+      let scale = 1;
+      if (settingsRes.ok) {
+        const settingsData = await settingsRes.json();
+        setSettings(settingsData);
+        const decimals = settingsData?.financeDecimalScaling !== undefined ? settingsData.financeDecimalScaling : 0;
+        scale = Math.pow(10, decimals);
+      }
 
       if (overridesRes.ok) {
         const overridesData = await overridesRes.json();
-        setActualOverrides(overridesData?.values || {});
+        const rawOverrides = overridesData?.values || {};
+        const scaledOverrides: Record<string, any> = {};
+        Object.entries(rawOverrides).forEach(([k, v]) => {
+          if (v !== undefined && v !== null && v !== "" && !isNaN(parseFloat(String(v)))) {
+            scaledOverrides[k] = String(parseFloat(String(v)) / scale);
+          } else {
+            scaledOverrides[k] = v;
+          }
+        });
+        setActualOverrides(scaledOverrides);
       }
 
       if (planRes.ok) {
         const planData = await planRes.json();
-        setPlanValues(planData?.values || {});
+        const rawPlan = planData?.values || {};
+        const scaledPlan: Record<string, any> = {};
+        Object.entries(rawPlan).forEach(([k, v]) => {
+          if (Array.isArray(v)) {
+            scaledPlan[k] = v.map((item: any) => ({
+              ...item,
+              rate: String(parseFloat(item.rate || 0) / scale)
+            }));
+          } else if (v !== undefined && v !== null && v !== "" && !isNaN(parseFloat(String(v)))) {
+            scaledPlan[k] = String(parseFloat(String(v)) / scale);
+          } else {
+            scaledPlan[k] = v;
+          }
+        });
+        setPlanValues(scaledPlan);
       }
       if (txRes.ok) {
         const txData = await txRes.json();
@@ -444,10 +492,19 @@ export default function CompanyFinanceSummaryPage() {
     if (val === undefined || val === null || val === "") return "-";
     const num = parseFloat(val);
     if (isNaN(num)) return String(val);
+
+    const decimals = settings?.financeDecimalScaling !== undefined ? settings.financeDecimalScaling : 0;
+
     if (unit === "INR") {
-      return "₹" + num.toLocaleString("en-IN", { maximumFractionDigits: 2 });
+      return "₹" + num.toLocaleString("en-IN", {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
+      });
     }
-    return num.toLocaleString();
+    return num.toLocaleString("en-IN", {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals
+    });
   };
 
   // Calculate actuals dynamically for a row based on database listings
@@ -639,10 +696,19 @@ export default function CompanyFinanceSummaryPage() {
       else if (row.id === "ast_sw_chatgpt_plus") computed[row.id] = sw_chatgpt_plus;
     });
 
-    // Merge actual overrides before computing formulas
+    // Scale computed actual values down by the scaling factor
+    const scale = getScaleFactor();
+    Object.keys(computed).forEach((k) => {
+      const val = computed[k];
+      if (typeof val === "number") {
+        computed[k] = val / scale;
+      }
+    });
+
+    // Merge actual overrides before computing formulas (already scaled on load)
     Object.entries(actualOverrides).forEach(([key, val]) => {
       if (val !== undefined && val !== null && val !== "") {
-        computed[key] = val;
+        computed[key] = isNaN(parseFloat(String(val))) ? val : parseFloat(String(val));
       }
     });
 
@@ -656,7 +722,7 @@ export default function CompanyFinanceSummaryPage() {
     }
 
     return computed;
-  }, [transactions, employees, assets, jobOpenings, selectedMonth, rows, actualOverrides]);
+  }, [transactions, employees, assets, jobOpenings, selectedMonth, rows, actualOverrides, settings]);
 
   // Plan Values including evaluated formulas
   const evaluatedPlanValues = useMemo(() => {
