@@ -2586,6 +2586,7 @@ class CourseBase(BaseModel):
     title: str
     description: Optional[str] = ''
     image_url: Optional[str] = ''
+    assigned_employee_ids: Optional[List[str]] = []
 
 class CourseCreate(CourseBase):
     pass
@@ -2594,6 +2595,7 @@ class CourseUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     image_url: Optional[str] = None
+    assigned_employee_ids: Optional[List[str]] = None
 
 class CourseResponse(CourseBase):
     id: str
@@ -2651,5 +2653,25 @@ class CourseLectureResponse(CourseLectureBase):
     id: str
     createdAt: Optional[datetime] = None
     updatedAt: Optional[datetime] = None
+    class Config:
+        from_attributes = True
+
+# --- Course Progress ---
+class LectureProgressBase(BaseModel):
+    employee_id: str
+    course_id: str
+    module_id: str
+    lecture_id: str
+    watched_seconds: float = 0.0
+    total_seconds: float = 0.0
+    is_completed: bool = False
+
+class LectureProgressUpdate(BaseModel):
+    watched_seconds: float
+    total_seconds: float
+
+class LectureProgressResponse(LectureProgressBase):
+    id: str
+    last_watched_at: Optional[datetime] = None
     class Config:
         from_attributes = True

@@ -263,9 +263,16 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     }
 
     const trainingChildren: MenuItem[] = [];
-    // Ideally use permission checks here, allowing all to view for now if not restricted
-    trainingChildren.push(getItem(<Link href="/training">Course Library</Link>, "/training"));
-    if (isAdmin) {
+    
+    if (isAdmin || checkPermission('training', 'canView')) {
+      trainingChildren.push(getItem(<Link href="/training">Course Library</Link>, "/training"));
+    }
+    
+    if (isAdmin || checkPermission('course-progress', 'canView')) {
+      trainingChildren.push(getItem(<Link href="/training/progress">Progress & Access</Link>, "/training/progress"));
+    }
+    
+    if (isAdmin || checkPermission('admin-courses', 'canView')) {
       trainingChildren.push(getItem(<Link href="/admin/courses">Manage Courses</Link>, "/admin/courses"));
     }
 

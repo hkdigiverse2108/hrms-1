@@ -3890,6 +3890,56 @@ async def delete_course_lecture(lecture_id: str, db=Depends(get_db)):
     if not success:
         raise HTTPException(status_code=404, detail="Lecture not found")
     return {"message": "Lecture deleted successfully"}
+@app.put("/courses/{course_id}/assign")
+async def assign_course_employees(course_id: str, payload: dict, db=Depends(get_db), token_payload: dict = Depends(auth.require_admin)):
+    employee_ids = payload.get("employee_ids", [])
+    updated = await crud.update_course(db, course_id, schemas.CourseUpdate(assigned_employee_ids=employee_ids))
+    if not updated:
+        raise HTTPException(status_code=404, detail="Course not found")
+    return {"message": "Assigned successfully", "course": updated}
+
+@app.post("/courses/{course_id}/progress/{lecture_id}", response_model=schemas.LectureProgressResponse)
+async def update_lecture_progress(
+    course_id: str, 
+    lecture_id: str, 
+    update_data: schemas.LectureProgressUpdate, 
+    db=Depends(get_db), 
+    token_payload: dict = Depends(auth.require_auth)
+):
+    employee_id = token_payload.get("sub")
+    
+    # We need to know module_id, let's fetch lecture to find it
+    lecture = await crud.get_course_lecture(db, lecture_id) if hasattr(crud, "get_course_lecture") else None
+    
+    # Fallback to fetching directly if helper not present
+    if not lecture:
+        from bson import ObjectId
+        lecture = await db.course_lectures.find_one({"_id": ObjectId(lecture_id) if len(lecture_id)==24 else lecture_id})
+        if not lecture:
+            raise HTTPException(status_code=404, detail="Lecture not found")
+            
+    module_id = str(lecture.get("module_id", ""))
+    
+    progress = schemas.LectureProgressBase(
+        employee_id=employee_id,
+        course_id=course_id,
+        module_id=module_id,
+        lecture_id=lecture_id,
+        watched_seconds=update_data.watched_seconds,
+        total_seconds=update_data.total_seconds,
+        is_completed=update_data.watched_seconds >= update_data.total_seconds * 0.9 if update_data.total_seconds > 0 else False
+    )
+    
+    return await crud.update_lecture_progress(db, progress)
+
+@app.get("/courses/{course_id}/progress/my", response_model=List[schemas.LectureProgressResponse])
+async def get_my_course_progress(course_id: str, db=Depends(get_db), token_payload: dict = Depends(auth.require_auth)):
+    employee_id = token_payload.get("sub")
+    return await crud.get_course_progress(db, course_id, employee_id)
+
+@app.get("/courses/{course_id}/progress/all", response_model=List[schemas.LectureProgressResponse])
+async def get_all_course_progress(course_id: str, db=Depends(get_db), token_payload: dict = Depends(auth.require_admin)):
+    return await crud.get_all_course_progress(db, course_id)
 
 
 if __name__ == "__main__":

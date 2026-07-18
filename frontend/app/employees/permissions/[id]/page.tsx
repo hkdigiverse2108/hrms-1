@@ -95,6 +95,9 @@ const PERMISSION_GROUPS = [
       { moduleName: 'chat', displayName: 'Chat', tabUrl: '/chat' },
       { moduleName: 'activity-tracker', displayName: 'Activity Tracker', tabUrl: '/activity-tracker' },
       { moduleName: 'activity-logs', displayName: 'Activity Logs', tabUrl: '/activity-logs' },
+      { moduleName: 'training', displayName: 'Course Library', tabUrl: '/training' },
+      { moduleName: 'course-progress', displayName: 'Progress & Access', tabUrl: '/training/progress' },
+      { moduleName: 'admin-courses', displayName: 'Manage Courses', tabUrl: '/admin/courses' },
     ]
   },
   {

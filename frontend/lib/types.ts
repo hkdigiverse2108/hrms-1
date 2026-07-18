@@ -246,6 +246,18 @@ export interface Course {
   image_url: string;
   createdAt?: string;
   modules?: CourseModule[];
+  assigned_employee_ids?: string[];
+}
+
+export interface LectureProgress {
+  id: string;
+  employee_id: string;
+  course_id: string;
+  lecture_id: string;
+  watched_seconds: number;
+  total_seconds: number;
+  is_completed: boolean;
+  last_watched_at: string;
 }
 
 export interface CourseModule {

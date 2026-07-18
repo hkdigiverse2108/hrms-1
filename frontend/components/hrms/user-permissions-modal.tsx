@@ -51,6 +51,9 @@ const DEFAULT_MODULES = [
   { moduleName: 'settings', displayName: 'Settings', tabUrl: '/settings' },
   { moduleName: 'activity-logs', displayName: 'Activity Logs', tabUrl: '/activity-logs' },
   { moduleName: 'gallery', displayName: 'Gallery', tabUrl: '/workspace/gallery' },
+  { moduleName: 'training', displayName: 'Course Library', tabUrl: '/training' },
+  { moduleName: 'course-progress', displayName: 'Progress & Access', tabUrl: '/training/progress' },
+  { moduleName: 'admin-courses', displayName: 'Manage Courses', tabUrl: '/admin/courses' },
 ]
 
 export function UserPermissionsModal({

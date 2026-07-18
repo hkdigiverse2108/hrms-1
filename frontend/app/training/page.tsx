@@ -7,9 +7,13 @@ import { Course } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, Search, BookOpen, Clock, PlayCircle } from "lucide-react";
+import { useUser } from "@/hooks/useUser";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export default function TrainingPage() {
   const router = useRouter();
+  const { user } = useUser();
+  const { isAdmin } = usePermissions();
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -37,10 +41,18 @@ export default function TrainingPage() {
     }
   };
 
-  const filteredCourses = courses.filter(c => 
-    c.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    (c.description && c.description.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const filteredCourses = courses.filter(c => {
+    // Access Check
+    const isAssignedToMe = c.assigned_employee_ids && user?.id && c.assigned_employee_ids.includes(user.id);
+    const isPublic = !c.assigned_employee_ids || c.assigned_employee_ids.length === 0;
+    const hasAccess = isAdmin || isAssignedToMe || isPublic;
+    
+    if (!hasAccess) return false;
+    
+    // Search Check
+    return c.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    (c.description && c.description.toLowerCase().includes(searchQuery.toLowerCase()));
+  });
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-20">

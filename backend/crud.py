@@ -9228,3 +9228,44 @@ async def delete_course_lecture(db, lecture_id: str):
     from bson import ObjectId
     result = await db.course_lectures.delete_one({"_id": ObjectId(lecture_id)})
     return result.deleted_count > 0
+
+# --- Course Progress CRUD ---
+async def update_lecture_progress(db, progress: schemas.LectureProgressBase):
+    progress_dict = progress.dict()
+    progress_dict["last_watched_at"] = get_now()
+    
+    # Find existing
+    existing = await db.lecture_progress.find_one({
+        "employee_id": progress.employee_id,
+        "lecture_id": progress.lecture_id
+    })
+    
+    if existing:
+        # Update
+        if progress.is_completed:
+            update_data = {"watched_seconds": progress.watched_seconds, "is_completed": True, "last_watched_at": get_now()}
+        else:
+            update_data = {"watched_seconds": progress.watched_seconds, "last_watched_at": get_now()}
+            
+        await db.lecture_progress.update_one(
+            {"_id": existing["_id"]},
+            {"$set": update_data}
+        )
+        doc = await db.lecture_progress.find_one({"_id": existing["_id"]})
+    else:
+        # Create
+        result = await db.lecture_progress.insert_one(progress_dict)
+        doc = await db.lecture_progress.find_one({"_id": result.inserted_id})
+        
+    return fix_id(doc)
+
+async def get_course_progress(db, course_id: str, employee_id: str):
+    cursor = db.lecture_progress.find({"course_id": course_id, "employee_id": employee_id})
+    docs = await cursor.to_list(length=None)
+    return [fix_id(d) for d in docs]
+
+async def get_all_course_progress(db, course_id: str):
+    cursor = db.lecture_progress.find({"course_id": course_id})
+    docs = await cursor.to_list(length=None)
+    return [fix_id(d) for d in docs]
+

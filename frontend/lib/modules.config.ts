@@ -9,7 +9,8 @@ import {
   MessagesSquare, 
   Star, 
   FileText, 
-  Settings 
+  Settings,
+  BookOpen
 } from 'lucide-react'
 
 export interface ModuleDef {
@@ -126,6 +127,15 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { moduleName: 'marketing', displayName: 'Digital Marketing', tabUrl: '/work-management/digital-marketing' },
       { moduleName: 'creative', displayName: 'Social Media Management', tabUrl: '/work-management/smm' },
       { moduleName: 'research', displayName: 'Research', tabUrl: '/work-management/research' },
+    ]
+  },
+  {
+    name: 'Training & Courses',
+    icon: BookOpen,
+    modules: [
+      { moduleName: 'training', displayName: 'Course Library', tabUrl: '/training' },
+      { moduleName: 'course-progress', displayName: 'Progress & Access', tabUrl: '/training/progress' },
+      { moduleName: 'admin-courses', displayName: 'Manage Courses', tabUrl: '/admin/courses' },
     ]
   },
   {
