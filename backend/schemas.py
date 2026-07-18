@@ -1123,6 +1123,10 @@ class ProjectBase(BaseModel):
     teamLeaderName: Optional[str] = None
     assignedEmployeeId: Optional[str] = None
     assignedEmployeeName: Optional[str] = None
+    revenueAssigneeId: Optional[str] = None
+    followerAssigneeId: Optional[str] = None
+    userRemarkAssigneeId: Optional[str] = None
+    clientRemarkAssigneeId: Optional[str] = None
     assignedTeamIds: Optional[List[str]] = []
     startDate: RobustDate
     endDate: Optional[RobustDate] = None
@@ -1204,6 +1208,10 @@ class ProjectUpdate(BaseModel):
     teamLeaderName: Optional[str] = None
     assignedEmployeeId: Optional[str] = None
     assignedEmployeeName: Optional[str] = None
+    revenueAssigneeId: Optional[str] = None
+    followerAssigneeId: Optional[str] = None
+    userRemarkAssigneeId: Optional[str] = None
+    clientRemarkAssigneeId: Optional[str] = None
     assignedTeamIds: Optional[List[str]] = None
     startDate: Optional[RobustDate] = None
     endDate: Optional[RobustDate] = None
