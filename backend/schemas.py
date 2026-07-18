@@ -1309,6 +1309,7 @@ class TaskBase(BaseModel):
     remarks: Optional[str] = None
     createdDate: Optional[RobustDate] = None
     department: Optional[str] = None
+    frequency: Optional[str] = "one-time"
 
 class TaskCreate(TaskBase):
     performedBy: Optional[str] = None
@@ -1328,6 +1329,7 @@ class TaskUpdate(BaseModel):
     performedBy: Optional[str] = None
     userName: Optional[str] = None
     department: Optional[str] = None
+    frequency: Optional[str] = None
 
 class Task(TaskBase):
     id: str
