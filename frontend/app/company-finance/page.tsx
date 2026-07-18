@@ -222,6 +222,23 @@ export default function CompanyFinanceTransactionsPage() {
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [settings, setSettings] = useState<any>(null);
 
+  const formatVal = (val: any, unit: string = "INR") => {
+    if (val === undefined || val === null || val === "") return "-";
+    const num = parseFloat(val);
+    if (isNaN(num)) return String(val);
+    const decimals = settings?.financeDecimalScaling !== undefined ? settings.financeDecimalScaling : 0;
+    if (unit === "INR") {
+      return "₹" + num.toLocaleString("en-IN", {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
+      });
+    }
+    return num.toLocaleString("en-IN", {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals
+    });
+  };
+
   const brandOptions = useMemo(() => {
     if (settings && Array.isArray(settings.invoiceClientDepartments) && settings.invoiceClientDepartments.length > 0) {
       return settings.invoiceClientDepartments;
@@ -264,23 +281,34 @@ export default function CompanyFinanceTransactionsPage() {
         fetch(`${API_URL}/system-settings`),
       ]);
 
-      if (txRes.ok) {
-        const txData = await txRes.json();
-        setTransactions(txData.transactions || []);
-      }
+      let scale = 1;
       if (settingsRes.ok) {
         const settingsData = await settingsRes.json();
         setSettings(settingsData);
+        const decimals = settingsData?.financeDecimalScaling !== undefined ? settingsData.financeDecimalScaling : 0;
+        scale = Math.pow(10, decimals);
+      }
+
+      if (txRes.ok) {
+        const txData = await txRes.json();
+        const rawTxs = txData.transactions || [];
+        const scaledTxs = rawTxs.map((t: any) => ({
+          ...t,
+          amount: (Number(t.amount) || 0) / scale
+        }));
+        setTransactions(scaledTxs);
       }
       if (balRes.ok) {
         const balData = await balRes.json();
+        const bankOpening = Number(balData.bankOpeningBalance) || 0;
+        const cashOpening = Number(balData.cashOpeningBalance) || 0;
         setBalances({
-          bankOpeningBalance: Number(balData.bankOpeningBalance) || 0,
-          cashOpeningBalance: Number(balData.cashOpeningBalance) || 0,
+          bankOpeningBalance: bankOpening / scale,
+          cashOpeningBalance: cashOpening / scale,
         });
         setBalanceForm({
-          bankOpeningBalance: String(balData.bankOpeningBalance || 0),
-          cashOpeningBalance: String(balData.cashOpeningBalance || 0),
+          bankOpeningBalance: String(bankOpening / scale),
+          cashOpeningBalance: String(cashOpening / scale),
         });
       }
     } catch (err) {
@@ -445,10 +473,11 @@ export default function CompanyFinanceTransactionsPage() {
       toast.error("Please enter a valid amount");
       return;
     }
+    const scale = Math.pow(10, settings?.financeDecimalScaling !== undefined ? settings.financeDecimalScaling : 0);
     try {
       const payload = {
         ...creditForm,
-        amount: Number(creditForm.amount),
+        amount: Number(creditForm.amount) * scale,
         type: "credit",
         description: creditForm.descriptions || creditForm.category || "Credit",
       };
@@ -499,10 +528,11 @@ export default function CompanyFinanceTransactionsPage() {
       toast.error("Please enter a valid amount");
       return;
     }
+    const scale = Math.pow(10, settings?.financeDecimalScaling !== undefined ? settings.financeDecimalScaling : 0);
     try {
       const payload = {
         ...debitForm,
-        amount: Number(debitForm.amount),
+        amount: Number(debitForm.amount) * scale,
         type: "debit",
         description: debitForm.things || debitForm.narrative || "Expense",
       };
@@ -591,13 +621,14 @@ export default function CompanyFinanceTransactionsPage() {
   // Save Balances
   const handleSaveBalances = async (e: React.FormEvent) => {
     e.preventDefault();
+    const scale = Math.pow(10, settings?.financeDecimalScaling !== undefined ? settings.financeDecimalScaling : 0);
     try {
       const res = await fetch(`${API_URL}/company-finance/balances`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          bankOpeningBalance: Number(balanceForm.bankOpeningBalance) || 0,
-          cashOpeningBalance: Number(balanceForm.cashOpeningBalance) || 0,
+          bankOpeningBalance: (Number(balanceForm.bankOpeningBalance) || 0) * scale,
+          cashOpeningBalance: (Number(balanceForm.cashOpeningBalance) || 0) * scale,
         }),
       });
       if (res.ok) {
@@ -941,7 +972,7 @@ export default function CompanyFinanceTransactionsPage() {
             </div>
             <div>
               <p className="text-2xl font-black text-slate-800">
-                ₹{openingBalance.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                {formatVal(openingBalance)}
               </p>
               <button
                 onClick={() => setIsBalanceModalOpen(true)}
@@ -964,7 +995,7 @@ export default function CompanyFinanceTransactionsPage() {
             </div>
             <div>
               <p className="text-2xl font-black text-emerald-600">
-                +₹{totalCredit.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                +{formatVal(totalCredit)}
               </p>
               <p className="text-xs text-slate-400 font-medium mt-1">
                 {creditTransactions.length} credit entries synced
@@ -984,7 +1015,7 @@ export default function CompanyFinanceTransactionsPage() {
             </div>
             <div>
               <p className="text-2xl font-black text-rose-600">
-                -₹{totalDebit.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                -{formatVal(totalDebit)}
               </p>
               <p className="text-xs text-slate-400 font-medium mt-1">
                 {debitTransactions.length} expense entries recorded
@@ -1010,7 +1041,7 @@ export default function CompanyFinanceTransactionsPage() {
             </div>
             <div>
               <p className="text-3xl font-black tracking-tight">
-                ₹{closingBalance.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                {formatVal(closingBalance)}
               </p>
               <p className="text-[11px] text-slate-300 font-medium mt-1">
                 Opening Balance + Total Credit - Total Debt
@@ -1116,7 +1147,7 @@ export default function CompanyFinanceTransactionsPage() {
                           {t.date ? new Date(t.date).toLocaleDateString("en-IN") : "-"}
                         </td>
                         <td className="px-3.5 py-3 font-black text-emerald-600 text-right">
-                          ₹{(Number(t.amount) || 0).toLocaleString("en-IN")}
+                          {formatVal(Number(t.amount) || 0)}
                         </td>
                         {activeTab === "bank" && (
                           <td className="px-3.5 py-3 font-semibold text-slate-700">
@@ -1169,7 +1200,7 @@ export default function CompanyFinanceTransactionsPage() {
                 Transaction Total Credit
               </span>
               <span className="font-black text-emerald-600 text-base">
-                ₹{totalCredit.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                {formatVal(totalCredit)}
               </span>
             </div>
           </div>
@@ -1257,7 +1288,7 @@ export default function CompanyFinanceTransactionsPage() {
                           {t.date ? new Date(t.date).toLocaleDateString("en-IN") : "-"}
                         </td>
                         <td className="px-3.5 py-3 font-black text-rose-600 text-right">
-                          ₹{(Number(t.amount) || 0).toLocaleString("en-IN")}
+                          {formatVal(Number(t.amount) || 0)}
                         </td>
                         {activeTab === "bank" && (
                           <td className="px-3.5 py-3 font-semibold text-slate-700">
@@ -1305,7 +1336,7 @@ export default function CompanyFinanceTransactionsPage() {
                 Transaction Total Debt
               </span>
               <span className="font-black text-rose-600 text-base">
-                ₹{totalDebit.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                {formatVal(totalDebit)}
               </span>
             </div>
           </div>
@@ -1319,7 +1350,7 @@ export default function CompanyFinanceTransactionsPage() {
               {activeTab === "bank" ? "Bank Account Summary Overview" : "Cash Ledger Summary Overview"}
             </h4>
             <p className="text-xs text-slate-400 mt-1">
-              Opening Balance (₹{openingBalance.toLocaleString()}) + Total Credit (₹{totalCredit.toLocaleString()}) - Total Debt (₹{totalDebit.toLocaleString()})
+              Opening Balance ({formatVal(openingBalance)}) + Total Credit ({formatVal(totalCredit)}) - Total Debt ({formatVal(totalDebit)})
             </p>
           </div>
           <div className="text-right sm:text-right">
@@ -1327,7 +1358,7 @@ export default function CompanyFinanceTransactionsPage() {
               {activeTab === "bank" ? "Closing Balance in Bank" : "Cash in Hand"}
             </p>
             <p className={cn("text-3xl font-black mt-0.5", closingBalance >= 0 ? "text-emerald-400" : "text-rose-400")}>
-              ₹{closingBalance.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+              {formatVal(closingBalance)}
             </p>
           </div>
         </div>

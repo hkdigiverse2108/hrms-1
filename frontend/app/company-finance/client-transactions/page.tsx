@@ -79,6 +79,25 @@ export default function ClientTransactionsPage() {
     remarks: "",
   });
 
+  const [settings, setSettings] = useState<any>(null);
+
+  const formatVal = (val: any, unit: string = "INR") => {
+    if (val === undefined || val === null || val === "") return "-";
+    const num = parseFloat(val);
+    if (isNaN(num)) return String(val);
+    const decimals = settings?.financeDecimalScaling !== undefined ? settings.financeDecimalScaling : 0;
+    if (unit === "INR") {
+      return "₹" + num.toLocaleString("en-IN", {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
+      });
+    }
+    return num.toLocaleString("en-IN", {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals
+    });
+  };
+
   const amountInputRef = useRef<HTMLInputElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
@@ -86,14 +105,27 @@ export default function ClientTransactionsPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [txRes, clientsRes] = await Promise.all([
+      const [txRes, clientsRes, settingsRes] = await Promise.all([
         fetch(`${API_URL}/client-transactions`),
         fetch(`${API_URL}/clients`),
+        fetch(`${API_URL}/system-settings`),
       ]);
+
+      let scale = 1;
+      if (settingsRes.ok) {
+        const settingsData = await settingsRes.json();
+        setSettings(settingsData);
+        const decimals = settingsData?.financeDecimalScaling !== undefined ? settingsData.financeDecimalScaling : 0;
+        scale = Math.pow(10, decimals);
+      }
 
       if (txRes.ok) {
         const txData = await txRes.json();
-        setTransactions(txData);
+        const scaledTx = txData.map((t: any) => ({
+          ...t,
+          amount: (Number(t.amount) || 0) / scale
+        }));
+        setTransactions(scaledTx);
       } else {
         toast.error("Failed to load client transactions");
       }
@@ -243,12 +275,13 @@ export default function ClientTransactionsPage() {
       return;
     }
 
+    const scale = Math.pow(10, settings?.financeDecimalScaling !== undefined ? settings.financeDecimalScaling : 0);
     try {
       setFormLoading(true);
       const payload = {
         personName: form.personName.trim(),
         date: form.date,
-        amount: Number(form.amount),
+        amount: Number(form.amount) * scale,
         type: form.type,
         description: form.description.trim() || undefined,
         paymentMethod: form.paymentMethod || undefined,
@@ -330,7 +363,7 @@ export default function ClientTransactionsPage() {
             <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">Total Inflow</p>
             <h3 className="text-3xl font-bold mt-1 text-emerald-700 dark:text-emerald-300 flex items-center">
               <IndianRupee className="w-7 h-7" />
-              {metrics.totalInflow.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+              {formatVal(metrics.totalInflow, "none")}
             </h3>
           </div>
           <div className="p-4 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 rounded-xl">
@@ -344,7 +377,7 @@ export default function ClientTransactionsPage() {
             <p className="text-sm font-medium text-rose-600 dark:text-rose-400">Total Outflow</p>
             <h3 className="text-3xl font-bold mt-1 text-rose-700 dark:text-rose-300 flex items-center">
               <IndianRupee className="w-7 h-7" />
-              {metrics.totalOutflow.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+              {formatVal(metrics.totalOutflow, "none")}
             </h3>
           </div>
           <div className="p-4 bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400 rounded-xl">
@@ -358,7 +391,7 @@ export default function ClientTransactionsPage() {
             <p className="text-sm font-medium text-indigo-600 dark:text-indigo-400">Net Balance</p>
             <h3 className="text-3xl font-bold mt-1 text-indigo-700 dark:text-indigo-300 flex items-center">
               <IndianRupee className="w-7 h-7" />
-              {metrics.netBalance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+              {formatVal(metrics.netBalance, "none")}
             </h3>
           </div>
           <div className="p-4 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 rounded-xl">
@@ -469,10 +502,10 @@ export default function ClientTransactionsPage() {
                           </span>
                         </td>
                         <td className="p-4 font-medium text-emerald-600 dark:text-emerald-400">
-                          ₹{summary.totalInflow.toLocaleString("en-IN")}
+                          {formatVal(summary.totalInflow)}
                         </td>
                         <td className="p-4 font-medium text-rose-600 dark:text-rose-400">
-                          ₹{summary.totalOutflow.toLocaleString("en-IN")}
+                          {formatVal(summary.totalOutflow)}
                         </td>
                         <td className="p-4 font-bold">
                           <span 
@@ -482,7 +515,7 @@ export default function ClientTransactionsPage() {
                                 : "text-rose-600 dark:text-rose-400"
                             )}
                           >
-                            ₹{summary.netBalance.toLocaleString("en-IN")}
+                            {formatVal(summary.netBalance)}
                           </span>
                         </td>
                         <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
@@ -536,7 +569,7 @@ export default function ClientTransactionsPage() {
                                       </td>
                                       <td className="p-3 whitespace-nowrap font-bold">
                                         <span className={tx.type === "inflow" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}>
-                                          {tx.type === "inflow" ? "+" : "-"} ₹{tx.amount.toLocaleString("en-IN")}
+                                          {tx.type === "inflow" ? "+" : "-"} {formatVal(tx.amount)}
                                         </span>
                                       </td>
                                       <td className="p-3 max-w-xs truncate">{tx.description || "-"}</td>

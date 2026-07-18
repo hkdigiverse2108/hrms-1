@@ -1225,7 +1225,7 @@ export default function CompanyFinancePlanPage() {
                                       ? "text-blue-600 underline decoration-dotted font-black"
                                       : "text-slate-700 font-extrabold"
                                   } text-xs`}>
-                                    ₹{getRowSum(row.id, values).toLocaleString("en-IN")}
+                                    {formatVal(getRowSum(row.id, values), "INR")}
                                   </span>
                                   <Button
                                     variant="outline"
