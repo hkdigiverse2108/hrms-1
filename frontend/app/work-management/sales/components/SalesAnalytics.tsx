@@ -21,6 +21,7 @@ interface Lead {
   closedDate?: string;
   assignedTo: string | string[];
   expectedIncome?: string | number;
+  category?: string;
 }
 
 interface Employee {
@@ -54,6 +55,8 @@ export function SalesAnalytics() {
   const [dateRange, setDateRange] = useState({ start: '', end: '' })
   const [selectedEmployee, setSelectedEmployee] = useState<string>('all')
   const [selectedSource, setSelectedSource] = useState<string>('all')
+  const [selectedCategory, setSelectedCategory] = useState<string>('all')
+  const [leadCategories, setLeadCategories] = useState<string[]>([])
 
   // Sorting
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' }>({
@@ -67,10 +70,11 @@ export function SalesAnalytics() {
         const token = localStorage.getItem('token')
         const headers: HeadersInit = token ? { 'Authorization': `Bearer ${token}` } : {}
 
-        const [leadsRes, empRes, targetsRes] = await Promise.all([
+        const [leadsRes, empRes, targetsRes, settingsRes] = await Promise.all([
           fetch(`${API_URL}/leads`, { headers }),
           fetch(`${API_URL}/employees`, { headers }),
-          fetch(`${API_URL}/sales-targets`, { headers })
+          fetch(`${API_URL}/sales-targets`, { headers }),
+          fetch(`${API_URL}/system-settings`, { headers })
         ])
 
         if (leadsRes.ok) {
@@ -84,6 +88,10 @@ export function SalesAnalytics() {
         if (targetsRes.ok) {
           const targetsData = await targetsRes.json()
           setTargets(targetsData)
+        }
+        if (settingsRes && settingsRes.ok) {
+          const settingsData = await settingsRes.json()
+          setLeadCategories(settingsData.leadCategories || ["Hot Lead", "Warm Lead", "Cold Lead"])
         }
       } catch (err) {
         console.error("Failed to load sales data", err)
@@ -130,9 +138,15 @@ export function SalesAnalytics() {
         matchesSource = (lead.source || "Unknown").toLowerCase() === selectedSource.toLowerCase();
       }
 
-      return matchesDate && matchesEmp && matchesSource;
+      // Category Filter
+      let matchesCategory = true;
+      if (selectedCategory !== 'all') {
+        matchesCategory = (lead.category || "Other").toLowerCase() === selectedCategory.toLowerCase();
+      }
+
+      return matchesDate && matchesEmp && matchesSource && matchesCategory;
     });
-  }, [leads, dateRange, selectedEmployee, selectedSource]);
+  }, [leads, dateRange, selectedEmployee, selectedSource, selectedCategory]);
 
   // Derived Metrics (Month by Month)
   const metrics = useMemo(() => {
@@ -314,6 +328,41 @@ export function SalesAnalytics() {
     return { totalLeads, wonLeads: wonLeads.length, totalRevenue, winRate, employeeData, totalTargetValue, activePipeline, topPerformer };
   }, [filteredLeads, employees, targets, dateRange, selectedEmployee]);
 
+  // Lead Category-wise Analysis breakdown
+  const categoryAnalysis = useMemo(() => {
+    const catStats: Record<string, { name: string; total: number; active: number; won: number; revenue: number }> = {};
+    
+    // Initialize with dynamic categories
+    const categoriesList = Array.from(new Set(leads.map(l => l.category || "Other").filter(Boolean)));
+    if (!categoriesList.includes("Other")) {
+      categoriesList.push("Other");
+    }
+
+    categoriesList.forEach(cat => {
+      catStats[cat] = { name: cat, total: 0, active: 0, won: 0, revenue: 0 };
+    });
+
+    filteredLeads.forEach(l => {
+      const cat = l.category || "Other";
+      if (!catStats[cat]) {
+        catStats[cat] = { name: cat, total: 0, active: 0, won: 0, revenue: 0 };
+      }
+      catStats[cat].total += 1;
+      const income = parseIncome(l.expectedIncome);
+      if (l.status === "Client Won") {
+        catStats[cat].won += 1;
+        catStats[cat].revenue += income;
+      } else if (["lead", "contacted", "proposal sent"].includes((l.status || "").toLowerCase())) {
+        catStats[cat].active += 1;
+      }
+    });
+
+    return Object.values(catStats).filter(c => c.total > 0).map(c => ({
+      ...c,
+      winRate: c.total > 0 ? (c.won / c.total) * 100 : 0
+    })).sort((a, b) => b.revenue - a.revenue || b.total - a.total);
+  }, [filteredLeads, leads]);
+
   // Apply Sort
   const displayData = useMemo(() => {
     let data = [...metrics.employeeData];
@@ -462,8 +511,23 @@ export function SalesAnalytics() {
           </Select>
         </div>
 
+        <div className="flex items-center gap-2 border-l pl-4 border-slate-200">
+          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+            <SelectTrigger className="h-9 w-[160px] text-xs">
+              <SelectValue placeholder="Filter Category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              <SelectItem value="Other">Other</SelectItem>
+              {leadCategories.map((cat, idx) => (
+                <SelectItem key={idx} value={cat}>{cat}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
         <div className="ml-auto flex gap-2">
-          {(dateRange.start || dateRange.end || selectedEmployee !== 'all' || selectedSource !== 'all') && (
+          {(dateRange.start || dateRange.end || selectedEmployee !== 'all' || selectedSource !== 'all' || selectedCategory !== 'all') && (
             <Button 
               variant="ghost" 
               className="h-9 text-xs" 
@@ -471,6 +535,7 @@ export function SalesAnalytics() {
                 setDateRange({ start: '', end: '' }); 
                 setSelectedEmployee('all'); 
                 setSelectedSource('all');
+                setSelectedCategory('all');
               }}
             >
               Clear Filters
@@ -658,6 +723,72 @@ export function SalesAnalytics() {
                   <td colSpan={10} className="px-6 py-12 text-center">
                     <p className="text-slate-500 font-medium">No results found</p>
                     <p className="text-slate-400 text-xs mt-1">Try adjusting your filters or search query.</p>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* Lead Category-wise Analysis Table */}
+      <Card className="border-none shadow-sm bg-white overflow-hidden">
+        <CardHeader className="border-b border-slate-100 flex flex-row items-center justify-between py-4">
+          <CardTitle className="text-sm font-bold text-slate-700">Lead Category-wise Analysis</CardTitle>
+        </CardHeader>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm whitespace-nowrap">
+            <thead className="bg-slate-50/50">
+              <tr>
+                <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[11px] tracking-wider">Category</th>
+                <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[11px] tracking-wider text-center">Total Leads</th>
+                <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[11px] tracking-wider text-center">Active Pipeline</th>
+                <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[11px] tracking-wider text-center">Won</th>
+                <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[11px] tracking-wider text-right">Win Rate</th>
+                <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[11px] tracking-wider text-right text-emerald-600">Revenue</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {categoryAnalysis.map((cat, idx) => (
+                <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                  <td className="px-6 py-3">
+                    <span className="font-bold text-slate-700">{cat.name}</span>
+                  </td>
+                  <td className="px-6 py-3 text-center text-slate-600">{cat.total}</td>
+                  <td className="px-6 py-3 text-center text-slate-600">{cat.active || '-'}</td>
+                  <td className="px-6 py-3 text-center">
+                    {cat.won > 0 ? (
+                      <span className="bg-emerald-50 text-emerald-600 px-2.5 py-0.5 rounded-md text-xs font-bold">{cat.won}</span>
+                    ) : (
+                      <span className="text-slate-400">-</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-3 text-right text-slate-600 font-medium">{cat.total > 0 ? cat.winRate.toFixed(1) + '%' : '-'}</td>
+                  <td className="px-6 py-3 text-right font-bold text-emerald-600">{cat.revenue > 0 ? `₹${cat.revenue.toLocaleString()}` : '-'}</td>
+                </tr>
+              ))}
+              {categoryAnalysis.length > 0 && (
+                <tr className="bg-slate-100/80 font-bold text-slate-800 border-t-2 border-slate-200 shadow-sm">
+                  <td className="px-6 py-4 text-right uppercase tracking-wider text-xs">
+                    Grand Total
+                  </td>
+                  <td className="px-6 py-4 text-center text-slate-700">{categoryAnalysis.reduce((sum, d) => sum + d.total, 0)}</td>
+                  <td className="px-6 py-4 text-center text-slate-700">{categoryAnalysis.reduce((sum, d) => sum + d.active, 0)}</td>
+                  <td className="px-6 py-4 text-center text-emerald-600">{categoryAnalysis.reduce((sum, d) => sum + d.won, 0)}</td>
+                  <td className="px-6 py-4 text-right text-slate-700">
+                    {(() => {
+                      const total = categoryAnalysis.reduce((sum, d) => sum + d.total, 0);
+                      const won = categoryAnalysis.reduce((sum, d) => sum + d.won, 0);
+                      return total > 0 ? (won / total * 100).toFixed(1) + '%' : '0.0%';
+                    })()}
+                  </td>
+                  <td className="px-6 py-4 text-right text-emerald-600">₹{categoryAnalysis.reduce((sum, d) => sum + d.revenue, 0).toLocaleString()}</td>
+                </tr>
+              )}
+              {categoryAnalysis.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-6 py-12 text-center">
+                    <p className="text-slate-500 font-medium">No category analysis data available</p>
                   </td>
                 </tr>
               )}

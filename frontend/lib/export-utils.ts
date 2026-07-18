@@ -89,8 +89,52 @@ export const exportToPDF = (data: any[], fileName: string) => {
   }
 };
 
-// Keep exportToCSV as an alias to exportToPDF for complete backward compatibility
-export const exportToCSV = exportToPDF;
+// Real CSV export implementation using SheetJS
+export const exportToCSV = (data: any[], fileName: string) => {
+  if (!data || data.length === 0) {
+    toast.error("No data available to export.");
+    return;
+  }
+  try {
+    const headers = Object.keys(data[0]);
+    const displayHeaders = headers.map((h) =>
+      h
+        .replace(/([A-Z])/g, " $1")
+        .replace(/^./, (str) => str.toUpperCase())
+        .replace(/[-_]/g, " ")
+        .trim()
+    );
+    const wsData = [displayHeaders];
+    data.forEach((row) => {
+      wsData.push(
+        headers.map((h) => {
+          const val = row[h];
+          if (val !== null && val !== undefined) {
+            if (typeof val === "object") {
+              try { return JSON.stringify(val); } catch { return String(val); }
+            }
+            return val;
+          }
+          return "";
+        })
+      );
+    });
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    const csvContent = XLSX.utils.sheet_to_csv(ws);
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `${fileName}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success("CSV file downloaded successfully.");
+  } catch (error) {
+    console.error("CSV generation failed:", error);
+    toast.error("Failed to generate CSV. Please try again.");
+  }
+};
 
 export const exportToExcel = (data: any[], fileName: string) => {
   if (!data || data.length === 0) {

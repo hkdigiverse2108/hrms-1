@@ -1501,7 +1501,7 @@ class Meeting(BaseModel):
 
 class LeadBase(BaseModel):
     company: Optional[str] = ""
-    contact: str
+    contact: Optional[str] = ""
     email: Optional[str] = None
     phone: Optional[str] = None
     expectedIncome: Optional[str] = None
@@ -1518,6 +1518,7 @@ class LeadBase(BaseModel):
     createdBy: Optional[str] = None
     createdByUserName: Optional[str] = None
     nextFollowUpDate: Optional[RobustDate] = None
+    category: Optional[str] = None
 
 class LeadCreate(LeadBase):
     performedBy: Optional[str] = None
@@ -1542,6 +1543,7 @@ class LeadUpdate(BaseModel):
     holdResumeDate: Optional[RobustDate] = None
     nextFollowUpDate: Optional[RobustDate] = None
     reason: Optional[str] = None
+    category: Optional[str] = None
 
 class Lead(LeadBase):
     id: str
@@ -1589,6 +1591,7 @@ class SystemSettingsBase(BaseModel):
     showNamesInRemarksToAdmin: Optional[bool] = True
     autoInactiveAfterResignation: Optional[bool] = False
     otpRequiredRoles: Optional[List[str]] = []
+    leadCategories: Optional[List[str]] = Field(default_factory=list)
 
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
@@ -1628,6 +1631,7 @@ class SystemSettingsUpdate(BaseModel):
     showNamesInRemarksToAdmin: Optional[bool] = None
     autoInactiveAfterResignation: Optional[bool] = None
     otpRequiredRoles: Optional[List[str]] = None
+    leadCategories: Optional[List[str]] = None
 
 class SystemSettings(SystemSettingsBase):
     id: str
@@ -1994,6 +1998,7 @@ class SalesTargetBase(BaseModel):
     breakdown: Optional[List[dict]] = []
     status: Optional[str] = "Active"
     createdAt: Optional[str] = None
+    category: Optional[str] = "Overall"
 
 class SalesTargetCreate(SalesTargetBase):
     pass
@@ -2007,6 +2012,7 @@ class SalesTargetUpdate(BaseModel):
     startDate: Optional[str] = None
     endDate: Optional[str] = None
     status: Optional[str] = None
+    category: Optional[str] = None
 
 class SalesTarget(SalesTargetBase):
     id: str
