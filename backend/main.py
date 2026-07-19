@@ -940,6 +940,10 @@ async def create_employee(employee: schemas.EmployeeCreate, request: Request, db
 @app.put("/employees/{employee_id}", response_model=schemas.Employee)
 async def update_employee(employee_id: str, employee_update: schemas.EmployeeUpdate, request: Request, db=Depends(get_db)):
     performed_by, user_name = await get_actor_from_request(request, db)
+    if performed_by != "System" and performed_by != employee_id:
+        actor = await db.employees.find_one({"_id": ObjectId(performed_by) if len(performed_by) == 24 else performed_by})
+        if not actor or actor.get("role", "").lower() not in ["admin", "super admin", "manager"]:
+            raise HTTPException(status_code=403, detail="You do not have permission to modify this employee's details")
     updated = await crud.update_employee(db, employee_id, employee_update, performed_by=performed_by, user_name=user_name)
     if not updated:
         raise HTTPException(status_code=404, detail="Employee not found")

@@ -34,7 +34,10 @@ import {
   X,
   Save,
   Eye,
-  EyeOff
+  EyeOff,
+  Upload,
+  Trash2,
+  PenTool
 } from 'lucide-react'
 import { API_URL, getAvatarUrl } from '@/lib/config'
 import { useUserContext } from "@/context/UserContext";
@@ -93,10 +96,90 @@ export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [isUploadingSignature, setIsUploadingSignature] = useState(false)
   const [activeTab, setActiveTab] = useState<'personal' | 'professional' | 'bank_family'>('personal')
   const [formData, setFormData] = useState<any>({})
   const [focusedField, setFocusedField] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleSignatureUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setIsUploadingSignature(true)
+    try {
+      const fileFormData = new FormData()
+      fileFormData.append('file', file)
+
+      const response = await fetch(`${API_URL}/upload`, {
+        method: 'POST',
+        body: fileFormData,
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to upload signature')
+      }
+
+      const data = await response.json()
+      
+      const updateRes = await fetch(`${API_URL}/employees/${user.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ signatureUrl: data.url })
+      })
+
+      if (updateRes.ok) {
+        const updatedUser = await updateRes.json()
+        const pRes = await fetch(`${API_URL}/user-permissions/${user.id}`)
+        const pData = pRes.ok ? await pRes.json() : { permissions: [] }
+        const finalUser = {
+          ...updatedUser,
+          permissions: pData?.permissions || []
+        }
+        setUser(finalUser)
+        localStorage.setItem('user', JSON.stringify(finalUser))
+        toast.success("Signature uploaded successfully!")
+      } else {
+        toast.error("Failed to update profile with signature.")
+      }
+    } catch (error) {
+      console.error('Signature upload error:', error)
+      toast.error("An error occurred during upload.")
+    } finally {
+      setIsUploadingSignature(false)
+    }
+  }
+
+  const handleRemoveSignature = async () => {
+    setIsUploadingSignature(true)
+    try {
+      const updateRes = await fetch(`${API_URL}/employees/${user.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ signatureUrl: null })
+      })
+
+      if (updateRes.ok) {
+        const updatedUser = await updateRes.json()
+        const pRes = await fetch(`${API_URL}/user-permissions/${user.id}`)
+        const pData = pRes.ok ? await pRes.json() : { permissions: [] }
+        const finalUser = {
+          ...updatedUser,
+          permissions: pData?.permissions || []
+        }
+        setUser(finalUser)
+        localStorage.setItem('user', JSON.stringify(finalUser))
+        toast.success("Signature removed successfully!")
+      } else {
+        toast.error("Failed to remove signature.")
+      }
+    } catch (error) {
+      console.error('Remove signature error:', error)
+      toast.error("An error occurred.")
+    } finally {
+      setIsUploadingSignature(false)
+    }
+  }
 
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false)
   const [newPassword, setNewPassword] = useState('')
@@ -436,6 +519,62 @@ export default function ProfilePage() {
                     <Lock className="h-4 w-4 mr-2" />
                     Change Password
                   </Button>
+                </div>
+              </div>
+
+              {/* Signature block */}
+              <div className="w-full bg-gray-50/50 border border-gray-100 rounded-xl p-4 space-y-3">
+                <div className="flex items-center gap-2 text-xs font-bold text-gray-700">
+                  <PenTool className="h-3.5 w-3.5 text-brand-teal" />
+                  <span>My Signature</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground leading-normal">
+                  This signature is used when generating dynamic documents like Offer Letters.
+                </p>
+                {user.signatureUrl ? (
+                  <div className="relative border border-slate-200 rounded-lg bg-white p-2 flex justify-center items-center h-16">
+                    <img 
+                      src={user.signatureUrl.startsWith('http') ? user.signatureUrl : `${API_URL}${user.signatureUrl}`} 
+                      alt="My Signature"
+                      className="max-h-12 object-contain"
+                    />
+                  </div>
+                ) : (
+                  <div className="border border-dashed border-slate-300 rounded-lg bg-white h-16 flex items-center justify-center">
+                    <span className="text-[10px] text-slate-400 font-medium">No signature uploaded</span>
+                  </div>
+                )}
+                
+                <div className="flex items-center gap-2 pt-1">
+                  <Button asChild variant="outline" size="sm" className="flex-1 border-brand-teal text-brand-teal text-xs h-8 cursor-pointer hover:bg-brand-teal/5 hover:text-brand-teal">
+                    <label className="cursor-pointer flex items-center justify-center w-full h-full">
+                      {isUploadingSignature ? (
+                        <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                      ) : (
+                        <Upload className="w-3.5 h-3.5 mr-1" />
+                      )}
+                      {user.signatureUrl ? 'Change' : 'Upload'}
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden" 
+                        onChange={handleSignatureUpload} 
+                        disabled={isUploadingSignature} 
+                      />
+                    </label>
+                  </Button>
+                  {user.signatureUrl && (
+                    <Button 
+                      type="button"
+                      variant="destructive" 
+                      size="sm" 
+                      className="h-8 text-xs px-2.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 shadow-none hover:text-red-700"
+                      onClick={handleRemoveSignature}
+                      disabled={isUploadingSignature}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
                 </div>
               </div>
             </CardContent>
