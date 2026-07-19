@@ -444,11 +444,19 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
       })
     })
 
+    let resultList = mapped
     if (selectedStatusFilter !== 'all') {
-      return mapped.filter(item => item.status?.toLowerCase() === selectedStatusFilter.toLowerCase())
+      resultList = mapped.filter(item => item.status?.toLowerCase() === selectedStatusFilter.toLowerCase())
     }
 
-    return mapped
+    // Sort so that the highest rating is on top
+    resultList.sort((a, b) => {
+      const rA = Number(a.rating) || 0;
+      const rB = Number(b.rating) || 0;
+      return rB - rA;
+    })
+
+    return resultList
   }, [employees, allReports, leaveRequests, dateRange, user, isAdmin, isTeamLeader, activeDeptTab, activeRoleTab, selectedStatusFilter])
 
   const allRatingsData = useMemo(() => {
