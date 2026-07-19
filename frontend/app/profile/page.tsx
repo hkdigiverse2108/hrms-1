@@ -37,9 +37,11 @@ import {
   EyeOff,
   Upload,
   Trash2,
-  PenTool
+  PenTool,
+  Plus
 } from 'lucide-react'
 import { API_URL, getAvatarUrl } from '@/lib/config'
+import { QuickActionsWidget } from '@/components/dashboard/QuickActionsWidget'
 import { useUserContext } from "@/context/UserContext";
 import {
   Dialog,
@@ -104,7 +106,7 @@ export default function ProfilePage() {
 
   const handleSignatureUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file) return
+    if (!file || !user?.id) return
 
     setIsUploadingSignature(true)
     try {
@@ -151,6 +153,7 @@ export default function ProfilePage() {
   }
 
   const handleRemoveSignature = async () => {
+    if (!user?.id) return
     setIsUploadingSignature(true)
     try {
       const updateRes = await fetch(`${API_URL}/employees/${user.id}`, {
@@ -448,8 +451,8 @@ export default function ProfilePage() {
       <form onSubmit={handleSave} className="grid gap-4 lg:grid-cols-4 w-full items-stretch">
         {/* Left Column - Profile Card */}
         <div className="lg:col-span-1">
-          <Card className="min-h-[500px] lg:h-[calc(100vh-180px)] border border-gray-100 shadow-sm rounded-xl overflow-hidden bg-white">
-            <CardContent className="pt-8 pb-8 flex flex-col items-center h-full px-6 space-y-6">
+          <Card className="min-h-[500px] lg:h-[calc(100vh-180px)] border border-gray-100 shadow-sm rounded-xl bg-white flex flex-col">
+            <CardContent className="pt-8 pb-8 flex flex-col items-center flex-1 px-6 space-y-6 overflow-y-auto custom-scrollbar">
               {/* Top Profile block */}
               <div className="flex flex-col items-center text-center">
                 <div className="relative group cursor-pointer" onClick={handleAvatarClick} title="Click to upload a new profile photo">
@@ -575,6 +578,26 @@ export default function ProfilePage() {
                       <Trash2 className="w-3.5 h-3.5" />
                     </Button>
                   )}
+                </div>
+              </div>
+
+              {/* Shortcut configuration block */}
+              <div className="w-full bg-gray-50/50 border border-gray-100 rounded-xl p-4 space-y-3">
+                <div className="flex items-center gap-2 text-xs font-bold text-gray-700">
+                  <Plus className="h-3.5 w-3.5 text-brand-teal" />
+                  <span>Configure Header Shortcuts</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground leading-normal">
+                  Pin your favorite pages and tools to the top header for easy, one-click access.
+                </p>
+                <div className="pt-1">
+                  <QuickActionsWidget 
+                    user={user} 
+                    onlyConfigButton={true}
+                    onUpdate={(newUser) => {
+                      setUser(newUser);
+                    }} 
+                  />
                 </div>
               </div>
             </CardContent>

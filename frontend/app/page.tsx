@@ -688,10 +688,6 @@ export default function DashboardPage() {
         description="Here's what's happening in your organization today."
       >
         <div className="flex flex-wrap items-center gap-2 justify-end mt-4 sm:mt-0">
-          <QuickActionsWidget user={user} onUpdate={(newUser) => {
-            updateUser(newUser);
-            window.dispatchEvent(new Event("attendance-update"));
-          }} />
           {(!isAdmin) && (
             <Button 
               onClick={() => setIsRequestDialogOpen(true)}

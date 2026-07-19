@@ -5,7 +5,7 @@ import Link from "next/link";
 import { 
   LayoutDashboard, Users, Clock, Calendar, CalendarDays, ClipboardList, MonitorPlay,
   MessagesSquare, Star, FileText, Files, Briefcase, IndianRupee, Activity, Plus, Search,
-  Check, X, Loader2
+  Check, X, Loader2, ChevronDown, LayoutGrid
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { toast } from "sonner";
 import { API_URL } from "@/lib/config";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const AVAILABLE_ACTIONS = [
   { id: 'dashboard', label: 'Dashboard', path: '/', icon: LayoutDashboard, category: 'General' },
@@ -60,7 +66,17 @@ const AVAILABLE_ACTIONS = [
   { id: 'invoice_proforma', label: 'Create Proforma', path: '/invoice/create?type=Proforma', icon: FileText, category: 'Invoice' },
 ];
 
-export function QuickActionsWidget({ user, onUpdate }: { user: any, onUpdate?: (newUser: any) => void }) {
+export function QuickActionsWidget({ 
+  user, 
+  onUpdate,
+  hideConfigButton = false,
+  onlyConfigButton = false
+}: { 
+  user: any, 
+  onUpdate?: (newUser: any) => void,
+  hideConfigButton?: boolean,
+  onlyConfigButton?: boolean
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -128,38 +144,50 @@ export function QuickActionsWidget({ user, onUpdate }: { user: any, onUpdate?: (
 
   return (
     <>
-      {selectedActions.length > 0 && (
-        <TooltipProvider>
-          {selectedActions.map(action => (
-            <Tooltip key={action.id}>
-              <TooltipTrigger asChild>
-                <Link href={action.path} className="shrink-0">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="h-9 px-3 gap-1.5 bg-white shadow-sm border-slate-200 text-slate-700 hover:text-brand-teal hover:border-brand-teal/30 hover:bg-brand-teal/5 transition-all"
-                  >
-                    <action.icon className="w-4 h-4" />
-                    <span className="hidden sm:inline-block">{action.label.split(' ')[0]}</span>
-                  </Button>
-                </Link>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{action.label}</p>
-              </TooltipContent>
-            </Tooltip>
-          ))}
-        </TooltipProvider>
+      {!onlyConfigButton && selectedActions.length > 0 && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="h-9 px-3 gap-2 bg-white shadow-sm border-slate-200 text-slate-700 hover:text-brand-teal hover:border-brand-teal/30 hover:bg-brand-teal/5 transition-all font-semibold rounded-lg"
+            >
+              <LayoutGrid className="w-4 h-4 text-brand-teal" />
+              <span>Quick Links</span>
+              <ChevronDown className="w-3.5 h-3.5 opacity-60" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48 bg-white border border-slate-100 shadow-xl rounded-xl p-1.5 z-[100]">
+            {selectedActions.map(action => (
+              <Link href={action.path} key={action.id} className="w-full block">
+                <DropdownMenuItem className="flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer text-slate-600 hover:text-brand-teal hover:bg-brand-teal/5 focus:bg-brand-teal/5 focus:text-brand-teal transition-all text-xs font-semibold">
+                  <action.icon className="w-4 h-4 shrink-0 text-slate-400" />
+                  <span>{action.label}</span>
+                </DropdownMenuItem>
+              </Link>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
 
-      <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogTrigger asChild>
-          <Button variant="outline" size="sm" className="h-9 px-3 gap-1.5 border-dashed border-slate-300 bg-white shadow-sm text-slate-600 hover:text-slate-900">
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline-block">Quick Actions</span>
-          </Button>
-        </DialogTrigger>
-        <DialogContent className="sm:max-w-[600px] max-h-[85vh] flex flex-col p-0">
+      {!hideConfigButton && (
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+          {onlyConfigButton ? (
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9 px-4 gap-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold shadow-sm rounded-lg flex items-center">
+                <Plus className="w-4 h-4 text-brand-teal" />
+                Configure Shortcuts
+              </Button>
+            </DialogTrigger>
+          ) : (
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9 px-3 gap-1.5 border-dashed border-slate-300 bg-white shadow-sm text-slate-600 hover:text-slate-900">
+                <Plus className="w-4 h-4" />
+                <span className="hidden sm:inline-block">Quick Actions</span>
+              </Button>
+            </DialogTrigger>
+          )}
+          <DialogContent className="sm:max-w-[600px] max-h-[85vh] flex flex-col p-0">
           <DialogHeader className="p-5 pb-3 border-b border-slate-100">
             <DialogTitle className="text-xl">Configure Shortcuts</DialogTitle>
             <p className="text-sm text-muted-foreground">Select the sections you want to pin to your dashboard.</p>
@@ -237,6 +265,7 @@ export function QuickActionsWidget({ user, onUpdate }: { user: any, onUpdate?: (
           </div>
         </DialogContent>
       </Dialog>
+      )}
     </>
   );
 }

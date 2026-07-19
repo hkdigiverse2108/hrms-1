@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { SidebarNav } from "./SidebarNav";
 import { useUser } from "@/hooks/useUser";
+import { QuickActionsWidget } from "@/components/dashboard/QuickActionsWidget";
 import { useChatContext } from "@/context/ChatContext";
 import { useAppEvent } from "@/hooks/useAppEvent";
 import { useRouter, usePathname } from "next/navigation";
@@ -30,7 +31,7 @@ const { Header: AntHeader } = Layout;
 export function Header() {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, isLoading } = useUser();
+  const { user, setUser, isLoading } = useUser();
   const [isElectron, setIsElectron] = useState(false);
   const [appVersion, setAppVersion] = useState<string>("");
   
@@ -226,6 +227,18 @@ export function Header() {
  
         {/* Right - Profile & Actions */}
         <div className="flex items-center gap-4 h-full">
+          {user && (
+            <div className="flex items-center gap-2 mr-2">
+              <QuickActionsWidget 
+                user={user} 
+                hideConfigButton={true}
+                onUpdate={(newUser) => {
+                  setUser(newUser);
+                  window.dispatchEvent(new Event("attendance-update"));
+                }} 
+              />
+            </div>
+          )}
           <Popover>
             <PopoverTrigger asChild>
               <button className="flex items-center justify-center p-2 border border-border rounded-full hover:bg-muted transition-colors relative">

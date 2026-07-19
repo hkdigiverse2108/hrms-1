@@ -272,7 +272,7 @@ export default function HRTasksPage() {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <PageHeader 
           title="HR Tasks & Approvals" 
-          subtitle="Manage leaves, document generation requests, and HR department tasks." 
+          description="Manage leaves, document generation requests, and HR department tasks." 
         />
         {isAdminOrHR && (
           <Button 
