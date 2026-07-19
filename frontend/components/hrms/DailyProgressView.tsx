@@ -60,7 +60,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [verifyRecord, setVerifyRecord] = useState<any>(null)
   const [verifyNote, setVerifyNote] = useState('')
-  const [verifyRating, setVerifyRating] = useState<number | ''>('')
+  const [verifyRating, setVerifyRating] = useState<string>('')
   const [pendingTasks, setPendingTasks] = useState<any[]>([])
   const [isLoadingPendingTasks, setIsLoadingPendingTasks] = useState(false)
   const [logsOpen, setLogsOpen] = useState(false)
@@ -664,7 +664,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
           onClick={() => {
             setVerifyRecord(record)
             setVerifyNote(record.note || '')
-            setVerifyRating(record.rating || '')
+            setVerifyRating(record.rating ? String(record.rating) : '')
           }}
         >
           <CheckCircle2 className="w-3 h-3 mr-1" /> Verify
@@ -941,8 +941,9 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
                 type="number"
                 min="1"
                 max="10"
+                step="any"
                 value={verifyRating}
-                onChange={(e) => setVerifyRating(e.target.value === '' ? '' : Number(e.target.value))}
+                onChange={(e) => setVerifyRating(e.target.value)}
                 placeholder="Enter rating from 1 to 10"
                 className="text-xs border-slate-200 focus:border-brand-teal focus:ring-brand-teal rounded-xl h-10"
               />
