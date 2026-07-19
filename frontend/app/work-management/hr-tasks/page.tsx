@@ -25,6 +25,7 @@ export default function HRTasksPage() {
 
   const [activeTab, setActiveTab] = useState("tasks");
   const [taskSubTab, setTaskSubTab] = useState("all");
+  const [frequencyFilter, setFrequencyFilter] = useState("all");
   const [tasks, setTasks] = useState<any[]>([]);
   const [leaves, setLeaves] = useState<any[]>([]);
   const [docRequests, setDocRequests] = useState<any[]>([]);
@@ -313,12 +314,17 @@ export default function HRTasksPage() {
         <TabsContent value="tasks" className="mt-6 space-y-4">
           {(() => {
             const todayStr = new Date().toISOString().split("T")[0];
-            const countToday = hrTasks.filter(t => t.status !== "completed" && t.dueDate === todayStr).length;
-            const countPending = hrTasks.filter(t => t.status !== "completed" && ((t.dueDate && t.dueDate < todayStr) || !t.dueDate)).length;
-            const countUpcoming = hrTasks.filter(t => t.status !== "completed" && t.dueDate && t.dueDate > todayStr).length;
-            const countCompleted = hrTasks.filter(t => t.status === "completed").length;
+            
+            const freqTasks = frequencyFilter === "all" 
+              ? hrTasks 
+              : hrTasks.filter(t => t.frequency === frequencyFilter);
 
-            const filteredTasks = hrTasks.filter((task) => {
+            const countToday = freqTasks.filter(t => t.status !== "completed" && t.dueDate === todayStr).length;
+            const countPending = freqTasks.filter(t => t.status !== "completed" && ((t.dueDate && t.dueDate < todayStr) || !t.dueDate)).length;
+            const countUpcoming = freqTasks.filter(t => t.status !== "completed" && t.dueDate && t.dueDate > todayStr).length;
+            const countCompleted = freqTasks.filter(t => t.status === "completed").length;
+
+            const filteredTasks = freqTasks.filter((task) => {
               const taskDateStr = task.dueDate ? (task.dueDate.includes("T") ? task.dueDate.split("T")[0] : task.dueDate) : "";
               if (taskSubTab === "today") {
                 return task.status !== "completed" && taskDateStr === todayStr;
@@ -345,29 +351,48 @@ export default function HRTasksPage() {
 
             return (
               <>
-                <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-3">
-                  {[
-                    { id: "all", label: "All Tasks", count: hrTasks.length },
-                    { id: "today", label: "Today's Tasks", count: countToday },
-                    { id: "pending", label: "Pending Tasks", count: countPending },
-                    { id: "upcoming", label: "Upcoming Tasks", count: countUpcoming },
-                    { id: "completed", label: "Completed", count: countCompleted }
-                  ].map((sub) => (
-                    <button
-                      key={sub.id}
-                      onClick={() => setTaskSubTab(sub.id)}
-                      className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
-                        taskSubTab === sub.id 
-                          ? "bg-slate-800 text-white" 
-                          : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"
-                      }`}
-                    >
-                      <span>{sub.label}</span>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                        taskSubTab === sub.id ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"
-                      }`}>{sub.count}</span>
-                    </button>
-                  ))}
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-3">
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { id: "all", label: "All Tasks", count: freqTasks.length },
+                      { id: "today", label: "Today's Tasks", count: countToday },
+                      { id: "pending", label: "Pending Tasks", count: countPending },
+                      { id: "upcoming", label: "Upcoming Tasks", count: countUpcoming },
+                      { id: "completed", label: "Completed", count: countCompleted }
+                    ].map((sub) => (
+                      <button
+                        key={sub.id}
+                        onClick={() => setTaskSubTab(sub.id)}
+                        className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+                          taskSubTab === sub.id 
+                            ? "bg-slate-800 text-white" 
+                            : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"
+                        }`}
+                      >
+                        <span>{sub.label}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                          taskSubTab === sub.id ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"
+                        }`}>{sub.count}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Label className="text-xs font-medium text-slate-500 whitespace-nowrap">Frequency:</Label>
+                    <Select value={frequencyFilter} onValueChange={(val) => setFrequencyFilter(val)}>
+                      <SelectTrigger className="w-[150px] h-8 bg-white border-slate-200 text-xs rounded-lg shadow-none">
+                        <SelectValue placeholder="Select Frequency" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Frequencies</SelectItem>
+                        <SelectItem value="one-time">One-Time</SelectItem>
+                        <SelectItem value="daily">Daily</SelectItem>
+                        <SelectItem value="every-2-days">Once in 2 Days</SelectItem>
+                        <SelectItem value="weekly">Weekly</SelectItem>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 {loadingTasks ? (
