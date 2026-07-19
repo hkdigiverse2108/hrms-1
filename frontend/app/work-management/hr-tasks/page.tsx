@@ -279,10 +279,12 @@ export default function HRTasksPage() {
             className="bg-brand-teal hover:bg-brand-teal/90 text-white font-bold"
             onClick={() => {
               setEditingTask(null);
+              const hrEmployees = employees.filter(emp => emp.role === "HR" || emp.department?.toLowerCase() === "hr" || emp.department?.toLowerCase() === "human resources");
+              const defaultAssigneeId = hrEmployees.length === 1 ? (hrEmployees[0].id || hrEmployees[0]._id) : "";
               setTaskFormData({
                 title: "",
                 description: "",
-                assignedToId: "",
+                assignedToId: defaultAssigneeId,
                 dueDate: "",
                 priority: "medium",
                 status: "todo",
@@ -609,24 +611,37 @@ export default function HRTasksPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Assigned Employee</Label>
-                <Select 
-                  value={taskFormData.assignedToId} 
-                  onValueChange={(val) => setTaskFormData({ ...taskFormData, assignedToId: val })}
-                >
-                  <SelectTrigger className="bg-white border-slate-200 text-xs">
-                    <SelectValue placeholder="Select staff..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {employees
-                      .filter(emp => emp.role === "HR" || emp.department?.toLowerCase() === "hr" || emp.department?.toLowerCase() === "human resources")
-                      .map((emp) => (
-                        <SelectItem key={emp.id || emp._id} value={emp.id || emp._id}>
-                          {emp.firstName} {emp.lastName}
-                        </SelectItem>
-                      ))
-                    }
-                  </SelectContent>
-                </Select>
+                {(() => {
+                  const hrEmployees = employees.filter(emp => emp.role === "HR" || emp.department?.toLowerCase() === "hr" || emp.department?.toLowerCase() === "human resources");
+                  if (hrEmployees.length === 1) {
+                    const singleHR = hrEmployees[0];
+                    const fullName = `${singleHR.firstName} ${singleHR.lastName}`;
+                    return (
+                      <Input 
+                        value={fullName} 
+                        disabled 
+                        className="bg-slate-50 border-slate-200 text-xs text-slate-500 font-medium h-9" 
+                      />
+                    );
+                  }
+                  return (
+                    <Select 
+                      value={taskFormData.assignedToId} 
+                      onValueChange={(val) => setTaskFormData({ ...taskFormData, assignedToId: val })}
+                    >
+                      <SelectTrigger className="bg-white border-slate-200 text-xs h-9">
+                        <SelectValue placeholder="Select staff..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {hrEmployees.map((emp) => (
+                          <SelectItem key={emp.id || emp._id} value={emp.id || emp._id}>
+                            {emp.firstName} {emp.lastName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  );
+                })()}
               </div>
               <div className="space-y-2">
                 <Label>Frequency</Label>
