@@ -284,10 +284,15 @@ async def update_employee(db, employee_id: str, employee_update: schemas.Employe
                     print(f"Error removing old photo: {e}")
     
     # Recalculate name if name components are updated
-    if any(field in update_data for field in ["firstName", "lastName"]):
+    if any(field in update_data for field in ["firstName", "middleName", "lastName"]):
         first = update_data.get("firstName", existing.get("firstName", ""))
+        middle = update_data.get("middleName", existing.get("middleName", ""))
         last = update_data.get("lastName", existing.get("lastName", ""))
-        update_data["name"] = f"{first} {last}"
+        
+        name = f"{first} {last}"
+        if middle:
+            name = f"{first} {middle} {last}"
+        update_data["name"] = name
 
     # Diff updates
     log_details, diffs = format_field_changes(existing, update_data, f"Employee '{existing.get('name')}'")
@@ -1432,6 +1437,8 @@ async def create_employee(db, employee: schemas.EmployeeCreate, performed_by: st
     
     # Calculate full name
     name = f"{employee.firstName} {employee.lastName}"
+    if employee.middleName:
+        name = f"{employee.firstName} {employee.middleName} {employee.lastName}"
     
     employee_dict = employee.dict()
     employee_dict["name"] = name
