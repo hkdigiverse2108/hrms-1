@@ -16,7 +16,7 @@ import { Calendar as CalendarComponent } from "@/components/ui/calendar"
 import { format, eachDayOfInterval } from "date-fns"
 import { DateRange } from "react-day-picker"
 import { usePermissions } from '@/hooks/usePermissions'
-import { Loader2, MessageSquare, History } from 'lucide-react'
+import { Loader2, MessageSquare, History, AlertCircle } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -863,85 +863,102 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
             {(() => {
               const selectedAttendance = verifyRecord ? attendanceRecords.find((a: any) => a.employeeId === verifyRecord.employeeId && a.date === verifyRecord.date) : null;
               const workLogs = selectedAttendance?.punches || [];
+
+              const employeeDept = verifyRecord?.department?.toLowerCase() || '';
+              const isSmm = (dept: string) => ['smm', 'creative'].includes(dept);
+              const isDm = (dept: string) => dept === 'digital marketing' || dept === 'dm';
               
+              const filteredPending = pendingTasks.filter(t => {
+                const taskDept = t.department?.toLowerCase() || '';
+                if (!employeeDept) return true;
+                if (isSmm(employeeDept) && isSmm(taskDept)) return true;
+                if (isDm(employeeDept) && isDm(taskDept)) return true;
+                return taskDept === employeeDept;
+              });
+
               return (
-                <div>
-                  <Label className="text-xs font-bold text-slate-700 mb-2 block">Tasks Logged</Label>
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3 max-h-[250px] overflow-y-auto">
-                    {workLogs.length > 0 ? (
-                      <ul className="list-disc pl-5 space-y-1.5">
-                        {workLogs.map((punch: any, i: number) => {
-                          const text = punch.activityType === 'Work' && punch.activityValue ? punch.activityValue : 
-                                       punch.activityType === 'Other' ? `${punch.activitySubtype || 'Other'}: ${punch.activityValue || ''}` :
-                                       punch.activityType === 'Research' ? `Research: ${punch.activityValue || ''}` :
-                                       punch.activityType || 'Work Log';
-                          return (
-                            <li key={i} className="text-[13px] text-slate-700 leading-snug">{text}</li>
-                          );
-                        })}
-                      </ul>
-                    ) : (
-                      <div className="text-[13px] text-slate-500 italic">No tasks logged for this date.</div>
-                    )}
+                <>
+                  {/* KPI Summary Cards */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-emerald-50/40 border border-emerald-100/60 rounded-2xl p-4 flex items-center justify-between shadow-sm">
+                      <div>
+                        <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Tasks Logged</p>
+                        <p className="text-2xl font-black text-slate-800 mt-1">{workLogs.length}</p>
+                      </div>
+                      <div className="h-10 w-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-500 shadow-sm">
+                        <CheckCircle2 className="w-5 h-5" />
+                      </div>
+                    </div>
+                    <div className="bg-amber-50/40 border border-amber-100/60 rounded-2xl p-4 flex items-center justify-between shadow-sm">
+                      <div>
+                        <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">Pending Tasks</p>
+                        <p className="text-2xl font-black text-slate-800 mt-1">{filteredPending.length}</p>
+                      </div>
+                      <div className="h-10 w-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500 shadow-sm">
+                        <AlertCircle className="w-5 h-5" />
+                      </div>
+                    </div>
                   </div>
-                </div>
+
+                  <div>
+                    <Label className="text-xs font-bold text-slate-700 mb-2 block">Tasks Logged</Label>
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3 max-h-[250px] overflow-y-auto">
+                      {workLogs.length > 0 ? (
+                        <ul className="list-disc pl-5 space-y-1.5">
+                          {workLogs.map((punch: any, i: number) => {
+                            const text = punch.activityType === 'Work' && punch.activityValue ? punch.activityValue : 
+                                         punch.activityType === 'Other' ? `${punch.activitySubtype || 'Other'}: ${punch.activityValue || ''}` :
+                                         punch.activityType === 'Research' ? `Research: ${punch.activityValue || ''}` :
+                                         punch.activityType || 'Work Log';
+                            return (
+                              <li key={i} className="text-[13px] text-slate-700 leading-snug">{text}</li>
+                            );
+                          })}
+                        </ul>
+                      ) : (
+                        <div className="text-[13px] text-slate-500 italic">No tasks logged for this date.</div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label className="text-xs font-bold text-slate-700 mb-2 block">Today's Pending Tasks</Label>
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-4 max-h-[250px] overflow-y-auto">
+                      {isLoadingPendingTasks ? (
+                        <div className="flex items-center justify-center py-4">
+                          <Loader2 className="w-5 h-5 animate-spin text-brand-teal" />
+                        </div>
+                      ) : filteredPending.length > 0 ? (
+                        <>
+                          {(() => {
+                            // Group by task department name
+                            const grouped = filteredPending.reduce((acc: any, task: any) => {
+                              const dept = task.department || 'Other';
+                              if (!acc[dept]) acc[dept] = [];
+                              acc[dept].push(task);
+                              return acc;
+                            }, {});
+
+                            return Object.entries(grouped).map(([dept, tasks]: [string, any]) => (
+                              <div key={dept} className="space-y-1.5">
+                                <h4 className="text-[11px] font-bold text-brand-teal uppercase tracking-wider">{dept}</h4>
+                                <ul className="list-disc pl-5 space-y-1">
+                                  {tasks.map((t: any) => (
+                                    <li key={t.id} className="text-[13px] text-slate-700 leading-snug">{t.title}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ));
+                          })()}
+                        </>
+                      ) : (
+                        <div className="text-[13px] text-slate-500 italic">No pending tasks for this date.</div>
+                      )}
+                    </div>
+                  </div>
+                </>
               );
             })()}
-
-            <div>
-              <Label className="text-xs font-bold text-slate-700 mb-2 block">Today's Pending Tasks</Label>
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-4 max-h-[250px] overflow-y-auto">
-                {isLoadingPendingTasks ? (
-                  <div className="flex items-center justify-center py-4">
-                    <Loader2 className="w-5 h-5 animate-spin text-brand-teal" />
-                  </div>
-                ) : pendingTasks.length > 0 ? (
-                  <>
-                    {(() => {
-                      const employeeDept = verifyRecord?.department?.toLowerCase() || '';
-                      
-                      // Normalize department names for matching
-                      const isSmm = (dept: string) => ['smm', 'creative'].includes(dept);
-                      const isDm = (dept: string) => dept === 'digital marketing' || dept === 'dm';
-                      
-                      const filtered = pendingTasks.filter(t => {
-                        const taskDept = t.department?.toLowerCase() || '';
-                        if (!employeeDept) return true;
-                        
-                        if (isSmm(employeeDept) && isSmm(taskDept)) return true;
-                        if (isDm(employeeDept) && isDm(taskDept)) return true;
-                        return taskDept === employeeDept;
-                      });
-
-                      if (filtered.length === 0) {
-                        return <div className="text-[13px] text-slate-500 italic">No pending tasks found for their department.</div>;
-                      }
-
-                      // Group by task department name
-                      const grouped = filtered.reduce((acc: any, task: any) => {
-                        const dept = task.department || 'Other';
-                        if (!acc[dept]) acc[dept] = [];
-                        acc[dept].push(task);
-                        return acc;
-                      }, {});
-
-                      return Object.entries(grouped).map(([dept, tasks]: [string, any]) => (
-                        <div key={dept} className="space-y-1.5">
-                          <h4 className="text-[11px] font-bold text-brand-teal uppercase tracking-wider">{dept}</h4>
-                          <ul className="list-disc pl-5 space-y-1">
-                            {tasks.map((t: any) => (
-                              <li key={t.id} className="text-[13px] text-slate-700 leading-snug">{t.title}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      ));
-                    })()}
-                  </>
-                ) : (
-                  <div className="text-[13px] text-slate-500 italic">No pending tasks for this date.</div>
-                )}
-              </div>
-            </div>
 
             <div>
               <Label className="text-xs font-bold text-slate-700 mb-2 block">Rating (1 to 10) <span className="text-rose-500">*</span></Label>
