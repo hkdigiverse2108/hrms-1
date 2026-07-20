@@ -19,51 +19,52 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { usePermissions } from "@/hooks/usePermissions";
 
 const AVAILABLE_ACTIONS = [
   { id: 'dashboard', label: 'Dashboard', path: '/', icon: LayoutDashboard, category: 'General' },
-  { id: 'attendance', label: 'Attendance', path: '/attendance', icon: Clock, category: 'General' },
-  { id: 'leave', label: 'Leave', path: '/leave', icon: Calendar, category: 'General' },
-  { id: 'schedule', label: 'Schedule', path: '/schedule', icon: CalendarDays, category: 'General' },
-  { id: 'penalty', label: 'Penalty', path: '/penalty', icon: MessagesSquare, category: 'General' },
-  { id: 'remarks', label: 'Remarks', path: '/remarks', icon: Star, category: 'General' },
-  { id: 'activity_tracker', label: 'Activity Tracker', path: '/activity-tracker', icon: Activity, category: 'General' },
-  { id: 'chat', label: 'Chat', path: '/chat', icon: MessagesSquare, category: 'General' },
+  { id: 'attendance', label: 'Attendance', path: '/attendance', icon: Clock, category: 'General', perm: 'attendance' },
+  { id: 'leave', label: 'Leave', path: '/leave', icon: Calendar, category: 'General', perm: 'leave' },
+  { id: 'schedule', label: 'Schedule', path: '/schedule', icon: CalendarDays, category: 'General', perm: 'schedule' },
+  { id: 'penalty', label: 'Penalty', path: '/penalty', icon: MessagesSquare, category: 'General', perm: 'remarks' },
+  { id: 'remarks', label: 'Remarks', path: '/remarks', icon: Star, category: 'General', perm: 'review' },
+  { id: 'activity_tracker', label: 'Activity Tracker', path: '/activity-tracker', icon: Activity, category: 'General', perm: 'activity-tracker' },
+  { id: 'chat', label: 'Chat', path: '/chat', icon: MessagesSquare, category: 'General', perm: 'chat' },
 
-  { id: 'wm_projects', label: 'Projects', path: '/work-management/projects', icon: ClipboardList, category: 'Work Management' },
-  { id: 'wm_development', label: 'Development', path: '/work-management/development', icon: ClipboardList, category: 'Work Management' },
-  { id: 'wm_daily_progress', label: 'Daily Progress', path: '/work-management/daily-progress', icon: ClipboardList, category: 'Work Management' },
-  { id: 'wm_sales', label: 'Sales', path: '/work-management/sales', icon: ClipboardList, category: 'Work Management' },
-  { id: 'wm_work_logs', label: 'Work Logs', path: '/work-management/work-logs', icon: ClipboardList, category: 'Work Management' },
-  { id: 'wm_clients', label: 'Clients', path: '/work-management/clients', icon: ClipboardList, category: 'Work Management' },
-  { id: 'wm_digital_marketing', label: 'Digital Marketing', path: '/work-management/digital-marketing', icon: ClipboardList, category: 'Work Management' },
-  { id: 'wm_smm', label: 'Social Media Management', path: '/work-management/smm', icon: ClipboardList, category: 'Work Management' },
-  { id: 'wm_research', label: 'Research', path: '/work-management/research', icon: ClipboardList, category: 'Work Management' },
+  { id: 'wm_projects', label: 'Projects', path: '/work-management/projects', icon: ClipboardList, category: 'Work Management', perm: 'projects' },
+  { id: 'wm_development', label: 'Development', path: '/work-management/development', icon: ClipboardList, category: 'Work Management', perm: 'development' },
+  { id: 'wm_daily_progress', label: 'Daily Progress', path: '/work-management/daily-progress', icon: ClipboardList, category: 'Work Management', perm: 'daily-progress' },
+  { id: 'wm_sales', label: 'Sales', path: '/work-management/sales', icon: ClipboardList, category: 'Work Management', perm: 'sales' },
+  { id: 'wm_work_logs', label: 'Work Logs', path: '/work-management/work-logs', icon: ClipboardList, category: 'Work Management', perm: 'work-logs' },
+  { id: 'wm_clients', label: 'Clients', path: '/work-management/clients', icon: ClipboardList, category: 'Work Management', perm: 'clients' },
+  { id: 'wm_digital_marketing', label: 'Digital Marketing', path: '/work-management/digital-marketing', icon: ClipboardList, category: 'Work Management', perm: 'marketing' },
+  { id: 'wm_smm', label: 'Social Media Management', path: '/work-management/smm', icon: ClipboardList, category: 'Work Management', perm: 'creative' },
+  { id: 'wm_research', label: 'Research', path: '/work-management/research', icon: ClipboardList, category: 'Work Management', perm: 'research' },
 
-  { id: 'employees', label: 'Employee List', path: '/employees', icon: Users, category: 'Employees' },
-  { id: 'org_structure', label: 'Org Structure', path: '/employees/organization/departments', icon: Users, category: 'Employees' },
-  { id: 'emp_attendance', label: 'Employee Attendance', path: '/employees/attendance', icon: Users, category: 'Employees' },
-  { id: 'leave_requests', label: 'Leave Requests', path: '/employees/leave', icon: Users, category: 'Employees' },
+  { id: 'employees', label: 'Employee List', path: '/employees', icon: Users, category: 'Employees', perm: 'employee-list' },
+  { id: 'org_structure', label: 'Org Structure', path: '/employees/organization/departments', icon: Users, category: 'Employees', perm: 'org-structure' },
+  { id: 'emp_attendance', label: 'Employee Attendance', path: '/employees/attendance', icon: Users, category: 'Employees', perm: 'employee-attendance' },
+  { id: 'leave_requests', label: 'Leave Requests', path: '/employees/leave', icon: Users, category: 'Employees', perm: 'leave-requests' },
   
-  { id: 'emp_documents', label: 'Employee Documents', path: '/employees/documents', icon: Files, category: 'Documents' },
-  { id: 'doc_generator', label: 'Document Generator', path: '/employees/documents/generate', icon: Files, category: 'Documents' },
+  { id: 'emp_documents', label: 'Employee Documents', path: '/employees/documents', icon: Files, category: 'Documents', perm: 'employee-documents' },
+  { id: 'doc_generator', label: 'Document Generator', path: '/employees/documents/generate', icon: Files, category: 'Documents', perm: 'document-generator' },
   
-  { id: 'salary_structure', label: 'Salary Structure', path: '/payroll/salary-structure', icon: IndianRupee, category: 'Payroll' },
-  { id: 'payroll_processing', label: 'Payroll Processing', path: '/payroll', icon: IndianRupee, category: 'Payroll' },
-  { id: 'payslips', label: 'Payslips', path: '/payroll/payslips', icon: IndianRupee, category: 'Payroll' },
-  { id: 'bonuses', label: 'Bonuses & Deductions', path: '/payroll/bonuses', icon: IndianRupee, category: 'Payroll' },
+  { id: 'salary_structure', label: 'Salary Structure', path: '/payroll/salary-structure', icon: IndianRupee, category: 'Payroll', perm: 'salary-structure' },
+  { id: 'payroll_processing', label: 'Payroll Processing', path: '/payroll', icon: IndianRupee, category: 'Payroll', perm: 'payroll-processing' },
+  { id: 'payslips', label: 'Payslips', path: '/payroll/payslips', icon: IndianRupee, category: 'Payroll', perm: 'payslips' },
+  { id: 'bonuses', label: 'Bonuses & Deductions', path: '/payroll/bonuses', icon: IndianRupee, category: 'Payroll', perm: 'bonuses-deductions' },
   
-  { id: 'interviews', label: 'Interviews', path: '/recruitment/hiring-board', icon: Briefcase, category: 'Recruitment' },
-  { id: 'hirings', label: 'Hirings', path: '/recruitment', icon: Briefcase, category: 'Recruitment' },
+  { id: 'interviews', label: 'Interviews', path: '/recruitment/hiring-board', icon: Briefcase, category: 'Recruitment', perm: 'interviews' },
+  { id: 'hirings', label: 'Hirings', path: '/recruitment', icon: Briefcase, category: 'Recruitment', perm: 'hirings' },
   
-  { id: 'workspace_seating', label: 'Seating Arrangement', path: '/workspace/seating', icon: MonitorPlay, category: 'Workspace' },
-  { id: 'workspace_resource', label: 'Resource Management', path: '/workspace/resource', icon: MonitorPlay, category: 'Workspace' },
-  { id: 'workspace_gallery', label: 'Gallery', path: '/workspace/gallery', icon: MonitorPlay, category: 'Workspace' },
+  { id: 'workspace_seating', label: 'Seating Arrangement', path: '/workspace/seating', icon: MonitorPlay, category: 'Workspace', perm: 'seating-arrangement' },
+  { id: 'workspace_resource', label: 'Resource Management', path: '/workspace/resource', icon: MonitorPlay, category: 'Workspace', perm: 'resource-management' },
+  { id: 'workspace_gallery', label: 'Gallery', path: '/workspace/gallery', icon: MonitorPlay, category: 'Workspace', perm: 'gallery' },
   
-  { id: 'invoice_all', label: 'All Invoices', path: '/invoice', icon: FileText, category: 'Invoice' },
-  { id: 'invoice_ledger', label: 'Invoice Ledger', path: '/invoice/ledger', icon: FileText, category: 'Invoice' },
-  { id: 'invoice_create', label: 'Create Invoice', path: '/invoice/create', icon: FileText, category: 'Invoice' },
-  { id: 'invoice_proforma', label: 'Create Proforma', path: '/invoice/create?type=Proforma', icon: FileText, category: 'Invoice' },
+  { id: 'invoice_all', label: 'All Invoices', path: '/invoice', icon: FileText, category: 'Invoice', perm: 'invoice' },
+  { id: 'invoice_ledger', label: 'Invoice Ledger', path: '/invoice/ledger', icon: FileText, category: 'Invoice', perm: 'invoice' },
+  { id: 'invoice_create', label: 'Create Invoice', path: '/invoice/create', icon: FileText, category: 'Invoice', perm: 'invoice' },
+  { id: 'invoice_proforma', label: 'Create Proforma', path: '/invoice/create?type=Proforma', icon: FileText, category: 'Invoice', perm: 'invoice' },
 ];
 
 export function QuickActionsWidget({ 
@@ -91,13 +92,42 @@ export function QuickActionsWidget({
       .filter(Boolean) as typeof AVAILABLE_ACTIONS;
   }, [selectedIds]);
 
+  const { checkPermission, isAdmin } = usePermissions();
+
+  const accessibleActions = useMemo(() => {
+    return AVAILABLE_ACTIONS.filter(action => {
+      if (isAdmin) return true;
+      if (!action.perm) return true;
+      
+      if (action.id === 'wm_development') {
+        const isTL = Boolean(user && (user.role?.toLowerCase() === 'team leader' || user.designation?.toLowerCase() === 'team leader'));
+        if (isTL || checkPermission('tasks', 'canView') || checkPermission('development', 'canView')) return true;
+        return false;
+      }
+      
+      if (action.id === 'wm_daily_progress') {
+        const isHRUser = user?.role === 'HR' || user?.department?.toLowerCase() === 'hr';
+        if (isHRUser || checkPermission(action.perm, 'canView')) return true;
+        return false;
+      }
+      
+      if (action.id === 'wm_smm') {
+        const isCreativeSpecial = user?.role === 'HR' || user?.role === 'Team Leader';
+        if (isCreativeSpecial || checkPermission('creative', 'canView')) return true;
+        return false;
+      }
+
+      return checkPermission(action.perm, 'canView');
+    });
+  }, [isAdmin, checkPermission, user]);
+
   const filteredAvailableActions = useMemo(() => {
-    if (!searchQuery) return AVAILABLE_ACTIONS;
-    return AVAILABLE_ACTIONS.filter(a => 
+    if (!searchQuery) return accessibleActions;
+    return accessibleActions.filter(a => 
       a.label.toLowerCase().includes(searchQuery.toLowerCase()) || 
       a.category.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [searchQuery]);
+  }, [searchQuery, accessibleActions]);
 
   const groupedActions = useMemo(() => {
     const groups: Record<string, typeof AVAILABLE_ACTIONS> = {};

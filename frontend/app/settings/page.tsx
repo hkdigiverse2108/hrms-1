@@ -23,7 +23,11 @@ import {
   Upload,
   Image as ImageIcon,
   Calendar,
-  X
+  X,
+  Plus,
+  Trash2,
+  Link as LinkIcon,
+  Pencil
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -60,6 +64,11 @@ export default function SettingsPage() {
   const [meetingsInput, setMeetingsInput] = useState<string | null>(null);
   const [categoriesInput, setCategoriesInput] = useState<string | null>(null);
   const [leadCategoriesInput, setLeadCategoriesInput] = useState<string | null>(null);
+
+  const [isAddBannerModalOpen, setIsAddBannerModalOpen] = useState(false);
+  const [editingBannerId, setEditingBannerId] = useState<string | null>(null);
+  const [newBanner, setNewBanner] = useState({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "" });
+  const [isUploadingBanner, setIsUploadingBanner] = useState(false);
 
   useEffect(() => {
     if (selectedEmployeeIdForSign) {
@@ -289,7 +298,8 @@ export default function SettingsPage() {
           defaultEditingStartOffset: settings?.defaultEditingStartOffset !== undefined ? settings.defaultEditingStartOffset : null,
           defaultApprovalOffset: settings?.defaultApprovalOffset !== undefined ? settings.defaultApprovalOffset : null,
           addHoldDaysToEndDate: settings?.addHoldDaysToEndDate !== undefined ? settings.addHoldDaysToEndDate : true,
-          otpRequiredRoles: settings?.otpRequiredRoles || []
+          otpRequiredRoles: settings?.otpRequiredRoles || [],
+          dashboardBanners: settings?.dashboardBanners || []
         })
       });
       if (res.ok) {
@@ -306,6 +316,85 @@ export default function SettingsPage() {
     }
   };
  
+  const handleBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingBanner(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(`${API_URL}/upload`, { method: 'POST', body: formData });
+      if (res.ok) {
+        const data = await res.json();
+        setNewBanner(prev => ({ ...prev, imageUrl: data.url }));
+        toast.success("Banner image uploaded!");
+      } else {
+        toast.error("Failed to upload image.");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("An error occurred during upload.");
+    } finally {
+      setIsUploadingBanner(false);
+    }
+  };
+
+  const saveSettingsToAPI = async (newSettings: any) => {
+    try {
+      const res = await fetch(`${API_URL}/system-settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newSettings)
+      });
+      if (res.ok) {
+        setSettings(await res.json());
+      } else {
+        toast.error("Failed to auto-save banner settings.");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const addDashboardBanner = () => {
+    if (!newBanner.imageUrl) {
+      toast.error("Image is required.");
+      return;
+    }
+    
+    let updatedBanners;
+    if (editingBannerId) {
+      updatedBanners = (settings?.dashboardBanners || []).map((b: any) => b.id === editingBannerId ? { ...newBanner, id: editingBannerId } : b);
+    } else {
+      const banner = { ...newBanner, id: Date.now().toString() };
+      updatedBanners = [...(settings?.dashboardBanners || []), banner];
+    }
+    
+    const newSettings = { ...settings, dashboardBanners: updatedBanners };
+    setSettings(newSettings);
+    saveSettingsToAPI(newSettings);
+    
+    setNewBanner({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "" });
+    setEditingBannerId(null);
+    setIsAddBannerModalOpen(false);
+    toast.success(editingBannerId ? "Banner updated successfully!" : "Banner added successfully!");
+  };
+
+  const removeDashboardBanner = (id: string) => {
+    const updatedBanners = (settings?.dashboardBanners || []).filter((b: any) => b.id !== id);
+    const newSettings = { ...settings, dashboardBanners: updatedBanners };
+    setSettings(newSettings);
+    saveSettingsToAPI(newSettings);
+    toast.success("Banner removed!");
+  };
+
+  const toggleBannerActive = (id: string, isActive: boolean) => {
+    const updatedBanners = (settings?.dashboardBanners || []).map((b: any) => b.id === id ? { ...b, isActive } : b);
+    const newSettings = { ...settings, dashboardBanners: updatedBanners };
+    setSettings(newSettings);
+    saveSettingsToAPI(newSettings);
+  };
+
   const handleLetterheadUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1415,6 +1504,161 @@ export default function SettingsPage() {
                     />
                   </div>
                 </div>
+              </div>
+            </Card>
+          )}
+
+          {canViewSettings && (
+            <Card className="p-6 border-border shadow-sm mb-6">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-brand-light rounded-lg">
+                    <ImageIcon className="w-5 h-5 text-brand-teal" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-lg text-foreground">Dashboard Banners</h3>
+                    <p className="text-xs text-muted-foreground">Manage image banners displayed in the dashboard carousel.</p>
+                  </div>
+                </div>
+                {canEditSettings && (
+                  <Dialog open={isAddBannerModalOpen} onOpenChange={(val) => {
+                    if (!val) {
+                      setNewBanner({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "" });
+                      setEditingBannerId(null);
+                    }
+                    setIsAddBannerModalOpen(val);
+                  }}>
+                    <DialogTrigger asChild>
+                      <Button size="sm" className="bg-brand-teal hover:bg-brand-teal-light text-white h-9">
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Banner
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[500px]">
+                      <DialogHeader>
+                        <DialogTitle>{editingBannerId ? "Edit Dashboard Banner" : "Add Dashboard Banner"}</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                          <Label>Banner Image <span className="text-red-500">*</span></Label>
+                          {newBanner.imageUrl ? (
+                            <div className="relative border rounded-lg p-2 bg-slate-50">
+                              <img src={newBanner.imageUrl.startsWith('http') ? newBanner.imageUrl : `${API_URL}${newBanner.imageUrl}`} alt="Preview" className="h-32 w-full object-cover rounded-md" />
+                              <Button 
+                                variant="destructive" 
+                                size="icon" 
+                                className="absolute top-4 right-4 h-6 w-6 rounded-full"
+                                onClick={() => setNewBanner({...newBanner, imageUrl: ""})}
+                              >
+                                <X className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 flex flex-col items-center justify-center bg-slate-50">
+                              <label className="cursor-pointer flex flex-col items-center">
+                                <Upload className="w-6 h-6 text-slate-400 mb-2" />
+                                <span className="text-sm font-semibold text-brand-teal">Upload Image</span>
+                                <input type="file" accept="image/*" className="hidden" onChange={handleBannerUpload} disabled={isUploadingBanner} />
+                              </label>
+                              {isUploadingBanner && <p className="text-xs text-muted-foreground mt-2 flex items-center"><Loader2 className="w-3 h-3 animate-spin mr-1"/> Uploading...</p>}
+                            </div>
+                          )}
+                         </div>
+                        <div className="space-y-2">
+                          <Label>Heading (Optional)</Label>
+                          <Input placeholder="Enter announcement heading..." value={newBanner.heading || ""} onChange={e => setNewBanner({...newBanner, heading: e.target.value})} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Start Date (Optional)</Label>
+                            <Input type="date" value={newBanner.startDate} onChange={e => setNewBanner({...newBanner, startDate: e.target.value})} />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>End Date (Optional)</Label>
+                            <Input type="date" value={newBanner.endDate} onChange={e => setNewBanner({...newBanner, endDate: e.target.value})} />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>External URL (Optional)</Label>
+                          <Input placeholder="https://example.com" value={newBanner.externalUrl} onChange={e => setNewBanner({...newBanner, externalUrl: e.target.value})} />
+                        </div>
+                        <div className="flex justify-end pt-4 gap-2">
+                          <Button variant="outline" onClick={() => setIsAddBannerModalOpen(false)}>Cancel</Button>
+                          <Button className="bg-brand-teal hover:bg-brand-teal-light text-white" onClick={addDashboardBanner}>
+                            {editingBannerId ? "Save Changes" : "Add to List"}
+                          </Button>
+                        </div>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                )}
+              </div>
+
+              <div className="space-y-4">
+                {(settings?.dashboardBanners || []).length > 0 ? (
+                  (settings?.dashboardBanners || []).map((banner: any) => (
+                    <div key={banner.id} className="flex flex-col sm:flex-row items-center gap-4 p-4 border rounded-xl bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                      <div className="w-full sm:w-32 h-20 rounded-lg overflow-hidden border shrink-0 bg-white flex items-center justify-center">
+                        <img src={banner.imageUrl.startsWith('http') ? banner.imageUrl : `${API_URL}${banner.imageUrl}`} alt="Banner" className="w-full h-full object-cover" />
+                      </div>
+                      <div className="flex-1 w-full space-y-1">
+                        {banner.heading && (
+                          <h4 className="text-sm font-bold text-slate-800 mb-1">{banner.heading}</h4>
+                        )}
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-3 h-3 text-slate-400" />
+                          <span className="text-xs font-semibold text-slate-700">
+                            {banner.startDate || banner.endDate 
+                              ? `${banner.startDate || 'Any'} to ${banner.endDate || 'Any'}`
+                              : 'Always Active'}
+                          </span>
+                        </div>
+                        {banner.externalUrl && (
+                          <div className="flex items-center gap-2 text-xs text-brand-teal">
+                            <LinkIcon className="w-3 h-3" />
+                            <span className="truncate max-w-[200px] block">{banner.externalUrl}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
+                        <div className="flex items-center gap-2">
+                          <Label className="text-xs font-semibold cursor-pointer">Active</Label>
+                          <Switch checked={banner.isActive} onCheckedChange={(c) => toggleBannerActive(banner.id, c)} disabled={!canEditSettings} />
+                        </div>
+                        {canEditSettings && (
+                          <div className="flex items-center gap-1">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="text-brand-teal hover:text-brand-teal hover:bg-brand-light h-8 w-8" 
+                              onClick={() => {
+                                setNewBanner({
+                                  imageUrl: banner.imageUrl || "",
+                                  startDate: banner.startDate || "",
+                                  endDate: banner.endDate || "",
+                                  externalUrl: banner.externalUrl || "",
+                                  isActive: banner.isActive ?? true,
+                                  heading: banner.heading || ""
+                                });
+                                setEditingBannerId(banner.id);
+                                setIsAddBannerModalOpen(true);
+                              }}
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600 hover:bg-red-50 h-8 w-8" onClick={() => removeDashboardBanner(banner.id)}>
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8 border-2 border-dashed rounded-xl bg-slate-50 text-slate-500 text-sm">
+                    No dashboard banners configured.
+                  </div>
+                )}
               </div>
             </Card>
           )}

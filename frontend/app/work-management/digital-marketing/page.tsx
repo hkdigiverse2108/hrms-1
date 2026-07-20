@@ -2588,68 +2588,8 @@ export default function MarketingReportsPage() {
         }}
         className="w-full flex-1 flex flex-col min-h-0"
       >
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
-          <TabsList className="bg-slate-100 p-1 rounded-lg">
-            <TabsTrigger
-              value="todays-work"
-              className="px-6 py-2 rounded-md transition-all"
-            >
-              Today's Work
-            </TabsTrigger>
-            <TabsTrigger
-              value="daily"
-              className="px-6 py-2 rounded-md transition-all"
-            >
-              Daily Reports
-            </TabsTrigger>
-            <TabsTrigger
-              value="monthly"
-              className="px-6 py-2 rounded-md transition-all"
-            >
-              Monthly Reports
-            </TabsTrigger>
-            
-            <TabsTrigger
-              value="tasks"
-              className="px-6 py-2 rounded-md transition-all"
-            >
-              Creative Tasks
-            </TabsTrigger>
-            <TabsTrigger
-              value="other-work"
-              className="px-6 py-2 rounded-md transition-all"
-            >
-              Other Work
-            </TabsTrigger>
-            {user?.role?.toLowerCase() === 'admin' && (
-              <TabsTrigger
-                value="analysis"
-                className="px-6 py-2 rounded-md transition-all"
-              >
-                Analysis
-              </TabsTrigger>
-            )}
-            {(user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'team leader' || user?.designation?.toLowerCase() === 'team leader') && (
-              <TabsTrigger
-                value="all_clients"
-                className="px-6 py-2 rounded-md transition-all"
-              >
-                All Clients
-              </TabsTrigger>
-            )}
-            {!isAdmin && (
-              <TabsTrigger
-                value="progress"
-                className="px-6 py-2 rounded-md transition-all"
-              >
-                Daily Progress
-              </TabsTrigger>
-            )}
-          </TabsList>
-        </div>
-
         {activeTab !== "clients" && activeTab !== "tasks" && activeTab !== "analysis" && activeTab !== "progress" && activeTab !== "all_clients" && !isDailyFullScreen && (
-          <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-xl border shadow-sm mb-6">
+          <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-xl border shadow-sm mb-4">
             <div className="flex-1 min-w-[200px] max-w-md space-y-1.5">
               <Label className="text-xs text-slate-500">
                 Search Campaign, Project or Client
@@ -2877,6 +2817,66 @@ export default function MarketingReportsPage() {
             </div>
           </div>
         )}
+
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+          <TabsList className="inline-flex items-center gap-1 w-max bg-slate-100/70 p-1 rounded-xl shadow-inner border border-slate-200/60 h-auto">
+            <TabsTrigger
+              value="todays-work"
+              className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto"
+            >
+              Today's Work
+            </TabsTrigger>
+            <TabsTrigger
+              value="daily"
+              className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto"
+            >
+              Daily Reports
+            </TabsTrigger>
+            <TabsTrigger
+              value="monthly"
+              className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto"
+            >
+              Monthly Reports
+            </TabsTrigger>
+            
+            <TabsTrigger
+              value="tasks"
+              className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto"
+            >
+              Creative Tasks
+            </TabsTrigger>
+            <TabsTrigger
+              value="other-work"
+              className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto"
+            >
+              Other Work
+            </TabsTrigger>
+            {user?.role?.toLowerCase() === 'admin' && (
+              <TabsTrigger
+                value="analysis"
+                className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto"
+              >
+                Analysis
+              </TabsTrigger>
+            )}
+            {(user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'team leader' || user?.designation?.toLowerCase() === 'team leader') && (
+              <TabsTrigger
+                value="all_clients"
+                className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto"
+              >
+                All Clients
+              </TabsTrigger>
+            )}
+            {!isAdmin && (
+              <TabsTrigger
+                value="progress"
+                className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto"
+              >
+                Daily Progress
+              </TabsTrigger>
+            )}
+          </TabsList>
+        </div>
 
                 
         <TabsContent
