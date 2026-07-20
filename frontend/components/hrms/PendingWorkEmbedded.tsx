@@ -72,7 +72,6 @@ export function PendingWorkEmbedded({
   const [otherWorkEntries, setOtherWorkEntries] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
   const [clientProjects, setClientProjects] = useState<Record<string, any>>({});
-  const [projects, setProjects] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -377,10 +376,9 @@ export function PendingWorkEmbedded({
       }
       
       if (pRes.ok) {
-        const fetchedProjects = await pRes.json();
-        setProjects(fetchedProjects);
+        const projects = await pRes.json();
         const projectMap: Record<string, any> = {};
-        fetchedProjects.forEach((p: any) => {
+        projects.forEach((p: any) => {
           if (p.clientId && p.department === 'Creative') {
             projectMap[p.clientId] = p;
           }
@@ -722,7 +720,7 @@ export function PendingWorkEmbedded({
 
     filteredTasks.sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
     return filteredTasks;
-  }, [entries, otherWorkEntries, clients, clientProjects, filterProject, filterTaskType, filterAssigner, filterAssignee, searchQuery, filterDate, type, employees, workScope, projects]);
+  }, [entries, otherWorkEntries, clients, clientProjects, filterProject, filterTaskType, filterAssigner, filterAssignee, searchQuery, filterDate, type, employees, workScope]);
 
   const allPendingTasks = useMemo(() => {
     if (filterStage === 'all') return preFilteredTasks;
