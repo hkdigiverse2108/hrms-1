@@ -833,7 +833,7 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
->>>>>>> 9507d648f983c17a15eff670964ba640b362de65
+
       )}
  
       <RequestPunchOutDialog 
@@ -851,9 +851,6 @@ export default function DashboardPage() {
           setIsRequestDialogOpen(false);
           setMissingPunchOutDate(null);
           punchCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }}
-        onSubmitSuccess={() => {
-          fetchStatus();
         }}
       />
       <PunchInModal
@@ -1525,7 +1522,6 @@ function EmployeeView({
                 <Button variant="outline" size="sm" onClick={() => setIsRequestDialogOpen(true)} className="border-amber-300 text-amber-700 hover:bg-amber-100">Resolve Now</Button>
               </div>
             )}
-
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-0 border border-brand-teal/10 rounded-xl overflow-hidden bg-white">
                {[
                  { label: 'First In', value: punchInTime, highlight: false },

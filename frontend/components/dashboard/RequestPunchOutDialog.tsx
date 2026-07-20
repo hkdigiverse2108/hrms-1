@@ -76,6 +76,7 @@ export function RequestPunchOutDialog({
         diffMins = endObj.diff(startObj, 'minute');
         if (diffMins < 0) diffMins = 0;
       }
+
       const res = await fetch(`${API_URL}/time-recovery`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
