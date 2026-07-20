@@ -2,10 +2,27 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   focusWindow: () => ipcRenderer.send('focus-window'),
+  openExternal: (url) => ipcRenderer.send('open-external', url),
+  downloadAndOpen: (url, filename) => ipcRenderer.invoke('download-and-open', { url, filename }),
+  saveAndOpen: (filename, arrayBuffer) => ipcRenderer.invoke('save-and-open', { filename, arrayBuffer }),
+  saveFile: (filename, arrayBuffer) => ipcRenderer.invoke('save-file', { filename, arrayBuffer }),
   saveSession: (sessionData) => ipcRenderer.send('save-session', sessionData),
   clearSession: () => ipcRenderer.send('clear-session'),
   getSession: () => ipcRenderer.invoke('get-session'),
-  showNotification: (title, options) => ipcRenderer.send('show-notification', title, options)
+  showNotification: (title, options) => ipcRenderer.send('show-notification', title, options),
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  startUpdate: (downloadUrl) => ipcRenderer.invoke('start-update', downloadUrl),
+  updateBadge: (count, dataUrl) => ipcRenderer.send('update-badge', count, dataUrl),
+  onWindowFocusChange: (callback) => {
+    const subscription = (event, isFocused) => callback(isFocused);
+    ipcRenderer.on('window-focus-change', subscription);
+    return () => ipcRenderer.removeListener('window-focus-change', subscription);
+  },
+  onUpdateProgress: (callback) => {
+    const subscription = (event, progress) => callback(progress);
+    ipcRenderer.on('update-progress', subscription);
+    return () => ipcRenderer.removeListener('update-progress', subscription);
+  }
 });
 
 ipcRenderer.on('navigate-to-url', (event, url) => {

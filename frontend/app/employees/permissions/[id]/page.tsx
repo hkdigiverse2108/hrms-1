@@ -65,38 +65,45 @@ const PERMISSION_GROUPS = [
     icon: Briefcase,
     modules: [
       { moduleName: 'projects', displayName: 'Projects', tabUrl: '/work-management/projects' },
-      { moduleName: 'tasks', displayName: 'Tasks', tabUrl: '/work-management/tasks' },
-      { moduleName: 'personal-tasks', displayName: 'Personal Tasks', tabUrl: '/task' },
+      { moduleName: 'tasks', displayName: 'Development', tabUrl: '/work-management/development' },
+      { moduleName: 'personal-tasks', displayName: 'Tasks', tabUrl: '/tasks' },
       { moduleName: 'daily-progress', displayName: 'Daily Progress', tabUrl: '/work-management/daily-progress' },
+      { moduleName: 'work-logs', displayName: 'Work Logs', tabUrl: '/work-management/work-logs' },
       { moduleName: 'sales', displayName: 'Sales', tabUrl: '/work-management/sales' },
       { moduleName: 'clients', displayName: 'Clients', tabUrl: '/work-management/clients' },
-      { moduleName: 'marketing', displayName: 'Marketing Reports', tabUrl: '/work-management/marketing-reports' },
+      { moduleName: 'marketing', displayName: 'Digital Marketing', tabUrl: '/work-management/digital-marketing' },
+      { moduleName: 'creative', displayName: 'Social Media Management', tabUrl: '/work-management/smm' },
+      { moduleName: 'research', displayName: 'Research', tabUrl: '/work-management/research' },
     ]
   },
   {
     name: 'Workspace',
     icon: MonitorPlay,
     modules: [
-      { moduleName: 'blank-canvas', displayName: 'Blank Canvas', tabUrl: '/workspace/blank-canvas' },
       { moduleName: 'seating-arrangement', displayName: 'Seating Arrangement', tabUrl: '/workspace/seating' },
       { moduleName: 'resource-management', displayName: 'Resource Management', tabUrl: '/workspace/resource' },
+      { moduleName: 'gallery', displayName: 'Gallery', tabUrl: '/workspace/gallery' },
     ]
   },
   {
     name: 'More',
     icon: MessagesSquare,
     modules: [
-      { moduleName: 'remarks', displayName: 'Remarks', tabUrl: '/remarks' },
-      { moduleName: 'review', displayName: 'Review', tabUrl: '/review' },
+      { moduleName: 'remarks', displayName: 'Penalty', tabUrl: '/penalty' },
+      { moduleName: 'review', displayName: 'Remarks', tabUrl: '/remarks' },
       { moduleName: 'invoice', displayName: 'Invoice', tabUrl: '/invoice' },
       { moduleName: 'chat', displayName: 'Chat', tabUrl: '/chat' },
       { moduleName: 'activity-tracker', displayName: 'Activity Tracker', tabUrl: '/activity-tracker' },
+      { moduleName: 'activity-logs', displayName: 'Activity Logs', tabUrl: '/activity-logs' },
+      { moduleName: 'training', displayName: 'Course Library', tabUrl: '/training' },
+      { moduleName: 'admin-courses', displayName: 'Manage Courses', tabUrl: '/admin/courses' },
     ]
   },
   {
     name: 'System',
     icon: Settings,
     modules: [
+      { moduleName: 'access-control', displayName: 'Access Control', tabUrl: '/employees/permissions' },
       { moduleName: 'settings', displayName: 'Settings', tabUrl: '/settings' },
     ]
   },
@@ -159,7 +166,7 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
         if (data && data.permissions) {
           const merged = DEFAULT_MODULES.map(def => {
             const existing = data.permissions.find((p: any) => p.moduleName === def.moduleName)
-            return existing || { ...def, canAdd: false, canEdit: false, canDelete: false, canView: false }
+            return existing ? { ...existing, displayName: def.displayName, tabUrl: def.tabUrl } : { ...def, canAdd: false, canEdit: false, canDelete: false, canView: false }
           })
           setPermissions(merged)
           setActivePresetId(data.presetId || null)
@@ -245,9 +252,14 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
   const handleSave = async () => {
     setSaving(true)
     try {
+      const token = localStorage.getItem('token')
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
       const response = await fetch(`${API_URL}/user-permissions/${employeeId}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ permissions, presetId: activePresetId }),
       })
       if (response.ok) {
@@ -275,7 +287,8 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
   const filteredEmployees = employees.filter(emp => 
     (emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     emp.employeeId?.toLowerCase().includes(searchTerm.toLowerCase())) &&
-    emp.role?.toLowerCase() !== 'admin'
+    emp.role?.toLowerCase() !== 'admin' &&
+    emp.status?.toLowerCase() !== 'inactive'
   )
 
   return (
@@ -468,10 +481,10 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
                           return (
                             <tr key={m.moduleName} className="hover:bg-slate-50/30 transition-colors group">
                               <td className="px-6 py-4">
-                                <div className="font-bold text-slate-900 group-hover:text-brand-teal transition-colors">{p.displayName}</div>
+                                <div className="font-bold text-slate-900 group-hover:text-brand-teal transition-colors">{m.displayName}</div>
                               </td>
                               <td className="px-6 py-4">
-                                <div className="text-[10px] text-slate-400 font-mono bg-slate-50 px-2 py-1 rounded inline-block">{p.tabUrl}</div>
+                                <div className="text-[10px] text-slate-400 font-mono bg-slate-50 px-2 py-1 rounded inline-block">{m.tabUrl}</div>
                               </td>
                               <td className="px-6 py-4 text-center">
                                 <Checkbox 

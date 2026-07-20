@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Map, Layout, Sparkles, Package, Plus, Trash2 } from "lucide-react";
+import { Map, Package, Plus, Trash2, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApi } from "@/hooks/useApi";
 import { useUser } from "@/hooks/useUser";
@@ -223,6 +223,66 @@ const getEmployeeAssets = (employeeName: string, assets: any[]) => {
   });
 };
 
+const isFutureJoiner = (emp: any) => {
+  if (!emp || !emp.joinDate) return false;
+  let joinTime = 0;
+  const dateStr = emp.joinDate;
+  if (dateStr.includes('-')) {
+    const parts = dateStr.split('-');
+    if (parts[0].length === 4) {
+      joinTime = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])).getTime();
+    } else if (parts[2].length === 4) {
+      joinTime = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0])).getTime();
+    }
+  } else if (dateStr.includes('/')) {
+    const parts = dateStr.split('/');
+    if (parts[0].length === 4) {
+      joinTime = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])).getTime();
+    } else if (parts[2].length === 4) {
+      joinTime = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0])).getTime();
+    }
+  } else {
+    joinTime = new Date(dateStr).getTime();
+  }
+  
+  if (isNaN(joinTime)) return false;
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return joinTime > today.getTime();
+};
+
+const formatJoinDate = (dateStr: string) => {
+  if (!dateStr) return '';
+  try {
+    let d = new Date(dateStr);
+    if (isNaN(d.getTime())) {
+      if (dateStr.includes('-')) {
+        const parts = dateStr.split('-');
+        if (parts[0].length === 4) {
+          d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        } else if (parts[2].length === 4) {
+          d = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+        }
+      } else if (dateStr.includes('/')) {
+        const parts = dateStr.split('/');
+        if (parts[0].length === 4) {
+          d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        } else if (parts[2].length === 4) {
+          d = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+        }
+      }
+    }
+    if (!isNaN(d.getTime())) {
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${day}-${month}-${year}`;
+    }
+  } catch (e) {}
+  return dateStr;
+};
+
 const sanitizeDesks = (desks: any[]): Desk[] => {
   return desks.map(d => {
     let pcs = d.pcs;
@@ -242,8 +302,6 @@ const sanitizeDesks = (desks: any[]): Desk[] => {
 export default function SeatingArrangementPage() {
   const { data, isLoading } = useApi();
   const { user } = useUser();
-  const [viewMode, setViewMode] = useState<"standard" | "custom">("standard");
-  const [customImage, setCustomImage] = useState<string | null>(null);
   const [desksState, setDesksState] = useState<Desk[]>(sanitizeDesks(defaultDesks));
 
   // Layout Editor states
@@ -294,11 +352,6 @@ export default function SeatingArrangementPage() {
   const isAdminOrHR = user?.role?.toLowerCase() === "admin" || user?.role?.toLowerCase() === "hr";
 
   useEffect(() => {
-    const saved = localStorage.getItem("workspace_custom_layout");
-    if (saved) {
-      setCustomImage(saved);
-    }
-
     // Fetch seating arrangement from global database for all-employee sync
     const fetchSeatingArrangement = async () => {
       // Pause updating state if admin has selection/modal active or editing layout
@@ -643,30 +696,8 @@ export default function SeatingArrangementPage() {
 
   return (
     <div className="space-y-6 h-[calc(100vh-8rem)] flex flex-col">
-      {/* View Toggle */}
       <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-lg border border-border w-fit">
-          <Button
-            variant={viewMode === "standard" ? "default" : "ghost"}
-            size="sm"
-            onClick={() => setViewMode("standard")}
-            className={cn("gap-2", viewMode === "standard" && "bg-brand-teal hover:bg-brand-teal-light")}
-          >
-            <Map className="w-4 h-4" />
-            Standard Map
-          </Button>
-          <Button
-            variant={viewMode === "custom" ? "default" : "ghost"}
-            size="sm"
-            onClick={() => setViewMode("custom")}
-            className={cn("gap-2", viewMode === "custom" && "bg-brand-teal hover:bg-brand-teal-light")}
-          >
-            <Layout className="w-4 h-4" />
-            Custom Layout
-          </Button>
-        </div>
-
-        {isAdminOrHR && viewMode === "standard" && (
+        {isAdminOrHR && (
           <div className="flex items-center gap-3">
             <Button
               variant={isLayoutEditMode ? "default" : "outline"}
@@ -714,13 +745,6 @@ export default function SeatingArrangementPage() {
             )}
           </div>
         )}
-
-        {viewMode === "custom" && customImage && (
-          <div className="flex items-center gap-2 text-brand-teal font-medium text-sm bg-brand-light px-3 py-1.5 rounded-full animate-pulse">
-            <Sparkles className="w-4 h-4" />
-            Live from Blank Canvas
-          </div>
-        )}
       </div>
 
       <div className="flex-1 bg-[#e4dfcd] rounded-xl overflow-hidden shadow-sm relative min-h-[600px] border border-border">
@@ -731,7 +755,7 @@ export default function SeatingArrangementPage() {
               <p className="text-slate-600 font-bold text-sm">Loading Seating Layout...</p>
             </div>
           </div>
-        ) : viewMode === "standard" ? (
+        ) : (
           <>
             {/* Legend */}
             <div className="absolute top-4 right-6 bg-white/90 backdrop-blur-md px-3 py-2 rounded-lg shadow-md flex flex-col gap-2 z-[100] text-sm font-medium border border-border/50">
@@ -756,6 +780,10 @@ export default function SeatingArrangementPage() {
               <div className="flex items-center gap-2">
                 <div className="w-6 h-4 bg-slate-900 rounded-sm"></div>
                 <span>Allocated Seats</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-4 bg-emerald-700 rounded-sm ring-2 ring-yellow-400"></div>
+                <span>Future Joining</span>
               </div>
             </div>
 
@@ -838,6 +866,7 @@ export default function SeatingArrangementPage() {
                       const employee = getSeatEmployee(seat, data?.employees || [], desk.id, desksState);
                       const empAssets = employee ? getEmployeeAssets(employee.name || `${employee.firstName} ${employee.lastName}`, data?.assets || []) : [];
                       const isMySeat = checkIsMySeat(employee);
+                      const isFutureJoin = isFutureJoiner(employee);
 
                       // Smart positioning to avoid boundary clipping
                       const isLeftEdge = seat.id === 't1';
@@ -882,7 +911,8 @@ export default function SeatingArrangementPage() {
                             "absolute w-[12%] h-[30%] -top-[35%] rounded-t-2xl shadow-sm transition-all hover:-translate-y-1 cursor-pointer group z-20 hover:z-50",
                             seat.available 
                               ? 'bg-emerald-700 hover:bg-emerald-600' 
-                              : 'bg-slate-900 hover:bg-slate-800'
+                              : (isFutureJoin ? 'bg-emerald-700 hover:bg-emerald-600' : 'bg-slate-900 hover:bg-slate-800'),
+                            isFutureJoin && "ring-2 ring-yellow-400 ring-offset-1"
                           )}
                           style={{ left: `calc(${seat.x}% - 6%)` }}
                         >
@@ -924,6 +954,12 @@ export default function SeatingArrangementPage() {
                                     </p>
                                     <p className="text-[10px] font-bold text-brand-teal/80 uppercase tracking-wider truncate">{employee.designation}</p>
                                     <p className="text-[10px] text-muted-foreground truncate">{employee.department}</p>
+                                    {isFutureJoin && (
+                                      <p className="text-[10px] text-amber-600 font-extrabold flex items-center gap-1 mt-1 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/50 w-fit">
+                                        <Calendar className="w-3.5 h-3.5" />
+                                        Joining: {formatJoinDate(employee.joinDate)}
+                                      </p>
+                                    )}
                                   </div>
                                 </div>
                                 
@@ -962,6 +998,7 @@ export default function SeatingArrangementPage() {
                       const employee = getSeatEmployee(seat, data?.employees || [], desk.id, desksState);
                       const empAssets = employee ? getEmployeeAssets(employee.name || `${employee.firstName} ${employee.lastName}`, data?.assets || []) : [];
                       const isMySeat = checkIsMySeat(employee);
+                      const isFutureJoin = isFutureJoiner(employee);
 
                       // Smart positioning to avoid boundary clipping
                       const isLeftEdge = seat.id === 'b1';
@@ -1006,7 +1043,8 @@ export default function SeatingArrangementPage() {
                             "absolute w-[12%] h-[30%] -bottom-[35%] rounded-b-2xl shadow-sm transition-all hover:translate-y-1 cursor-pointer group z-20 hover:z-50",
                             seat.available 
                               ? 'bg-emerald-700 hover:bg-emerald-600' 
-                              : 'bg-slate-900 hover:bg-slate-800'
+                              : (isFutureJoin ? 'bg-emerald-700 hover:bg-emerald-600' : 'bg-slate-900 hover:bg-slate-800'),
+                            isFutureJoin && "ring-2 ring-yellow-400 ring-offset-1"
                           )}
                           style={{ left: `calc(${seat.x}% - 6%)` }}
                         >
@@ -1048,6 +1086,12 @@ export default function SeatingArrangementPage() {
                                     </p>
                                     <p className="text-[10px] font-bold text-brand-teal/80 uppercase tracking-wider truncate">{employee.designation}</p>
                                     <p className="text-[10px] text-muted-foreground truncate">{employee.department}</p>
+                                    {isFutureJoin && (
+                                      <p className="text-[10px] text-amber-600 font-extrabold flex items-center gap-1 mt-1 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/50 w-fit">
+                                        <Calendar className="w-3.5 h-3.5" />
+                                        Joining: {formatJoinDate(employee.joinDate)}
+                                      </p>
+                                    )}
                                   </div>
                                 </div>
                                 
@@ -1095,29 +1139,6 @@ export default function SeatingArrangementPage() {
               </div>
             </div>
           </>
-        ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center bg-white overflow-auto p-8">
-            {customImage ? (
-              <div className="relative group max-w-full">
-                <img 
-                  src={customImage} 
-                  alt="Custom Workspace Layout" 
-                  className="shadow-2xl rounded-lg border border-border max-w-full h-auto"
-                />
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors pointer-events-none rounded-lg" />
-              </div>
-            ) : (
-              <div className="text-center space-y-4">
-                <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto text-slate-300">
-                  <Layout className="w-10 h-10" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-slate-800">No Custom Layout Found</h3>
-                  <p className="text-slate-500 max-w-xs mx-auto">Create and publish your layout from the Blank Canvas to see it here.</p>
-                </div>
-              </div>
-            )}
-          </div>
         )}
       </div>
 

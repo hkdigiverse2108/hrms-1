@@ -26,7 +26,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   // Setup global fetch interceptor to inject Authorization header
   useEffect(() => {
     const originalFetch = window.fetch;
-    window.fetch = async (...args) => {
+    window.fetch = function (...args) {
       const [resource, config] = args;
       
       if (typeof resource === 'string' && resource.startsWith(API_URL)) {
@@ -152,6 +152,29 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     };
 
     initializeUser();
+  }, []);
+
+  useEffect(() => {
+    const handleLocalUserUpdate = () => {
+      const stored = localStorage.getItem('user');
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          setUser(prev => {
+            if (JSON.stringify(prev) !== stored) {
+              return parsed;
+            }
+            return prev;
+          });
+        } catch (e) {
+          setUser(null);
+        }
+      } else {
+        setUser(null);
+      }
+    };
+    window.addEventListener('local-user-updated', handleLocalUserUpdate);
+    return () => window.removeEventListener('local-user-updated', handleLocalUserUpdate);
   }, []);
   
   const login = (userData: User & { token?: string }) => {

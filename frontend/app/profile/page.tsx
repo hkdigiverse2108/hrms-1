@@ -32,9 +32,27 @@ import {
   Banknote, 
   Clock, 
   X,
-  Save
+  Save,
+  Eye,
+  EyeOff,
+  Upload,
+  Trash2,
+  PenTool,
+  Plus
 } from 'lucide-react'
 import { API_URL, getAvatarUrl } from '@/lib/config'
+import { QuickActionsWidget } from '@/components/dashboard/QuickActionsWidget'
+import { useUserContext } from "@/context/UserContext";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { toast } from 'sonner'
+
+import { TIME_OPTIONS } from "@/lib/constants";
 
 // Utility helpers for time input conversions
 function convertTo24Hour(timeStr: string): string {
@@ -80,10 +98,98 @@ export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [isUploadingSignature, setIsUploadingSignature] = useState(false)
   const [activeTab, setActiveTab] = useState<'personal' | 'professional' | 'bank_family'>('personal')
   const [formData, setFormData] = useState<any>({})
   const [focusedField, setFocusedField] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleSignatureUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !user?.id) return
+
+    setIsUploadingSignature(true)
+    try {
+      const fileFormData = new FormData()
+      fileFormData.append('file', file)
+
+      const response = await fetch(`${API_URL}/upload`, {
+        method: 'POST',
+        body: fileFormData,
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to upload signature')
+      }
+
+      const data = await response.json()
+      
+      const updateRes = await fetch(`${API_URL}/employees/${user.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ signatureUrl: data.url })
+      })
+
+      if (updateRes.ok) {
+        const updatedUser = await updateRes.json()
+        const pRes = await fetch(`${API_URL}/user-permissions/${user.id}`)
+        const pData = pRes.ok ? await pRes.json() : { permissions: [] }
+        const finalUser = {
+          ...updatedUser,
+          permissions: pData?.permissions || []
+        }
+        setUser(finalUser)
+        localStorage.setItem('user', JSON.stringify(finalUser))
+        toast.success("Signature uploaded successfully!")
+      } else {
+        toast.error("Failed to update profile with signature.")
+      }
+    } catch (error) {
+      console.error('Signature upload error:', error)
+      toast.error("An error occurred during upload.")
+    } finally {
+      setIsUploadingSignature(false)
+    }
+  }
+
+  const handleRemoveSignature = async () => {
+    if (!user?.id) return
+    setIsUploadingSignature(true)
+    try {
+      const updateRes = await fetch(`${API_URL}/employees/${user.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ signatureUrl: null })
+      })
+
+      if (updateRes.ok) {
+        const updatedUser = await updateRes.json()
+        const pRes = await fetch(`${API_URL}/user-permissions/${user.id}`)
+        const pData = pRes.ok ? await pRes.json() : { permissions: [] }
+        const finalUser = {
+          ...updatedUser,
+          permissions: pData?.permissions || []
+        }
+        setUser(finalUser)
+        localStorage.setItem('user', JSON.stringify(finalUser))
+        toast.success("Signature removed successfully!")
+      } else {
+        toast.error("Failed to remove signature.")
+      }
+    } catch (error) {
+      console.error('Remove signature error:', error)
+      toast.error("An error occurred.")
+    } finally {
+      setIsUploadingSignature(false)
+    }
+  }
+
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [isChangingPassword, setIsChangingPassword] = useState(false)
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   const departments = apiData?.departments || []
   const designations = apiData?.designations || []
@@ -199,9 +305,15 @@ export default function ProfilePage() {
         payload.endTime = convertTo12Hour(payload.endTime)
       }
 
-      if (payload.salary) {
-        payload.salary = parseFloat(payload.salary)
+      if (payload.salary === "" || payload.salary === undefined || payload.salary === null) {
+        payload.salary = null
+      } else {
+        const parsed = parseFloat(payload.salary)
+        payload.salary = isNaN(parsed) ? null : parsed
       }
+
+      if (payload.dob === "") payload.dob = null
+      if (payload.joinDate === "") payload.joinDate = null
 
       const response = await fetch(`${API_URL}/employees/${user.id}`, {
         method: 'PUT',
@@ -231,6 +343,43 @@ export default function ProfilePage() {
       console.error('Update error:', error)
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (newPassword !== confirmPassword) {
+      toast.error('Passwords do not match')
+      return
+    }
+    if (newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters')
+      return
+    }
+    
+    setIsChangingPassword(true)
+    try {
+      const response = await fetch(`${API_URL}/employees/${user.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ password: newPassword }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update password')
+      }
+      
+      toast.success('Password changed successfully')
+      setIsPasswordModalOpen(false)
+      setNewPassword('')
+      setConfirmPassword('')
+    } catch (error) {
+      console.error('Password update error:', error)
+      toast.error('Failed to update password')
+    } finally {
+      setIsChangingPassword(false)
     }
   }
 
@@ -302,8 +451,8 @@ export default function ProfilePage() {
       <form onSubmit={handleSave} className="grid gap-4 lg:grid-cols-4 w-full items-stretch">
         {/* Left Column - Profile Card */}
         <div className="lg:col-span-1">
-          <Card className="min-h-[500px] lg:h-[calc(100vh-180px)] border border-gray-100 shadow-sm rounded-xl overflow-hidden bg-white">
-            <CardContent className="pt-8 pb-8 flex flex-col items-center h-full px-6 space-y-6">
+          <Card className="min-h-[500px] lg:h-[calc(100vh-180px)] border border-gray-100 shadow-sm rounded-xl bg-white flex flex-col">
+            <CardContent className="pt-8 pb-8 flex flex-col items-center flex-1 px-6 space-y-6 overflow-y-auto custom-scrollbar">
               {/* Top Profile block */}
               <div className="flex flex-col items-center text-center">
                 <div className="relative group cursor-pointer" onClick={handleAvatarClick} title="Click to upload a new profile photo">
@@ -361,6 +510,94 @@ export default function ProfilePage() {
                     <Building2 className="h-3.5 w-3.5 text-gray-400" />
                   </div>
                   <span className="font-semibold text-[11px]">{user.department}</span>
+                </div>
+                
+                <div className="pt-2 w-full">
+                  <Button 
+                    type="button"
+                    onClick={() => setIsPasswordModalOpen(true)}
+                    variant="outline"
+                    className="w-full text-brand-teal border-brand-teal/20 hover:bg-brand-teal/5 font-bold h-10 text-xs rounded-xl transition-all"
+                  >
+                    <Lock className="h-4 w-4 mr-2" />
+                    Change Password
+                  </Button>
+                </div>
+              </div>
+
+              {/* Signature block */}
+              <div className="w-full bg-gray-50/50 border border-gray-100 rounded-xl p-4 space-y-3">
+                <div className="flex items-center gap-2 text-xs font-bold text-gray-700">
+                  <PenTool className="h-3.5 w-3.5 text-brand-teal" />
+                  <span>My Signature</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground leading-normal">
+                  This signature is used when generating dynamic documents like Offer Letters.
+                </p>
+                {user.signatureUrl ? (
+                  <div className="relative border border-slate-200 rounded-lg bg-white p-2 flex justify-center items-center h-16">
+                    <img 
+                      src={user.signatureUrl.startsWith('http') ? user.signatureUrl : `${API_URL}${user.signatureUrl}`} 
+                      alt="My Signature"
+                      className="max-h-12 object-contain"
+                    />
+                  </div>
+                ) : (
+                  <div className="border border-dashed border-slate-300 rounded-lg bg-white h-16 flex items-center justify-center">
+                    <span className="text-[10px] text-slate-400 font-medium">No signature uploaded</span>
+                  </div>
+                )}
+                
+                <div className="flex items-center gap-2 pt-1">
+                  <Button asChild variant="outline" size="sm" className="flex-1 border-brand-teal text-brand-teal text-xs h-8 cursor-pointer hover:bg-brand-teal/5 hover:text-brand-teal">
+                    <label className="cursor-pointer flex items-center justify-center w-full h-full">
+                      {isUploadingSignature ? (
+                        <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                      ) : (
+                        <Upload className="w-3.5 h-3.5 mr-1" />
+                      )}
+                      {user.signatureUrl ? 'Change' : 'Upload'}
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden" 
+                        onChange={handleSignatureUpload} 
+                        disabled={isUploadingSignature} 
+                      />
+                    </label>
+                  </Button>
+                  {user.signatureUrl && (
+                    <Button 
+                      type="button"
+                      variant="destructive" 
+                      size="sm" 
+                      className="h-8 text-xs px-2.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 shadow-none hover:text-red-700"
+                      onClick={handleRemoveSignature}
+                      disabled={isUploadingSignature}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Shortcut configuration block */}
+              <div className="w-full bg-gray-50/50 border border-gray-100 rounded-xl p-4 space-y-3">
+                <div className="flex items-center gap-2 text-xs font-bold text-gray-700">
+                  <Plus className="h-3.5 w-3.5 text-brand-teal" />
+                  <span>Configure Header Shortcuts</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground leading-normal">
+                  Pin your favorite pages and tools to the top header for easy, one-click access.
+                </p>
+                <div className="pt-1">
+                  <QuickActionsWidget 
+                    user={user} 
+                    onlyConfigButton={true}
+                    onUpdate={(newUser) => {
+                      setUser(newUser);
+                    }} 
+                  />
                 </div>
               </div>
             </CardContent>
@@ -582,24 +819,24 @@ export default function ProfilePage() {
                     <ProfileField 
                       label="Start Time" 
                       id="startTime" 
-                      type="time" 
                       value={isEditing ? formData.startTime : (user.startTime ? convertTo12Hour(user.startTime) : '—')} 
                       isEditing={isEditing} 
                       onChange={(v) => handleFieldChange('startTime', v)} 
                       disabled={!isAdmin} 
                       icon={Clock} 
+                      options={TIME_OPTIONS.map(opt => ({ label: opt.label, value: opt.valueNoSec }))}
                       onEditInitiate={handleEditClick}
                       focusedField={focusedField}
                     />
                     <ProfileField 
                       label="End Time" 
                       id="endTime" 
-                      type="time" 
                       value={isEditing ? formData.endTime : (user.endTime ? convertTo12Hour(user.endTime) : '—')} 
                       isEditing={isEditing} 
                       onChange={(v) => handleFieldChange('endTime', v)} 
                       disabled={!isAdmin} 
                       icon={Clock} 
+                      options={TIME_OPTIONS.map(opt => ({ label: opt.label, value: opt.valueNoSec }))}
                       onEditInitiate={handleEditClick}
                       focusedField={focusedField}
                     />
@@ -755,6 +992,74 @@ export default function ProfilePage() {
           </Card>
         </div>
       </form>
+
+      {/* Password Change Dialog */}
+      <Dialog open={isPasswordModalOpen} onOpenChange={setIsPasswordModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Change Password</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleChangePassword} className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label htmlFor="new-password">New Password</Label>
+              <div className="relative">
+                <Input
+                  id="new-password"
+                  type={showNewPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Enter new password"
+                  required
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                >
+                  {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirm-password">Confirm Password</Label>
+              <div className="relative">
+                <Input
+                  id="confirm-password"
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm new password"
+                  required
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                >
+                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+            <DialogFooter className="pt-4">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => setIsPasswordModalOpen(false)}
+                disabled={isChangingPassword}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isChangingPassword} className="bg-brand-teal hover:bg-brand-teal-light text-white">
+                {isChangingPassword ? (
+                  <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Updating...</>
+                ) : 'Update Password'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -795,7 +1100,9 @@ function ProfileField({
           <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5 mb-1.5">
             {Icon && <Icon className="h-3.5 w-3.5 text-gray-300" />}
             {label}
-            <Lock className="h-2.5 w-2.5 text-gray-300 ml-1" title="Restricted field" />
+            <span title="Restricted field">
+              <Lock className="h-2.5 w-2.5 text-gray-300 ml-1" />
+            </span>
           </p>
           <p className="font-semibold text-gray-400 break-words text-xs">{value || '—'}</p>
         </div>
@@ -828,7 +1135,11 @@ function ProfileField({
         {Icon && <Icon className="h-3.5 w-3.5 text-gray-500" />}
         {label}
         {required && <span className="text-red-500 font-bold">*</span>}
-        {disabled && <Lock className="h-2.5 w-2.5 text-muted-foreground ml-1" title="Restricted field" />}
+        {disabled && (
+          <span title="Restricted field">
+            <Lock className="h-2.5 w-2.5 text-muted-foreground ml-1" />
+          </span>
+        )}
       </label>
       
       {options ? (

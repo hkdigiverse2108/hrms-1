@@ -25,6 +25,7 @@ import {
   Landmark,
   Menu as MenuIcon,
   Activity,
+  BookOpen,
 } from "lucide-react";
 import { useUser } from "@/hooks/useUser";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -55,22 +56,33 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
   const { user } = useUser();
   const { checkPermission, isAdmin, permissions } = usePermissions();
   const { totalUnreadCount: unreadChatCount } = useChatContext();
-  const [settings, setSettings] = useState<any>(null);
+  const [settings, setSettings] = useState<any>(() => {
+    // Read cached settings instantly from localStorage (no network wait)
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('system-settings-cache');
+        if (cached) return JSON.parse(cached);
+      } catch {}
+    }
+    return null;
+  });
 
   useEffect(() => {
-    fetchSettings();
-  }, []);
-
-  const fetchSettings = async () => {
-    try {
-      const res = await fetch(`${API_URL}/system-settings`);
-      if (res.ok) {
-        setSettings(await res.json());
+    // Refresh settings in background (deferred to avoid competing with critical calls)
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`${API_URL}/system-settings`);
+        if (res.ok) {
+          const data = await res.json();
+          setSettings(data);
+          localStorage.setItem('system-settings-cache', JSON.stringify(data));
+        }
+      } catch (err) {
+        console.error("Error fetching sidebar settings:", err);
       }
-    } catch (err) {
-      console.error("Error fetching sidebar settings:", err);
-    }
-  };
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
 
 
   const showClients = () => {
@@ -86,21 +98,36 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (isAdmin || checkPermission('projects', 'canView')) {
       workManagementChildren.push(getItem(<Link href="/work-management/projects">Projects</Link>, "/work-management/projects"));
     }
-    if (isAdmin || checkPermission('tasks', 'canView')) {
-      workManagementChildren.push(getItem(<Link href="/work-management/tasks">Tasks</Link>, "/work-management/tasks"));
+    const isTL = Boolean(user && (user.role?.toLowerCase() === 'team leader' || user.designation?.toLowerCase() === 'team leader'));
+    if (isAdmin || isTL || checkPermission('tasks', 'canView') || checkPermission('development', 'canView')) {
+      workManagementChildren.push(getItem(<Link href="/work-management/development">Development</Link>, "/work-management/development"));
     }
-    if (isAdmin || checkPermission('daily-progress', 'canView')) {
+    const isHRUser = user?.role === 'HR' || user?.department?.toLowerCase() === 'hr';
+    if (isAdmin || isHRUser || checkPermission('daily-progress', 'canView')) {
       workManagementChildren.push(getItem(<Link href="/work-management/daily-progress">Daily Progress</Link>, "/work-management/daily-progress"));
+    }
+    if (isAdmin || isHRUser) {
+      workManagementChildren.push(getItem(<Link href="/work-management/hr-tasks">HR Tasks</Link>, "/work-management/hr-tasks"));
     }
     if (isAdmin || checkPermission('sales', 'canView')) {
       workManagementChildren.push(getItem(<Link href="/work-management/sales">Sales</Link>, "/work-management/sales"));
+    }
+    if (isAdmin || checkPermission('work-logs', 'canView')) {
+      workManagementChildren.push(getItem(<Link href="/work-management/work-logs">Work Logs</Link>, "/work-management/work-logs"));
     }
     if (isAdmin || checkPermission('clients', 'canView')) {
       workManagementChildren.push(getItem(<Link href="/work-management/clients">Clients</Link>, "/work-management/clients"));
     }
     if (isAdmin || checkPermission('marketing', 'canView')) {
-      workManagementChildren.push(getItem(<Link href="/work-management/marketing-reports">Marketing Reports</Link>, "/work-management/marketing-reports"));
+      workManagementChildren.push(getItem(<Link href="/work-management/digital-marketing">Digital Marketing</Link>, "/work-management/digital-marketing"));
     }
+    if (isAdmin || user?.role === 'HR' || user?.role === 'Team Leader' || checkPermission('creative', 'canView')) {
+      workManagementChildren.push(getItem(<Link href="/work-management/smm">Social Media Management</Link>, "/work-management/smm"));
+    }
+    if (isAdmin || checkPermission('research', 'canView')) {
+      workManagementChildren.push(getItem(<Link href="/work-management/research">Research</Link>, "/work-management/research"));
+    }
+
 
     const employeeChildren: MenuItem[] = [];
     if (isAdmin || checkPermission('employee-list', 'canView')) {
@@ -180,14 +207,14 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
 
     
     const workspaceChildren: MenuItem[] = [];
-    if (isAdmin || checkPermission('blank-canvas', 'canView')) {
-      workspaceChildren.push(getItem(<Link href="/workspace/blank-canvas">Blank Canvas</Link>, "/workspace/blank-canvas"));
-    }
     if (isAdmin || checkPermission('seating-arrangement', 'canView')) {
       workspaceChildren.push(getItem(<Link href="/workspace/seating">Seating Arrangement</Link>, "/workspace/seating"));
     }
     if (isAdmin || checkPermission('resource-management', 'canView')) {
       workspaceChildren.push(getItem(<Link href="/workspace/resource">Resource Management</Link>, "/workspace/resource"));
+    }
+    if (isAdmin || checkPermission('gallery', 'canView')) {
+      workspaceChildren.push(getItem(<Link href="/workspace/gallery">Gallery</Link>, "/workspace/gallery"));
     }
 
     if (isAdmin || workspaceChildren.length > 0) {
@@ -195,11 +222,11 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     }
     
     if (isAdmin || checkPermission('remarks', 'canView')) {
-      menuItems.push(getItem(<Link href="/remarks">Penalty</Link>, "/remarks", <MessagesSquare className="w-5 h-5" />));
+      menuItems.push(getItem(<Link href="/penalty">Penalty</Link>, "/penalty", <MessagesSquare className="w-5 h-5" />));
     }
 
     if (isAdmin || checkPermission('review', 'canView')) {
-      menuItems.push(getItem(<Link href="/review">Remarks</Link>, "/review", <Star className="w-5 h-5" />));
+      menuItems.push(getItem(<Link href="/remarks">Remarks</Link>, "/remarks", <Star className="w-5 h-5" />));
     }
 
     if (isAdmin || checkPermission('activity-tracker', 'canView')) {
@@ -226,10 +253,10 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       ));
     }
 
-    if (isAdmin || checkPermission('personal-tasks', 'canView')) {
+    if (isAdmin || checkPermission('personal-tasks', 'canView') || checkPermission('tasks', 'canView')) {
       menuItems.push(getItem(
-        <Link href="/task">Tasks</Link>,
-        "/task",
+        <Link href="/tasks">Tasks</Link>,
+        "/tasks",
         <ClipboardList className="w-5 h-5" />
       ));
     }
@@ -238,12 +265,30 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       menuItems.push(getItem("Work Management", "work-management", <Briefcase className="w-5 h-5" />, workManagementChildren));
     }
 
+    const trainingChildren: MenuItem[] = [];
+    
+    if (isAdmin || checkPermission('training', 'canView')) {
+      trainingChildren.push(getItem(<Link href="/training">Course Library</Link>, "/training"));
+    }
+    
+    if (isAdmin || checkPermission('admin-courses', 'canView')) {
+      trainingChildren.push(getItem(<Link href="/admin/courses">Manage Courses</Link>, "/admin/courses"));
+    }
+
+    if (trainingChildren.length > 0) {
+      menuItems.push(getItem("Training & Courses", "training", <BookOpen className="w-5 h-5" />, trainingChildren));
+    }
+
     if (isAdmin || checkPermission('settings', 'canView')) {
       menuItems.push(getItem(<Link href="/settings">Settings</Link>, "/settings", <Settings className="w-5 h-5" />));
     }
 
     if (isAdmin) {
       menuItems.push(getItem(<Link href="/restrictions">Restrictions</Link>, "/restrictions", <ShieldHalf className="w-5 h-5" />));
+    }
+
+    if (isAdmin || checkPermission('activity-logs', 'canView')) {
+      menuItems.push(getItem(<Link href="/activity-logs">Activity Logs</Link>, "/activity-logs", <Activity className="w-5 h-5" />));
     }
 
     return menuItems;
@@ -263,9 +308,9 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
 
     if (pathname.startsWith("/attendance")) return ["/attendance"];
     if (pathname.startsWith("/schedule")) return ["/schedule"];
-    if (pathname.startsWith("/task")) return ["/task"];
+    if (pathname.startsWith("/tasks")) return ["/tasks"];
+    if (pathname.startsWith("/penalty")) return ["/penalty"];
     if (pathname.startsWith("/remarks")) return ["/remarks"];
-    if (pathname.startsWith("/review")) return ["/review"];
     if (pathname.startsWith("/activity-tracker")) return ["/activity-tracker"];
     if (pathname.startsWith("/invoice")) {
       if (pathname === "/invoice/create" && searchParams.get("type") === "Proforma") {
@@ -278,6 +323,9 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (pathname.startsWith("/recruitment")) return [pathname];
     if (pathname.startsWith("/payroll")) return [pathname];
     if (pathname.startsWith("/restrictions")) return ["/restrictions"];
+    if (pathname.startsWith("/activity-logs")) return ["/activity-logs"];
+    if (pathname.startsWith("/training")) return ["/training"];
+    if (pathname.startsWith("/admin/courses")) return ["/admin/courses"];
     return [];
   };
 
@@ -289,6 +337,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (pathname.startsWith("/work-management")) return ["work-management"];
     if (pathname.startsWith("/recruitment")) return ["recruitment-sub"];
     if (pathname.startsWith("/payroll")) return ["payroll-sub"];
+    if (pathname.startsWith("/training") || pathname.startsWith("/admin/courses")) return ["training"];
     return [];
   };
  

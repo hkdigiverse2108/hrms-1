@@ -34,30 +34,42 @@ def load_env():
     return False
 
 def get_venv_python():
-    """Find the Python executable inside the project's venv or .venv."""
-    for venv_name in ["venv", ".venv"]:
-        venv_dir = Path(__file__).parent / venv_name
+    base_dir = Path(__file__).resolve().parent
+    venv_dir = base_dir / ".venv"
+    if venv_dir.exists():
         if os.name == 'nt':
-            venv_python = venv_dir / "Scripts" / "python.exe"
+            windows_python = venv_dir / "Scripts" / "python.exe"
+            if windows_python.exists():
+                return str(windows_python)
         else:
-            venv_python = venv_dir / "bin" / "python3"
-        if venv_python.exists():
-            return str(venv_python)
-    # Fallback to the current interpreter
-    return sys.executable
+            unix_python = venv_dir / "bin" / "python"
+            if unix_python.exists():
+                return str(unix_python)
+            
+    # Fallback to system python/python3
+    if shutil.which("python3"):
+        return "python3"
+    elif shutil.which("python"):
+        return "python"
+    return "python3" if os.name != 'nt' else "python"
 
 def kill_port_owner(port):
     """Clean up any process using the port before starting (cross-platform)."""
     try:
         if os.name == 'nt':
-            cmd = f"netstat -ano | findstr :{port} | findstr LISTENING"
+            cmd = f"netstat -ano"
             output = subprocess.check_output(cmd, shell=True).decode()
+            pids = set()
             for line in output.strip().split('\n'):
-                parts = line.split()
-                if len(parts) > 4:
-                    pid = parts[-1]
-                    print(f"Cleaning up port {port} (PID: {pid})...")
-                    subprocess.run(f"taskkill /F /PID {pid}", shell=True, capture_output=True)
+                if f":{port}" in line:
+                    parts = line.split()
+                    if len(parts) > 4:
+                        pid = parts[-1]
+                        if pid.isdigit() and int(pid) > 0:
+                            pids.add(pid)
+            for pid in pids:
+                print(f"Cleaning up port {port} (PID: {pid})...")
+                subprocess.run(f"taskkill /F /PID {pid}", shell=True, capture_output=True)
         else:
             # Linux/macOS
             cmd = f"lsof -t -i:{port}"
@@ -89,7 +101,7 @@ def run_app():
     # Ensure standard env vars are set
     os.environ["HOST"] = app_host
     os.environ["UVICORN_HOST"] = app_host
-    os.environ["NODE_OPTIONS"] = "--max-old-space-size=2048"
+    os.environ["NODE_OPTIONS"] = "--max-old-space-size=8192"
 
     print("=" * 60)
     print(f"  HRMS Application Launcher (Like Sahjanand)")
@@ -260,6 +272,26 @@ def run_app():
         )
 
     processes["backend"]  = start_backend()
+
+    # Wait for backend to be ready
+    print(f"\nWaiting for backend on port {backend_port} to start listening...")
+    import socket
+    def wait_for_port(port, host="127.0.0.1", timeout=30):
+        start_time = time.time()
+        while True:
+            try:
+                with socket.create_connection((host, port), timeout=1):
+                    return True
+            except (ConnectionRefusedError, OSError):
+                time.sleep(0.5)
+                if time.time() - start_time > timeout:
+                    return False
+    
+    if wait_for_port(int(backend_port), host=app_host):
+        print("[OK] Backend is ready and listening.")
+    else:
+        print("[WARN] Backend did not start listening within timeout. Starting frontend anyway...")
+
     processes["frontend"] = start_frontend()
 
     # ── Signal handling ───────────────────────────────────────

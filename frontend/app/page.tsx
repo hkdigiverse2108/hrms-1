@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/common/PageHeader";
+import { LiveTimer } from "@/components/common/LiveTimer";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
@@ -51,6 +52,8 @@ import {
 import { useUserContext } from "@/context/UserContext";
 import { API_URL, getAvatarUrl } from "@/lib/config";
 import dayjs from "dayjs";
+import isSameOrAfter from "dayjs/plugin/isSameOrAfter";
+dayjs.extend(isSameOrAfter);
 import { TablePagination } from "@/components/common/TablePagination";
 import { formatTime12h } from "@/lib/utils";
 import { RequestPunchOutDialog } from "@/components/dashboard/RequestPunchOutDialog";
@@ -58,6 +61,8 @@ import { AddEventDialog } from "@/components/dashboard/AddEventDialog";
 import { ViewAllEventsDialog } from "@/components/dashboard/ViewAllEventsDialog";
 import { toast } from "sonner";
 import { useConfirm } from "@/context/ConfirmContext";
+import { PunchInModal } from "@/components/dashboard/PunchInModal";
+import { QuickActionsWidget } from "@/components/dashboard/QuickActionsWidget";
  
 const formatToHhMm = (totalMinutes: number) => {
   const { confirm } = useConfirm();
@@ -93,32 +98,60 @@ const formatWorkHours = (workHours: string) => {
 };
 
 export default function DashboardPage() {
-  const { user, isLoading, getISTNow, isTimeSynced } = useUserContext();
+  const { user, updateUser, isLoading, getISTNow, isTimeSynced } = useUserContext();
+  const [hrActiveFilter, setHrActiveFilter] = useState<string | null>(null);
   const [attendanceStatus, setAttendanceStatus] = useState<{isPunchedIn: boolean, record: any} | null>(null);
   const [recentAttendance, setRecentAttendance] = useState<any[]>([]);
   const [isPunching, setIsPunching] = useState(false);
   const [workTime, setWorkTime] = useState("00:00:00");
   const [totalBreakTime, setTotalBreakTime] = useState("0h 0m");
   const [currentTime, setCurrentTime] = useState(getISTNow());
+  const serverTimeOffset = getISTNow().getTime() - Date.now();
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
   const [missingPunchOutDate, setMissingPunchOutDate] = useState<Date | null>(null);
   const [isForcedRequest, setIsForcedRequest] = useState(false);
+  const [isPunchInModalOpen, setIsPunchInModalOpen] = useState(false);
+  const [isBreakOutModalOpen, setIsBreakOutModalOpen] = useState(false);
   const [leaveRequests, setLeaveRequests] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [interns, setInterns] = useState<any[]>([]);
   const [allAttendance, setAllAttendance] = useState<any[]>([]);
   const [applications, setApplications] = useState<any[]>([]);
   const [assets, setAssets] = useState<any[]>([]);
+  const [activeTaskTitle, setActiveTaskTitle] = useState<string | null>(null);
 
-  
+  useEffect(() => {
+    if (attendanceStatus?.isPunchedIn && attendanceStatus.record?.punchInActivityType === "Work" && attendanceStatus.record?.punchInTaskId) {
+      fetch(`${API_URL}/wm-tasks/${attendanceStatus.record.punchInTaskId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.title) {
+            setActiveTaskTitle(data.title);
+          } else if (attendanceStatus.record?.punchInActivityValue) {
+            setActiveTaskTitle(attendanceStatus.record.punchInActivityValue);
+          }
+        })
+        .catch(err => {
+          console.error("Error fetching active task:", err);
+          if (attendanceStatus.record?.punchInActivityValue) {
+            setActiveTaskTitle(attendanceStatus.record.punchInActivityValue);
+          }
+        });
+    } else if (attendanceStatus?.isPunchedIn && attendanceStatus.record?.punchInActivityType === "Work") {
+      setActiveTaskTitle(attendanceStatus.record?.punchInActivityValue || null);
+    } else {
+      setActiveTaskTitle(null);
+    }
+  }, [attendanceStatus]);
+
   const punchCardRef = useRef<HTMLDivElement>(null);
  
   useEffect(() => {
     if (user?.id) {
       fetchStatus();
       fetchHistory();
+      fetchLeaveRequests();
       if (user.role === "Admin" || user.role === "HR") {
-        fetchLeaveRequests();
         fetchEmployees();
         fetchInterns();
         fetchAllAttendance();
@@ -221,7 +254,6 @@ export default function DashboardPage() {
     let interval: any;
     if (attendanceStatus?.isPunchedIn && attendanceStatus.record?.checkIn) {
       const parseTimeToDate = (timeStr: string, baseDate: Date) => {
-        const d = new Date(baseDate.getTime());
         const cleaned = timeStr.trim();
         let hours = 0, minutes = 0, seconds = 0;
         const ampmMatch = cleaned.match(/(\d+):(\d+):?(\d+)?\s*(AM|PM)/i);
@@ -238,18 +270,39 @@ export default function DashboardPage() {
           minutes = parts[1] ? parseInt(parts[1]) : 0;
           seconds = parts[2] ? parseInt(parts[2]) : 0;
         }
-        d.setHours(hours, minutes, seconds, 0);
-        return d;
+
+        // Format the baseDate into Year-Month-Day in Asia/Kolkata timezone
+        const formatter = new Intl.DateTimeFormat("en-US", {
+          timeZone: "Asia/Kolkata",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit"
+        });
+        const parts = formatter.formatToParts(baseDate);
+        const year = parts.find(p => p.type === "year")?.value;
+        const month = parts.find(p => p.type === "month")?.value;
+        const day = parts.find(p => p.type === "day")?.value;
+
+        const hh = hours.toString().padStart(2, '0');
+        const mm = minutes.toString().padStart(2, '0');
+        const ss = seconds.toString().padStart(2, '0');
+
+        const isoStr = `${year}-${month}-${day}T${hh}:${mm}:${ss}+05:30`;
+        return new Date(isoStr);
       };
 
       const runTimer = () => {
         const istNow = getISTNow();
-        const lastPunchInStr = attendanceStatus.record.lastPunchIn || attendanceStatus.record.checkIn;
+        let lastPunchInStr = attendanceStatus.record.lastPunchIn || attendanceStatus.record.checkIn;
+        if (!attendanceStatus.record.accumulatedWorkSeconds) {
+          lastPunchInStr = attendanceStatus.record.checkIn;
+        }
         if (!lastPunchInStr) return;
 
         const normalizeDate = (d: Date) => {
           if (d.getTime() > istNow.getTime() + 60000) {
-            d.setDate(d.getDate() - 1);
+            // Shift date back by 1 day timezone-safely
+            return new Date(d.getTime() - 24 * 60 * 60 * 1000);
           }
           return d;
         };
@@ -402,6 +455,10 @@ export default function DashboardPage() {
  
   const fetchStatus = async () => {
     try {
+      const userRole = user?.role?.toLowerCase() || "employee";
+      const isAdmin = ['admin', 'super admin', 'superadmin', 'administrator', 'founder'].includes(userRole.trim());
+      if (isAdmin) return;
+
       const res = await fetch(`${API_URL}/attendance/status/${user?.id}`);
       if (res.ok) {
         const data = await res.json();
@@ -459,6 +516,16 @@ export default function DashboardPage() {
   };
  
   const handlePunch = async (type: 'punch-in' | 'punch-out' | 'break-in' | 'break-out') => {
+    if (type === 'punch-in') {
+      setIsPunchInModalOpen(true);
+      return;
+    }
+    
+    if (type === 'break-out') {
+      setIsBreakOutModalOpen(true);
+      return;
+    }
+
     setIsPunching(true);
     try {
       const res = await fetch(`${API_URL}/attendance/${type}/${user?.id}`, {
@@ -478,6 +545,136 @@ export default function DashboardPage() {
     } catch (err) {
       console.error("Punch error:", err);
       toast.error("Failed to connect to the server. Please ensure the backend is running.");
+    } finally {
+      setIsPunching(false);
+    }
+  };
+
+  const handleBreakOutConfirm = async (action: 'continue' | 'change') => {
+    setIsBreakOutModalOpen(false);
+    
+    if (action === 'change') {
+      setIsPunchInModalOpen(true);
+      return;
+    }
+
+    setIsPunching(true);
+    
+    try {
+      const breakOutRes = await fetch(`${API_URL}/attendance/break-out/${user?.id}?resume_task=true`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      
+      if (breakOutRes.ok) {
+        await fetchStatus();
+        await fetchHistory();
+        window.dispatchEvent(new Event("attendance-update"));
+      } else {
+        const errorData = await breakOutRes.json().catch(() => ({}));
+        toast.error(`Action failed: ${errorData.detail || 'Server error'}`);
+      }
+    } catch (err) {
+      console.error("Break out error:", err);
+      toast.error("Failed to connect to the server. Please ensure the backend is running.");
+    } finally {
+      setIsPunching(false);
+    }
+  };
+
+  const handleConfirmPunchIn = async (data: { type: string; subtype?: string; value?: string; taskId?: string }) => {
+    setIsPunchInModalOpen(false);
+    setIsPunching(true);
+    try {
+      const payload: any = {};
+      if (data.type === "Work") {
+        payload.activityType = "Work";
+        payload.taskId = data.taskId;
+        payload.activityValue = data.value;
+      } else if (data.type === "Research") {
+        payload.activityType = "Research";
+        payload.activityValue = data.value;
+      } else if (data.type === "Other") {
+        payload.activityType = "Other";
+        payload.activitySubtype = data.subtype;
+        payload.activityValue = data.value;
+      }
+
+      // If user is currently on break, break-out first before starting new activity
+      const isOnBreak = attendanceStatus?.record?.status === "On Break";
+      if (isOnBreak) {
+        const breakOutRes = await fetch(`${API_URL}/attendance/break-out/${user?.id}?resume_task=false`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
+        if (!breakOutRes.ok) {
+          toast.error("Failed to break out before changing activity");
+          setIsPunching(false);
+          return;
+        }
+      }
+
+      const res = await fetch(`${API_URL}/attendance/punch-in/${user?.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      
+      if (res.ok) {
+        if (data.type === "Work") {
+          // Downgrade any other in-progress task for this user
+          try {
+            const tasksRes = await fetch(`${API_URL}/wm-tasks`);
+            if (tasksRes.ok) {
+              const allTasks = await tasksRes.json();
+              const myInProgress = allTasks.filter((t: any) => 
+                (t.status === 'in-progress' || t.status === 'in_progress') && 
+                String(t.id || t._id) !== String(data.taskId) &&
+                String(t.assignedToId) === String(user?.id)
+              );
+              
+              for (const t of myInProgress) {
+                await fetch(`${API_URL}/wm-tasks/${t.id || t._id}`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ status: 'todo' })
+                });
+              }
+            }
+          } catch(e) {
+            console.error("Failed to downgrade previous in-progress tasks:", e);
+          }
+
+          if (data.taskId) {
+            // Update task status to in-progress via PUT /wm-tasks/{taskId}
+            try {
+              await fetch(`${API_URL}/wm-tasks/${data.taskId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'in-progress' })
+              });
+            } catch (taskErr) {
+              console.error("Failed to update task status:", taskErr);
+            }
+          }
+        }
+        await fetchStatus();
+        await fetchHistory();
+        window.dispatchEvent(new Event("attendance-update"));
+        if (attendanceStatus?.isPunchedIn) {
+          toast.success("Activity changed successfully!");
+        } else {
+          toast.success("Successfully punched in!");
+        }
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        toast.error(`Punch in failed: ${errorData.detail || 'Server error'}`);
+      }
+    } catch (err) {
+      console.error("Punch error:", err);
+      toast.error("Failed to connect to the server.");
     } finally {
       setIsPunching(false);
     }
@@ -526,7 +723,7 @@ export default function DashboardPage() {
   }
  
   const userRole = user?.role?.toLowerCase() || "employee";
-  const isAdmin = userRole === "admin";
+  const isAdmin = ['admin', 'super admin', 'superadmin', 'administrator', 'founder'].includes(userRole.trim());
   const isHR = userRole === "hr";
   const isEmployee = userRole === "employee";
  
@@ -536,39 +733,107 @@ export default function DashboardPage() {
         title="Dashboard"
         description="Here's what's happening in your organization today."
       >
-        {(!isAdmin) && (
-          <Button 
-            onClick={() => setIsRequestDialogOpen(true)}
-            className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-9 px-4 rounded-lg shadow-sm flex items-center gap-2"
-          >
-             <Plus className="w-4 h-4" />
-             Request Punch Out
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2 justify-end mt-4 sm:mt-0">
+          {(!isAdmin) && (
+            <Button 
+              onClick={() => setIsRequestDialogOpen(true)}
+              className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-9 px-4 rounded-lg shadow-sm flex items-center gap-2"
+            >
+               <Plus className="w-4 h-4" />
+               Request Punch Out
+            </Button>
+          )}
+        </div>
       </PageHeader>
  
-      {isAdmin && <AdminView user={user} leaves={leaveRequests} employees={employees} interns={interns} allAttendance={allAttendance} getISTNow={getISTNow} />}
+      {isAdmin ? (
+        <AdminView user={user} leaves={leaveRequests} employees={employees} interns={interns} allAttendance={allAttendance} getISTNow={getISTNow} />
+      ) : (
+        <div className="space-y-6">
+          {/* 1. If HR, show the 4 HR StatCards on top (full width) */}
+          {isHR && (
+            <HRView 
+              user={user} 
+              leaves={leaveRequests} 
+              applications={applications} 
+              assets={assets} 
+              showStatsOnly={true}
+              activeFilter={hrActiveFilter}
+              setActiveFilter={setHrActiveFilter}
+            />
+          )}
 
-      {isHR && <HRView user={user} leaves={leaveRequests} applications={applications} assets={assets} />}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-6">
+              {/* 2. Show Employee Punch Card Box */}
+              <EmployeeView 
+                serverTimeOffset={serverTimeOffset}
+                user={user} 
+                attendanceStatus={attendanceStatus} 
+                handlePunch={handlePunch} 
+                handleGoingForMeeting={handleGoingForMeeting}
+                isPunching={isPunching}
+                workTime={workTime}
+                totalBreakTime={totalBreakTime}
+                allTimeHours={allTimeHours}
+                recentAttendance={recentAttendance}
+                currentTime={currentTime}
+                isTimeSynced={isTimeSynced}
+                getISTNow={getISTNow}
+                punchCardRef={punchCardRef}
+                showPunchCardOnly={true}
+                setIsPunchInModalOpen={setIsPunchInModalOpen}
+                activeTaskTitle={activeTaskTitle}
+                missingPunchOutDate={missingPunchOutDate}
+                setIsRequestDialogOpen={setIsRequestDialogOpen}
+              />
 
-      {(!isAdmin) && (
-        <EmployeeView 
-          user={user} 
-          attendanceStatus={attendanceStatus} 
-          handlePunch={handlePunch} 
-          handleGoingForMeeting={handleGoingForMeeting}
-          isPunching={isPunching}
-          workTime={workTime}
-          totalBreakTime={totalBreakTime}
-          allTimeHours={allTimeHours}
-          recentAttendance={recentAttendance}
-          currentTime={currentTime}
-          isTimeSynced={isTimeSynced}
-          getISTNow={getISTNow}
-          punchCardRef={punchCardRef}
-          missingPunchOutDate={missingPunchOutDate}
-          setIsRequestDialogOpen={setIsRequestDialogOpen}
-        />
+              {/* 3. Show Employee stats and Recent Attendance table */}
+              <EmployeeView 
+                serverTimeOffset={serverTimeOffset}
+                user={user} 
+                attendanceStatus={attendanceStatus} 
+                handlePunch={handlePunch} 
+                handleGoingForMeeting={handleGoingForMeeting}
+                isPunching={isPunching}
+                workTime={workTime}
+                totalBreakTime={totalBreakTime}
+                allTimeHours={allTimeHours}
+                recentAttendance={recentAttendance}
+                currentTime={currentTime}
+                isTimeSynced={isTimeSynced}
+                getISTNow={getISTNow}
+                punchCardRef={punchCardRef}
+                showStatsAndAttendanceOnly={true}
+                setIsPunchInModalOpen={setIsPunchInModalOpen}
+                activeTaskTitle={activeTaskTitle}
+                missingPunchOutDate={missingPunchOutDate}
+                setIsRequestDialogOpen={setIsRequestDialogOpen}
+              />
+
+              {/* 4. If HR, show HR Lists (Recent Leave Requests, Upcoming Interviews) */}
+              {isHR && (
+                <HRView 
+                  user={user} 
+                  leaves={leaveRequests} 
+                  applications={applications} 
+                  assets={assets} 
+                  showListsOnly={true}
+                  activeFilter={hrActiveFilter}
+                  setActiveFilter={setHrActiveFilter}
+                />
+              )}
+
+              {/* 5. Show Upcoming Approved Leaves Card */}
+              <UpcomingApprovedLeavesCard leaves={leaveRequests} />
+            </div>
+
+            <div className="lg:col-span-1">
+              <EventsSidebar user={user} leaves={leaveRequests} />
+            </div>
+          </div>
+        </div>
+>>>>>>> 9507d648f983c17a15eff670964ba640b362de65
       )}
  
       <RequestPunchOutDialog 
@@ -591,6 +856,116 @@ export default function DashboardPage() {
           fetchStatus();
         }}
       />
+      <PunchInModal
+        open={isPunchInModalOpen}
+        onOpenChange={setIsPunchInModalOpen}
+        onConfirm={handleConfirmPunchIn}
+        userId={user?.id || ""}
+        initialActivityType={attendanceStatus?.record?.punchInActivityType}
+        initialActivitySubtype={attendanceStatus?.record?.punchInActivitySubtype}
+        initialActivityValue={attendanceStatus?.record?.punchInActivityValue}
+        initialTaskId={attendanceStatus?.record?.punchInTaskId}
+        isUpdateMode={attendanceStatus?.isPunchedIn || false}
+      />
+      
+      {isBreakOutModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] relative">
+            <div className="p-6">
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Resume Work</h2>
+              <p className="text-sm text-gray-500 mb-6">
+                Are you sure you want to continue the previous task or want to change the task?
+              </p>
+              
+              <div className="flex gap-3">
+                <Button 
+                  onClick={() => handleBreakOutConfirm('continue')}
+                  className="flex-1 bg-brand-teal hover:bg-brand-teal/90 text-white font-bold"
+                  disabled={isPunching}
+                >
+                  Continue Previous
+                </Button>
+                <Button 
+                  onClick={() => handleBreakOutConfirm('change')}
+                  variant="outline"
+                  className="flex-1 bg-white hover:bg-gray-50 text-gray-700 font-bold border-gray-200"
+                  disabled={isPunching}
+                >
+                  Change Task
+                </Button>
+              </div>
+            </div>
+            <button 
+              onClick={() => setIsBreakOutModalOpen(false)}
+              className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function UpcomingApprovedLeavesCard({ leaves }: { leaves: any[] }) {
+  const today = dayjs();
+  const upcomingApprovedLeaves = (leaves || [])
+    .filter((l: any) => {
+      if (l.status !== 'Approved') return false;
+      const endDate = dayjs(l.end_date, "DD-MM-YYYY");
+      return endDate.isSameOrAfter(today, 'day');
+    })
+    .sort((a: any, b: any) => {
+      const dateA = dayjs(a.start_date, "DD-MM-YYYY");
+      const dateB = dayjs(b.start_date, "DD-MM-YYYY");
+      return dateA.diff(dateB);
+    });
+
+  return (
+    <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden">
+      <div className="p-5 border-b border-border flex justify-between items-center bg-white">
+        <div className="flex items-center gap-2">
+          <CalendarIcon className="w-5 h-5 text-brand-teal" />
+          <h3 className="font-bold text-lg text-[#111827]">Upcoming Approved Leaves</h3>
+        </div>
+      </div>
+      <div className="p-0">
+        {upcomingApprovedLeaves.length > 0 ? (
+          <div className="divide-y divide-border">
+            {upcomingApprovedLeaves.slice(0, 5).map((leave: any, idx: number) => {
+              const start = dayjs(leave.start_date, "DD-MM-YYYY");
+              const end = dayjs(leave.end_date, "DD-MM-YYYY");
+              const dateDisplay = start.isSame(end, 'day') 
+                ? start.format("MMM DD, YYYY")
+                : `${start.format("MMM DD")} - ${end.format("MMM DD, YYYY")}`;
+              
+              return (
+                <div key={leave.id || idx} className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-9 w-9">
+                      <AvatarFallback className="bg-brand-light text-brand-teal font-bold">
+                        {(leave.employee_name || "L")[0]}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <div className="text-sm font-semibold text-gray-950">{leave.employee_name}</div>
+                      <div className="text-xs text-muted-foreground capitalize">{leave.type} • {leave.duration}</div>
+                    </div>
+                  </div>
+                  <span className="text-xs font-semibold px-2.5 py-1 bg-brand-light text-brand-teal rounded-md">
+                    {dateDisplay}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="p-8 text-center text-sm text-muted-foreground">
+            No upcoming approved leaves found
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -598,7 +973,12 @@ export default function DashboardPage() {
 function AdminView({ user, leaves, employees, interns, allAttendance, getISTNow }: { user: any, leaves: any[], employees: any[], interns: any[], allAttendance: any[], getISTNow: () => Date }) {
 
   // Exclude admin employees from attendance-related calculations
-  const nonAdminEmployees = employees?.filter(e => e.role?.toLowerCase() !== 'admin') || [];
+  const isRoleAdmin = (r?: string) => {
+    if (!r) return false;
+    const clean = r.toLowerCase().trim();
+    return clean === 'admin' || clean === 'super admin' || clean === 'superadmin' || clean === 'administrator' || clean === 'founder' || clean === 'super_admin';
+  };
+  const nonAdminEmployees = employees?.filter(e => !isRoleAdmin(e.role)) || [];
 
   const todayStr = dayjs(getISTNow()).format('YYYY-MM-DD');
   const todayAttendance = allAttendance?.filter(a => a.date === todayStr) || [];
@@ -628,11 +1008,11 @@ function AdminView({ user, leaves, employees, interns, allAttendance, getISTNow 
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
         <StatCard 
           title="Total Employees" 
           value={totalEmployeesCount.toString()} 
-          trend={`+${employees?.filter(e => dayjs(e.joinDate).isAfter(dayjs().subtract(1, 'month'))).length || 0}`} 
+          trend={`+${nonAdminEmployees?.filter(e => dayjs(e.joinDate).isAfter(dayjs().subtract(1, 'month'))).length || 0}`} 
           trendLabel="new this month" 
           icon={<Users className="w-5 h-5 text-muted-foreground" />} 
         />
@@ -703,125 +1083,151 @@ function AdminView({ user, leaves, employees, interns, allAttendance, getISTNow 
             </div>
           </div>
           <DepartmentDistribution />
+          <UpcomingApprovedLeavesCard leaves={leaves} />
         </div>
         <div className="lg:col-span-1">
-          <EventsSidebar user={user} />
+          <EventsSidebar user={user} leaves={leaves} />
         </div>
       </div>
     </div>
   );
 }
  
-function HRView({ user, leaves, applications, assets }: { user: any, leaves: any[], applications: any[], assets: any[] }) {
-  const [activeFilter, setActiveFilter] = useState<string | null>(null);
+function HRView({ 
+  user, 
+  leaves, 
+  applications, 
+  assets,
+  showStatsOnly = false,
+  showListsOnly = false,
+  activeFilter: externalActiveFilter,
+  setActiveFilter: externalSetActiveFilter
+}: { 
+  user: any, 
+  leaves: any[], 
+  applications: any[], 
+  assets: any[],
+  showStatsOnly?: boolean,
+  showListsOnly?: boolean,
+  activeFilter?: string | null,
+  setActiveFilter?: (val: string | null) => void
+}) {
+  const [internalActiveFilter, setInternalActiveFilter] = useState<string | null>(null);
+  const activeFilter = externalActiveFilter !== undefined ? externalActiveFilter : internalActiveFilter;
+  const setActiveFilter = externalSetActiveFilter !== undefined ? externalSetActiveFilter : setInternalActiveFilter;
 
   const filteredLeaves = activeFilter 
     ? leaves.filter(l => l.status === activeFilter) 
     : leaves;
 
+  const statsSection = (
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div onClick={() => setActiveFilter(activeFilter === 'Pending' ? null : 'Pending')} className="cursor-pointer">
+        <StatCard 
+          title="Pending Leaves" 
+          value={leaves.filter(l => l.status === 'Pending').length.toString().padStart(2, '0')} 
+          trend="Action Required" 
+          trendLabel="awaiting approval" 
+          icon={<CalendarIcon className={`w-5 h-5 ${activeFilter === 'Pending' ? 'text-brand-teal' : 'text-muted-foreground'}`} />} 
+          color={activeFilter === 'Pending' ? 'brand' : undefined}
+        />
+      </div>
+
+      <Link href="/recruitment/hiring-board">
+        <StatCard title="New Applications" value={(applications?.length || 0).toString().padStart(2, '0')} trend="+5" trendLabel="this week" icon={<FileCheck className="w-5 h-5 text-muted-foreground" />} trendUp/>
+      </Link>
+      <div onClick={() => setActiveFilter(activeFilter === 'Approved' ? null : 'Approved')} className="cursor-pointer">
+        <StatCard 
+          title="Approved Leaves" 
+          value={leaves.filter(l => l.status === 'Approved').length.toString().padStart(2, '0')} 
+          trend="Past & Future" 
+          trendLabel="approved requests" 
+          icon={<CheckCircle2 className={`w-5 h-5 ${activeFilter === 'Approved' ? 'text-brand-teal' : 'text-muted-foreground'}`} />} 
+          color={activeFilter === 'Approved' ? 'brand' : undefined}
+        />
+      </div>
+      <StatCard title="Asset Requests" value={(assets?.filter(a => a.status === 'Requested' || a.status === 'Pending')?.length || 0).toString().padStart(2, '0')} trend="Pending" trendLabel="laptop & equipment" icon={<AlertCircle className="w-5 h-5 text-muted-foreground" />} trendUp={false} />
+    </div>
+  );
+
+  const listsSection = (
+    <div className="space-y-6">
+      <div className="bg-white border border-border rounded-xl shadow-sm">
+        <div className="p-5 border-b border-border flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <h3 className="font-bold text-lg text-[#111827]">Recent Leave Requests</h3>
+            {activeFilter && (
+              <Badge variant="outline" className="bg-brand-light text-brand-teal border-brand-teal/20 px-2 py-0">
+                {activeFilter}
+                <X className="w-3 h-3 ml-1 cursor-pointer" onClick={() => setActiveFilter(null)} />
+              </Badge>
+            )}
+          </div>
+          <Link href="/leave">
+            <Button variant="ghost" size="sm" className="text-brand-teal">View All</Button>
+          </Link>
+        </div>
+        <div className="p-0">
+          {filteredLeaves.length > 0 ? filteredLeaves.slice(0, 5).map((leave, i) => (
+            <div key={i} className="flex items-center justify-between p-4 border-b last:border-0 border-border hover:bg-gray-50 transition-colors">
+              <div className="flex items-center gap-3">
+                <Avatar className="h-9 w-9">
+                  <AvatarFallback className="bg-brand-light text-brand-teal font-bold">{leave.employee_name[0]}</AvatarFallback>
+                </Avatar>
+                <div>
+                  <div className="text-sm font-semibold">{leave.employee_name}</div>
+                  <div className="text-xs text-muted-foreground capitalize">{leave.type} • {leave.duration}</div>
+                </div>
+              </div>
+              <span className={`text-xs font-semibold px-2 py-1 rounded-md ${
+                leave.status === 'Approved' ? 'bg-green-50 text-green-600' : 
+                leave.status === 'Rejected' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'
+              }`}>
+                {leave.status}
+              </span>
+            </div>
+          )) : (
+            <div className="p-8 text-center text-sm text-muted-foreground">No {activeFilter ? activeFilter.toLowerCase() : ''} leave requests found</div>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white border border-border rounded-xl p-6 shadow-sm">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="font-bold text-lg text-[#111827]">Upcoming Interviews</h3>
+          <Link href="/recruitment/hiring-board">
+            <Button variant="ghost" size="sm" className="text-brand-teal">Hiring Board</Button>
+          </Link>
+        </div>
+        <div className="space-y-4">
+          {applications && applications.length > 0 ? (
+            applications.slice(0, 3).map((app, i) => (
+              <div key={i} className="flex gap-4 p-3 rounded-lg border border-border hover:border-brand-teal/30 transition-colors">
+                <div className="bg-brand-light p-2 rounded-md h-fit"><Clock className="w-4 h-4 text-brand-teal" /></div>
+                <div className="flex-1">
+                  <h4 className="font-semibold text-sm">{app.candidate_name || app.name}</h4>
+                  <p className="text-xs text-muted-foreground">{app.applied_for || app.role}</p>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs font-bold text-brand-teal">{app.status || 'Applied'}</div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="p-8 text-center text-sm text-muted-foreground">No upcoming interviews or recent applications</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  if (showStatsOnly) return statsSection;
+  if (showListsOnly) return listsSection;
+
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div onClick={() => setActiveFilter(activeFilter === 'Pending' ? null : 'Pending')} className="cursor-pointer">
-          <StatCard 
-            title="Pending Leaves" 
-            value={leaves.filter(l => l.status === 'Pending').length.toString().padStart(2, '0')} 
-            trend="Action Required" 
-            trendLabel="awaiting approval" 
-            icon={<CalendarIcon className={`w-5 h-5 ${activeFilter === 'Pending' ? 'text-brand-teal' : 'text-muted-foreground'}`} />} 
-            color={activeFilter === 'Pending' ? 'brand' : undefined}
-          />
-        </div>
-
-        <Link href="/recruitment/hiring-board">
-          <StatCard title="New Applications" value={(applications?.length || 0).toString().padStart(2, '0')} trend="+5" trendLabel="this week" icon={<FileCheck className="w-5 h-5 text-muted-foreground" />} trendUp/>
-        </Link>
-        <div onClick={() => setActiveFilter(activeFilter === 'Approved' ? null : 'Approved')} className="cursor-pointer">
-          <StatCard 
-            title="Approved Leaves" 
-            value={leaves.filter(l => l.status === 'Approved').length.toString().padStart(2, '0')} 
-            trend="Past & Future" 
-            trendLabel="approved requests" 
-            icon={<CheckCircle2 className={`w-5 h-5 ${activeFilter === 'Approved' ? 'text-brand-teal' : 'text-muted-foreground'}`} />} 
-            color={activeFilter === 'Approved' ? 'brand' : undefined}
-          />
-        </div>
-        <StatCard title="Asset Requests" value={(assets?.filter(a => a.status === 'Requested' || a.status === 'Pending')?.length || 0).toString().padStart(2, '0')} trend="Pending" trendLabel="laptop & equipment" icon={<AlertCircle className="w-5 h-5 text-muted-foreground" />} trendUp={false} />
-      </div>
- 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white border border-border rounded-xl shadow-sm">
-            <div className="p-5 border-b border-border flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                <h3 className="font-bold text-lg text-[#111827]">Recent Leave Requests</h3>
-                {activeFilter && (
-                  <Badge variant="outline" className="bg-brand-light text-brand-teal border-brand-teal/20 px-2 py-0">
-                    {activeFilter}
-                    <X className="w-3 h-3 ml-1 cursor-pointer" onClick={() => setActiveFilter(null)} />
-                  </Badge>
-                )}
-              </div>
-              <Link href="/leave">
-                <Button variant="ghost" size="sm" className="text-brand-teal">View All</Button>
-              </Link>
-            </div>
-            <div className="p-0">
-              {filteredLeaves.length > 0 ? filteredLeaves.slice(0, 5).map((leave, i) => (
-                <div key={i} className="flex items-center justify-between p-4 border-b last:border-0 border-border hover:bg-gray-50 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-9 w-9">
-                      <AvatarFallback className="bg-brand-light text-brand-teal font-bold">{leave.employee_name[0]}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <div className="text-sm font-semibold">{leave.employee_name}</div>
-                      <div className="text-xs text-muted-foreground capitalize">{leave.type} • {leave.duration}</div>
-                    </div>
-                  </div>
-                  <span className={`text-xs font-semibold px-2 py-1 rounded-md ${
-                    leave.status === 'Approved' ? 'bg-green-50 text-green-600' : 
-                    leave.status === 'Rejected' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'
-                  }`}>
-                    {leave.status}
-                  </span>
-                </div>
-              )) : (
-                <div className="p-8 text-center text-sm text-muted-foreground">No {activeFilter ? activeFilter.toLowerCase() : ''} leave requests found</div>
-              )}
-            </div>
-          </div>
-
-          <div className="bg-white border border-border rounded-xl p-6 shadow-sm">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-lg text-[#111827]">Upcoming Interviews</h3>
-              <Link href="/recruitment/hiring-board">
-                <Button variant="ghost" size="sm" className="text-brand-teal">Hiring Board</Button>
-              </Link>
-            </div>
-            <div className="space-y-4">
-              {applications && applications.length > 0 ? (
-                applications.slice(0, 3).map((app, i) => (
-                  <div key={i} className="flex gap-4 p-3 rounded-lg border border-border hover:border-brand-teal/30 transition-colors">
-                    <div className="bg-brand-light p-2 rounded-md h-fit"><Clock className="w-4 h-4 text-brand-teal" /></div>
-                    <div className="flex-1">
-                      <h4 className="font-semibold text-sm">{app.candidate_name || app.name}</h4>
-                      <p className="text-xs text-muted-foreground">{app.applied_for || app.role}</p>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-xs font-bold text-brand-teal">{app.status || 'Applied'}</div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="p-8 text-center text-sm text-muted-foreground">No upcoming interviews or recent applications</div>
-              )}
-            </div>
-          </div>
-        </div>
-        <div className="lg:col-span-1">
-          <EventsSidebar user={user} />
-        </div>
-      </div>
+      {statsSection}
+      {listsSection}
     </div>
   );
 }
@@ -841,7 +1247,13 @@ function EmployeeView({
   getISTNow,
   punchCardRef,
   missingPunchOutDate,
-  setIsRequestDialogOpen
+  setIsRequestDialogOpen,
+  leaves,
+  showPunchCardOnly = false,
+  showStatsAndAttendanceOnly = false,
+  setIsPunchInModalOpen,
+  activeTaskTitle,
+  serverTimeOffset
 }: { 
   user: any, 
   attendanceStatus: any, 
@@ -857,7 +1269,13 @@ function EmployeeView({
   getISTNow: () => Date,
   punchCardRef: React.RefObject<HTMLDivElement | null>,
   missingPunchOutDate: Date | null,
-  setIsRequestDialogOpen: (open: boolean) => void
+  setIsRequestDialogOpen: (open: boolean) => void,
+  leaves?: any[],
+  showPunchCardOnly?: boolean,
+  showStatsAndAttendanceOnly?: boolean,
+  setIsPunchInModalOpen: (val: boolean) => void,
+  activeTaskTitle?: string | null,
+  serverTimeOffset?: number
 }) {
   const userName = user?.name || "Guest";
   const firstName = user?.firstName || userName.split(' ')[0];
@@ -865,10 +1283,74 @@ function EmployeeView({
   const isPunchedIn = attendanceStatus?.isPunchedIn;
   const isOnBreak = attendanceStatus?.record?.status === "On Break";
   const punchInTimeRaw = attendanceStatus?.record?.checkIn || (recentAttendance[0]?.checkIn || "Not Started");
-  const punchOutTimeRaw = attendanceStatus?.record?.checkOut || (recentAttendance[0]?.checkOut || "Active");
+  const punchOutTimeRaw = isPunchedIn
+    ? (attendanceStatus?.record?.checkOut || "Active")
+    : (attendanceStatus?.record?.checkOut || recentAttendance[0]?.checkOut || "Active");
   const punchInTime = formatTime12h(punchInTimeRaw);
   const punchOutTime = formatTime12h(punchOutTimeRaw);
 
+  let accumulatedSeconds = 0;
+  if (attendanceStatus?.record?.punches) {
+    const currentType = attendanceStatus.record.punchInActivityType;
+    const currentTaskId = attendanceStatus.record.punchInTaskId;
+    const currentValue = attendanceStatus.record.punchInActivityValue;
+    const currentSubtype = attendanceStatus.record.punchInActivitySubtype;
+    
+    const parseTimeSafe = (timeStr: string) => {
+      if (!timeStr) return NaN;
+      if (timeStr.includes('AM') || timeStr.includes('PM')) {
+        const [time, modifier] = timeStr.trim().split(' ');
+        let [hours, minutes, seconds] = time.split(':');
+        if (hours === '12') hours = '00';
+        if (modifier === 'PM') hours = String(parseInt(hours, 10) + 12);
+        return new Date(`2000/01/01 ${hours}:${minutes}:${seconds || '00'}`).getTime();
+      }
+      return new Date(`2000/01/01 ${timeStr}`).getTime();
+    };
+
+    const breaksList = attendanceStatus.record.breaks || [];
+    attendanceStatus.record.punches.forEach((p: any) => {
+      // Only count completed punches for this same activity
+      if (p.punchOut && p.punchIn) {
+        let isSame = false;
+        if (currentType === "Work") {
+          if (currentTaskId && currentTaskId !== "undefined") {
+            isSame = (p.activityType === "Work" && String(p.taskId) === String(currentTaskId));
+          } else {
+            isSame = (p.activityType === "Work" && p.activityValue === currentValue);
+          }
+        } else if (currentType === "Research") {
+          isSame = (p.activityType === "Research" && p.activityValue === currentValue);
+        } else if (currentType === "Other") {
+          isSame = (p.activityType === "Other" && p.activitySubtype === currentSubtype && p.activityValue === currentValue);
+        }
+
+        if (isSame) {
+          const inTime = parseTimeSafe(p.punchIn);
+          const outTime = parseTimeSafe(p.punchOut);
+          if (!isNaN(inTime) && !isNaN(outTime) && outTime > inTime) {
+            let durationSec = Math.floor((outTime - inTime) / 1000);
+            
+            breaksList.forEach((b: any) => {
+              if (b.startTime && b.endTime) {
+                const bIn = parseTimeSafe(b.startTime);
+                const bOut = parseTimeSafe(b.endTime);
+                if (!isNaN(bIn) && !isNaN(bOut) && bOut > bIn) {
+                  const overlapStart = Math.max(inTime, bIn);
+                  const overlapEnd = Math.min(outTime, bOut);
+                  if (overlapEnd > overlapStart) {
+                    durationSec -= Math.floor((overlapEnd - overlapStart) / 1000);
+                  }
+                }
+              }
+            });
+
+            accumulatedSeconds += Math.max(0, durationSec);
+          }
+        }
+      }
+    });
+  }
   const getFormattedWorkedTime = () => {
     if (!workTime || workTime === "00:00:00") return "Not Started";
     const parts = workTime.split(':');
@@ -879,12 +1361,8 @@ function EmployeeView({
     }
     return "Not Started";
   };
- 
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <div ref={punchCardRef} className="bg-white border border-border rounded-2xl p-8 shadow-sm scroll-mt-20 relative overflow-hidden">
+  const punchCardSection = (
+    <div ref={punchCardRef} className="bg-white border border-border rounded-2xl p-8 shadow-sm scroll-mt-20 relative overflow-hidden">
             <div className="flex justify-between items-start mb-8">
               <div className="flex flex-col gap-4">
                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-brand-light/50 border border-brand-teal/20 rounded-full w-fit">
@@ -896,7 +1374,7 @@ function EmployeeView({
                      <Moon className="w-4 h-4 text-brand-teal" />
                    )}
                    <span className="text-[11px] font-bold text-brand-teal">
-                     {getISTNow().getHours() < 12 ? "Good morning" : getISTNow().getHours() < 17 ? "Good afternoon" : "Good evening"}, {firstName}
+                     {getISTNow().getHours() < 12 ? "Good Morning" : getISTNow().getHours() < 17 ? "Good Afternoon" : "Good Evening"}, {firstName}
                    </span>
                 </div>
                 <div className="flex items-center gap-4">
@@ -945,17 +1423,17 @@ function EmployeeView({
               </div>
               <div className="text-sm text-gray-500 font-medium min-h-[20px] flex items-center justify-center gap-2">
                 {isPunchedIn ? (
-                  isOnBreak ? (
-                    <span className="text-amber-600 font-bold flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                      On Break
-                    </span>
-                  ) : (
-                    <span className="text-brand-teal font-bold flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-brand-teal animate-pulse"></span>
-                      Live Tracking Active
-                    </span>
-                  )
+                   isOnBreak ? (
+                     <span className="text-amber-600 font-bold flex items-center gap-1.5">
+                       <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                       On Break
+                     </span>
+                   ) : (
+                     <span className="text-brand-teal font-bold flex items-center gap-1.5">
+                       <span className="w-1.5 h-1.5 rounded-full bg-brand-teal animate-pulse"></span>
+                       Live Tracking Active
+                     </span>
+                   )
                 ) : (
                   <span className="text-gray-400 font-bold">Not Started</span>
                 )}
@@ -978,18 +1456,8 @@ function EmployeeView({
                   <><Coffee className="w-5 h-5 mr-3" /> {isOnBreak ? 'Break Out' : 'Take Break'}</>
                 )}
               </Button>
+ 
 
-              <Button 
-                onClick={handleGoingForMeeting} 
-                disabled={isPunching || !isPunchedIn || isOnBreak}
-                variant="outline"
-                className={`flex-1 py-7 text-base font-bold shadow-sm transition-all border-[#F3F4F6] rounded-xl bg-white hover:bg-gray-50 text-[#111827]`}
-              >
-                {isPunching ? <Loader2 className="w-5 h-5 animate-spin" /> : (
-                  <><CalendarIcon className="w-5 h-5 mr-3 text-indigo-500" /> Going for Meeting</>
-                )}
-              </Button>
-              
               <Button 
                 onClick={() => handlePunch(isPunchedIn ? 'punch-out' : 'punch-in')} 
                 disabled={isPunching || isOnBreak || !!missingPunchOutDate}
@@ -1000,6 +1468,56 @@ function EmployeeView({
                 )}
               </Button>
             </div>
+
+            {isPunchedIn && attendanceStatus?.record?.punchInActivityType && (
+              <div className="flex items-center justify-between px-6 py-4 mb-8 bg-brand-light/40 border border-brand-teal/20 rounded-2xl shadow-sm">
+                <div>
+                  <p className="text-xs text-brand-teal/80 font-bold uppercase tracking-wider mb-1">Current Activity</p>
+                  <div className="font-black text-gray-800 text-lg flex items-center gap-3">
+                    <span>
+                      {attendanceStatus.record.punchInActivityType === "Work" ? (
+                        `Work: ${activeTaskTitle || 'Loading...'}`
+                      ) : attendanceStatus.record.punchInActivityType === "Research" ? (
+                        `Research: ${attendanceStatus.record.punchInActivityValue}`
+                      ) : attendanceStatus.record.punchInActivityType === "Other" ? (
+                        `${attendanceStatus.record.punchInActivitySubtype}: ${attendanceStatus.record.punchInActivityValue}`
+                      ) : (
+                        "Active"
+                      )}
+                    </span>
+                    {(attendanceStatus.record.lastPunchIn || isOnBreak) && (
+                      <LiveTimer 
+                        startTime={attendanceStatus.record.punches && attendanceStatus.record.punches.length > 0 
+                                      ? attendanceStatus.record.punches[attendanceStatus.record.punches.length - 1].punchIn 
+                                      : attendanceStatus.record.lastPunchIn} 
+                        serverTimeOffset={serverTimeOffset} 
+                        accumulatedSeconds={accumulatedSeconds} 
+                        isPaused={isOnBreak} 
+                        breaks={attendanceStatus.record.breaks}
+                      />
+                    )}
+                    {isOnBreak && (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-50 text-orange-600 border border-orange-100 text-[11px] font-bold font-mono tracking-wider shadow-sm">
+                        <span className="relative flex h-1.5 w-1.5">
+                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-orange-500"></span>
+                        </span>
+                        PAUSED
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {!isOnBreak && (
+                  <Button 
+                    onClick={() => setIsPunchInModalOpen(true)}
+                    variant="outline" 
+                    size="sm" 
+                    className="bg-white hover:bg-gray-50 border-gray-200 text-gray-700 font-bold shadow-sm rounded-xl px-5"
+                  >
+                    Change
+                  </Button>
+                )}
+              </div>
+            )}
  
             {missingPunchOutDate && (
               <div className="bg-amber-50 text-amber-800 p-4 rounded-xl mb-8 border border-amber-200 flex justify-between items-center">
@@ -1008,22 +1526,24 @@ function EmployeeView({
               </div>
             )}
 
-            <div className="grid grid-cols-4 gap-0 border border-brand-teal/10 rounded-xl overflow-hidden bg-white">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-0 border border-brand-teal/10 rounded-xl overflow-hidden bg-white">
                {[
                  { label: 'First In', value: punchInTime, highlight: false },
                  { label: 'Last Out', value: punchOutTime, highlight: punchOutTime === "Active" },
                  { label: 'Break In Time', value: totalBreakTime, highlight: false },
                  { label: 'Worked Time', value: isPunchedIn ? "Active" : (workTime !== "00:00:00" ? getFormattedWorkedTime() : "Not Started"), highlight: isPunchedIn },
                ].map((item, idx) => (
-                 <div key={idx} className={`p-4 ${idx < 3 ? 'border-r border-brand-teal/10' : ''} bg-[#EAF7F6]/10`}>
+                 <div key={idx} className={`p-4 ${idx < 3 ? 'sm:border-r border-brand-teal/10' : ''} ${idx === 0 || idx === 2 ? 'border-r border-brand-teal/10' : ''} ${idx < 2 ? 'border-b sm:border-b-0 border-brand-teal/10' : ''} bg-[#EAF7F6]/10`}>
                    <div className="text-[10px] font-bold text-gray-500 uppercase mb-1">{item.label}</div>
                    <div className={`text-sm font-black ${item.highlight ? 'text-brand-teal' : 'text-[#111827]'}`}>{item.value}</div>
                  </div>
                ))}
             </div>
           </div>
- 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+  );
+
+  const statsSection = (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <StatCard 
                 title="Today's Hours" 
                 value={isPunchedIn ? workTime.split(':').slice(0, 2).join('h ') + 'm' : (workTime !== "00:00:00" ? getFormattedWorkedTime() : '0h 0m')} 
@@ -1054,14 +1574,10 @@ function EmployeeView({
                hideTrend
              />
           </div>
-        </div>
- 
-        <div className="lg:col-span-1">
-          <EventsSidebar user={user} />
-        </div>
-      </div>
- 
-      <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden">
+  );
+
+  const attendanceSection = (
+    <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden">
         <div className="px-6 py-5 flex justify-between items-center">
           <h3 className="font-bold text-lg text-foreground">Recent Attendance</h3>
         </div>
@@ -1125,13 +1641,29 @@ function EmployeeView({
             </tbody>
           </table>
         </div>
-
       </div>
+  );
+
+  if (showPunchCardOnly) return punchCardSection;
+  if (showStatsAndAttendanceOnly) {
+    return (
+      <div className="space-y-6">
+        {statsSection}
+        {attendanceSection}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {punchCardSection}
+      {statsSection}
+      {attendanceSection}
     </div>
   );
 }
  
-function EventsSidebar({ user }: { user: any }) {
+function EventsSidebar({ user, leaves }: { user: any, leaves: any[] }) {
   const [isAddEventOpen, setIsAddEventOpen] = useState(false);
   const [isViewAllOpen, setIsViewAllOpen] = useState(false);
   const [events, setEvents] = useState<any[]>([]);
@@ -1173,7 +1705,19 @@ function EventsSidebar({ user }: { user: any }) {
         };
       });
 
-      const allCombined = [...eventsData, ...birthdayEvents];
+      const resignationEvents = empData.filter((emp: any) => emp.hasResignation && emp.resignationDate).map((emp: any) => {
+        const empName = emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || 'Employee';
+        return {
+          id: `resignation-${emp.id}`,
+          type: 'resignation',
+          title: `${empName} - Last Day`,
+          description: 'Last working day.',
+          date: emp.resignationDate,
+          originalResignationDate: emp.resignationDate
+        };
+      });
+
+      const allCombined = [...eventsData, ...birthdayEvents, ...resignationEvents];
       setEvents(allCombined.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime()));
     } catch (err) {
       console.error("Error fetching events:", err);
@@ -1372,11 +1916,14 @@ function EventsSidebar({ user }: { user: any }) {
              <div className={`${
                event.type === 'meeting' ? 'bg-[#F0FDF4] text-green-600' : 
                event.type === 'discussion' ? 'bg-[#EFF6FF] text-blue-600' : 
+               event.type === 'birthday' ? 'bg-[#FFF7ED] text-orange-600' : 
+               event.type === 'resignation' ? 'bg-[#FEF2F2] text-red-600' :
                'bg-[#FFF7ED] text-orange-600'
              } p-3 rounded-xl`}>
                {event.type === 'meeting' ? <CalendarIcon className="w-5 h-5" /> : 
                 event.type === 'discussion' ? <MessageSquare className="w-5 h-5" /> : 
                 event.type === 'birthday' ? <Cake className="w-5 h-5" /> : 
+                event.type === 'resignation' ? <UserX className="w-5 h-5" /> :
                 <CalendarIcon className="w-5 h-5" />}
              </div>
              <div className="flex-1 min-w-0">
@@ -1385,11 +1932,11 @@ function EventsSidebar({ user }: { user: any }) {
              </div>
              <div className="text-right">
                <div className="text-[13px] font-bold text-[#111827]">{dayjs(event.date).format("DD MMM")}</div>
-               {event.type !== 'birthday' && (
+               {event.type !== 'birthday' && event.type !== 'resignation' && (
                  <div className="text-[11px] text-gray-400 font-medium">{event.time}</div>
                )}
                
-               {canAddEvents && event.type !== 'birthday' && (
+               {canAddEvents && event.type !== 'birthday' && event.type !== 'resignation' && (
                  <div className="flex items-center justify-end gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button 
                       onClick={() => handleEditClick(event)}

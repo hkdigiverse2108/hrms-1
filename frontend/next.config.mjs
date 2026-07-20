@@ -14,10 +14,14 @@ const nextConfig = {
   },
   productionBrowserSourceMaps: false,
   async rewrites() {
-    const backendUrl = (process.env.BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
     const localBackendPort = process.env.BACKEND_PORT || '8000';
+    const backendUrl = (process.env.BACKEND_URL || `http://127.0.0.1:${localBackendPort}`).replace(/\/$/, '');
     return {
       beforeFiles: [
+        {
+          source: '/uploads/:path*',
+          destination: `${backendUrl}/uploads/:path*`,
+        },
         {
           source: '/api/activity/session-active/:path*',
           destination: `http://127.0.0.1:${localBackendPort}/activity/session-active/:path*`,
@@ -33,6 +37,10 @@ const nextConfig = {
         {
           source: '/api/system/info',
           destination: `http://127.0.0.1:${localBackendPort}/system/info`,
+        },
+        {
+          source: '/api/chat/ws-info',
+          destination: `http://127.0.0.1:${localBackendPort}/chat/ws-info`,
         },
         {
           source: '/api/:path*',

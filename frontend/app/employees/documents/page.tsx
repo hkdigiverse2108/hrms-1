@@ -48,7 +48,9 @@ export default function EmployeeDocumentsPage() {
   }, [permissionsLoading, isAdmin, router, checkPermission])
 
   // Official Letter Requests State
-  const [activeMainTab, setActiveMainTab] = useState<'submitted' | 'requests'>('submitted')
+  const [activeMainTab, setActiveMainTab] = useState<string>('submitted')
+  const [contractEmployeeFilter, setContractEmployeeFilter] = useState('all')
+  const [contractTypeFilter, setContractTypeFilter] = useState('all')
   
   // Deposit Ledger States
   const [isLedgerModalOpen, setIsLedgerModalOpen] = useState(false)
@@ -279,7 +281,8 @@ export default function EmployeeDocumentsPage() {
   const [templates, setTemplates] = useState<any[]>([])
   const [requestFormData, setRequestFormData] = useState({
     documentType: '',
-    reason: ''
+    reason: '',
+    neededByDate: ''
   })
   const [sendFormData, setSendFormData] = useState({
     fileName: '',
@@ -391,14 +394,15 @@ export default function EmployeeDocumentsPage() {
           documentType: requestFormData.documentType,
           reason: requestFormData.reason,
           status: 'Pending',
-          requestDate: new Date().toISOString().split('T')[0]
+          requestDate: new Date().toISOString().split('T')[0],
+          neededByDate: requestFormData.neededByDate || null
         })
       })
       
       if (response.ok) {
         toast.success('Document request submitted successfully')
         setIsRequestModalOpen(false)
-        setRequestFormData({ documentType: templates[0]?.name || '', reason: '' })
+        setRequestFormData({ documentType: templates[0]?.name || '', reason: '', neededByDate: '' })
         fetchRequests()
       } else {
         toast.error('Failed to submit request')
@@ -844,6 +848,7 @@ export default function EmployeeDocumentsPage() {
 
   const [filterType, setFilterType] = useState<string>('all')
   const [filterEmployee, setFilterEmployee] = useState<string>('all')
+  const [filterStatus, setFilterStatus] = useState<string>('all')
 
   const allDocumentsWithPlaceholders = () => {
     const combined: any[] = [];
@@ -916,15 +921,148 @@ export default function EmployeeDocumentsPage() {
     }
     const matchesType = filterType === 'all' || doc.documentName?.includes(filterType)
     const matchesEmployee = filterEmployee === 'all' || doc.employeeId === filterEmployee
-    return matchesType && matchesEmployee
+    
+    let matchesStatus = true;
+    if (filterStatus !== 'all') {
+      if (filterStatus === 'pending') {
+        matchesStatus = doc.isPendingSubmit === true;
+      } else if (filterStatus === 'accepted') {
+        matchesStatus = doc.status === 'Accepted' && !doc.isPendingSubmit;
+      } else if (filterStatus === 'rejected') {
+        matchesStatus = doc.status === 'Rejected' && !doc.isPendingSubmit;
+      } else if (filterStatus === 'returned') {
+        matchesStatus = doc.status === 'Returned to Employee' && !doc.isPendingSubmit;
+      }
+    }
+
+    return matchesType && matchesEmployee && matchesStatus
   })
+
+  const contractRows: any[] = [];
+  employees.forEach((emp: any) => {
+    if (emp.bondsHistory && emp.bondsHistory.length > 0) {
+      emp.bondsHistory.forEach((bond: any, idx: number) => {
+        if (bond.startDate || bond.endDate) {
+          contractRows.push({
+            id: `${emp.id}-bond-${idx}`,
+            employeeId: emp.id,
+            employeeName: emp.name,
+            employeeCode: emp.employeeId,
+            designation: emp.designation,
+            type: 'Bond',
+            startDate: bond.startDate,
+            endDate: bond.endDate,
+            displayDetails: `Start: ${bond.startDate || 'N/A'} · End: ${bond.endDate || 'N/A'}`,
+            sortDate: bond.endDate || bond.startDate || ''
+          });
+        }
+      });
+    } else if (emp.hasBond && (emp.bondStartDate || emp.bondEndDate)) {
+      contractRows.push({
+        id: `${emp.id}-bond`,
+        employeeId: emp.id,
+        employeeName: emp.name,
+        employeeCode: emp.employeeId,
+        designation: emp.designation,
+        type: 'Bond',
+        startDate: emp.bondStartDate,
+        endDate: emp.bondEndDate,
+        displayDetails: `Start: ${emp.bondStartDate || 'N/A'} · End: ${emp.bondEndDate || 'N/A'}`,
+        sortDate: emp.bondEndDate || emp.bondStartDate || ''
+      });
+    }
+    if (emp.hasNoticePeriod && (emp.noticePeriodStartDate || emp.noticePeriodDays)) {
+      contractRows.push({
+        id: `${emp.id}-notice`,
+        employeeId: emp.id,
+        employeeName: emp.name,
+        employeeCode: emp.employeeId,
+        designation: emp.designation,
+        type: 'Notice Period',
+        startDate: emp.noticePeriodStartDate,
+        days: emp.noticePeriodDays,
+        displayDetails: `Start: ${emp.noticePeriodStartDate || 'N/A'} · Duration: ${emp.noticePeriodDays ? `${emp.noticePeriodDays} Days` : 'N/A'}`,
+        sortDate: emp.noticePeriodStartDate || ''
+      });
+    }
+    if (emp.hasResignation && emp.resignationDate) {
+      contractRows.push({
+        id: `${emp.id}-resignation`,
+        employeeId: emp.id,
+        employeeName: emp.name,
+        employeeCode: emp.employeeId,
+        designation: emp.designation,
+        type: 'Resignation',
+        resignationDate: emp.resignationDate,
+        displayDetails: `Last Day: ${emp.resignationDate || 'N/A'}`,
+        sortDate: emp.resignationDate || ''
+      });
+    }
+    if (emp.hasEmployment && emp.employmentStartDate) {
+      contractRows.push({
+        id: `${emp.id}-employment`,
+        employeeId: emp.id,
+        employeeName: emp.name,
+        employeeCode: emp.employeeId,
+        designation: emp.designation,
+        type: 'Employment',
+        startDate: emp.employmentStartDate,
+        displayDetails: `Start Date: ${emp.employmentStartDate || 'N/A'}`,
+        sortDate: emp.employmentStartDate || ''
+      });
+    }
+  });
+
+  const filteredContractRows = contractRows
+    .filter((row: any) => {
+      if (contractEmployeeFilter !== 'all' && row.employeeId !== contractEmployeeFilter) return false;
+
+      if (contractTypeFilter !== 'all') {
+        if (contractTypeFilter === 'bond' && row.type !== 'Bond') return false;
+        if (contractTypeFilter === 'notice' && row.type !== 'Notice Period') return false;
+        if (contractTypeFilter === 'resignation' && row.type !== 'Resignation') return false;
+        if (contractTypeFilter === 'employment' && row.type !== 'Employment') return false;
+      }
+
+      return true;
+    })
+    .sort((a: any, b: any) => {
+      if (!a.sortDate) return 1;
+      if (!b.sortDate) return -1;
+      // Convert to Date and compare for descending order (latest first)
+      const parseDate = (dStr: string) => {
+        // If string contains '-' let's normalize or split
+        if (dStr.includes('-')) {
+          const parts = dStr.split('-');
+          if (parts[0].length === 4) { // YYYY-MM-DD
+            return new Date(dStr);
+          } else { // DD-MM-YYYY
+            return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+          }
+        }
+        return new Date(dStr);
+      };
+      return parseDate(a.sortDate).getTime() - parseDate(b.sortDate).getTime();
+    });
 
   // Official Letter Requests Columns & Render Actions
   const requestColumns = [
     { key: 'employeeName' as const, header: 'Employee' },
     { key: 'documentType' as const, header: 'Letter Type' },
-    { key: 'reason' as const, header: 'Reason' },
+    { key: 'reason' as const, header: 'Reason', render: (record: any) => (
+      <span 
+        className="block truncate max-w-[250px] text-slate-600 hover:text-slate-900 cursor-help" 
+        title={record.reason}
+      >
+        {record.reason || "-"}
+      </span>
+    )},
     { key: 'requestDate' as const, header: 'Date Requested' },
+    { key: 'neededByDate' as const, header: 'Needed By', render: (record: any) => (
+      <span className="text-slate-700">
+        {record.neededByDate || "-"}
+      </span>
+    )},
     { key: 'status' as const, header: 'Status', render: (record: any) => (
       <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
         record.status === 'Sent' ? 'bg-emerald-50 text-emerald-600' :
@@ -1052,7 +1190,7 @@ export default function EmployeeDocumentsPage() {
         )}
         {activeMainTab === 'requests' && !isAdminOrHR && (
           <Button className="bg-brand-teal hover:bg-brand-teal/90 font-bold" onClick={() => {
-            setRequestFormData({ documentType: templates[0]?.name || '', reason: '' })
+            setRequestFormData({ documentType: templates[0]?.name || '', reason: '', neededByDate: '' })
             setIsRequestModalOpen(true)
           }}>
             <Plus className="mr-2 h-4 w-4" />
@@ -1072,7 +1210,7 @@ export default function EmployeeDocumentsPage() {
       </PageHeader>
 
       <Tabs value={activeMainTab} onValueChange={(val: any) => setActiveMainTab(val)} className="w-full">
-        <TabsList className={`grid w-full p-1 bg-slate-100/80 rounded-xl ${isAdminOrHR ? 'grid-cols-4 max-w-[800px]' : 'grid-cols-2 max-w-[400px]'}`}>
+        <TabsList className={`grid w-full p-1 bg-slate-100/80 rounded-xl ${isAdminOrHR ? 'grid-cols-5 max-w-[1000px]' : 'grid-cols-2 max-w-[400px]'}`}>
           <TabsTrigger 
             value="submitted" 
             className="font-bold data-[state=active]:bg-brand-teal data-[state=active]:text-white transition-all duration-200"
@@ -1099,6 +1237,14 @@ export default function EmployeeDocumentsPage() {
               className="font-bold data-[state=active]:bg-brand-teal data-[state=active]:text-white transition-all duration-200"
             >
               Document Templates
+            </TabsTrigger>
+          )}
+          {isAdminOrHR && (
+            <TabsTrigger 
+              value="contracts" 
+              className="font-bold data-[state=active]:bg-brand-teal data-[state=active]:text-white transition-all duration-200"
+            >
+              Verify Contracts
             </TabsTrigger>
           )}
         </TabsList>
@@ -1132,6 +1278,21 @@ export default function EmployeeDocumentsPage() {
                       {documentTypes.map((t: string) => (
                         <SelectItem key={t} value={t}>{t}</SelectItem>
                       ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="w-56">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Status</span>
+                  <Select value={filterStatus} onValueChange={setFilterStatus}>
+                    <SelectTrigger className="h-10 border-slate-200 bg-slate-50/50 font-semibold">
+                      <SelectValue placeholder="All Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Status</SelectItem>
+                      <SelectItem value="pending">Pending to Submit</SelectItem>
+                      <SelectItem value="accepted">Accepted</SelectItem>
+                      <SelectItem value="rejected">Rejected</SelectItem>
+                      <SelectItem value="returned">Returned to Employee</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1210,8 +1371,20 @@ export default function EmployeeDocumentsPage() {
               data={documentRequests}
               columns={isAdminOrHR ? requestColumns : [
                 { key: 'documentType' as const, header: 'Letter Type' },
-                { key: 'reason' as const, header: 'Reason' },
+                { key: 'reason' as const, header: 'Reason', render: (record: any) => (
+                  <span 
+                    className="block truncate max-w-[250px] text-slate-600 hover:text-slate-900 cursor-help" 
+                    title={record.reason}
+                  >
+                    {record.reason || "-"}
+                  </span>
+                )},
                 { key: 'requestDate' as const, header: 'Requested Date' },
+                { key: 'neededByDate' as const, header: 'Needed By', render: (record: any) => (
+                  <span className="text-slate-700">
+                    {record.neededByDate || "-"}
+                  </span>
+                )},
                 { key: 'status' as const, header: 'Status', render: (record: any) => (
                   <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
                     record.status === 'Sent' ? 'bg-emerald-50 text-emerald-600' :
@@ -1276,6 +1449,98 @@ export default function EmployeeDocumentsPage() {
           <TabsContent value="templates" className="mt-6 h-full">
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden min-h-[600px]">
               <DocumentTemplatesPage />
+            </div>
+          </TabsContent>
+        )}
+
+        {isAdminOrHR && (
+          <TabsContent value="contracts" className="mt-6 space-y-6">
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-5">
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="w-64">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Filter by Employee</span>
+                  <Select value={contractEmployeeFilter} onValueChange={setContractEmployeeFilter}>
+                    <SelectTrigger className="h-10 border-slate-200 bg-slate-50/50 font-semibold">
+                      <SelectValue placeholder="All Employees" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Employees</SelectItem>
+                      {employees.map((emp: any) => (
+                        <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.employeeId})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="w-64">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Filter by Term Type</span>
+                  <Select value={contractTypeFilter} onValueChange={setContractTypeFilter}>
+                    <SelectTrigger className="h-10 border-slate-200 bg-slate-50/50 font-semibold">
+                      <SelectValue placeholder="All Terms" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Terms (Bond / Notice / Resignation / Employment)</SelectItem>
+                      <SelectItem value="bond">Bond</SelectItem>
+                      <SelectItem value="notice">Notice Period</SelectItem>
+                      <SelectItem value="resignation">Resignation</SelectItem>
+                      <SelectItem value="employment">Employment</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="overflow-hidden border border-slate-100 rounded-xl">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100">
+                      <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Employee</th>
+                      <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Contract Type</th>
+                      <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Details</th>
+                      <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Key Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {filteredContractRows.length > 0 ? (
+                      filteredContractRows.map((row: any) => (
+                        <tr key={row.id} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-full bg-brand-teal/10 flex items-center justify-center font-bold text-brand-teal text-sm">
+                                {row.employeeName?.charAt(0) || 'E'}
+                              </div>
+                              <div>
+                                <div className="font-semibold text-slate-900">{row.employeeName}</div>
+                                <div className="text-xs text-slate-500">{row.employeeCode} · {row.designation || 'Staff'}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`px-2.5 py-1 rounded text-[10px] font-black uppercase border ${
+                              row.type === 'Bond' ? 'bg-teal-50 text-teal-700 border-teal-200' :
+                              row.type === 'Notice Period' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                              row.type === 'Resignation' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                              'bg-indigo-50 text-indigo-700 border-indigo-200'
+                            }`}>
+                              {row.type}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-xs font-semibold text-slate-600">
+                            {row.displayDetails}
+                          </td>
+                          <td className="px-6 py-4 text-xs font-bold text-slate-900">
+                            {row.sortDate || '—'}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={4} className="px-6 py-10 text-center text-slate-400 italic text-sm">
+                          No contracts match the selected filters.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </TabsContent>
         )}
@@ -1408,6 +1673,14 @@ export default function EmployeeDocumentsPage() {
                 placeholder="e.g. For bank loan, higher education, etc." 
                 value={requestFormData.reason} 
                 onChange={(e) => setRequestFormData({...requestFormData, reason: e.target.value})} 
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Needed By Date (Optional)</Label>
+              <Input 
+                type="date"
+                value={requestFormData.neededByDate} 
+                onChange={(e) => setRequestFormData({...requestFormData, neededByDate: e.target.value})} 
               />
             </div>
           </div>

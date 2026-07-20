@@ -243,6 +243,11 @@ export default function ViewInvoicePage() {
       return;
     }
 
+    if (baseAmt > (invoice.total || 0)) {
+      toast.error("Incentive base amount cannot exceed the invoice amount");
+      return;
+    }
+
     setIsUpdatingStatus(true);
     setShowIncentiveModal(false);
     try {
@@ -857,7 +862,14 @@ export default function ViewInvoicePage() {
                 id="incentiveAmountBase"
                 type="number"
                 value={incentiveAmountBase}
-                onChange={(e) => setIncentiveAmountBase(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (invoice && val && parseFloat(val) > (invoice.total || 0)) {
+                    toast.error("Incentive base amount cannot exceed the invoice amount");
+                    return;
+                  }
+                  setIncentiveAmountBase(val);
+                }}
                 placeholder="0.00"
               />
             </div>

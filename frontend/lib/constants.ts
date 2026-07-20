@@ -37,3 +37,14 @@ export const INDIAN_STATES = [
   { code: "37", name: "Andhra Pradesh" },
   { code: "38", name: "Ladakh" }
 ];
+
+export const TIME_OPTIONS = Array.from({ length: 24 * 4 }).map((_, i) => {
+  const hour = Math.floor(i / 4);
+  const minute = (i % 4) * 15;
+  const ampm = hour >= 12 ? "PM" : "AM";
+  const displayHour = hour % 12 || 12;
+  const timeString = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}:00`;
+  const timeStringNoSec = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
+  const displayString = `${displayHour}:${minute.toString().padStart(2, "0")} ${ampm}`;
+  return { value: timeString, valueNoSec: timeStringNoSec, label: displayString };
+});

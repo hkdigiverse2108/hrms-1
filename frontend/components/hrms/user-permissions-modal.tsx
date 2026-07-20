@@ -33,18 +33,26 @@ interface UserPermissionsModalProps {
 
 const DEFAULT_MODULES = [
   { moduleName: 'dashboard', displayName: 'Dashboard', tabUrl: '/' },
-  { moduleName: 'employees', displayName: 'Employee Management', tabUrl: '/employees' },
+  { moduleName: 'employees', displayName: 'Employee List', tabUrl: '/employees' },
   { moduleName: 'payroll', displayName: 'Payroll', tabUrl: '/payroll' },
   { moduleName: 'attendance', displayName: 'Attendance', tabUrl: '/attendance' },
   { moduleName: 'leave', displayName: 'Leave', tabUrl: '/leave' },
   { moduleName: 'projects', displayName: 'Projects', tabUrl: '/work-management/projects' },
-  { moduleName: 'tasks', displayName: 'Tasks', tabUrl: '/work-management/tasks' },
+  { moduleName: 'tasks', displayName: 'Development', tabUrl: '/work-management/development' },
+  { moduleName: 'personal-tasks', displayName: 'Tasks', tabUrl: '/tasks' },
   { moduleName: 'daily-progress', displayName: 'Daily Progress', tabUrl: '/work-management/daily-progress' },
-  { moduleName: 'remarks', displayName: 'Remarks', tabUrl: '/remarks' },
-  { moduleName: 'review', displayName: 'Review', tabUrl: '/review' },
+  { moduleName: 'work-logs', displayName: 'Work Logs', tabUrl: '/work-management/work-logs' },
+  { moduleName: 'marketing', displayName: 'Digital Marketing', tabUrl: '/work-management/digital-marketing' },
+  { moduleName: 'creative', displayName: 'Social Media Management', tabUrl: '/work-management/smm' },
+  { moduleName: 'remarks', displayName: 'Penalty', tabUrl: '/penalty' },
+  { moduleName: 'review', displayName: 'Remarks', tabUrl: '/remarks' },
   { moduleName: 'invoice', displayName: 'Invoice', tabUrl: '/invoice' },
   { moduleName: 'chat', displayName: 'Chat', tabUrl: '/chat' },
   { moduleName: 'settings', displayName: 'Settings', tabUrl: '/settings' },
+  { moduleName: 'activity-logs', displayName: 'Activity Logs', tabUrl: '/activity-logs' },
+  { moduleName: 'gallery', displayName: 'Gallery', tabUrl: '/workspace/gallery' },
+  { moduleName: 'training', displayName: 'Course Library', tabUrl: '/training' },
+  { moduleName: 'admin-courses', displayName: 'Manage Courses', tabUrl: '/admin/courses' },
 ]
 
 export function UserPermissionsModal({
@@ -73,7 +81,7 @@ export function UserPermissionsModal({
           // Merge existing permissions with default modules to handle new modules
           const merged = DEFAULT_MODULES.map(def => {
             const existing = data.permissions.find((p: any) => p.moduleName === def.moduleName)
-            return existing || { ...def, canAdd: false, canEdit: false, canDelete: false, canView: false }
+            return existing ? { ...existing, displayName: def.displayName, tabUrl: def.tabUrl } : { ...def, canAdd: false, canEdit: false, canDelete: false, canView: false }
           })
           setPermissions(merged)
         } else {
@@ -110,9 +118,14 @@ export function UserPermissionsModal({
   const handleSave = async () => {
     setSaving(true)
     try {
+      const token = localStorage.getItem('token')
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
       const response = await fetch(`${API_URL}/user-permissions/${employeeId}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ permissions }),
       })
       if (response.ok) {

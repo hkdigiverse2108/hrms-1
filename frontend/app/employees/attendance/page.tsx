@@ -31,18 +31,30 @@ import { PageHeader } from "@/components/common/PageHeader";
 import dayjs from "dayjs";
 import { API_URL, getAvatarUrl } from "@/lib/config";
 import { exportToCSV } from "@/lib/export-utils";
-import { formatTime12h } from "@/lib/utils";
+import { formatTime12h, calculateAttendanceTimes } from "@/lib/utils";
 import { toast } from "sonner";
+import { useUserContext } from "@/context/UserContext";
 
 import { usePermissions } from "@/hooks/usePermissions";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useConfirm } from "@/context/ConfirmContext";
 
+const TIME_OPTIONS = Array.from({ length: 24 * 4 }).map((_, i) => {
+  const hour = Math.floor(i / 4);
+  const minute = (i % 4) * 15;
+  const ampm = hour >= 12 ? "PM" : "AM";
+  const displayHour = hour % 12 || 12;
+  const timeString = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}:00`;
+  const displayString = `${displayHour}:${minute.toString().padStart(2, "0")} ${ampm}`;
+  return { value: timeString, label: displayString };
+});
+
 export default function EmployeeAttendanceListPage() {
   const router = useRouter();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
   const { confirm } = useConfirm();
+  const { getISTNow } = useUserContext();
   const formatToHhMm = (totalMinutes: number) => {
     if (!totalMinutes || totalMinutes <= 0) return "-";
     const h = Math.floor(totalMinutes / 60);
@@ -77,6 +89,12 @@ export default function EmployeeAttendanceListPage() {
   const [view, setView] = useState<"list" | "calendar">("list");
   const [attendance, setAttendance] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
+
+  // Filter out admin and inactive employees from the attendance list
+  const nonAdminEmployees = useMemo(() => 
+    employees.filter(emp => emp.role?.toLowerCase() !== 'admin' && emp.status?.toLowerCase() !== 'inactive'),
+    [employees]
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDept, setSelectedDept] = useState("all");
@@ -289,7 +307,9 @@ export default function EmployeeAttendanceListPage() {
   };
 
   const filteredAttendance = useMemo(() => {
-    let baseRecords = [...attendance];
+    // Start with attendance records that don't belong to admin employees
+    const adminIds = new Set(employees.filter(e => e.role?.toLowerCase() === 'admin').map(e => e.id));
+    let baseRecords = attendance.filter(a => !adminIds.has(a.employeeId));
     const todayStr = dayjs().format('YYYY-MM-DD');
     
     // Determine the range of dates to synthesize based on filter
@@ -337,7 +357,7 @@ export default function EmployeeAttendanceListPage() {
 
     // Synthesize missing records for each employee and each date in the range
     datesToSynthesize.forEach(dateStr => {
-      employees.forEach(emp => {
+      nonAdminEmployees.forEach(emp => {
         // We use employeeId for the check because some records might use emp.id or emp.employeeId
         const existing = baseRecords.find(a => {
           const aDateStr = a.date?.split('T')[0]?.split(' ')[0];
@@ -431,7 +451,7 @@ export default function EmployeeAttendanceListPage() {
       const bDateStr = b.date?.split('T')[0]?.split(' ')[0];
       return dayjs(bDateStr).valueOf() - dayjs(aDateStr).valueOf() || a.employeeName?.localeCompare(b.employeeName);
     });
-  }, [attendance, employees, leaveRequests, dateFilter, specificDate, selectedStatus, selectedDept, searchQuery]);
+  }, [attendance, employees, nonAdminEmployees, leaveRequests, dateFilter, specificDate, selectedStatus, selectedDept, searchQuery]);
 
   const paginatedAttendance = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
@@ -503,15 +523,7 @@ export default function EmployeeAttendanceListPage() {
                     req.status === 'approved'
                   );
                   
-                  const isLate = (() => {
-                    if (recoveryReq) return false;
-                    if (!record.checkIn || record.checkIn === "--") return false;
-                    const officeStartTime = sysSettings?.officeStartTime || "09:30";
-                    const bufferMins = sysSettings?.lateBufferMins || 10;
-                    const [h, m] = record.checkIn.split(':').map(Number);
-                    const [sh, sm] = officeStartTime.split(':').map(Number);
-                    return (h * 60 + m) > (sh * 60 + sm + bufferMins);
-                  })();
+                  const isLate = record.isLate && !recoveryReq;
                   
                   if (isLate) l++;
                   else p++;
@@ -519,7 +531,7 @@ export default function EmployeeAttendanceListPage() {
               });
               
               const totalLogged = p + l + lv;
-              const a = Math.max(0, employees.length - totalLogged);
+              const a = Math.max(0, nonAdminEmployees.length - totalLogged);
               
               return { present: p, late: l, absent: a, leave: lv };
             })();
@@ -537,7 +549,7 @@ export default function EmployeeAttendanceListPage() {
               >
                 <div className="flex justify-between items-start mb-1">
                   <span className={`text-xs font-bold ${!d.currentMonth ? 'text-slate-300' : 'text-slate-600'}`}>{d.day}</span>
-                  {d.currentMonth && <span className="text-[9px] font-medium text-slate-400">{employees.length} Total</span>}
+                  {d.currentMonth && <span className="text-[9px] font-medium text-slate-400">{nonAdminEmployees.length} Total</span>}
                 </div>
 
                 {isSunday ? (
@@ -572,7 +584,7 @@ export default function EmployeeAttendanceListPage() {
     if (!selectedDay) return null;
     
     const dayAttendance = attendance.filter(a => a.date === selectedDay);
-    const dayEmployees = employees.map(emp => {
+    const dayEmployees = nonAdminEmployees.map(emp => {
       const existing = dayAttendance.find(a => a.employeeId === emp.id || a.employeeId === emp.employeeId);
       if (existing) return existing;
       
@@ -599,16 +611,12 @@ export default function EmployeeAttendanceListPage() {
           req.date === a.date && (req.employee_id === a.employeeId || req.employee_id === a.employeeId) && req.status === 'approved'
         );
         if (recoveryReq) return false;
-        const officeStartTime = sysSettings?.officeStartTime || "09:30";
-        const bufferMins = sysSettings?.lateBufferMins || 10;
-        const [h, m] = (a.checkIn || "00:00").split(':').map(Number);
-        const [sh, sm] = officeStartTime.split(':').map(Number);
-        return (h * 60 + m) > (sh * 60 + sm + bufferMins);
+        return a.isLate;
       }).length,
       absent: dayEmployees.filter(a => a.status === "Absent").length,
       records: filteredRecords
     };
-  }, [selectedDay, attendance, employees, modalSearchQuery, recoveryRequests, sysSettings]);
+  }, [selectedDay, attendance, employees, nonAdminEmployees, modalSearchQuery, recoveryRequests, sysSettings]);
 
   if (permissionsLoading) {
     return (
@@ -738,7 +746,7 @@ export default function EmployeeAttendanceListPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Employees</SelectItem>
-              {employees.map(emp => (
+              {nonAdminEmployees.map(emp => (
                 <SelectItem key={emp.id} value={emp.id}>
                   {emp.name} {emp.employeeId ? `(${emp.employeeId})` : ""}
                 </SelectItem>
@@ -781,57 +789,68 @@ export default function EmployeeAttendanceListPage() {
                   </tr>
                 ) : (
                   paginatedAttendance.map((record, idx) => {
-                    const totalBreakMinutes = (record.breaks || []).reduce((acc: number, b: any) => acc + (parseInt(b.duration) || 0), 0);
-                    const breakStr = formatToHhMm(totalBreakMinutes);
-                    
-                    const isToday = dayjs(record.date).isSame(dayjs(), 'day');
-                    const checkIn = dayjs(`${record.date} ${record.checkIn}`);
-                    const checkOut = record.checkOut 
-                      ? dayjs(`${record.date} ${record.checkOut}`) 
-                      : (isToday && record.checkIn && record.checkIn !== "--" ? dayjs() : null);
-                    
-                    let totalWorkingMinutes = 0;
-                    if (checkIn.isValid() && checkOut && checkOut.isValid()) {
-                      totalWorkingMinutes = checkOut.diff(checkIn, 'minute');
-                    }
+                    const { productionMinutes, totalWorkingMinutes, breakMinutes } = calculateAttendanceTimes(record, getISTNow());
+                    const breakStr = formatToHhMm(breakMinutes);
                     const totalWorkingStr = formatToHhMm(totalWorkingMinutes);
-                    
-                    const productionMinutes = Math.max(0, totalWorkingMinutes - totalBreakMinutes);
                     const productionStr = formatToHhMm(productionMinutes);
                     
+                    const isToday = dayjs(record.date).isSame(dayjs(), 'day');
+                    
+                    const emp = employees.find(e => e.id === record.employeeId || e.employeeId === record.employeeId);
+                    const officeStartTime = emp?.startTime || sysSettings?.officeStartTime || "09:30";
+                    const officeEndTime = emp?.endTime || sysSettings?.officeEndTime || "18:30";
+
+                    const checkIn = dayjs(`${record.date} ${record.checkIn}`);
+
                     const recoveryReq = recoveryRequests.find(req => 
                       req.date === record.date && 
-                      (req.employee_id === record.employeeId || req.employee_id === record.employeeId) && 
+                      (req.employee_id === record.employeeId || req.employeeId === record.employeeId) && 
                       req.status === 'approved'
                     );
 
-                    const isLate = (() => {
-                      if (recoveryReq) return false;
-                      if (!record.checkIn || record.checkIn === "--") return false;
-                      const officeStartTime = sysSettings?.officeStartTime || "09:30";
-                      const bufferMins = sysSettings?.lateBufferMins || 10;
-                      
-                      const [h, m] = record.checkIn.split(':').map(Number);
-                      const [sh, sm] = officeStartTime.split(':').map(Number);
-                      
-                      const punchMins = h * 60 + m;
-                      const limitMins = sh * 60 + sm + bufferMins;
-                      
-                      return punchMins > limitMins;
+                    const isLate = record.isLate && !recoveryReq;
+                    
+                    const lateMinutes = (() => {
+                      if (!isLate || !checkIn.isValid()) return 0;
+                      return Math.max(0, checkIn.diff(dayjs(`${record.date} ${officeStartTime}`), 'minute'));
                     })();
                     
-                    const lateMinutes = checkIn.isValid() ? Math.max(0, checkIn.diff(dayjs(`${record.date} ${sysSettings?.officeStartTime || "09:30"}`), 'minute')) : 0;
                     const lateStr = isLate || recoveryReq ? formatToHhMm(lateMinutes) : "-";
                     
                     const shiftDurationMinutes = (() => {
-                      const officeStartTime = sysSettings?.officeStartTime || "09:30";
-                      const officeEndTime = sysSettings?.officeEndTime || "18:30";
-                      const [sh, sm] = officeStartTime.split(':').map(Number);
-                      const [eh, em] = officeEndTime.split(':').map(Number);
-                      return (eh * 60 + em) - (sh * 60 + sm);
+                      const parseTimeToMinutes = (timeStr: string): number => {
+                        if (!timeStr) return 0;
+                        const cleaned = timeStr.trim().toUpperCase();
+                        let hours = 0;
+                        let minutes = 0;
+                        const ampmMatch = cleaned.match(/(\d+):(\d+)(?::\d+)?\s*(AM|PM)/);
+                        if (ampmMatch) {
+                          hours = parseInt(ampmMatch[1], 10);
+                          minutes = parseInt(ampmMatch[2], 10);
+                          const ampm = ampmMatch[3];
+                          if (ampm === "PM" && hours < 12) hours += 12;
+                          if (ampm === "AM" && hours === 12) hours = 0;
+                        } else {
+                          const parts = cleaned.split(':');
+                          hours = parseInt(parts[0] || '0', 10);
+                          minutes = parseInt(parts[1] || '0', 10);
+                          if (hours >= 1 && hours <= 8) {
+                            hours += 12;
+                          }
+                        }
+                        return hours * 60 + minutes;
+                      };
+
+                      const startMinutes = parseTimeToMinutes(officeStartTime);
+                      const endMinutes = parseTimeToMinutes(officeEndTime);
+                      let diff = endMinutes - startMinutes;
+                      if (diff < 0) {
+                        diff += 24 * 60;
+                      }
+                      return diff;
                     })();
                     
-                    const overtimeMinutes = Math.max(0, productionMinutes - shiftDurationMinutes);
+                    const overtimeMinutes = productionMinutes > 0 ? Math.max(0, productionMinutes - shiftDurationMinutes) : 0;
                     const overtimeStr = formatToHhMm(overtimeMinutes);
 
                     const day = dayjs(record.date).format("dddd");
@@ -890,8 +909,8 @@ export default function EmployeeAttendanceListPage() {
                             ) : "-"}
                         </td>
                         <td className="px-4 py-4 text-slate-700 font-medium whitespace-nowrap">{totalWorkingStr}</td>
-                        <td className="px-4 py-4 text-[11px] text-muted-foreground max-w-[200px] truncate" title={(!record.remarks || record.remarks === "-") ? (isLate ? `Late punch-in; ${lateMinutes} mins after expected start (${sysSettings?.officeStartTime || "09:30"} AM)` : undefined) : record.remarks}>
-                          {(!record.remarks || record.remarks === "-") ? (isLate ? `Late punch-in; ${lateMinutes} mins after expected start (${sysSettings?.officeStartTime || "09:30"} AM)` : "-") : record.remarks}
+                        <td className="px-4 py-4 text-[11px] text-muted-foreground max-w-[200px] truncate" title={(!record.remarks || record.remarks === "-") ? (isLate ? `Late punch-in; ${lateMinutes} mins after expected start (${formatTime12h(officeStartTime)})` : undefined) : record.remarks}>
+                          {(!record.remarks || record.remarks === "-") ? (isLate ? `Late punch-in; ${lateMinutes} mins after expected start (${formatTime12h(officeStartTime)})` : "-") : record.remarks}
                         </td>
                         <td className="px-4 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
@@ -1225,23 +1244,29 @@ export default function EmployeeAttendanceListPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Check In</label>
-                <input 
-                  type="time" 
-                  step="1"
-                  className="w-full p-2 border rounded-md" 
-                  value={createForm.checkIn}
-                  onChange={(e) => setCreateForm({...createForm, checkIn: e.target.value})}
-                />
+                <Select value={createForm.checkIn} onValueChange={(v) => setCreateForm({...createForm, checkIn: v})}>
+                  <SelectTrigger className="w-full h-10">
+                    <SelectValue placeholder="Check In" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[250px]">
+                    {TIME_OPTIONS.map(opt => (
+                      <SelectItem key={`create-checkin-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Check Out</label>
-                <input 
-                  type="time" 
-                  step="1"
-                  className="w-full p-2 border rounded-md" 
-                  value={createForm.checkOut}
-                  onChange={(e) => setCreateForm({...createForm, checkOut: e.target.value})}
-                />
+                <Select value={createForm.checkOut} onValueChange={(v) => setCreateForm({...createForm, checkOut: v})}>
+                  <SelectTrigger className="w-full h-10">
+                    <SelectValue placeholder="Check Out" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[250px]">
+                    {TIME_OPTIONS.map(opt => (
+                      <SelectItem key={`create-checkout-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="space-y-2">
@@ -1283,23 +1308,29 @@ export default function EmployeeAttendanceListPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Check In</label>
-                <input 
-                  type="time" 
-                  step="1"
-                  className="w-full p-2 border rounded-md" 
-                  value={editForm.checkIn}
-                  onChange={(e) => setEditForm({...editForm, checkIn: e.target.value})}
-                />
+                <Select value={editForm.checkIn} onValueChange={(v) => setEditForm({...editForm, checkIn: v})}>
+                  <SelectTrigger className="w-full h-10">
+                    <SelectValue placeholder="Check In" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[250px]">
+                    {TIME_OPTIONS.map(opt => (
+                      <SelectItem key={`edit-checkin-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Check Out</label>
-                <input 
-                  type="time" 
-                  step="1"
-                  className="w-full p-2 border rounded-md" 
-                  value={editForm.checkOut}
-                  onChange={(e) => setEditForm({...editForm, checkOut: e.target.value})}
-                />
+                <Select value={editForm.checkOut} onValueChange={(v) => setEditForm({...editForm, checkOut: v})}>
+                  <SelectTrigger className="w-full h-10">
+                    <SelectValue placeholder="Check Out" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[250px]">
+                    {TIME_OPTIONS.map(opt => (
+                      <SelectItem key={`edit-checkout-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="space-y-2">

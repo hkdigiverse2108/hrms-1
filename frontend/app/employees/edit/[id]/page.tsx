@@ -67,6 +67,22 @@ export default function EditEmployeePage() {
         delete payload.password
       }
 
+      if (payload.noticePeriodDays === '' || payload.noticePeriodDays === null || payload.noticePeriodDays === undefined) {
+        payload.noticePeriodDays = null;
+      } else {
+        payload.noticePeriodDays = parseInt(payload.noticePeriodDays) || null;
+      }
+
+      const dateFields = [
+        'dob', 'joinDate', 'bondStartDate', 'bondEndDate', 
+        'noticePeriodStartDate', 'resignationDate', 'employmentStartDate'
+      ];
+      dateFields.forEach(field => {
+        if (payload[field] === '') {
+          payload[field] = null;
+        }
+      });
+
       const response = await fetch(`${API_URL}/employees/${employeeId}`, {
         method: 'PUT',
         headers: {
@@ -79,7 +95,20 @@ export default function EditEmployeePage() {
         router.push('/employees')
       } else {
         const error = await response.json()
-        toast.error(`Error: ${error.detail || 'Failed to update employee'}`)
+        let errMsg = 'Failed to update employee';
+        if (error.detail) {
+          if (typeof error.detail === 'string') {
+            errMsg = error.detail;
+          } else if (Array.isArray(error.detail)) {
+            errMsg = error.detail.map((e: any) => {
+              const field = e.loc ? e.loc.filter((l: any) => l !== 'body').join('.') : '';
+              return `${field ? field + ': ' : ''}${e.msg}`;
+            }).join(' | ');
+          } else {
+            errMsg = JSON.stringify(error.detail);
+          }
+        }
+        toast.error(`Error: ${errMsg}`, { duration: 10000 });
       }
     } catch (error) {
       console.error('Error updating employee:', error)
@@ -101,11 +130,9 @@ export default function EditEmployeePage() {
     <>
       <div className="max-w-[1400px] mx-auto px-4 py-6 space-y-10">
         <div className="flex items-center gap-4">
-          <Link href="/employees">
-            <Button className="bg-brand-teal hover:bg-brand-teal-light text-white rounded-lg h-10 w-10 p-0 shadow-md">
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-          </Link>
+          <Button onClick={() => router.back()} className="bg-brand-teal hover:bg-brand-teal-light text-white rounded-lg h-10 w-10 p-0 shadow-md" title="Back">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
           <div className="flex flex-col">
             <h1 className="text-2xl font-bold text-gray-800">Edit Employee</h1>
             {employeeData && (

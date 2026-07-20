@@ -75,8 +75,20 @@ export function HRMSNavbar() {
     }
   };
 
-  useAppEvent("new_notification", () => {
+  useAppEvent("new_notification", (data) => {
     fetchNotifications();
+    if (data?.type === 'wm-task' || data?.type === 'task') {
+      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+        const notifUrl = data.type === 'wm-task' ? '/work-management/development' : '/tasks';
+        const notification = new Notification(data.title || "Task Assigned", {
+          body: data.message,
+        });
+        notification.onclick = () => {
+          window.focus();
+          router.push(notifUrl);
+        };
+      }
+    }
   });
 
   const markAsRead = async (id: string) => {
@@ -156,6 +168,10 @@ export function HRMSNavbar() {
                         router.push(user?.role === 'Employee' ? '/attendance' : '/employees/attendance');
                       } else if (n.type === 'recruitment') {
                         router.push('/recruitment');
+                      } else if (n.type === 'task') {
+                        router.push('/tasks');
+                      } else if (n.type === 'wm-task') {
+                        router.push('/work-management/development');
                       }
                       markAsRead(n.id);
                     }}
@@ -183,6 +199,10 @@ export function HRMSNavbar() {
                               router.push(user?.role === 'Employee' ? '/attendance' : '/employees/attendance');
                             } else if (n.type === 'recruitment') {
                               router.push('/recruitment');
+                            } else if (n.type === 'task') {
+                              router.push('/tasks');
+                            } else if (n.type === 'wm-task') {
+                              router.push('/work-management/development');
                             }
                             markAsRead(n.id);
                           }}

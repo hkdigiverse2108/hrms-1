@@ -1,279 +1,239 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import { 
   Plus, 
   Search, 
-  Filter, 
-  Calendar as CalendarIcon, 
-  Download,
-  Edit2,
-  Trash2,
+  Edit2, 
+  Trash2, 
+  Star,
+  StarHalf,
   Loader2,
-  AlertCircle,
-  RotateCcw
+  History
 } from "lucide-react";
 import { API_URL } from "@/lib/config";
-import { useUser } from "@/hooks/useUser";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/common/PageHeader";
+import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { TablePagination } from "@/components/common/TablePagination";
-import { exportToCSV } from "@/lib/export-utils";
+import { cn } from "@/lib/utils";
+import { useUser } from "@/hooks/useUser";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { toast } from "sonner";
 import { useConfirm } from "@/context/ConfirmContext";
 
-
-const getTypeBadge = (type: string) => {
-  return "bg-slate-100 text-slate-700 border-slate-200";
-};
-
-const PENALTIES_FALLBACK = [
-  { name: "Language rule violation", amount: 10 },
-  { name: "Clean desk violation", amount: 20 },
-  { name: "No socks", amount: 10 },
-  { name: "Non-dry snacks", amount: 50 },
-  { name: "Phone not submitted / unauthorized use", amount: 500 },
-  { name: "Phone not on silent", amount: 50 },
-  { name: "Activity not participated", amount: 20 },
-  { name: "Disrespectful behavior", amount: 10 },
-  { name: "Late Punch-in", amount: 50 },
+const reviewsData = [
+  {
+    id: "01",
+    user: "Michael Chang",
+    role: "Senior Developer",
+    avatar: "/avatars/michael.jpg",
+    department: "Engineering",
+    summary: "Strong delivery pace, clear ownership, and dependable collaboration across the sprint.",
+    rating: 5,
+  },
+  {
+    id: "02",
+    user: "Emily Roberts",
+    role: "HR Executive",
+    avatar: "/avatars/emily.jpg",
+    department: "Human Resources",
+    summary: "Consistent follow-through, clear documentation, and very responsive support for internal teams.",
+    rating: 5,
+  },
+  {
+    id: "03",
+    user: "David Wilson",
+    role: "QA Analyst",
+    avatar: "/avatars/david.jpg",
+    department: "Quality Assurance",
+    summary: "Careful validation, steady bug tracking, and reliable communication during release cycles.",
+    rating: 5,
+  },
+  {
+    id: "04",
+    user: "Jessica Taylor",
+    role: "Project Coordinator",
+    avatar: "/avatars/jessica.jpg",
+    department: "Operations",
+    summary: "Needs tighter deadline follow-up, but client communication remains calm and professional.",
+    rating: 3,
+  },
+  {
+    id: "05",
+    user: "Robert Chen",
+    role: "UI Designer",
+    avatar: "/avatars/robert.jpg",
+    department: "Design",
+    summary: "Creative direction is strong, and design handoff quality has improved over the last month.",
+    rating: 4,
+  },
+  {
+    id: "06",
+    user: "Michael Chang",
+    role: "Support Specialist",
+    avatar: "/avatars/michael.jpg",
+    department: "Customer Support",
+    summary: "Creative direction is strong, and design handoff quality has improved over the last month.",
+    rating: 5,
+  }
 ];
 
-const parseRemarkDate = (dateStr: string): Date | null => {
-  if (!dateStr) return null;
-  // Match "DD-MM-YYYY" or "DD/MM/YYYY"
-  if (/^\d{1,2}[-/]\d{1,2}[-/]\d{4}$/.test(dateStr)) {
-    const parts = dateStr.split(/[-/]/);
-    const day = parseInt(parts[0], 10);
-    const month = parseInt(parts[1], 10) - 1; // 0-indexed month
-    const year = parseInt(parts[2], 10);
-    return new Date(year, month, day);
-  }
-  
-  const d = new Date(dateStr);
-  if (!isNaN(d.getTime())) {
-    return d;
-  }
-  return null;
+const RatingStars = ({ rating, interactive = false, onRatingChange }: { rating: number, interactive?: boolean, onRatingChange?: (rating: number) => void }) => {
+  return (
+    <div className="flex items-center gap-1">
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button
+          key={star}
+          type="button"
+          disabled={!interactive}
+          onClick={() => onRatingChange?.(star)}
+          className={cn(
+            "transition-transform active:scale-95",
+            interactive ? "cursor-pointer" : "cursor-default"
+          )}
+        >
+          <Star 
+            className={cn(
+              "w-4 h-4",
+              star <= rating 
+                ? "fill-amber-400 text-amber-400" 
+                : "text-gray-200 fill-transparent"
+            )} 
+          />
+        </button>
+      ))}
+    </div>
+  );
 };
 
-
-
-export default function RemarksPage() {
+export default function ReviewPage() {
   const { confirm } = useConfirm();
-  const [remarks, setRemarks] = useState<any[]>([]);
+  const [reviews, setReviews] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
-  const [selectedRemark, setSelectedRemark] = useState<any>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedReview, setSelectedReview] = useState<any>(null);
+  const [newRating, setNewRating] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
-  const [typeFilter, setTypeFilter] = useState("All");
-  const [dateFilter, setDateFilter] = useState("This Month");
-  const [specificDate, setSpecificDate] = useState("");
-  const [activeTab, setActiveTab] = useState("active");
-  const [isExporting, setIsExporting] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [activeTab, setActiveTab] = useState("remarks");
+  const [logsDialogOpen, setLogsDialogOpen] = useState(false);
+  const [selectedReviewForLogs, setSelectedReviewForLogs] = useState<any>(null);
+
+  const openLogsModal = (review: any) => {
+    if (!isAdmin) return;
+    setSelectedReviewForLogs(review);
+    setLogsDialogOpen(true);
+  };
+  
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+  
   const { user } = useUser();
   const router = useRouter();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
 
-  const isHR = user?.role?.toLowerCase() === 'hr';
-  
-  const canViewRemarks = !!user;
-  const canManageRemarks = isAdmin || isHR;
-  const canAddRemarks = isAdmin || isHR || checkPermission('remarks', 'canAdd');
-  const canEditRemarks = isAdmin || isHR || checkPermission('remarks', 'canEdit');
-  const canDeleteRemarks = isAdmin || isHR || checkPermission('remarks', 'canDelete');
+  const canViewReviews = true;
+  const canAddReviews = true;
+  const canEditReviews = isAdmin || checkPermission('review', 'canEdit');
+  const canDeleteReviews = isAdmin || checkPermission('review', 'canDelete');
 
   useEffect(() => {
     if (!permissionsLoading) {
-      if (!canViewRemarks) {
+      if (!canViewReviews) {
         router.push('/');
       }
     }
-  }, [permissionsLoading, canViewRemarks, router]);
-  const [employeeFilter, setEmployeeFilter] = useState("All");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
-  const [penaltyTypes, setPenaltyTypes] = useState<any[]>([]);
-  const [manageTypesOpen, setManageTypesOpen] = useState(false);
-  const [newType, setNewType] = useState({ name: "", amount: 0 });
-  const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
-
-  const getPenaltyAmount = (type: string) => {
-    const p = penaltyTypes.find(item => item.name === type);
-    return p ? p.amount : 0;
-  };
-
-  // New remark state
-  const [newRemark, setNewRemark] = useState({
+  }, [permissionsLoading, canViewReviews, router]);
+  
+  // New review form state
+  const [newReview, setNewReview] = useState({
     employeeId: "",
-    type: "Language rule violation",
-    details: "Language rule violation. Penalty amount of ₹10 applied.",
-    date: new Date().toISOString().split('T')[0]
+    summary: "",
+    rating: 0
   });
 
-  // Calculate leaderboard of remarks per employee (all active remarks)
-  const leaderboard = React.useMemo(() => {
-    const counts: { [key: string]: { name: string; avatar: string; role: string; count: number; totalAmount: number } } = {};
-    
-    remarks.forEach(r => {
-      if (r.isDeleted) return;
-      const empId = r.employeeId;
-      if (!empId) return;
-      
-      const penaltyAmount = r.amount || getPenaltyAmount(r.type);
-      
-      if (!counts[empId]) {
-        counts[empId] = {
-          name: r.employeeName || "Unknown",
-          avatar: r.avatar || "",
-          role: r.role || "Staff",
-          count: 0,
-          totalAmount: 0
-        };
-      }
-      counts[empId].count += 1;
-      counts[empId].totalAmount += penaltyAmount;
-    });
-    
-    return Object.values(counts)
-      .sort((a, b) => b.count - a.count || b.totalAmount - a.totalAmount)
-      .slice(0, 5); // Get top 5
-  }, [remarks, penaltyTypes]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [sysSettings, setSysSettings] = useState<any>(null);
+  
+  const [createQueryModalOpen, setCreateQueryModalOpen] = useState(false);
+  const [newQueryText, setNewQueryText] = useState("");
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (user !== undefined) {
+      fetchData();
+    }
+    if (user && !isAdmin) {
+      setNewReview(prev => ({
+        ...prev,
+        employeeId: user.id || user._id || ""
+      }));
+    }
+  }, [user, isAdmin]);
 
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [remRes, empRes, typeRes] = await Promise.all([
-        fetch(`${API_URL}/remarks`),
+      const employeeIdParam = (!isAdmin && user) ? `?employeeId=${user.id || user._id || ''}` : '';
+      const [revRes, empRes, settingsRes] = await Promise.all([
+        fetch(`${API_URL}/reviews${employeeIdParam}`),
         fetch(`${API_URL}/employees`),
-        fetch(`${API_URL}/penalty-types`)
+        fetch(`${API_URL}/system-settings`)
       ]);
-      if (remRes.ok) setRemarks(await remRes.json());
+      if (revRes.ok) setReviews(await revRes.json());
       if (empRes.ok) setEmployees(await empRes.json());
-      if (typeRes.ok) {
-        const types = await typeRes.json();
-        const dbNames = new Set(types.map((t: any) => t.name));
-        const deletedFallbacks = JSON.parse(localStorage.getItem('deletedFallbacks') || '[]');
-        const missingFallbacks = PENALTIES_FALLBACK
-          .filter(p => !dbNames.has(p.name) && !deletedFallbacks.includes(p.name))
-          .map((p, i) => ({ ...p, id: `fallback-${i}` }));
-        setPenaltyTypes([...types, ...missingFallbacks]);
-      } else {
-        const deletedFallbacks = JSON.parse(localStorage.getItem('deletedFallbacks') || '[]');
-        setPenaltyTypes(PENALTIES_FALLBACK
-          .filter(p => !deletedFallbacks.includes(p.name))
-          .map((p, i) => ({ ...p, id: `fallback-${i}` })));
-      }
+      if (settingsRes.ok) setSysSettings(await settingsRes.json());
     } catch (err) {
-      console.error("Error fetching remarks data:", err);
-      const deletedFallbacks = JSON.parse(localStorage.getItem('deletedFallbacks') || '[]');
-      setPenaltyTypes(PENALTIES_FALLBACK
-        .filter(p => !deletedFallbacks.includes(p.name))
-        .map((p, i) => ({ ...p, id: `fallback-${i}` })));
+      console.error("Error fetching review data:", err);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleAddType = async () => {
-    if (!newType.name || newType.amount <= 0) return;
-    try {
-      if (editingTypeId && !editingTypeId.startsWith('fallback-')) {
-        const res = await fetch(`${API_URL}/penalty-types/${editingTypeId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newType)
-        });
-        if (res.ok) {
-          setNewType({ name: "", amount: 0 });
-          setEditingTypeId(null);
-          fetchData();
-        }
-      } else {
-        const res = await fetch(`${API_URL}/penalty-types`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newType)
-        });
-        if (res.ok) {
-          setNewType({ name: "", amount: 0 });
-          fetchData();
-        }
-      }
-    } catch (err) {
-      console.error("Error saving penalty type:", err);
-    }
-  };
-
-  const handleDeleteType = async (id: string) => {
-    if (id.startsWith('fallback-')) {
-      const isConfirmed = await confirm({
-      title: "Confirm Action",
-      message: "Are you sure you want to delete this default violation type?",
-      destructive: true,
-      confirmText: "Confirm"
-    });
-    if (!isConfirmed) return;
-      const fallbackIdx = parseInt(id.split('-')[1]);
-      if (!isNaN(fallbackIdx) && PENALTIES_FALLBACK[fallbackIdx]) {
-        const fallbackName = PENALTIES_FALLBACK[fallbackIdx].name;
-        const deletedFallbacks = JSON.parse(localStorage.getItem('deletedFallbacks') || '[]');
-        if (!deletedFallbacks.includes(fallbackName)) {
-          deletedFallbacks.push(fallbackName);
-          localStorage.setItem('deletedFallbacks', JSON.stringify(deletedFallbacks));
-        }
-      }
-      fetchData();
-      return;
-    }
-    const isConfirmed = await confirm({
-      title: "Confirm Action",
-      message: "Are you sure you want to delete this violation type?",
-      destructive: true,
-      confirmText: "Confirm"
-    });
-    if (!isConfirmed) return;
-    try {
-      const res = await fetch(`${API_URL}/penalty-types/${id}`, { method: 'DELETE' });
-      if (res.ok) fetchData();
-    } catch (err) {
-      console.error("Error deleting penalty type:", err);
-    }
-  };
-
-  const handleCreateRemark = async () => {
-    if (!newRemark.employeeId || !newRemark.details) return;
+  const handleCreateReview = async () => {
+    if (!newReview.employeeId || !newReview.summary || newReview.rating === 0) return;
     
     setIsSubmitting(true);
     try {
-      const emp = employees.find(e => e.id === newRemark.employeeId || e.employeeId === newRemark.employeeId);
-      const payload = {
-        ...newRemark,
-        employeeName: emp?.name || "Unknown",
-        role: emp?.designation || "Staff",
-        avatar: emp?.profilePhoto || "",
-        addedBy: user?.name || "Admin",
-        date: new Date(newRemark.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-      };
+      const storedUser = localStorage.getItem('user');
+      const currentUser = storedUser ? JSON.parse(storedUser) : null;
+      const currentUserName = currentUser?.name || (currentUser?.firstName ? `${currentUser.firstName} ${currentUser.lastName || ''}`.trim() : null) || "Unknown User";
 
-      const res = await fetch(`${API_URL}/remarks`, {
+      let payload;
+      if (!isAdmin && user) {
+        payload = {
+          employeeId: user.id || user._id || "",
+          employeeName: user.name || "Unknown",
+          role: user.designation || "Staff",
+          avatar: user.profilePhoto || "",
+          department: user.department || "N/A",
+          summary: newReview.summary,
+          rating: newReview.rating,
+          updatedBy: currentUserName
+        };
+      } else {
+        const emp = employees.find(e => e.id === newReview.employeeId || e.employeeId === newReview.employeeId);
+        payload = {
+          ...newReview,
+          employeeName: emp?.name || "Unknown",
+          role: emp?.designation || "Staff",
+          avatar: emp?.profilePhoto || "",
+          department: emp?.department || "N/A",
+          updatedBy: currentUserName
+        };
+      }
+
+      const res = await fetch(`${API_URL}/reviews`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -281,32 +241,73 @@ export default function RemarksPage() {
 
       if (res.ok) {
         setCreateModalOpen(false);
-        setNewRemark({ 
-          employeeId: "", 
-          type: "Language rule violation", 
-          details: "Language rule violation. Penalty amount of ₹10 applied.",
-          date: new Date().toISOString().split('T')[0]
-        });
+        setNewReview({ employeeId: (!isAdmin && user) ? (user.id || user._id || "") : "", summary: "", rating: 0 });
+        setNewRating(0);
         fetchData();
       }
     } catch (err) {
-      console.error("Error creating remark:", err);
+      console.error("Error creating review:", err);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleUpdateRemark = async () => {
-    if (!selectedRemark) return;
+  const handleCreateQuery = async () => {
+    if (!newQueryText.trim()) return;
+    setIsSubmitting(true);
+    try {
+      const storedUser = localStorage.getItem('user');
+      const currentUser = storedUser ? JSON.parse(storedUser) : null;
+      const currentUserName = currentUser?.name || (currentUser?.firstName ? `${currentUser.firstName} ${currentUser.lastName || ''}`.trim() : null) || "Unknown User";
+
+      const payload = {
+        employeeId: user?.id || user?._id || "",
+        employeeName: user?.name || "Unknown",
+        role: user?.designation || "Staff",
+        avatar: user?.profilePhoto || "",
+        department: user?.department || "N/A",
+        summary: "Employee Query",
+        rating: 0,
+        query: newQueryText,
+        updatedBy: currentUserName
+      };
+
+      const res = await fetch(`${API_URL}/reviews`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        setCreateQueryModalOpen(false);
+        setNewQueryText("");
+        fetchData();
+      }
+    } catch (err) {
+      console.error("Error creating query:", err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleUpdateReview = async () => {
+    if (!selectedReview) return;
     
     setIsSubmitting(true);
     try {
-      const res = await fetch(`${API_URL}/remarks/${selectedRemark.id}`, {
+      const storedUser = localStorage.getItem('user');
+      const currentUser = storedUser ? JSON.parse(storedUser) : null;
+      const currentUserName = currentUser?.name || (currentUser?.firstName ? `${currentUser.firstName} ${currentUser.lastName || ''}`.trim() : null) || "Unknown User";
+
+      const res = await fetch(`${API_URL}/reviews/${selectedReview.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          type: selectedRemark.type,
-          details: selectedRemark.details
+          summary: selectedReview.summary,
+          rating: selectedReview.rating,
+          query: selectedReview.query,
+          adminReply: selectedReview.adminReply,
+          updatedBy: currentUserName
         })
       });
 
@@ -315,231 +316,53 @@ export default function RemarksPage() {
         fetchData();
       }
     } catch (err) {
-      console.error("Error updating remark:", err);
+      console.error("Error updating review:", err);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleDeleteRemark = async (id: string) => {
+  const handleDeleteReview = async (id: string) => {
     const isConfirmed = await confirm({
       title: "Confirm Action",
-      message: "Are you sure you want to delete this penalty?",
+      message: "Are you sure you want to delete this remark?",
       destructive: true,
       confirmText: "Confirm"
     });
     if (!isConfirmed) return;
     
     try {
-      const res = await fetch(`${API_URL}/remarks/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${API_URL}/reviews/${id}`, { method: 'DELETE' });
       if (res.ok) fetchData();
     } catch (err) {
-      console.error("Error deleting remark:", err);
+      console.error("Error deleting review:", err);
     }
   };
 
-  const handleRestoreRemark = async (id: string) => {
-    const isConfirmed = await confirm({
-      title: "Confirm Action",
-      message: "Are you sure you want to restore this penalty?",
-      destructive: true,
-      confirmText: "Confirm"
-    });
-    if (!isConfirmed) return;
-    
-    try {
-      const res = await fetch(`${API_URL}/remarks/${id}/restore`, { method: 'POST' });
-      if (res.ok) fetchData();
-    } catch (err) {
-      console.error("Error restoring remark:", err);
-    }
-  };
-
-  const handlePermanentDeleteRemark = async (id: string) => {
-    const isConfirmed = await confirm({
-      title: "Confirm Action",
-      message: "WARNING: Are you sure you want to PERMANENTLY delete this penalty? This action cannot be undone.",
-      destructive: true,
-      confirmText: "Confirm"
-    });
-    if (!isConfirmed) return;
-    
-    try {
-      const res = await fetch(`${API_URL}/remarks/${id}/permanent`, { method: 'DELETE' });
-      if (res.ok) fetchData();
-    } catch (err) {
-      console.error("Error permanently deleting remark:", err);
-    }
-  };
-
-  const openEditModal = (remark: any) => {
-    setSelectedRemark(remark);
+  const openEditModal = (review: any) => {
+    setSelectedReview(review);
     setEditModalOpen(true);
   };
 
-  const handleExportPDF = async () => {
-    setIsExporting(true)
-    try {
-      const doc = new jsPDF('l', 'mm', 'a4')
-
-      // Header styling
-      doc.setFont("Helvetica", "bold")
-      doc.setFontSize(22)
-      doc.setTextColor(9, 160, 138) // Brand Teal: #09A08A
-      doc.text("HK DIGIVERSE LLP", 14, 16)
-
-      doc.setFont("Helvetica", "normal")
-      doc.setFontSize(10)
-      doc.setTextColor(110, 110, 110)
-      doc.text("Remarks & Penalty Report", 14, 22)
-      
-      const formattedDate = new Date().toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      })
-      doc.text(`Generated: ${formattedDate}`, 220, 22)
-
-      // Separator
-      doc.setDrawColor(9, 160, 138)
-      doc.setLineWidth(0.8)
-      doc.line(14, 26, 283, 26)
-
-      // Prepare Table Data
-      const headers = [["Date", "Employee Name", "Role", "Violation Type", "Remark Details", "Added By", "Penalty"]]
-      const rows = tabRemarks.map(r => [
-        r.date && parseRemarkDate(r.date) 
-          ? parseRemarkDate(r.date)!.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-          : r.date || "",
-        r.employeeName || "",
-        r.role || "",
-        r.type || "",
-        (r.details || "").replace(/₹/g, "Rs."),
-        r.addedBy || "",
-        `Rs. ${r.amount || getPenaltyAmount(r.type)}`
-      ])
-
-      if (rows.length > 0) {
-        rows.push([
-          "TOTAL PENALTY AMOUNT",
-          "",
-          "",
-          "",
-          "",
-          "",
-          `Rs. ${totalPenalty}`
-        ])
-      }
-
-      autoTable(doc, {
-        head: headers,
-        body: rows,
-        startY: 32,
-        theme: 'striped',
-        styles: {
-          fontSize: 9,
-          cellPadding: 3.5,
-          textColor: [51, 65, 85], // slate-700
-          lineColor: [241, 245, 249],
-          lineWidth: 0.1,
-        },
-        headStyles: {
-          fillColor: [9, 160, 138], // brand-teal
-          textColor: [255, 255, 255],
-          fontStyle: 'bold',
-          fontSize: 9.5,
-        },
-        alternateRowStyles: {
-          fillColor: [248, 250, 252], // slate-50
-        },
-        columnStyles: {
-          0: { fontStyle: 'bold', textColor: [15, 23, 42] }, // Slate-900 for Date
-          6: { fontStyle: 'bold', textColor: [220, 38, 38], halign: 'right' }, // Red-600 color for Penalty
-        },
-        didParseCell: (data: any) => {
-          // Apply custom style to the TOTAL row
-          if (data.row.index === rows.length - 1 && rows.length > 0) {
-            data.cell.styles.fontStyle = 'bold';
-            data.cell.styles.fillColor = [241, 245, 249]; // slate-100
-            if (data.column.index === 0) {
-              data.cell.styles.textColor = [15, 23, 42];
-            }
-            if (data.column.index === 6) {
-              data.cell.styles.textColor = [15, 23, 42]; // dark color for total penalty amount
-            }
-          }
-        },
-        margin: { left: 14, right: 14 }
-      })
-
-      doc.save(`Remarks_Penalty_Report_${new Date().toISOString().slice(0,10)}.pdf`)
-    } catch (err) {
-      console.error("PDF Export error:", err)
-      toast.error("Failed to export PDF file.")
-    } finally {
-      setIsExporting(false)
-    }
-  }
-
-  const filteredRemarks = remarks.filter(r => {
-    // Role-based visibility check: Employees only see their own remarks
-    if (!canManageRemarks) {
-      const isOwnRemark = r.employeeId === user?.employeeId || r.employeeId === user?.id;
-      if (!isOwnRemark) return false;
+  const filteredReviews = reviews.filter(r => {
+    if (!isAdmin && user) {
+      const myId = user.id || user._id;
+      if (r.employeeId !== myId) return false;
     }
 
-    const matchesSearch = r.details?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesType = typeFilter === "All" || r.type === typeFilter;
-    const matchesEmployee = employeeFilter === "All" || r.employeeId === employeeFilter || r.employeeName === employeeFilter;
-    
-    // Robust date filtering logic
-    let matchesDate = true;
-    if (dateFilter !== "All Time") {
-      const rDateObj = parseRemarkDate(r.date);
-      if (rDateObj) {
-        const today = new Date();
-        if (dateFilter === "Today") {
-           matchesDate = rDateObj.getDate() === today.getDate() &&
-                         rDateObj.getMonth() === today.getMonth() &&
-                         rDateObj.getFullYear() === today.getFullYear();
-        } else if (dateFilter === "This Month") {
-           matchesDate = rDateObj.getMonth() === today.getMonth() &&
-                         rDateObj.getFullYear() === today.getFullYear();
-        } else if (dateFilter === "Specific Date" && specificDate) {
-           const filterDate = new Date(specificDate);
-           matchesDate = rDateObj.getDate() === filterDate.getDate() &&
-                         rDateObj.getMonth() === filterDate.getMonth() &&
-                         rDateObj.getFullYear() === filterDate.getFullYear();
-        }
-      } else {
-        matchesDate = false;
-      }
-    }
-    
-    return matchesSearch && matchesType && matchesDate && matchesEmployee;
+    if (activeTab === "remarks" && r.summary === "Employee Query") return false;
+    if (activeTab === "queries" && r.summary !== "Employee Query") return false;
+
+    return (
+      r.employeeName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.department?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
   });
 
-  const visibleRemarks = remarks.filter(r => {
-    if (!canManageRemarks) {
-      return r.employeeId === user?.employeeId || r.employeeId === user?.id;
-    }
-    if (employeeFilter !== "All") {
-      return r.employeeId === employeeFilter || r.employeeName === employeeFilter;
-    }
-    return true;
-  });
-
-  const tabRemarks = filteredRemarks.filter(r => activeTab === "deleted" ? r.isDeleted : !r.isDeleted);
-
-  const totalPages = Math.ceil(tabRemarks.length / itemsPerPage);
-  const paginatedRemarks = tabRemarks.slice(
+  const paginatedReviews = filteredReviews.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
-
-  const totalPenalty = tabRemarks.reduce((sum, r) => sum + (r.amount || getPenaltyAmount(r.type)), 0);
 
   if (permissionsLoading) {
     return (
@@ -552,264 +375,351 @@ export default function RemarksPage() {
   return (
     <div className="space-y-6 pb-10">
       <PageHeader 
-        title="Penalty" 
-        description="Manage employee violations, penalties, and warning notes."
+        title="Employee Remarks" 
+        description="Remark records with department, summary, rating, timestamps, and quick actions."
       >
-        {(canAddRemarks || canEditRemarks) && (
-          <div className="flex flex-col sm:flex-row gap-2 mt-4 sm:mt-0">
-            {canEditRemarks && (
-              <Button 
-                variant="outline"
-                className="border-brand-teal text-brand-teal hover:bg-brand-teal hover:text-white font-medium shadow-sm w-full sm:w-auto"
-                onClick={() => setManageTypesOpen(true)}
-              >
-                <Filter className="w-4 h-4 mr-2" />
-                Violation Types
-              </Button>
-            )}
-            {canAddRemarks && (
-              <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
+        {canAddReviews && (
+          <div className="flex items-center gap-2 mt-4 sm:mt-0 w-full sm:w-auto">
+            {!isAdmin && (
+              <Dialog open={createQueryModalOpen} onOpenChange={setCreateQueryModalOpen}>
                 <DialogTrigger asChild>
-                  <Button className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium shadow-sm w-full sm:w-auto">
+                  <Button variant="outline" className="text-brand-teal border-brand-teal hover:bg-brand-teal-light hover:text-white font-medium shadow-sm w-full sm:w-auto">
                     <Plus className="w-4 h-4 mr-2" />
-                    New Penalty
+                    Add Query
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="sm:max-w-[550px]">
+                <DialogContent className="sm:max-w-[500px]">
                   <DialogHeader>
-                    <DialogTitle className="text-xl font-bold">Add New Penalty</DialogTitle>
-                    <p className="text-sm text-muted-foreground mt-1">Create a new penalty, warning, or violation record for an employee.</p>
+                    <DialogTitle className="text-xl font-bold">Add Query</DialogTitle>
+                    <p className="text-sm text-muted-foreground mt-1">Submit a new query for the admin to review.</p>
                   </DialogHeader>
-                  
-                  <div className="space-y-5 py-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                      <div className="space-y-2">
-                        <label className="text-sm font-semibold text-foreground">Employee</label>
-                        <Select onValueChange={(val) => setNewRemark(prev => ({ ...prev, employeeId: val }))} value={newRemark.employeeId}>
-                          <SelectTrigger className="w-full bg-white shadow-sm border-border hover:bg-gray-50/50 transition-colors">
-                            <SelectValue placeholder="Select an employee" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {employees.map(emp => (
-                              <SelectItem key={emp.id} value={emp.id || emp.employeeId}>{emp.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <label className="text-sm font-semibold text-foreground">Date</label>
-                        <div className="relative">
-                          <Input 
-                            type="date"
-                            value={newRemark.date}
-                            onChange={(e) => setNewRemark(prev => ({ ...prev, date: e.target.value }))}
-                            className="bg-white border-border hover:border-brand-teal/50 transition-all focus:ring-brand-teal" 
-                          />
-                        </div>
-                      </div>
-                    </div>
+                  <div className="space-y-4 py-4">
                     <div className="space-y-2">
-                      <label className="text-sm font-semibold text-foreground">Penalty Type</label>
-                      <Select onValueChange={(val) => {
-                        const penalty = penaltyTypes.find(p => p.name === val);
-                        if (penalty) {
-                          setNewRemark(prev => ({ 
-                             ...prev, 
-                             type: val,
-                             details: `${penalty.name}. Penalty amount of ₹${penalty.amount} applied.` 
-                          }));
-                        } else {
-                          setNewRemark(prev => ({ ...prev, type: val }));
-                        }
-                      }} value={newRemark.type}>
-                        <SelectTrigger className="w-full bg-white shadow-sm border-border hover:bg-gray-50/50 transition-colors">
-                          <SelectValue placeholder="Select penalty type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <div className="px-2 py-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Violations & Penalties</div>
-                          {penaltyTypes.map((p, idx) => (
-                            <SelectItem key={idx} value={p.name}>{p.name} (₹{p.amount})</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-sm font-semibold text-foreground">Penalty Details</label>
+                      <label className="text-sm font-semibold text-foreground">Your Query</label>
                       <Textarea 
-                        value={newRemark.details}
-                        onChange={(e) => setNewRemark(prev => ({ ...prev, details: e.target.value }))}
-                        placeholder="Enter detailed description of the penalty..." 
+                        value={newQueryText}
+                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewQueryText(e.target.value)}
+                        placeholder="Type your query here..."
                         className="h-32 resize-none bg-white"
                       />
                     </div>
                   </div>
-
                   <DialogFooter className="flex flex-col-reverse sm:flex-row gap-3 mt-4">
-                    <Button variant="outline" className="w-full sm:w-auto" onClick={() => setCreateModalOpen(false)}>Cancel</Button>
+                    <Button variant="outline" className="px-8" onClick={() => setCreateQueryModalOpen(false)}>Cancel</Button>
                     <Button 
-                      disabled={isSubmitting || !newRemark.employeeId || !newRemark.details}
-                      className="w-full sm:w-auto bg-brand-teal hover:bg-brand-teal-light text-white font-semibold" 
-                      onClick={handleCreateRemark}
+                      disabled={isSubmitting || !newQueryText.trim()}
+                      className="bg-brand-teal hover:bg-brand-teal-light text-white font-semibold px-8" 
+                      onClick={handleCreateQuery}
                     >
-                      {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Apply Penalty"}
+                      {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Submit Query"}
                     </Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
             )}
+            
+            <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
+              <DialogTrigger asChild>
+                <Button className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium shadow-sm w-full sm:w-auto">
+                  <Plus className="w-4 h-4 mr-2" />
+                  New Remark
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[600px]">
+              <DialogHeader>
+                <DialogTitle className="text-xl font-bold">Add New Remark</DialogTitle>
+                <p className="text-sm text-muted-foreground mt-1">Submit a performance remark and rating for an employee.</p>
+              </DialogHeader>
+              
+              <div className="space-y-6 py-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-foreground">Employee</label>
+                    {!isAdmin ? (
+                      <Input 
+                        value={user?.name || ""} 
+                        className="bg-gray-50 text-muted-foreground" 
+                        readOnly 
+                      />
+                    ) : (
+                      <Select onValueChange={(val: string) => setNewReview(prev => ({ ...prev, employeeId: val }))} value={newReview.employeeId}>
+                        <SelectTrigger className="w-full bg-white shadow-sm border-border">
+                          <SelectValue placeholder="Select employee..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {employees.map(emp => (
+                            <SelectItem key={emp.id} value={emp.id || emp.employeeId}>{emp.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-foreground">Department</label>
+                    <Input 
+                      value={
+                        !isAdmin 
+                          ? (user?.department || "Staff") 
+                          : (employees.find(e => e.id === newReview.employeeId || e.employeeId === newReview.employeeId)?.department || "")
+                      } 
+                      placeholder="Auto-filled" 
+                      className="bg-gray-50 text-muted-foreground" 
+                      readOnly 
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-foreground">Rating</label>
+                  <RatingStars rating={newRating} interactive={true} onRatingChange={(val) => { setNewRating(val); setNewReview(prev => ({ ...prev, rating: val })); }} />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-foreground">Summary</label>
+                  <Textarea 
+                    value={newReview.summary}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewReview(prev => ({ ...prev, summary: e.target.value }))}
+                    placeholder="Write detailed remarks here..." 
+                    className="h-32 resize-none bg-white"
+                  />
+                </div>
+              </div>
+
+              <DialogFooter className="flex flex-col-reverse sm:flex-row gap-3 mt-4">
+                <Button variant="outline" className="px-8" onClick={() => setCreateModalOpen(false)}>Cancel</Button>
+                <Button 
+                  disabled={isSubmitting || !newReview.employeeId || !newReview.summary || newReview.rating === 0}
+                  className="bg-brand-teal hover:bg-brand-teal-light text-white font-semibold px-8" 
+                  onClick={handleCreateReview}
+                >
+                  {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Submit Remark"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
           </div>
         )}
       </PageHeader>
 
-      <div className="space-y-6">
-
-      {/* Penalty Leaderboard */}
-      {leaderboard.length > 0 && (
-        <div className="bg-gradient-to-br from-teal-50/60 via-white to-slate-50 border border-slate-200/80 rounded-xl p-5 shadow-sm">
-          <div className="flex flex-col md:flex-row md:items-center justify-between mb-5 gap-2">
-            <div>
-              <h3 className="text-base font-extrabold text-slate-800 flex items-center gap-2">
-                <span className="flex h-2.5 w-2.5 rounded-full bg-brand-teal animate-pulse"></span>
-                Penalty Leaderboard
-              </h3>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">Public statistics showing top violations and active penalty counts across the company.</p>
-            </div>
-            <div className="bg-white px-3 py-1.5 rounded-lg border border-slate-100 shadow-2xs text-[11px] font-bold text-slate-500 uppercase tracking-wider self-start md:self-auto">
-              🏆 Top Penalty Leaderboard
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            {leaderboard.map((item, idx) => {
-              const rankColors = [
-                "bg-amber-500/10 text-amber-700 border-amber-500/20", // 1st
-                "bg-slate-400/10 text-slate-700 border-slate-400/20", // 2nd
-                "bg-orange-500/10 text-orange-700 border-orange-500/20", // 3rd
-                "bg-slate-100 text-slate-600 border-slate-200", // 4th
-                "bg-slate-100 text-slate-600 border-slate-200"  // 5th
-              ];
-              const rankBadges = ["🥇 1st", "🥈 2nd", "🥉 3rd", "4th", "5th"];
-              
-              return (
-                <div key={idx} className="bg-white border border-slate-200/60 rounded-xl p-4 flex flex-col items-center text-center shadow-2xs hover:shadow-md hover:border-brand-teal/20 transition-all duration-300 group relative overflow-hidden">
-                  <div className="absolute top-2 left-2 z-10">
-                    <span className={`inline-flex px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider border ${rankColors[idx]}`}>
-                      {rankBadges[idx]}
-                    </span>
-                  </div>
-                  
-                  <div className="relative mt-3">
-                    <Avatar className="w-16 h-16 border-2 border-slate-100 rounded-full group-hover:scale-105 transition-transform duration-300 overflow-hidden shadow-sm">
-                      <AvatarImage src={item.avatar} className="object-cover" />
-                      <AvatarFallback className="bg-brand-light text-brand-teal text-lg font-extrabold">
-                        {item.name?.split(' ').map((n:any) => n[0]).join('')}
-                      </AvatarFallback>
-                    </Avatar>
-                  </div>
-                  
-                  <div className="font-extrabold text-slate-800 text-[14px] mt-3 leading-snug truncate w-full group-hover:text-brand-teal transition-colors duration-200">{item.name}</div>
-                  <div className="text-[11px] text-muted-foreground font-bold uppercase tracking-wider mt-0.5 truncate w-full">{item.role}</div>
-                  
-                  <div className="mt-4 flex items-center justify-between w-full pt-3 border-t border-slate-100 text-xs">
-                    <div className="text-left">
-                      <span className="text-[9px] text-muted-foreground uppercase font-extrabold tracking-wider block">Violations</span>
-                      <span className="font-black text-slate-800 text-sm">{item.count}</span>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-[9px] text-muted-foreground uppercase font-extrabold tracking-wider block">Penalties</span>
-                      <span className="font-black text-red-600 text-sm">₹{item.totalAmount}</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+      {/* Main Table Container */}
+      <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden flex flex-col">
+        <div className="p-4 sm:p-6 border-b border-border bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <Tabs value={activeTab} onValueChange={(val) => { setActiveTab(val); setCurrentPage(1); }} className="w-full sm:w-auto">
+            <TabsList className="bg-gray-100/80 p-1">
+              <TabsTrigger value="remarks" className="rounded-md px-6 data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm">Remarks</TabsTrigger>
+              <TabsTrigger value="queries" className="rounded-md px-6 data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm">Queries</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <div className="relative w-full sm:w-[350px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input 
+              value={searchQuery}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+              placeholder="Search employees, reports..." 
+              className="pl-9 bg-gray-50/50 border-border rounded-lg h-10" 
+            />
           </div>
         </div>
-      )}
+        
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left whitespace-nowrap">
+            <thead className="text-[11px] text-muted-foreground font-bold border-b border-border bg-gray-50/30 uppercase tracking-wider">
+              <tr>
+                <th className="px-6 py-4 w-[80px]">Sr. No.</th>
+                <th className="px-6 py-4">User</th>
+                <th className="px-6 py-4">Department</th>
+                {activeTab === "remarks" && <th className="px-6 py-4">Remarks</th>}
+                {activeTab === "remarks" && <th className="px-6 py-4">Rating</th>}
+                {activeTab === "queries" && <th className="px-6 py-4">Query & Reply</th>}
+                <th className="px-6 py-4 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {isLoading ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-10 text-center">
+                    <Loader2 className="w-8 h-8 animate-spin mx-auto text-brand-teal" />
+                    <p className="text-sm text-muted-foreground mt-2">Loading remarks...</p>
+                  </td>
+                </tr>
+              ) : filteredReviews.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-10 text-center text-muted-foreground">
+                    No remarks found.
+                  </td>
+                </tr>
+              ) : (
+                paginatedReviews.map((review, idx) => {
+                  const shouldHideNames = isAdmin && sysSettings && sysSettings.showNamesInRemarksToAdmin === false;
+                  const displayName = shouldHideNames ? "Anonymous" : review.employeeName;
+                  const displayRole = shouldHideNames ? "Employee" : review.role;
+                  const displayAvatarFallback = shouldHideNames ? "A" : review.employeeName?.split(' ').map((n:any) => n[0]).join('');
+                  const displayAvatarSrc = shouldHideNames ? "" : review.avatar;
+
+                  return (
+                    <tr key={review.id} className="hover:bg-gray-50/50 transition-colors group">
+                      <td className="px-6 py-4 font-semibold text-slate-500">
+                        {((currentPage - 1) * itemsPerPage + idx + 1).toString().padStart(2, '0')}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <Avatar className="w-10 h-10 border border-border rounded-lg overflow-hidden">
+                            <AvatarImage src={displayAvatarSrc} className="object-cover" />
+                            <AvatarFallback className="bg-brand-light text-brand-teal text-xs font-bold">
+                              {displayAvatarFallback}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <div className="font-bold text-foreground text-[14px] leading-tight">{displayName}</div>
+                            <div className="text-[12px] text-muted-foreground font-medium mt-0.5">{displayRole}</div>
+                          </div>
+                        </div>
+                      </td>
+                    <td className="px-6 py-4 font-medium text-slate-600">
+                      {review.department}
+                    </td>
+                    {activeTab === "remarks" && (
+                      <td className="px-6 py-4 max-w-[300px]" title={review.summary}>
+                        <div className="text-[13px] text-slate-600 leading-relaxed whitespace-normal line-clamp-2">
+                          {review.summary}
+                        </div>
+                      </td>
+                    )}
+                    {activeTab === "remarks" && (
+                      <td className="px-6 py-4">
+                        <RatingStars rating={review.rating} />
+                      </td>
+                    )}
+                    {activeTab === "queries" && (
+                      <td className="px-6 py-4 max-w-[350px]">
+                        {review.query && (
+                          <div className="text-[12px] mb-1">
+                            <span className="font-semibold text-brand-teal">Query:</span> <span className="text-slate-600 whitespace-normal">{review.query}</span>
+                          </div>
+                        )}
+                        {review.adminReply && (
+                          <div className="text-[12px]">
+                            <span className="font-semibold text-amber-600">Reply:</span> <span className="text-slate-600 whitespace-normal">{review.adminReply}</span>
+                          </div>
+                        )}
+                        {!review.query && !review.adminReply && (
+                          <span className="text-[12px] text-slate-400">No queries</span>
+                        )}
+                      </td>
+                    )}
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        {isAdmin && (
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-muted-foreground hover:text-brand-teal" 
+                            onClick={() => openLogsModal(review)}
+                            title="View History"
+                          >
+                            <History className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                        {(canEditReviews || (!isAdmin && user && review.employeeId === (user.id || user._id))) && (
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-brand-teal" onClick={() => openEditModal(review)} title={canEditReviews ? "Edit Review" : "Add/Edit Query"}>
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                        {canDeleteReviews && (
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" onClick={() => handleDeleteReview(review.id)}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+        
+        <TablePagination 
+          totalItems={filteredReviews.length} 
+          itemsPerPage={itemsPerPage} 
+          currentPage={currentPage} 
+          onPageChange={setCurrentPage} 
+          onItemsPerPageChange={(v) => { setItemsPerPage(v); setCurrentPage(1); }}
+          itemName="remarks" 
+        />
+      </div>
 
       {/* Edit Modal */}
       <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
-        <DialogContent className="sm:max-w-[550px]">
+        <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
-            <DialogTitle className="text-xl font-bold">Edit Penalty</DialogTitle>
-            <p className="text-sm text-muted-foreground mt-1">Update employee violations, penalties, and warning notes.</p>
+            <DialogTitle className="text-xl font-bold">Edit Remark</DialogTitle>
           </DialogHeader>
           
-          {selectedRemark && (
-            <div className="space-y-5 py-4">
+          {selectedReview && (
+            <div className="space-y-6 py-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-foreground">Employee</label>
-                  <Select defaultValue="current">
-                    <SelectTrigger className="w-full bg-white shadow-sm border-border">
-                      <SelectValue>
-                        <div className="flex items-center gap-2">
-                          <Avatar className="w-5 h-5">
-                            <AvatarImage src={selectedRemark.avatar} />
-                            <AvatarFallback className="bg-brand-light text-brand-teal text-[10px] font-bold">
-                              {selectedRemark.employeeName?.split(' ').map((n: string) => n[0]).join('')}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="font-medium text-foreground">{selectedRemark.employeeName}</span>
-                        </div>
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="current">{selectedRemark.employeeName}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-foreground">Penalty Type</label>
-                  <Select 
-                    value={selectedRemark.type} 
-                    onValueChange={(val) => setSelectedRemark((prev:any) => ({ ...prev, type: val }))}
-                  >
-                    <SelectTrigger className="w-full bg-white shadow-sm border-border">
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {penaltyTypes.map((p, idx) => (
-                        <SelectItem key={idx} value={p.name}>{p.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-foreground">Date</label>
-                  <div className="relative">
-                    <CalendarIcon className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                    <Input value={selectedRemark.date} className="bg-gray-50 text-muted-foreground pr-10" readOnly />
+              
+              {selectedReview.summary !== "Employee Query" && (
+                <>
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-foreground">Rating</label>
+                    <RatingStars 
+                      rating={selectedReview.rating} 
+                      interactive={isAdmin || checkPermission('review', 'canEdit')} 
+                      onRatingChange={(val) => setSelectedReview((prev: any) => ({ ...prev, rating: val }))} 
+                    />
                   </div>
-                </div>
 
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-foreground">Summary</label>
+                    <Textarea 
+                      value={selectedReview.summary}
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setSelectedReview((prev: any) => ({ ...prev, summary: e.target.value }))}
+                      className="h-24 resize-none bg-white"
+                      disabled={!isAdmin && !checkPermission('review', 'canEdit')}
+                    />
+                  </div>
+                </>
+              )}
+
+              {(selectedReview.summary === "Employee Query" || selectedReview.query) && (
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-foreground">Added By</label>
-                  <Input defaultValue={selectedRemark.addedBy} className="bg-gray-50 text-muted-foreground font-medium" readOnly />
+                  <label className="text-sm font-semibold text-foreground">Employee Query</label>
+                  <Textarea
+                    value={selectedReview.query || ""}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setSelectedReview((prev: any) => ({ ...prev, query: e.target.value }))}
+                    className="h-24 resize-none bg-white"
+                    disabled={isAdmin}
+                    placeholder="Enter your query..."
+                  />
                 </div>
-              </div>
+              )}
 
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-foreground">Penalty Details</label>
-                <Textarea 
-                  value={selectedRemark.details}
-                  onChange={(e) => setSelectedRemark((prev:any) => ({ ...prev, details: e.target.value }))}
-                  className="h-32 resize-none bg-white"
-                />
+              {(selectedReview.summary === "Employee Query" || selectedReview.adminReply) && (
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-foreground">Admin Reply</label>
+                  <Textarea 
+                    value={selectedReview.adminReply || ""}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setSelectedReview((prev: any) => ({ ...prev, adminReply: e.target.value }))}
+                    placeholder={isAdmin ? "Enter a reply to the employee's query..." : "Waiting for admin reply..."}
+                    className="h-24 resize-none bg-white"
+                    disabled={!isAdmin}
+                  />
+                </div>
+              )}
               </div>
             </div>
           )}
 
           <DialogFooter className="flex flex-col-reverse sm:flex-row gap-3 mt-4">
-            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setEditModalOpen(false)}>Cancel</Button>
+            <Button variant="outline" className="px-8" onClick={() => setEditModalOpen(false)}>Cancel</Button>
             <Button 
               disabled={isSubmitting}
-              className="w-full sm:w-auto bg-brand-teal hover:bg-brand-teal-light text-white font-semibold" 
-              onClick={handleUpdateRemark}
+              className="bg-brand-teal hover:bg-brand-teal-light text-white font-semibold px-8" 
+              onClick={handleUpdateReview}
             >
               {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Save Changes"}
             </Button>
@@ -817,324 +727,36 @@ export default function RemarksPage() {
         </DialogContent>
       </Dialog>
 
-      <Tabs value={activeTab} onValueChange={(val) => { setActiveTab(val); setCurrentPage(1); }} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 max-w-[400px]">
-          <TabsTrigger value="active">Active Penalties ({visibleRemarks.filter(r => !r.isDeleted).length})</TabsTrigger>
-          <TabsTrigger value="deleted">Deleted Penalties ({visibleRemarks.filter(r => r.isDeleted).length})</TabsTrigger>
-        </TabsList>
-      </Tabs>
-
-      {/* Main Table Container */}
-      <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden flex flex-col">
-        <div className="p-4 sm:p-6 border-b border-border flex flex-col xl:flex-row xl:items-center justify-end gap-4">
+      {/* Logs Dialog */}
+      <ActivityLogDialog
+        open={logsDialogOpen}
+        onOpenChange={setLogsDialogOpen}
+        title="Remark Activity History"
+        subtitle={selectedReviewForLogs?.employeeName ? `Remark history for ${selectedReviewForLogs.employeeName}` : undefined}
+        logs={(() => {
+          const allLogs: any[] = [];
           
-          <div className="flex flex-col sm:flex-row items-center gap-4">
-            {canManageRemarks && (
-              <div className="w-full sm:w-auto">
-                <Select value={employeeFilter} onValueChange={(v) => { setEmployeeFilter(v); setCurrentPage(1); }}>
-                  <SelectTrigger className="w-full sm:w-[180px] font-medium border-border shadow-sm">
-                    <SelectValue placeholder="All Employees" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="All">All Employees</SelectItem>
-                    {employees.map(emp => (
-                      <SelectItem key={emp.id} value={emp.id || emp.name}>{emp.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            
-            <div className="w-full sm:w-auto">
-              <Select value={typeFilter} onValueChange={(v) => { setTypeFilter(v); setCurrentPage(1); }}>
-                <SelectTrigger className="w-full sm:min-w-[180px] sm:w-auto font-medium border-border shadow-sm">
-                  <div className="flex items-center gap-2 px-1">
-                    <Filter className="w-4 h-4 text-brand-teal flex-shrink-0" />
-                    <span className="truncate">{typeFilter === "All" ? "Type: All" : typeFilter}</span>
-                  </div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="All">All Violations</SelectItem>
-                  {penaltyTypes.map((p, idx) => (
-                    <SelectItem key={idx} value={p.name}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="w-full sm:w-auto">
-              <Select value={dateFilter} onValueChange={(v) => { setDateFilter(v); setCurrentPage(1); }}>
-                <SelectTrigger className="w-full sm:min-w-[140px] sm:w-auto font-medium border-border shadow-sm">
-                  <div className="flex items-center gap-2 px-1">
-                    <CalendarIcon className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                    <span>{dateFilter}</span>
-                  </div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="All Time">All Time</SelectItem>
-                  <SelectItem value="Today">Today</SelectItem>
-                  <SelectItem value="This Month">This Month</SelectItem>
-                  <SelectItem value="Specific Date">Specific Date...</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          // Prepend synthetic creation log if there is no explicit creation log in the array
+          const hasCreationLog = selectedReviewForLogs?.logs?.some((l: any) => l.action?.toLowerCase().includes('create'));
+          if (selectedReviewForLogs?.date && !hasCreationLog) {
+            allLogs.push({
+              timestamp: new Date(selectedReviewForLogs.date).toISOString(),
+              action: "Remark created",
+              details: `Remark created. Summary: '${selectedReviewForLogs.summary}', Rating: ${selectedReviewForLogs.rating} stars`,
+              userName: "System"
+            });
+          }
 
-            {dateFilter === "Specific Date" && (
-              <div className="w-full sm:w-auto animate-in fade-in slide-in-from-left-2 duration-200">
-                <Input 
-                  type="date" 
-                  value={specificDate} 
-                  onChange={(e) => { setSpecificDate(e.target.value); setCurrentPage(1); }}
-                  className="bg-white border-border shadow-sm h-10 min-w-[140px]"
-                />
-              </div>
-            )}
-          </div>
-
-          {canManageRemarks && (
-            <Button 
-              variant="outline" 
-              className="w-full xl:w-auto shadow-sm font-medium text-foreground bg-white hover:bg-gray-50 border-border"
-              onClick={handleExportPDF}
-              disabled={isExporting}
-            >
-              {isExporting ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin text-brand-teal" />
-              ) : (
-                <Download className="w-4 h-4 mr-2 text-brand-teal" />
-              )}
-              Export PDF
-            </Button>
-          )}
-
-        </div>
-        
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left whitespace-nowrap">
-            <thead className="text-[11px] text-muted-foreground font-bold border-b border-border bg-gray-50/30 uppercase tracking-wider">
-              <tr>
-                <th className="px-6 py-4">Date</th>
-                <th className="px-6 py-4">Employee</th>
-                <th className="px-6 py-4">Type</th>
-                <th className="px-6 py-4">Penalty Details</th>
-                <th className="px-6 py-4">Added By</th>
-                <th className="px-6 py-4 text-right">Penalty</th>
-                {(canEditRemarks || canDeleteRemarks) && <th className="px-6 py-4 text-right">Action</th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {isLoading ? (
-                <tr>
-                  <td colSpan={(canEditRemarks || canDeleteRemarks) ? 7 : 6} className="px-6 py-10 text-center">
-                    <Loader2 className="w-8 h-8 animate-spin mx-auto text-brand-teal" />
-                    <p className="text-sm text-muted-foreground mt-2">Loading penalties...</p>
-                  </td>
-                </tr>
-              ) : paginatedRemarks.length === 0 ? (
-                <tr>
-                  <td colSpan={(canEditRemarks || canDeleteRemarks) ? 7 : 6} className="px-6 py-10 text-center text-muted-foreground">
-                    No penalties found.
-                  </td>
-                </tr>
-              ) : (
-                paginatedRemarks.map((remark) => (
-                  <tr key={remark.id} className="hover:bg-gray-50/50 transition-colors group">
-                    <td className="px-6 py-4 font-semibold text-slate-500">
-                      {remark.date && parseRemarkDate(remark.date) 
-                        ? parseRemarkDate(remark.date)!.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                        : remark.date}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="w-10 h-10 border border-border rounded-lg overflow-hidden">
-                          <AvatarImage src={remark.avatar} className="object-cover" />
-                          <AvatarFallback className="bg-brand-light text-brand-teal text-xs font-bold">
-                            {remark.employeeName?.split(' ').map((n:any) => n[0]).join('')}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <div className="font-bold text-foreground text-[14px] leading-tight">{remark.employeeName}</div>
-                          <div className="text-[12px] text-muted-foreground font-medium mt-0.5">{remark.role}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex px-2.5 py-1 rounded-md text-[11px] font-bold tracking-wide uppercase border ${getTypeBadge(remark.type)}`}>
-                        {remark.type}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 max-w-[350px]">
-                      <div className="text-[13px] text-slate-600 leading-relaxed whitespace-normal line-clamp-2">
-                        {remark.details}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 font-medium text-slate-600">
-                      {remark.addedBy}
-                    </td>
-                    <td className="px-6 py-4 text-right font-bold text-red-600">
-                      ₹{remark.amount || getPenaltyAmount(remark.type)}
-                    </td>
-                    {(canEditRemarks || canDeleteRemarks) && (
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {activeTab === "deleted" ? (
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-8 w-8 text-muted-foreground hover:text-green-600" 
-                              title="Restore Penalty"
-                              onClick={() => handleRestoreRemark(remark.id)}
-                            >
-                              <RotateCcw className="w-3.5 h-3.5" />
-                            </Button>
-                          ) : (
-                            <>
-                              {canEditRemarks && (
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-8 w-8 text-muted-foreground hover:text-brand-teal" 
-                                  title="Edit Penalty"
-                                  onClick={() => openEditModal(remark)}
-                                >
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </Button>
-                              )}
-                              {canDeleteRemarks && (
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-8 w-8 text-muted-foreground hover:text-red-600" 
-                                  title="Delete Penalty"
-                                  onClick={() => handleDeleteRemark(remark.id)}
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </Button>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                ))
-              )}
-            </tbody>
-            {tabRemarks.length > 0 && (
-              <tfoot className="bg-gray-50/50 border-t-2 border-border font-bold">
-                <tr>
-                  <td colSpan={5} className="px-6 py-4 text-right text-slate-500 uppercase tracking-wider text-[11px] font-bold">Total Penalty Amount:</td>
-                  <td className="px-6 py-4 text-right text-slate-900 text-lg font-black">₹{totalPenalty}</td>
-                  {(canEditRemarks || canDeleteRemarks) && <td></td>}
-                </tr>
-              </tfoot>
-            )}
-          </table>
-        </div>
-        
-        <TablePagination 
-          totalItems={tabRemarks.length} 
-          itemsPerPage={itemsPerPage} 
-          currentPage={currentPage} 
-          onPageChange={setCurrentPage}
-          onItemsPerPageChange={(v) => { setItemsPerPage(v); setCurrentPage(1); }}
-          itemName="entries" 
-        />
-      </div>
-
-      {/* Penalty Types Management Modal */}
-      <Dialog open={manageTypesOpen} onOpenChange={setManageTypesOpen}>
-        <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold">Manage Violation Types</DialogTitle>
-            <p className="text-sm text-muted-foreground mt-1">Add, edit, or remove the types of violations available in the system.</p>
-          </DialogHeader>
-          
-          <div className="space-y-6 py-4">
-            <div className="bg-gray-50/50 p-4 rounded-lg border border-border space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{editingTypeId ? "Update Violation Type" : "Add New Violation Type"}</h4>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <Input 
-                  placeholder="Violation Name" 
-                  value={newType.name}
-                  onChange={(e) => setNewType(prev => ({ ...prev, name: e.target.value }))}
-                  className="bg-white flex-grow"
-                />
-                <Input 
-                  type="number" 
-                  placeholder="Amount (₹)" 
-                  value={newType.amount || ""}
-                  onChange={(e) => setNewType(prev => ({ ...prev, amount: parseInt(e.target.value) || 0 }))}
-                  className="bg-white w-full sm:w-[120px]"
-                />
-                <Button onClick={handleAddType} className="bg-brand-teal hover:bg-brand-teal-light text-white shrink-0">
-                  {editingTypeId ? <Edit2 className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
-                  {editingTypeId ? 'Update' : 'Add'}
-                </Button>
-                {editingTypeId && (
-                  <Button variant="ghost" onClick={() => { setNewType({ name: "", amount: 0 }); setEditingTypeId(null); }} className="shrink-0 text-muted-foreground">
-                    Cancel
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            <div className="border border-border rounded-lg overflow-hidden max-h-[300px] overflow-y-auto">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-gray-50 sticky top-0 z-10 text-[10px] font-bold uppercase text-muted-foreground border-b border-border">
-                  <tr>
-                    <th className="px-4 py-3">Violation Name</th>
-                    <th className="px-4 py-3 text-right">Amount</th>
-                    <th className="px-4 py-3 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {penaltyTypes.map((type, idx) => (
-                    <tr key={type.id || idx} className="hover:bg-gray-50/30">
-                      <td className="px-4 py-3 font-medium text-foreground">{type.name}</td>
-                      <td className="px-4 py-3 text-right font-bold text-red-600">₹{type.amount}</td>
-                      <td className="px-4 py-3 text-right">
-                        {type.id && (
-                          <div className="flex items-center justify-end gap-1">
-                            {canEditRemarks && (
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-7 w-7 text-muted-foreground hover:text-brand-teal"
-                                onClick={() => {
-                                  setNewType({ name: type.name, amount: type.amount });
-                                  setEditingTypeId(type.id);
-                                }}
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </Button>
-                            )}
-                            {canDeleteRemarks && (
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-7 w-7 text-muted-foreground hover:text-red-600"
-                                onClick={() => handleDeleteType(type.id)}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setManageTypesOpen(false)}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          if (selectedReviewForLogs?.logs) {
+            allLogs.push(...selectedReviewForLogs.logs);
+          }
+          return allLogs.sort((a, b) => {
+            const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+            const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+            return timeB - timeA;
+          });
+        })()}
+      />
     </div>
-  </div>
   );
 }

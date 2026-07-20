@@ -1,4 +1,4 @@
-'use client'
+  'use client'
 
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -67,18 +67,21 @@ const PERMISSION_GROUPS = [
     icon: Briefcase,
     modules: [
       { moduleName: 'projects', displayName: 'Projects', tabUrl: '/work-management/projects' },
-      { moduleName: 'tasks', displayName: 'Tasks', tabUrl: '/work-management/tasks' },
+      { moduleName: 'tasks', displayName: 'Development', tabUrl: '/work-management/development' },
+      { moduleName: 'personal-tasks', displayName: 'Tasks', tabUrl: '/tasks' },
       { moduleName: 'daily-progress', displayName: 'Daily Progress', tabUrl: '/work-management/daily-progress' },
+      { moduleName: 'work-logs', displayName: 'Work Logs', tabUrl: '/work-management/work-logs' },
       { moduleName: 'sales', displayName: 'Sales', tabUrl: '/work-management/sales' },
       { moduleName: 'clients', displayName: 'Clients', tabUrl: '/work-management/clients' },
-      { moduleName: 'marketing', displayName: 'Marketing Reports', tabUrl: '/work-management/marketing-reports' },
+      { moduleName: 'marketing', displayName: 'Digital Marketing', tabUrl: '/work-management/digital-marketing' },
+      { moduleName: 'creative', displayName: 'Social Media Management', tabUrl: '/work-management/smm' },
+      { moduleName: 'research', displayName: 'Research', tabUrl: '/work-management/research' },
     ]
   },
   {
     name: 'Workspace',
     icon: MonitorPlay,
     modules: [
-      { moduleName: 'blank-canvas', displayName: 'Blank Canvas', tabUrl: '/workspace/blank-canvas' },
       { moduleName: 'seating-arrangement', displayName: 'Seating Arrangement', tabUrl: '/workspace/seating' },
       { moduleName: 'resource-management', displayName: 'Resource Management', tabUrl: '/workspace/resource' },
     ]
@@ -87,10 +90,14 @@ const PERMISSION_GROUPS = [
     name: 'More',
     icon: MessagesSquare,
     modules: [
-      { moduleName: 'remarks', displayName: 'Remarks', tabUrl: '/remarks' },
-      { moduleName: 'review', displayName: 'Review', tabUrl: '/review' },
+      { moduleName: 'remarks', displayName: 'Penalty', tabUrl: '/penalty' },
+      { moduleName: 'review', displayName: 'Remarks', tabUrl: '/remarks' },
       { moduleName: 'invoice', displayName: 'Invoice', tabUrl: '/invoice' },
       { moduleName: 'chat', displayName: 'Chat', tabUrl: '/chat' },
+      { moduleName: 'activity-logs', displayName: 'Activity Logs', tabUrl: '/activity-logs' },
+      { moduleName: 'gallery', displayName: 'Gallery', tabUrl: '/workspace/gallery' },
+      { moduleName: 'training', displayName: 'Course Library', tabUrl: '/training' },
+      { moduleName: 'admin-courses', displayName: 'Manage Courses', tabUrl: '/admin/courses' },
     ]
   },
   {

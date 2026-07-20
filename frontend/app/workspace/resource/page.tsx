@@ -269,9 +269,10 @@ export default function ResourceManagementPage() {
 
   const handleAssignToChange = (val: string) => {
     const isClear = val === "unassigned" || !val;
+    const actualVal = val && val.includes('|') ? val.split('|')[0] : val;
     setFormData(prev => ({
       ...prev,
-      assignedTo: isClear ? "" : val,
+      assignedTo: isClear ? "" : actualVal,
       status: isClear ? "Available" : "Allocated"
     }));
   };
@@ -772,7 +773,10 @@ export default function ResourceManagementPage() {
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-foreground flex items-center gap-1.5"><User className="w-4 h-4 text-muted-foreground" /> Assign To</label>
                 <Select 
-                  value={formData.assignedTo || "unassigned"}
+                  value={(() => {
+                    const emp = data?.employees?.find((e:any) => (e.name || `${e.firstName} ${e.lastName}`) === formData.assignedTo);
+                    return emp ? `${formData.assignedTo}|${emp.id}` : (formData.assignedTo || "unassigned");
+                  })()}
                   onValueChange={handleAssignToChange}
                 >
                   <SelectTrigger className="w-full bg-white focus-visible:ring-brand-teal">
@@ -780,11 +784,14 @@ export default function ResourceManagementPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="unassigned">-- Unassigned / Clear --</SelectItem>
-                    {data?.employees?.map((emp: any) => (
-                      <SelectItem key={emp.id} value={emp.name || emp.firstName + ' ' + emp.lastName}>
-                        {emp.name || `${emp.firstName} ${emp.lastName}`}
-                      </SelectItem>
-                    ))}
+                    {data?.employees?.map((emp: any) => {
+                      const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
+                      return (
+                        <SelectItem key={emp.id} value={`${empName}|${emp.id}`}>
+                          {empName}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
@@ -1170,17 +1177,29 @@ export default function ResourceManagementPage() {
                       </td>
                       <td className={`px-6 py-4 ${!isEmployeeOnly ? 'cursor-pointer hover:bg-gray-50/50' : ''}`} onClick={isEmployeeOnly ? undefined : (e) => { e.stopPropagation(); setEditingCell({ id: res.id, field: 'assignedTo' }); setTempValue(res.assignedTo || 'unassigned'); }}>
                         {editingCell?.id === res.id && editingCell?.field === 'assignedTo' ? (
-                          <Select value={tempValue} onValueChange={(val) => handleInlineSave(res.id, 'assignedTo', val)}>
+                          <Select 
+                            value={(() => {
+                              const emp = data?.employees?.find((e:any) => (e.name || `${e.firstName} ${e.lastName}`) === tempValue);
+                              return emp ? `${tempValue}|${emp.id}` : (tempValue || "unassigned");
+                            })()} 
+                            onValueChange={(val) => {
+                              const actualVal = val && val.includes('|') ? val.split('|')[0] : val;
+                              handleInlineSave(res.id, 'assignedTo', actualVal);
+                            }}
+                          >
                             <SelectTrigger className="h-8 bg-white text-xs w-36">
                               <SelectValue placeholder="Select" />
                             </SelectTrigger>
                             <SelectContent onClick={(e) => e.stopPropagation()}>
                               <SelectItem value="unassigned">-- Unassigned --</SelectItem>
-                              {data?.employees?.map((emp: any) => (
-                                <SelectItem key={emp.id} value={emp.name || emp.firstName + ' ' + emp.lastName}>
-                                  {emp.name || `${emp.firstName} ${emp.lastName}`}
-                                </SelectItem>
-                              ))}
+                              {data?.employees?.map((emp: any) => {
+                                const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
+                                return (
+                                  <SelectItem key={emp.id} value={`${empName}|${emp.id}`}>
+                                    {empName}
+                                  </SelectItem>
+                                );
+                              })}
                             </SelectContent>
                           </Select>
                         ) : res.assignedTo ? (

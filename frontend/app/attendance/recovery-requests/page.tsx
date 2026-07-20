@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -15,6 +16,7 @@ import relativeTime from 'dayjs/plugin/relativeTime'
 dayjs.extend(relativeTime)
 
 export default function RecoveryRequestsPage() {
+  const router = useRouter()
   const [requests, setRequests] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
@@ -55,11 +57,9 @@ export default function RecoveryRequestsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Link href="/attendance">
-          <Button variant="ghost" size="icon" className="rounded-full">
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
-        </Link>
+        <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-full" title="Back">
+          <ArrowLeft className="w-5 h-5" />
+        </Button>
         <PageHeader 
           title="Time Recovery Requests" 
           description="Review and manage employee requests for break-time recovery."

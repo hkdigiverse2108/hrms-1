@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Calendar, User, FileText } from "lucide-react";
+import { Loader2, Calendar, User, FileText, Search, ChevronDown, Check } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import { Textarea } from "@/components/ui/textarea";
 import { INDIAN_STATES } from "@/lib/constants";
@@ -22,19 +22,11 @@ export interface ClientFormData {
   state?: string;
   department: string;
   status: string;
-  services?: string;
-  festivalPost?: string;
-  post?: number;
-  graphics?: string;
-  reel?: number;
-  video?: string;
-  postRequired?: string;
-  reelRequired?: string;
-  graphicsRequired?: string;
   salesFocused?: string;
   dailyBudget?: number;
   remarks?: string;
-  responsibility?: string;
+  assignedEmployeeId?: string;
+  assignedEmployeeName?: string;
   dailyFollowup?: string;
   interviewDate?: string;
   interviewTime?: string;
@@ -53,19 +45,11 @@ const defaultFormData: ClientFormData = {
   state: "",
   department: "",
   status: "active",
-  services: "",
-  festivalPost: "No",
-  post: 0,
-  graphics: "",
-  reel: 0,
-  video: "",
-  postRequired: "No",
-  reelRequired: "No",
-  graphicsRequired: "No",
   salesFocused: "",
   dailyBudget: 0,
   remarks: "",
-  responsibility: "",
+  assignedEmployeeId: "",
+    assignedEmployeeName: "",
   dailyFollowup: "No",
   interviewDate: "",
   interviewTime: "",
@@ -86,6 +70,19 @@ export function ClientForm({ initialData, onSubmit, isSubmitting, departments: p
     ...initialData,
   });
   const [employees, setEmployees] = useState<any[]>([]);
+  const [stateSearchQuery, setStateSearchQuery] = useState("");
+  const [isStateOpen, setIsStateOpen] = useState(false);
+  const stateContainerRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (stateContainerRef.current && !stateContainerRef.current.contains(e.target as Node)) {
+        setIsStateOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   React.useEffect(() => {
     fetchEmployees();
@@ -111,16 +108,16 @@ export function ClientForm({ initialData, onSubmit, isSubmitting, departments: p
 
   const baseDepts = propDepartments && propDepartments.length > 0 
     ? propDepartments.map(d => d.trim()) 
-    : ["Development", "Sales", "Graphics", "Marketing"];
+    : ["Development", "Creative", "Digital Marketing"];
   
-  const departments = Array.from(new Set([...baseDepts, "Creative"]));
+  const departments = Array.from(new Set([...baseDepts]));
 
   const handleChange = (field: keyof ClientFormData, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const isMarketing = formData.department?.includes("Marketing");
-  const isGraphics = formData.department?.includes("Graphics");
+  const isGraphics = formData.department?.includes("Creative");
   const isDevelopment = formData.department?.includes("Development");
   const isSales = formData.department?.includes("Sales");
 
@@ -172,19 +169,73 @@ export function ClientForm({ initialData, onSubmit, isSubmitting, departments: p
               <Label htmlFor="address" className="text-xs font-bold uppercase text-slate-500">Address (Optional)</Label>
               <Input id="address" placeholder="e.g. 123 Main St, City" value={formData.address || ""} onChange={(e) => handleChange("address", e.target.value)} />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2" ref={stateContainerRef}>
               <Label htmlFor="state" className="text-xs font-bold uppercase text-slate-500">State / UT (Optional)</Label>
-              <Select value={formData.state || "none"} onValueChange={(v) => handleChange("state", v === "none" ? "" : v)}>
-                <SelectTrigger className="bg-white border-border"><SelectValue placeholder="Select State..." /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Select State...</SelectItem>
-                  {INDIAN_STATES.map((state) => (
-                    <SelectItem key={state.code} value={state.code}>
-                      {state.code} - {state.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="relative">
+                <button
+                  id="state"
+                  type="button"
+                  onClick={() => setIsStateOpen(!isStateOpen)}
+                  className="w-full flex items-center justify-between px-3 py-2 border border-slate-200 rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal text-slate-700 min-h-9"
+                >
+                  <span className="truncate">
+                    {formData.state
+                      ? `${formData.state} - ${INDIAN_STATES.find(s => s.code === formData.state)?.name || ""}`
+                      : "Select State..."}
+                  </span>
+                  <ChevronDown className="w-4 h-4 text-slate-400 shrink-0 ml-2" />
+                </button>
+
+                {isStateOpen && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-md shadow-lg flex flex-col min-w-[200px]">
+                    <div className="p-2 border-b border-slate-100 flex items-center gap-2 sticky top-0 bg-white">
+                      <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <Input
+                        placeholder="Search states..."
+                        value={stateSearchQuery}
+                        onChange={(e) => setStateSearchQuery(e.target.value)}
+                        className="h-8 text-xs border-transparent focus-visible:ring-0 focus-visible:ring-offset-0 px-0 shadow-none"
+                        autoFocus
+                      />
+                    </div>
+                    <ScrollArea className="max-h-60 overflow-y-auto">
+                      <div className="p-1">
+                        <div
+                          onClick={() => {
+                            handleChange("state", "");
+                            setIsStateOpen(false);
+                            setStateSearchQuery("");
+                          }}
+                          className="flex items-center justify-between px-3 py-2 text-sm hover:bg-slate-50 cursor-pointer rounded-sm text-slate-500"
+                        >
+                          Select State...
+                        </div>
+                        {INDIAN_STATES.filter((state) =>
+                          `${state.code} ${state.name}`
+                            .toLowerCase()
+                            .includes(stateSearchQuery.toLowerCase())
+                        ).map((state) => {
+                          const isSelected = formData.state === state.code;
+                          return (
+                            <div
+                              key={state.code}
+                              onClick={() => {
+                                handleChange("state", state.code);
+                                setIsStateOpen(false);
+                                setStateSearchQuery("");
+                              }}
+                              className={`flex items-center justify-between px-3 py-2 text-sm hover:bg-slate-50 cursor-pointer rounded-sm ${isSelected ? "text-brand-teal font-medium" : "text-slate-700"}`}
+                            >
+                              <span>{state.code} - {state.name}</span>
+                              {isSelected && <Check className="w-4 h-4 text-brand-teal" />}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </ScrollArea>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="gstin" className="text-xs font-bold uppercase text-slate-500">GSTIN (Optional)</Label>
@@ -268,12 +319,12 @@ export function ClientForm({ initialData, onSubmit, isSubmitting, departments: p
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="responsibility" className="text-[10px] font-bold uppercase text-slate-400">Assigned To</Label>
-                  <Select value={formData.responsibility} onValueChange={(v) => handleChange("responsibility", v)}>
+                  <Label htmlFor="assignedEmployeeId" className="text-[10px] font-bold uppercase text-slate-400">Assigned To</Label>
+                  <Select value={formData.assignedEmployeeId} onValueChange={(v) => handleChange("assignedEmployeeId", v)}>
                     <SelectTrigger className="h-8"><SelectValue placeholder="Select Employee" /></SelectTrigger>
                     <SelectContent>
                       {employees.map((emp) => (
-                        <SelectItem key={emp.id} value={`${emp.firstName} ${emp.lastName}`}>{emp.firstName} {emp.lastName}</SelectItem>
+                        <SelectItem key={emp.id} value={emp.id || `${emp.firstName} ${emp.lastName}`}>{emp.firstName} {emp.lastName}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -287,72 +338,6 @@ export function ClientForm({ initialData, onSubmit, isSubmitting, departments: p
             </div>
           )}
 
-          {/* Graphics Specific Fields - Updated as per user request */}
-          {isGraphics && (
-            <div className="space-y-4 border-t border-slate-100 pt-6">
-              <h4 className="text-xs font-bold text-brand-teal uppercase tracking-widest flex items-center gap-2">
-                <FileText className="w-4 h-4" /> Graphics Service Fields
-              </h4>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <div className="space-y-2">
-                  <Label htmlFor="services" className="text-[10px] font-bold uppercase text-slate-400">Services</Label>
-                  <Input id="services" placeholder="e.g. Social Media" value={formData.services || ""} onChange={(e) => handleChange("services", e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="post" className="text-[10px] font-bold uppercase text-slate-400">Post Count</Label>
-                  <Input id="post" type="number" value={formData.post || 0} onChange={(e) => handleChange("post", parseInt(e.target.value) || 0)} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="reel" className="text-[10px] font-bold uppercase text-slate-400">Reel Count</Label>
-                  <Input id="reel" type="number" value={formData.reel || 0} onChange={(e) => handleChange("reel", parseInt(e.target.value) || 0)} />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-bold uppercase text-slate-400">Festival Post</Label>
-                  <Select value={formData.festivalPost} onValueChange={(v) => handleChange("festivalPost", v)}>
-                    <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Yes">Yes</SelectItem>
-                      <SelectItem value="No">No</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-bold uppercase text-slate-400">Graph Req</Label>
-                  <Select value={formData.graphicsRequired} onValueChange={(v) => handleChange("graphicsRequired", v)}>
-                    <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Yes">Yes</SelectItem>
-                      <SelectItem value="No">No</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-bold uppercase text-slate-400">Post Req</Label>
-                  <Select value={formData.postRequired} onValueChange={(v) => handleChange("postRequired", v)}>
-                    <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Yes">Yes</SelectItem>
-                      <SelectItem value="No">No</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-bold uppercase text-slate-400">Reel Req</Label>
-                  <Select value={formData.reelRequired} onValueChange={(v) => handleChange("reelRequired", v)}>
-                    <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Yes">Yes</SelectItem>
-                      <SelectItem value="No">No</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-          )}
 
 
 

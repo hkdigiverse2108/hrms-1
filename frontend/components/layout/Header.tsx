@@ -1,13 +1,14 @@
 "use client";
  
 import React, { useState, useEffect } from "react";
-import { Bell, MessageSquare, Menu, LogOut } from "lucide-react";
+import { Bell, MessageSquare, Menu, LogOut, RefreshCw } from "lucide-react";
 import { Layout } from "antd";
 import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { SidebarNav } from "./SidebarNav";
 import { useUser } from "@/hooks/useUser";
+import { QuickActionsWidget } from "@/components/dashboard/QuickActionsWidget";
 import { useChatContext } from "@/context/ChatContext";
 import { useAppEvent } from "@/hooks/useAppEvent";
 import { useRouter, usePathname } from "next/navigation";
@@ -30,7 +31,18 @@ const { Header: AntHeader } = Layout;
 export function Header() {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, isLoading } = useUser();
+  const { user, setUser, isLoading } = useUser();
+  const [isElectron, setIsElectron] = useState(false);
+  const [appVersion, setAppVersion] = useState<string>("");
+  
+  useEffect(() => {
+    if (typeof window !== "undefined" && (window as any).electronAPI) {
+      setIsElectron(true);
+      (window as any).electronAPI.getAppVersion().then((ver: string) => {
+        setAppVersion(ver);
+      });
+    }
+  }, []);
   const [mounted, setMounted] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   const { totalUnreadCount: unreadChatCount } = useChatContext();
@@ -76,7 +88,9 @@ export function Header() {
 
   useEffect(() => {
     if (user?.id) {
-      fetchNotifications();
+      // Defer notifications fetch to avoid competing with rendering-critical calls
+      const timer = setTimeout(() => fetchNotifications(), 1500);
+      return () => clearTimeout(timer);
     }
   }, [user?.id]);
 
@@ -94,8 +108,20 @@ export function Header() {
     }
   };
 
-  useAppEvent("new_notification", () => {
+  useAppEvent("new_notification", (data) => {
     fetchNotifications();
+    if (data?.type === 'wm-task' || data?.type === 'task') {
+      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+        const notifUrl = data.type === 'wm-task' ? '/work-management/development' : '/tasks';
+        const notification = new Notification(data.title || "Task Assigned", {
+          body: data.message,
+        });
+        notification.onclick = () => {
+          window.focus();
+          router.push(notifUrl);
+        };
+      }
+    }
   });
 
   // Dynamically update the browser tab title with the unread chat badge count (like Email / WhatsApp) app-wide
@@ -201,6 +227,18 @@ export function Header() {
  
         {/* Right - Profile & Actions */}
         <div className="flex items-center gap-4 h-full">
+          {user && (
+            <div className="flex items-center gap-2 mr-2">
+              <QuickActionsWidget 
+                user={user} 
+                hideConfigButton={true}
+                onUpdate={(newUser) => {
+                  setUser(newUser);
+                  window.dispatchEvent(new Event("attendance-update"));
+                }} 
+              />
+            </div>
+          )}
           <Popover>
             <PopoverTrigger asChild>
               <button className="flex items-center justify-center p-2 border border-border rounded-full hover:bg-muted transition-colors relative">
@@ -253,6 +291,10 @@ export function Header() {
                                   router.push(user?.role === 'Employee' ? '/attendance' : '/employees/attendance');
                                 } else if (n.type === 'recruitment') {
                                   router.push('/recruitment');
+                                } else if (n.type === 'task') {
+                                  router.push('/tasks');
+                                } else if (n.type === 'wm-task') {
+                                  router.push('/work-management/development');
                                 }
                                 markAsRead(n.id);
                               }}
@@ -325,6 +367,18 @@ export function Header() {
               </div>
             </div>
           </Link>
+        {isElectron && (
+          <div className="flex items-center gap-1.5 ml-2 border border-slate-200 bg-slate-50/50 px-2.5 py-1 rounded-md text-xs font-semibold text-slate-500 leading-none">
+            <span>v{appVersion}</span>
+            <button 
+              onClick={() => window.dispatchEvent(new Event("check-for-updates-manual"))}
+              className="p-0.5 text-muted-foreground hover:text-brand-teal rounded transition-colors flex items-center justify-center"
+              title="Check for updates"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
           <button 
             onClick={handleLogout}
             className="ml-2 p-1.5 text-muted-foreground hover:text-brand-danger hover:bg-red-50 rounded-md transition-colors"
@@ -441,6 +495,10 @@ export function Header() {
                                     router.push(user?.role === 'Employee' ? '/attendance' : '/employees/attendance');
                                   } else if (n.type === 'recruitment') {
                                     router.push('/recruitment');
+                                  } else if (n.type === 'task') {
+                                    router.push('/tasks');
+                                  } else if (n.type === 'wm-task') {
+                                    router.push('/work-management/development');
                                   }
                                   markAsRead(n.id);
                                 }}

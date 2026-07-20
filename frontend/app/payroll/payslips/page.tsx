@@ -73,7 +73,7 @@ const getPayslipNumber = (record: any, allPayrolls: any[]): string => {
   const sorted = [...filtered].sort((a, b) => {
     const idA = a.id || a._id || ''
     const idB = b.id || b._id || ''
-    return idA.localeCompare(idB)
+    return idB.localeCompare(idA)
   })
 
   // Find index of current record
@@ -645,7 +645,7 @@ function PayslipContent() {
     const cleanPhone = phone.replace(/\D/g, '')
     const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone
     
-    const downloadLink = `https://new1-hrms.hkdigiverse.com/payroll/payslips?id=${record.id}`
+    const downloadLink = `https://hrms.hkdigiverse.com/payroll/payslips?id=${record.id}`
     const message = `Hello ${record.employeeName},\n\nYour payslip for ${record.month} ${record.year} is ready.\n\nYou can download it using this link:\n${downloadLink}\n\nRegards,\nHarikrushn Digiverse`
     
     const whatsappUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(message)}`
