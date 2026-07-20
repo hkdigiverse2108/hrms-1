@@ -407,7 +407,7 @@ export default function ReviewPage() {
                     onCheckedChange={(checked) => setNewReview(prev => ({ ...prev, showNameToAdmin: checked === true }))}
                   />
                   <label htmlFor="showNameToAdminCreate" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                    Force show my name to Admins
+                    Show my name to Admins
                   </label>
                 </div>
               </div>
