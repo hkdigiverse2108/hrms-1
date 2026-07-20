@@ -722,7 +722,7 @@ export function PendingWorkEmbedded({
 
     filteredTasks.sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
     return filteredTasks;
-  }, [entries, otherWorkEntries, clients, clientProjects, filterProject, filterTaskType, filterAssigner, filterAssignee, searchQuery, filterDate, type, employees, workScope, projects]);
+  }, [entries, otherWorkEntries, clients, clientProjects, projects, filterProject, filterTaskType, filterAssigner, filterAssignee, searchQuery, filterDate, type, employees, workScope]);
 
   const allPendingTasks = useMemo(() => {
     if (filterStage === 'all') return preFilteredTasks;

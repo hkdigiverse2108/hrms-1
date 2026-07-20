@@ -1386,9 +1386,9 @@ class TaskPreset(TaskPresetBase):
 class WMTaskBase(BaseModel):
     title: str
     description: Optional[str] = None
-    projectId: str
+    projectId: Optional[str] = ""
     projectName: Optional[str] = None
-    assignedToId: str # Employee ID
+    assignedToId: Optional[str] = "" # Employee ID
     assignedToName: Optional[str] = None
     department: Optional[str] = None
     dueDate: Optional[RobustDate] = None
