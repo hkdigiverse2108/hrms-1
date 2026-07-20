@@ -63,6 +63,7 @@ import { toast } from "sonner";
 import { useConfirm } from "@/context/ConfirmContext";
 import { PunchInModal } from "@/components/dashboard/PunchInModal";
 import { QuickActionsWidget } from "@/components/dashboard/QuickActionsWidget";
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
  
 const formatToHhMm = (totalMinutes: number) => {
   const { confirm } = useConfirm();
@@ -1600,18 +1601,29 @@ function EventsSidebar({ user, leaves }: { user: any, leaves: any[] }) {
   const [editingEvent, setEditingEvent] = useState<any>(null);
   const [currentMonth, setCurrentMonth] = useState(dayjs());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [dashboardBanners, setDashboardBanners] = useState<any[]>([]);
+  const [carouselApi, setCarouselApi] = useState<any>();
   const canAddEvents = user?.role === "Admin" || user?.role === "HR";
   const { confirm } = useConfirm();
  
   useEffect(() => {
     fetchEvents();
   }, []);
+
+  useEffect(() => {
+    if (!carouselApi) return;
+    const interval = setInterval(() => {
+      carouselApi.scrollNext();
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [carouselApi]);
  
   const fetchEvents = async () => {
     try {
-      const [resEvents, resEmp] = await Promise.all([
+      const [resEvents, resEmp, resSettings] = await Promise.all([
         fetch(`${API_URL}/events`),
-        fetch(`${API_URL}/employees`)
+        fetch(`${API_URL}/employees`),
+        fetch(`${API_URL}/system-settings`)
       ]);
       
       let eventsData = [];
@@ -1622,6 +1634,11 @@ function EventsSidebar({ user, leaves }: { user: any, leaves: any[] }) {
       let empData = [];
       if (resEmp.ok) {
         empData = await resEmp.json();
+      }
+
+      if (resSettings.ok) {
+        const settingsData = await resSettings.json();
+        setDashboardBanners(settingsData.dashboardBanners || []);
       }
 
       const birthdayEvents = empData.filter((emp: any) => emp.dob).map((emp: any) => {
@@ -1742,8 +1759,20 @@ function EventsSidebar({ user, leaves }: { user: any, leaves: any[] }) {
     })
     .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
+  const today = dayjs().format('YYYY-MM-DD');
+  const activeBanners = dashboardBanners.filter(b => {
+    if (!b.isActive) return false;
+    const hasStartDate = !!b.startDate;
+    const hasEndDate = !!b.endDate;
+    if (!hasStartDate && !hasEndDate) return true;
+    if (hasStartDate && !hasEndDate) return dayjs(today).isSameOrAfter(b.startDate);
+    if (!hasStartDate && hasEndDate) return dayjs(today).isSameOrBefore(b.endDate);
+    return dayjs(today).isSameOrAfter(b.startDate) && dayjs(today).isSameOrBefore(b.endDate);
+  });
+
   return (
     <div className="bg-white border border-border rounded-2xl p-6 shadow-sm h-fit">
+
       <div className="flex justify-between items-start mb-1">
         <h3 className="font-bold text-lg text-[#111827]">View Events</h3>
         <Button onClick={() => setIsViewAllOpen(true)} variant="outline" size="sm" className="h-8 text-[11px] font-bold border-gray-200 px-3 rounded-lg text-gray-600">View all</Button>
@@ -1758,6 +1787,35 @@ function EventsSidebar({ user, leaves }: { user: any, leaves: any[] }) {
       </div>
  
       <div className="bg-[#F9FAFB] border border-[#F3F4F6] rounded-2xl p-5 mb-6">
+        {activeBanners.length > 0 && (
+          <div className="mb-6 rounded-xl overflow-hidden shadow-sm relative group">
+            <Carousel setApi={setCarouselApi} opts={{ loop: true }}>
+              <CarouselContent>
+                {activeBanners.map(banner => (
+                  <CarouselItem key={banner.id}>
+                    {banner.externalUrl ? (
+                      <a href={banner.externalUrl} target="_blank" rel="noreferrer" className="block w-full cursor-pointer">
+                        <img 
+                          src={banner.imageUrl.startsWith('http') ? banner.imageUrl : `${API_URL}${banner.imageUrl}`} 
+                          alt="Banner" 
+                          className="w-full h-auto object-cover rounded-xl"
+                        />
+                      </a>
+                    ) : (
+                      <img 
+                        src={banner.imageUrl.startsWith('http') ? banner.imageUrl : `${API_URL}${banner.imageUrl}`} 
+                        alt="Banner" 
+                        className="w-full h-auto object-cover rounded-xl"
+                      />
+                    )}
+                  </CarouselItem>
+                ))}
+              </CarouselContent>
+              <CarouselPrevious className="absolute left-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 hover:bg-white text-brand-teal border-none" />
+              <CarouselNext className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 hover:bg-white text-brand-teal border-none" />
+            </Carousel>
+          </div>
+        )}
         <div className="flex items-center justify-between mb-6">
            <Button 
              variant="ghost" 
