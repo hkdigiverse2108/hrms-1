@@ -506,9 +506,9 @@ export default function ReviewPage() {
       <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden flex flex-col">
         <div className="p-4 sm:p-6 border-b border-border bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <Tabs value={activeTab} onValueChange={(val) => { setActiveTab(val); setCurrentPage(1); }} className="w-full sm:w-auto">
-            <TabsList className="bg-gray-100/80 p-1">
-              <TabsTrigger value="remarks" className="rounded-md px-6 data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm">Remarks</TabsTrigger>
-              <TabsTrigger value="queries" className="rounded-md px-6 data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm">Queries</TabsTrigger>
+            <TabsList className="inline-flex items-center gap-1 w-max bg-slate-100/70 p-1 rounded-xl shadow-inner border border-slate-200/60 h-auto justify-start shrink-0">
+              <TabsTrigger value="remarks" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto">Remarks</TabsTrigger>
+              <TabsTrigger value="queries" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto">Queries</TabsTrigger>
             </TabsList>
           </Tabs>
           <div className="relative w-full sm:w-[350px]">

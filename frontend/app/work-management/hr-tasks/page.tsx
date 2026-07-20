@@ -89,7 +89,6 @@ export default function HRTasksPage() {
       const isAssignedToHREmployee = (t.assignedToId && hrEmployeeIds.has(t.assignedToId)) || 
                                      (t.assignedToIds && t.assignedToIds.some((id: string) => hrEmployeeIds.has(id)));
       return t.department === "HR" || 
-             (t.frequency && t.frequency !== "one-time") || 
              t.assignedToName?.toLowerCase().includes("hr") ||
              isAssignedToHREmployee ||
              (user && (t.assignedToId === user.id || t.assignedToIds?.includes(user.id)));
@@ -215,17 +214,43 @@ export default function HRTasksPage() {
 
   const handleCompleteTask = async (task: any) => {
     try {
+      let nextDueDate = "";
+      let newStatus = "completed";
+      
+      if (task.frequency && task.frequency !== "one-time") {
+        const today = new Date();
+        const baseDate = task.dueDate ? new Date(task.dueDate) : today;
+        const alignDate = baseDate < today ? today : baseDate;
+        
+        if (task.frequency === "daily") {
+          alignDate.setDate(alignDate.getDate() + 1);
+        } else if (task.frequency === "every-2-days") {
+          alignDate.setDate(alignDate.getDate() + 2);
+        } else if (task.frequency === "weekly") {
+          alignDate.setDate(alignDate.getDate() + 7);
+        } else if (task.frequency === "monthly") {
+          alignDate.setMonth(alignDate.getMonth() + 1);
+        }
+        
+        nextDueDate = alignDate.toISOString().split("T")[0];
+        newStatus = "todo";
+      }
+
       const res = await fetch(`${API_URL}/tasks/${task.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          status: "completed",
+          status: newStatus,
+          dueDate: nextDueDate || task.dueDate,
           performedBy: user?.id || "System",
           userName: user?.name || "System"
         })
       });
       if (res.ok) {
-        toast.success("Task marked as completed");
+        toast.success(task.frequency && task.frequency !== "one-time" 
+          ? `Task completed and scheduled for next occurrence on ${nextDueDate}` 
+          : "Task marked as completed"
+        );
         fetchTasks();
       } else {
         toast.error("Failed to update task status");
@@ -300,14 +325,14 @@ export default function HRTasksPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="bg-slate-100 p-1 rounded-xl w-full md:w-auto">
-          <TabsTrigger value="tasks" className="font-semibold text-xs px-6 py-2 rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">
+        <TabsList className="inline-flex items-center gap-1 w-max bg-slate-100/70 p-1 rounded-xl shadow-inner border border-slate-200/60 h-auto md:w-auto">
+          <TabsTrigger value="tasks" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto">
             HR General Tasks ({hrTasks.length})
           </TabsTrigger>
-          <TabsTrigger value="leaves" className="font-semibold text-xs px-6 py-2 rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">
+          <TabsTrigger value="leaves" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto">
             Leave Approvals ({leaves.filter(l => l.status === "Pending").length} Pending)
           </TabsTrigger>
-          <TabsTrigger value="documents" className="font-semibold text-xs px-6 py-2 rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">
+          <TabsTrigger value="documents" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto">
             Document Requests ({docRequests.filter(d => d.status === "Pending").length} Pending)
           </TabsTrigger>
         </TabsList>
@@ -321,18 +346,18 @@ export default function HRTasksPage() {
               ? hrTasks 
               : hrTasks.filter(t => t.frequency === frequencyFilter);
 
-            const countToday = freqTasks.filter(t => t.status !== "completed" && t.dueDate === todayStr).length;
-            const countPending = freqTasks.filter(t => t.status !== "completed" && ((t.dueDate && t.dueDate < todayStr) || !t.dueDate)).length;
+            const countToday = freqTasks.filter(t => t.status !== "completed" && (t.dueDate === todayStr || (t.frequency === "daily" && !t.dueDate))).length;
+            const countPending = freqTasks.filter(t => t.status !== "completed" && t.dueDate && t.dueDate < todayStr).length;
             const countUpcoming = freqTasks.filter(t => t.status !== "completed" && t.dueDate && t.dueDate > todayStr).length;
             const countCompleted = freqTasks.filter(t => t.status === "completed").length;
 
             const filteredTasks = freqTasks.filter((task) => {
               const taskDateStr = task.dueDate ? (task.dueDate.includes("T") ? task.dueDate.split("T")[0] : task.dueDate) : "";
               if (taskSubTab === "today") {
-                return task.status !== "completed" && taskDateStr === todayStr;
+                return task.status !== "completed" && (taskDateStr === todayStr || (task.frequency === "daily" && !taskDateStr));
               }
               if (taskSubTab === "pending") {
-                return task.status !== "completed" && (taskDateStr < todayStr || !taskDateStr);
+                return task.status !== "completed" && taskDateStr < todayStr && taskDateStr !== "";
               }
               if (taskSubTab === "upcoming") {
                 return task.status !== "completed" && taskDateStr > todayStr;
@@ -354,7 +379,7 @@ export default function HRTasksPage() {
             return (
               <>
                 <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-3">
-                  <div className="flex flex-wrap gap-2">
+                  <div className="inline-flex items-center gap-1 w-max bg-slate-100/70 p-1 rounded-xl shadow-inner border border-slate-200/60 h-auto justify-start shrink-0">
                     {[
                       { id: "all", label: "All Tasks", count: freqTasks.length },
                       { id: "today", label: "Today's Tasks", count: countToday },
@@ -365,15 +390,15 @@ export default function HRTasksPage() {
                       <button
                         key={sub.id}
                         onClick={() => setTaskSubTab(sub.id)}
-                        className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+                        className={`text-sm font-bold px-4 py-2 rounded-lg transition-all flex items-center gap-1.5 h-auto border border-transparent ${
                           taskSubTab === sub.id 
-                            ? "bg-slate-800 text-white" 
-                            : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"
+                            ? "bg-white text-brand-teal shadow-sm border-slate-200/50" 
+                            : "text-slate-500 hover:text-slate-800 hover:bg-slate-200/50"
                         }`}
                       >
                         <span>{sub.label}</span>
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                          taskSubTab === sub.id ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"
+                          taskSubTab === sub.id ? "bg-brand-teal/10 text-brand-teal font-black" : "bg-slate-200 text-slate-700"
                         }`}>{sub.count}</span>
                       </button>
                     ))}
@@ -480,8 +505,8 @@ export default function HRTasksPage() {
         <TabsContent value="leaves" className="mt-6 space-y-4">
           {loadingLeaves ? (
             <div className="flex items-center justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-brand-teal" /></div>
-          ) : leaves.length === 0 ? (
-            <Card className="border border-slate-200 shadow-none"><CardContent className="flex flex-col items-center justify-center py-12"><AlertCircle className="w-8 h-8 text-slate-400 mb-2" /><p className="text-sm font-medium text-slate-500">No leave requests found.</p></CardContent></Card>
+          ) : leaves.filter(l => l.status === "Pending").length === 0 ? (
+            <Card className="border border-slate-200 shadow-none"><CardContent className="flex flex-col items-center justify-center py-12"><AlertCircle className="w-8 h-8 text-slate-400 mb-2" /><p className="text-sm font-medium text-slate-500">No pending leave requests found.</p></CardContent></Card>
           ) : (
             <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
               <table className="w-full text-left border-collapse">
@@ -496,7 +521,7 @@ export default function HRTasksPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs">
-                  {leaves.map((leave) => (
+                  {leaves.filter(l => l.status === "Pending").map((leave) => (
                     <tr key={leave.id} className="hover:bg-slate-50/50 transition-colors group">
                       <td className="p-4 font-bold text-slate-800">{leave.employee_name || "Unknown"}</td>
                       <td className="p-4">{leave.type}</td>
@@ -544,8 +569,8 @@ export default function HRTasksPage() {
         <TabsContent value="documents" className="mt-6 space-y-4">
           {loadingDocs ? (
             <div className="flex items-center justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-brand-teal" /></div>
-          ) : docRequests.length === 0 ? (
-            <Card className="border border-slate-200 shadow-none"><CardContent className="flex flex-col items-center justify-center py-12"><AlertCircle className="w-8 h-8 text-slate-400 mb-2" /><p className="text-sm font-medium text-slate-500">No document requests found.</p></CardContent></Card>
+          ) : docRequests.filter(d => d.status === "Pending").length === 0 ? (
+            <Card className="border border-slate-200 shadow-none"><CardContent className="flex flex-col items-center justify-center py-12"><AlertCircle className="w-8 h-8 text-slate-400 mb-2" /><p className="text-sm font-medium text-slate-500">No pending document requests found.</p></CardContent></Card>
           ) : (
             <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
               <table className="w-full text-left border-collapse">
@@ -560,7 +585,7 @@ export default function HRTasksPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs">
-                  {docRequests.map((req) => (
+                  {docRequests.filter(d => d.status === "Pending").map((req) => (
                     <tr key={req.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="p-4 font-bold text-slate-800">{req.employeeName || "Unknown"}</td>
                       <td className="p-4">{req.documentType}</td>

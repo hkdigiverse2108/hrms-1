@@ -2161,15 +2161,15 @@ export default function ModulesPage() {
 
           <Tabs defaultValue="notebook" className="flex-1 flex flex-col min-h-0 overflow-hidden">
             <div className="px-6 pt-3 bg-white border-b border-slate-200/80 shrink-0">
-              <TabsList className="bg-slate-100/80 p-1 rounded-xl border border-slate-200/60 h-10 inline-flex">
-                <TabsTrigger value="notebook" className="flex items-center gap-2 font-bold text-xs px-4 h-8 rounded-lg data-[state=active]:bg-brand-teal data-[state=active]:text-white data-[state=active]:shadow-sm transition-all cursor-pointer">
+              <TabsList className="bg-slate-100/70 p-1 rounded-xl shadow-inner border border-slate-200/60 inline-flex items-center gap-1">
+                <TabsTrigger value="notebook" className="flex items-center gap-2 font-bold text-sm px-4 py-2 rounded-lg data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 transition-all cursor-pointer hover:bg-slate-200/50 border border-transparent h-auto">
                   <BookOpen className="w-3.5 h-3.5" /> Research Notebook
                 </TabsTrigger>
-                <TabsTrigger value="tasks" className="flex items-center gap-2 font-bold text-xs px-4 h-8 rounded-lg data-[state=active]:bg-brand-teal data-[state=active]:text-white data-[state=active]:shadow-sm transition-all cursor-pointer">
+                <TabsTrigger value="tasks" className="flex items-center gap-2 font-bold text-sm px-4 py-2 rounded-lg data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 transition-all cursor-pointer hover:bg-slate-200/50 border border-transparent h-auto">
                   <CheckSquare className="w-3.5 h-3.5" /> Tasks ({moduleTasks.length})
                 </TabsTrigger>
                 {canManageModule && (
-                  <TabsTrigger value="settings" className="flex items-center gap-2 font-bold text-xs px-4 h-8 rounded-lg data-[state=active]:bg-brand-teal data-[state=active]:text-white data-[state=active]:shadow-sm transition-all cursor-pointer">
+                  <TabsTrigger value="settings" className="flex items-center gap-2 font-bold text-sm px-4 py-2 rounded-lg data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 transition-all cursor-pointer hover:bg-slate-200/50 border border-transparent h-auto">
                     <SlidersHorizontal className="w-3.5 h-3.5" /> Stage & Details
                   </TabsTrigger>
                 )}
