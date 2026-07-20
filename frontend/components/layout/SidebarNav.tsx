@@ -199,6 +199,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       companyFinanceChildren.push(getItem(<Link href="/company-finance/plan">Plan</Link>, "/company-finance/plan"));
       companyFinanceChildren.push(getItem(<Link href="/company-finance/summary">Summary</Link>, "/company-finance/summary"));
       companyFinanceChildren.push(getItem(<Link href="/company-finance/client-transactions">Client Transactions</Link>, "/company-finance/client-transactions"));
+      companyFinanceChildren.push(getItem(<Link href="/company-finance/logs">Audit Logs</Link>, "/company-finance/logs"));
     }
 
     if (isAdmin || companyFinanceChildren.length > 0) {

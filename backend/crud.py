@@ -4866,6 +4866,38 @@ async def get_all_activity_logs(db, performedBy: str = None, action: str = None,
     return [fix_id(row) for row in rows], total
 
 
+async def get_finance_activity_logs(db, performedBy: str = None, action: str = None, search: str = None, startDate: str = None, endDate: str = None, limit: int = 50, skip: int = 0):
+    query = {
+        "action": {"$regex": "^Finance ", "$options": "i"}
+    }
+    if performedBy:
+        query["userName"] = {"$regex": performedBy, "$options": "i"}
+    if action:
+        query["action"] = action
+    if search:
+        query["$and"] = [
+            {"action": {"$regex": "^Finance ", "$options": "i"}},
+            {"$or": [
+                {"details": {"$regex": search, "$options": "i"}},
+                {"action": {"$regex": search, "$options": "i"}},
+                {"userName": {"$regex": search, "$options": "i"}},
+                {"performedBy": {"$regex": search, "$options": "i"}}
+            ]}
+        ]
+    if startDate or endDate:
+        time_query = {}
+        if startDate:
+            time_query["$gte"] = f"{startDate} 00:00:00"
+        if endDate:
+            time_query["$lte"] = f"{endDate} 23:59:59"
+        query["timestamp"] = time_query
+
+    cursor = db.task_logs.find(query).sort("timestamp", -1).skip(skip).limit(limit)
+    total = await db.task_logs.count_documents(query)
+    rows = await cursor.to_list(length=limit)
+    return [fix_id(row) for row in rows], total
+
+
 async def update_task_log(db, log_id: str, new_details: str):
     await db.task_logs.update_one({"_id": ObjectId(log_id)}, {"$set": {"details": new_details}})
     doc = await db.task_logs.find_one({"_id": ObjectId(log_id)})

@@ -3872,6 +3872,24 @@ async def delete_finance_plan_endpoint(plan_id: str, db=Depends(get_db), current
 async def get_finance_summary_endpoint(db=Depends(get_db)):
     return await crud.get_finance_summary(db)
 
+@app.get("/company-finance/logs")
+async def get_finance_logs_endpoint(
+    performedBy: Optional[str] = None,
+    action: Optional[str] = None,
+    search: Optional[str] = None,
+    startDate: Optional[str] = None,
+    endDate: Optional[str] = None,
+    limit: int = 50,
+    skip: int = 0,
+    db=Depends(get_db),
+    current_user=Depends(auth.get_current_user_token)
+):
+    logs, total = await crud.get_finance_activity_logs(
+        db, performedBy=performedBy, action=action, search=search,
+        startDate=startDate, endDate=endDate, limit=limit, skip=skip
+    )
+    return {"logs": logs, "total": total}
+
 # --- Row Definitions Endpoints ---
 @app.get("/company-finance/row-definitions/{month}")
 async def get_row_definitions_endpoint(month: str, db=Depends(get_db)):
