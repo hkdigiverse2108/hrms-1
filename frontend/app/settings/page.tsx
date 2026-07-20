@@ -67,7 +67,7 @@ export default function SettingsPage() {
 
   const [isAddBannerModalOpen, setIsAddBannerModalOpen] = useState(false);
   const [editingBannerId, setEditingBannerId] = useState<string | null>(null);
-  const [newBanner, setNewBanner] = useState({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true });
+  const [newBanner, setNewBanner] = useState({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "" });
   const [isUploadingBanner, setIsUploadingBanner] = useState(false);
 
   useEffect(() => {
@@ -298,7 +298,8 @@ export default function SettingsPage() {
           defaultEditingStartOffset: settings?.defaultEditingStartOffset !== undefined ? settings.defaultEditingStartOffset : null,
           defaultApprovalOffset: settings?.defaultApprovalOffset !== undefined ? settings.defaultApprovalOffset : null,
           addHoldDaysToEndDate: settings?.addHoldDaysToEndDate !== undefined ? settings.addHoldDaysToEndDate : true,
-          otpRequiredRoles: settings?.otpRequiredRoles || []
+          otpRequiredRoles: settings?.otpRequiredRoles || [],
+          dashboardBanners: settings?.dashboardBanners || []
         })
       });
       if (res.ok) {
@@ -373,7 +374,7 @@ export default function SettingsPage() {
     setSettings(newSettings);
     saveSettingsToAPI(newSettings);
     
-    setNewBanner({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true });
+    setNewBanner({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "" });
     setEditingBannerId(null);
     setIsAddBannerModalOpen(false);
     toast.success(editingBannerId ? "Banner updated successfully!" : "Banner added successfully!");
@@ -1522,7 +1523,7 @@ export default function SettingsPage() {
                 {canEditSettings && (
                   <Dialog open={isAddBannerModalOpen} onOpenChange={(val) => {
                     if (!val) {
-                      setNewBanner({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true });
+                      setNewBanner({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "" });
                       setEditingBannerId(null);
                     }
                     setIsAddBannerModalOpen(val);
@@ -1562,6 +1563,10 @@ export default function SettingsPage() {
                               {isUploadingBanner && <p className="text-xs text-muted-foreground mt-2 flex items-center"><Loader2 className="w-3 h-3 animate-spin mr-1"/> Uploading...</p>}
                             </div>
                           )}
+                         </div>
+                        <div className="space-y-2">
+                          <Label>Heading (Optional)</Label>
+                          <Input placeholder="Enter announcement heading..." value={newBanner.heading || ""} onChange={e => setNewBanner({...newBanner, heading: e.target.value})} />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
@@ -1597,6 +1602,9 @@ export default function SettingsPage() {
                         <img src={banner.imageUrl.startsWith('http') ? banner.imageUrl : `${API_URL}${banner.imageUrl}`} alt="Banner" className="w-full h-full object-cover" />
                       </div>
                       <div className="flex-1 w-full space-y-1">
+                        {banner.heading && (
+                          <h4 className="text-sm font-bold text-slate-800 mb-1">{banner.heading}</h4>
+                        )}
                         <div className="flex items-center gap-2">
                           <Calendar className="w-3 h-3 text-slate-400" />
                           <span className="text-xs font-semibold text-slate-700">
@@ -1629,7 +1637,8 @@ export default function SettingsPage() {
                                   startDate: banner.startDate || "",
                                   endDate: banner.endDate || "",
                                   externalUrl: banner.externalUrl || "",
-                                  isActive: banner.isActive ?? true
+                                  isActive: banner.isActive ?? true,
+                                  heading: banner.heading || ""
                                 });
                                 setEditingBannerId(banner.id);
                                 setIsAddBannerModalOpen(true);
