@@ -11,7 +11,7 @@ export default function SalesAnalyticsPage() {
 
   return (
     <div className="-mt-6 -mx-4 sm:-mx-6 lg:-mx-8 min-h-screen bg-slate-50/50 flex flex-col">
-      <div className="bg-white border-b border-slate-100 sticky top-0 z-10 px-8 py-5 flex items-center shadow-sm">
+      <div className="bg-white border-b border-slate-100 px-8 py-5 flex items-center shadow-sm">
         <button 
           onClick={() => router.back()}
           className="mr-4 p-2 rounded-full text-brand-teal hover:bg-brand-teal/10 hover:text-brand-teal transition-all shrink-0"

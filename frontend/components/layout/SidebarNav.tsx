@@ -25,6 +25,7 @@ import {
   Landmark,
   Menu as MenuIcon,
   Activity,
+  BookOpen,
 } from "lucide-react";
 import { useUser } from "@/hooks/useUser";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -104,6 +105,9 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     const isHRUser = user?.role === 'HR' || user?.department?.toLowerCase() === 'hr';
     if (isAdmin || isHRUser || checkPermission('daily-progress', 'canView')) {
       workManagementChildren.push(getItem(<Link href="/work-management/daily-progress">Daily Progress</Link>, "/work-management/daily-progress"));
+    }
+    if (isAdmin || isHRUser) {
+      workManagementChildren.push(getItem(<Link href="/work-management/hr-tasks">HR Tasks</Link>, "/work-management/hr-tasks"));
     }
     if (isAdmin || checkPermission('sales', 'canView')) {
       workManagementChildren.push(getItem(<Link href="/work-management/sales">Sales</Link>, "/work-management/sales"));
@@ -273,6 +277,20 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       menuItems.push(getItem("Work Management", "work-management", <Briefcase className="w-5 h-5" />, workManagementChildren));
     }
 
+    const trainingChildren: MenuItem[] = [];
+    
+    if (isAdmin || checkPermission('training', 'canView')) {
+      trainingChildren.push(getItem(<Link href="/training">Course Library</Link>, "/training"));
+    }
+    
+    if (isAdmin || checkPermission('admin-courses', 'canView')) {
+      trainingChildren.push(getItem(<Link href="/admin/courses">Manage Courses</Link>, "/admin/courses"));
+    }
+
+    if (trainingChildren.length > 0) {
+      menuItems.push(getItem("Training & Courses", "training", <BookOpen className="w-5 h-5" />, trainingChildren));
+    }
+
     if (isAdmin || checkPermission('settings', 'canView')) {
       menuItems.push(getItem(<Link href="/settings">Settings</Link>, "/settings", <Settings className="w-5 h-5" />));
     }
@@ -319,6 +337,8 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (pathname.startsWith("/restrictions")) return ["/restrictions"];
     if (pathname.startsWith("/activity-logs")) return ["/activity-logs"];
     if (pathname.startsWith("/company-finance")) return [pathname];
+    if (pathname.startsWith("/training")) return ["/training"];
+    if (pathname.startsWith("/admin/courses")) return ["/admin/courses"];
     return [];
   };
 
@@ -331,6 +351,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (pathname.startsWith("/recruitment")) return ["recruitment-sub"];
     if (pathname.startsWith("/payroll")) return ["payroll-sub"];
     if (pathname.startsWith("/company-finance")) return ["company-finance-sub"];
+    if (pathname.startsWith("/training") || pathname.startsWith("/admin/courses")) return ["training"];
     return [];
   };
  

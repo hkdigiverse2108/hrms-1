@@ -37,6 +37,11 @@ export interface ProjectFormData {
   assignedEmployeeName?: string;
   isPhaseWise?: boolean;
   phases?: Array<{name: string, assignedToId?: string, assignedToIds?: string[], startDate: string, endDate: string}>;
+  // Digital Marketing fields
+  revenueAssigneeId?: string;
+  followerAssigneeId?: string;
+  userRemarkAssigneeId?: string;
+  clientRemarkAssigneeId?: string;
   // Development fields
   frontendLink?: string;
   thirdPartyIntegrations?: Array<{ name: string; credentials: string; notes?: string }>;
@@ -227,7 +232,16 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
   };
 
   const handleChange = (field: keyof ProjectFormData, value: any) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFormData((prev) => {
+      const newData = { ...prev, [field]: value };
+      if (field === "department") {
+        const isDev = typeof value === "string" && (value.toLowerCase() === "development" || value.toLowerCase().includes("dev"));
+        if (isDev && !["in-progress", "on-hold", "completed", "testing"].includes(newData.status as string)) {
+          newData.status = "in-progress";
+        }
+      }
+      return newData;
+    });
   };
 
   const handleAddPhase = () => {
@@ -400,6 +414,74 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
                 </Select>
               </div>
             )}
+            {formData.department === "Digital Marketing" && (
+              <>
+                <div className="space-y-2">
+                  <Label>Revenue Assignee</Label>
+                  <Select value={formData.revenueAssigneeId || "none"} onValueChange={(v) => handleChange("revenueAssigneeId", v === "none" ? "" : v)}>
+                    <SelectTrigger className="w-full bg-white">
+                      <SelectValue placeholder="Select Employee" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {allEmployees.map((emp) => (
+                        <SelectItem key={emp.id} value={emp.id}>
+                          {emp.firstName} {emp.lastName} {emp.role ? `(${emp.role})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Followers Assignee</Label>
+                  <Select value={formData.followerAssigneeId || "none"} onValueChange={(v) => handleChange("followerAssigneeId", v === "none" ? "" : v)}>
+                    <SelectTrigger className="w-full bg-white">
+                      <SelectValue placeholder="Select Employee" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {allEmployees.map((emp) => (
+                        <SelectItem key={emp.id} value={emp.id}>
+                          {emp.firstName} {emp.lastName} {emp.role ? `(${emp.role})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>User Remark Assignee</Label>
+                  <Select value={formData.userRemarkAssigneeId || "none"} onValueChange={(v) => handleChange("userRemarkAssigneeId", v === "none" ? "" : v)}>
+                    <SelectTrigger className="w-full bg-white">
+                      <SelectValue placeholder="Select Employee" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {allEmployees.map((emp) => (
+                        <SelectItem key={emp.id} value={emp.id}>
+                          {emp.firstName} {emp.lastName} {emp.role ? `(${emp.role})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Client Remark Assignee</Label>
+                  <Select value={formData.clientRemarkAssigneeId || "none"} onValueChange={(v) => handleChange("clientRemarkAssigneeId", v === "none" ? "" : v)}>
+                    <SelectTrigger className="w-full bg-white">
+                      <SelectValue placeholder="Select Employee" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {allEmployees.map((emp) => (
+                        <SelectItem key={emp.id} value={emp.id}>
+                          {emp.firstName} {emp.lastName} {emp.role ? `(${emp.role})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
           </div>
 
           <div className="space-y-2 p-3 bg-brand-teal/5 border border-brand-teal/20 rounded-xl">
@@ -482,13 +564,20 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="planning">Planning</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="in-progress">In Progress</SelectItem>
-              <SelectItem value="on-hold">On Hold</SelectItem>
-              <SelectItem value="rejected">Rejected</SelectItem>
-              {(!formData.department || formData.department.toLowerCase() === "development" || formData.department.toLowerCase().includes("dev")) && (isAdmin || currentUser?.role?.toLowerCase() === "cto" || formData.teamLeaderId === currentUser?.id || formData.status === "testing" || formData.status === "completed") && (
+              {formData.department?.toLowerCase() === "development" || formData.department?.toLowerCase().includes("dev") ? (
                 <>
+                  <SelectItem value="in-progress">In Progress</SelectItem>
+                  <SelectItem value="on-hold">On Hold</SelectItem>
+                  {(formData.status === "testing") && <SelectItem value="testing" disabled>Testing Phase</SelectItem>}
+                  <SelectItem value="completed" disabled={!isAdmin && currentUser?.role?.toLowerCase() !== "cto"}>Completed</SelectItem>
+                </>
+              ) : (
+                <>
+                  <SelectItem value="planning">Planning</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="in-progress">In Progress</SelectItem>
+                  <SelectItem value="on-hold">On Hold</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
                   <SelectItem value="testing" disabled={!isAdmin && currentUser?.role?.toLowerCase() !== "cto" && formData.teamLeaderId !== currentUser?.id}>Testing Phase</SelectItem>
                   <SelectItem value="completed" disabled={!isAdmin && currentUser?.role?.toLowerCase() !== "cto"}>Completed</SelectItem>
                 </>

@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useConfirm } from "@/context/ConfirmContext";
 import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 
 export default function ProjectsPage() {
   const { confirm } = useConfirm();
@@ -433,12 +434,21 @@ export default function ProjectsPage() {
     }
   };
 
-  const calculateProgress = (projectId: string) => {
-    const projectTasks = tasks.filter(t => t.projectId === projectId);
-    if (projectTasks.length === 0) return 0;
+  const getProjectStats = (project: any) => {
+    if (project.modules && project.modules.length > 0) {
+      const completedModulesCount = project.modules.filter((m: any) => m.stage === "completed").length;
+      const inProgressModules = project.modules.filter((m: any) => m.stage === "in_progress" || m.stage === "in-progress" || m.stage === "testing" || m.stage === "bugs");
+      const percent = Math.round((completedModulesCount / project.modules.length) * 100);
+      return { percent, inProgressNames: inProgressModules.map((m: any) => m.name), isTaskFallback: false };
+    }
+
+    const projectTasks = tasks.filter(t => t.projectId === project.id);
+    if (projectTasks.length === 0) return { percent: 0, inProgressNames: [], isTaskFallback: false };
     
     const completedTasks = projectTasks.filter(t => t.status === "completed").length;
-    return Math.round((completedTasks / projectTasks.length) * 100);
+    const inProgressTasks = projectTasks.filter(t => t.status === "in_progress" || t.status === "in-progress" || t.status === "testing" || t.status === "bugs");
+    const percent = Math.round((completedTasks / projectTasks.length) * 100);
+    return { percent, inProgressNames: inProgressTasks.map(t => t.title), isTaskFallback: true };
   };
 
   const getStatusColor = (status: string, progress: number) => {
@@ -500,6 +510,31 @@ export default function ProjectsPage() {
     const matchesCompany = selectedCompany === "all" || p.clientName === selectedCompany;
 
     return matchesSearch && matchesDept && matchesStatus && matchesPriority && matchesCompany;
+  }).sort((a, b) => {
+    const isDev = selectedDept.toLowerCase() === "development" || selectedDept.toLowerCase().includes("dev");
+    if (isDev) {
+      const statusOrder: Record<string, number> = {
+        "in-progress": 1,
+        "on-hold": 2,
+        "completed": 3,
+      };
+      
+      const statusA = a.status?.toLowerCase() || "";
+      const statusB = b.status?.toLowerCase() || "";
+      
+      const orderA = statusOrder[statusA] || 99;
+      const orderB = statusOrder[statusB] || 99;
+      
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+      
+      const progressA = getProjectStats(a).percent;
+      const progressB = getProjectStats(b).percent;
+      
+      return progressB - progressA;
+    }
+    return 0;
   });
 
   const uniqueCompanies = Array.from(new Set(projects.map(p => p.clientName).filter(Boolean))).sort();
@@ -1059,13 +1094,21 @@ export default function ProjectsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="planning">Planning</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="on-hold">On Hold</SelectItem>
-              {(selectedDept === "all" || selectedDept.toLowerCase() === "development" || selectedDept.toLowerCase().includes("dev")) && (
+              {(selectedDept.toLowerCase() === "development" || selectedDept.toLowerCase().includes("dev")) ? (
                 <>
-                  <SelectItem value="testing">Testing</SelectItem>
+                  <SelectItem value="in-progress">In Progress</SelectItem>
+                  <SelectItem value="on-hold">On Hold</SelectItem>
                   <SelectItem value="completed">Completed</SelectItem>
+                </>
+              ) : (
+                <>
+                  <SelectItem value="planning">Planning</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="in-progress">In Progress</SelectItem>
+                  <SelectItem value="on-hold">On Hold</SelectItem>
+                  <SelectItem value="testing">Testing Phase</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
                 </>
               )}
             </SelectContent>
@@ -1146,11 +1189,27 @@ export default function ProjectsPage() {
       ) : filteredProjects.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredProjects.map((project) => {
-            const progress = calculateProgress(project.id);
+            const stats = getProjectStats(project);
+            const progress = stats.percent;
             const isDevProject = !project.department || project.department.toLowerCase() === "development" || project.department.toLowerCase().includes("dev");
             const overdue = isOverdue(project.endDate, project.status, progress);
             const isManagementOrTL = isAdmin || user?.role === "HR" || project.teamLeaderId === user?.id;
             
+            const getDaysLeftText = (dateString: string) => {
+              if (!dateString || project.status === "completed" || progress === 100) return null;
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const target = new Date(dateString);
+              target.setHours(0, 0, 0, 0);
+              const diffTime = target.getTime() - today.getTime();
+              const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+              if (diffDays < 0) return `(${Math.abs(diffDays)} days overdue)`;
+              if (diffDays === 0) return "(Due today)";
+              if (diffDays === 1) return "(1 day left)";
+              return `(${diffDays} days left)`;
+            };
+            const clientDaysLeftText = getDaysLeftText(project.endDate);
+
             return (
               <Card key={project.id} className={`group hover:shadow-md transition-shadow border-border ${
                 overdue ? "border-red-300 bg-red-50/20" : ""
@@ -1288,7 +1347,29 @@ export default function ProjectsPage() {
                       </div>
                     )}
 
-                    {/* Development Details */}
+                    {/* Development Details & Progress */}
+                    {isDevProject && (
+                      <div className="pt-3 border-t border-dashed border-border/60 space-y-2">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="font-semibold text-slate-500 uppercase tracking-wider text-[9px]">Overall Progress</span>
+                          <span className="font-bold text-brand-teal">{progress}%</span>
+                        </div>
+                        <Progress value={progress} className="h-2 bg-slate-100" />
+                        {stats.inProgressNames.length > 0 && (
+                          <div className="pt-1">
+                            <p className="text-[10px] text-slate-500 italic mb-1">{stats.isTaskFallback ? "In-Progress Tasks:" : "In-Progress Modules:"}</p>
+                            <div className="flex flex-wrap gap-1">
+                              {stats.inProgressNames.map((name, i) => (
+                                <Badge key={i} variant="outline" className="text-[9px] bg-blue-50 text-blue-700 border-blue-200 shadow-none font-bold">
+                                  {name}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {project.department?.toLowerCase() === 'development' && (project.frontendLink || (project.thirdPartyIntegrations && project.thirdPartyIntegrations.length > 0)) && (
                       <div className="pt-3 border-t border-dashed border-border/60 space-y-2">
                         {project.frontendLink && (
@@ -1353,7 +1434,7 @@ export default function ProjectsPage() {
                       </div>
                     ) : null)}
 
-                    <div className="flex items-center justify-between pt-2 border-t border-border/50 text-[12px] text-muted-foreground">
+                    <div className="flex items-start justify-between pt-2 border-t border-border/50 text-[12px] text-muted-foreground">
                       {isAdmin ? (
                         <div className="flex flex-col gap-1">
                           <div className="flex items-center gap-1.5 text-slate-600 font-medium text-[11px] flex-wrap">
@@ -1381,13 +1462,20 @@ export default function ProjectsPage() {
                           </div>
                         </div>
                       )}
-                      <Badge variant="outline" className={`text-[10px] ${
-                        project.priority === 'high' ? 'border-red-200 text-red-600 bg-red-50' : 
-                        project.priority === 'medium' ? 'border-amber-200 text-amber-600 bg-amber-50' : 
-                        'border-green-200 text-green-600 bg-green-50'
-                      }`}>
-                        {project.priority.toUpperCase()}
-                      </Badge>
+                      <div className="flex flex-col items-end gap-1 mt-0.5">
+                        <Badge variant="outline" className={`text-[10px] ${
+                          project.priority === 'high' ? 'border-red-200 text-red-600 bg-red-50' : 
+                          project.priority === 'medium' ? 'border-amber-200 text-amber-600 bg-amber-50' : 
+                          'border-green-200 text-green-600 bg-green-50'
+                        }`}>
+                          {project.priority.toUpperCase()}
+                        </Badge>
+                        {isAdmin && clientDaysLeftText && (
+                          <span className={`text-[11px] font-bold ${overdue ? 'text-red-600' : 'text-slate-600'}`}>
+                            {clientDaysLeftText}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </CardContent>

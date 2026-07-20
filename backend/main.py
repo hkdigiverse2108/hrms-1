@@ -545,6 +545,18 @@ async def lifespan(app):
         await db.task_logs.create_index([("taskId", 1), ("timestamp", -1)])
         await db.task_logs.create_index([("projectId", 1), ("timestamp", -1)])
         await db.clients.create_index([("department", 1)])
+
+        # Marketing Reports & Remarks
+        await db.marketing_daily_reports.create_index([("clientId", 1), ("date", -1)])
+        await db.marketing_daily_reports.create_index([("projectId", 1), ("date", -1)])
+        await db.marketing_monthly_reports.create_index([("clientId", 1), ("month", 1)])
+        await db.marketing_project_daily_remarks.create_index([("projectId", 1), ("date", -1)])
+
+        # Notifications, Content Calendar, User Input Stats, and general log timestamps
+        await db.notifications.create_index([("userId", 1), ("_id", -1)])
+        await db.content_calendar_entries.create_index([("postingDate", 1)])
+        await db.user_input_stats.create_index([("employeeId", 1), ("date", -1)])
+        await db.task_logs.create_index([("timestamp", -1)])
         
         print("[Database Indexing] All database indexes verified/created successfully.", flush=True)
     except Exception as e:
@@ -928,6 +940,10 @@ async def create_employee(employee: schemas.EmployeeCreate, request: Request, db
 @app.put("/employees/{employee_id}", response_model=schemas.Employee)
 async def update_employee(employee_id: str, employee_update: schemas.EmployeeUpdate, request: Request, db=Depends(get_db)):
     performed_by, user_name = await get_actor_from_request(request, db)
+    if performed_by != "System" and performed_by != employee_id:
+        actor = await db.employees.find_one({"_id": ObjectId(performed_by) if len(performed_by) == 24 else performed_by})
+        if not actor or actor.get("role", "").lower() not in ["admin", "super admin", "manager"]:
+            raise HTTPException(status_code=403, detail="You do not have permission to modify this employee's details")
     updated = await crud.update_employee(db, employee_id, employee_update, performed_by=performed_by, user_name=user_name)
     if not updated:
         raise HTTPException(status_code=404, detail="Employee not found")
@@ -938,6 +954,71 @@ async def delete_employee(employee_id: str, request: Request, db=Depends(get_db)
     performed_by, user_name = await get_actor_from_request(request, db)
     await crud.delete_employee(db, employee_id, performed_by=performed_by, user_name=user_name)
     return {"message": "Employee deleted successfully"}
+
+@app.post("/employees/transfer-responsibilities")
+async def transfer_responsibilities(payload: dict, request: Request, db=Depends(get_db)):
+    from_emp_id = payload.get("fromEmployeeId")
+    to_emp_id = payload.get("toEmployeeId")
+    if not from_emp_id or not to_emp_id:
+        raise HTTPException(status_code=400, detail="Missing fromEmployeeId or toEmployeeId")
+
+    actor_id, actor_name = await get_actor_from_request(request, db)
+    if actor_id != "System":
+        actor = await db.employees.find_one({"_id": ObjectId(actor_id) if len(actor_id) == 24 else actor_id})
+        if not actor or actor.get("role", "").lower() not in ["admin", "super admin", "manager"]:
+            raise HTTPException(status_code=403, detail="Only admins can transfer responsibilities")
+
+    from_emp = await db.employees.find_one({"_id": ObjectId(from_emp_id) if len(from_emp_id) == 24 else from_emp_id})
+    to_emp = await db.employees.find_one({"_id": ObjectId(to_emp_id) if len(to_emp_id) == 24 else to_emp_id})
+    if not from_emp or not to_emp:
+        raise HTTPException(status_code=404, detail="One or both employees not found")
+
+    from_name = f"{from_emp.get('firstName', '')} {from_emp.get('lastName', '')}".strip()
+    to_name = f"{to_emp.get('firstName', '')} {to_emp.get('lastName', '')}".strip()
+
+    # 1. Update Clients
+    await db.clients.update_many({"assignedEmployeeId": from_emp_id}, {"$set": {"assignedEmployeeId": to_emp_id, "assignedEmployeeName": to_name}})
+    creative_roles = [
+        "assignedScriptwriterId", "assignedReelEditorId", "assignedPostDesignerId",
+        "assignedShooterId", "assignedApproverId", "assignedPosterId",
+        "assignedCaptionWriterId", "assignedThumbnailDesignerId"
+    ]
+    for role_id_field in creative_roles:
+        name_field = role_id_field[:-2] + "Name"
+        await db.clients.update_many({role_id_field: from_emp_id}, {"$set": {role_id_field: to_emp_id, name_field: to_name}})
+
+    # 2. Update Projects
+    await db.projects.update_many({"assignedEmployeeId": from_emp_id}, {"$set": {"assignedEmployeeId": to_emp_id, "assignedEmployeeName": to_name}})
+    await db.projects.update_many({"teamLeaderId": from_emp_id}, {"$set": {"teamLeaderId": to_emp_id, "teamLeaderName": to_name}})
+    
+    dm_assignee_fields = ["revenueAssigneeId", "followerAssigneeId", "userRemarkAssigneeId", "clientRemarkAssigneeId"]
+    for dm_field in dm_assignee_fields:
+        await db.projects.update_many({dm_field: from_emp_id}, {"$set": {dm_field: to_emp_id}})
+
+    for role_id_field in creative_roles:
+        name_field = role_id_field[:-2] + "Name"
+        await db.projects.update_many({role_id_field: from_emp_id}, {"$set": {role_id_field: to_emp_id, name_field: to_name}})
+
+    async for proj in db.projects.find({"assignedTeamIds": from_emp_id}):
+        updated_team_ids = [to_emp_id if tid == from_emp_id else tid for tid in proj.get("assignedTeamIds", [])]
+        unique_team_ids = list(dict.fromkeys(updated_team_ids))
+        await db.projects.update_one({"_id": proj["_id"]}, {"$set": {"assignedTeamIds": unique_team_ids}})
+
+    # 3. Update active Tasks
+    await db.wm_tasks.update_many(
+        {"assignedToId": from_emp_id, "status": {"$ne": "completed"}},
+        {"$set": {"assignedToId": to_emp_id, "assignedToName": to_name}}
+    )
+
+    await crud.log_activity(
+        db,
+        action="Employee Responsibilities Transferred",
+        performedBy=actor_id,
+        userName=actor_name,
+        details=f"All work and responsibilities transferred from {from_name} to {to_name}."
+    )
+
+    return {"message": f"Successfully transferred all responsibilities from {from_name} to {to_name}."}
 
 
 # Attendance Endpoints
@@ -2334,6 +2415,14 @@ async def read_leads(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
 @app.post("/leads", response_model=schemas.Lead)
 async def create_lead(lead: schemas.LeadCreate, db=Depends(get_db)):
     return await crud.create_lead(db, lead)
+
+@app.post("/leads/bulk", response_model=List[schemas.Lead])
+async def create_leads_bulk(leads: List[schemas.LeadCreate], db=Depends(get_db)):
+    results = []
+    for lead in leads:
+        res = await crud.create_lead(db, lead)
+        results.append(res)
+    return results
 
 @app.put("/leads/{lead_id}", response_model=schemas.Lead)
 async def update_lead(lead_id: str, lead_update: schemas.LeadUpdate, db=Depends(get_db)):
@@ -3911,7 +4000,6 @@ async def delete_research(entry_id: str, db=Depends(get_db)):
         raise HTTPException(status_code=404, detail="Entry not found")
     return {"message": "Entry deleted successfully"}
 
-
 # --- Client Transactions API ---
 @app.get("/client-transactions", response_model=List[schemas.ClientTransaction])
 async def get_client_transactions_endpoint(db=Depends(get_db)):
@@ -3934,6 +4022,129 @@ async def delete_client_transaction_endpoint(tx_id: str, db=Depends(get_db)):
     if not success:
         raise HTTPException(status_code=404, detail="Transaction not found")
     return {"message": "Transaction deleted successfully"}
+
+# --- Training / Courses API ---
+@app.post("/courses", response_model=schemas.CourseResponse)
+async def create_course(course: schemas.CourseCreate, db=Depends(get_db)):
+    return await crud.create_course(db, course)
+
+@app.get("/courses", response_model=List[schemas.CourseResponse])
+async def get_courses(db=Depends(get_db)):
+    return await crud.get_courses(db)
+
+@app.get("/courses/{course_id}")
+async def get_course_details(course_id: str, db=Depends(get_db)):
+    course = await crud.get_course(db, course_id)
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    modules = await crud.get_course_modules(db, course_id)
+    for module in modules:
+        lectures = await crud.get_course_lectures(db, str(module["id"]))
+        module["lectures"] = lectures
+        
+    course["modules"] = modules
+    return course
+
+@app.put("/courses/{course_id}", response_model=schemas.CourseResponse)
+async def update_course(course_id: str, course: schemas.CourseUpdate, db=Depends(get_db)):
+    updated = await crud.update_course(db, course_id, course)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Course not found")
+    return updated
+
+@app.delete("/courses/{course_id}")
+async def delete_course(course_id: str, db=Depends(get_db)):
+    success = await crud.delete_course(db, course_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Course not found")
+    return {"message": "Course deleted successfully"}
+
+@app.post("/course-modules", response_model=schemas.CourseModuleResponse)
+async def create_course_module(module: schemas.CourseModuleCreate, db=Depends(get_db)):
+    return await crud.create_course_module(db, module)
+
+@app.put("/course-modules/{module_id}", response_model=schemas.CourseModuleResponse)
+async def update_course_module(module_id: str, module: schemas.CourseModuleUpdate, db=Depends(get_db)):
+    updated = await crud.update_course_module(db, module_id, module)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Module not found")
+    return updated
+
+@app.delete("/course-modules/{module_id}")
+async def delete_course_module(module_id: str, db=Depends(get_db)):
+    success = await crud.delete_course_module(db, module_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Module not found")
+    return {"message": "Module deleted successfully"}
+
+@app.post("/course-lectures", response_model=schemas.CourseLectureResponse)
+async def create_course_lecture(lecture: schemas.CourseLectureCreate, db=Depends(get_db)):
+    return await crud.create_course_lecture(db, lecture)
+
+@app.put("/course-lectures/{lecture_id}", response_model=schemas.CourseLectureResponse)
+async def update_course_lecture(lecture_id: str, lecture: schemas.CourseLectureUpdate, db=Depends(get_db)):
+    updated = await crud.update_course_lecture(db, lecture_id, lecture)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Lecture not found")
+    return updated
+
+@app.delete("/course-lectures/{lecture_id}")
+async def delete_course_lecture(lecture_id: str, db=Depends(get_db)):
+    success = await crud.delete_course_lecture(db, lecture_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Lecture not found")
+    return {"message": "Lecture deleted successfully"}
+@app.put("/courses/{course_id}/assign")
+async def assign_course_employees(course_id: str, payload: dict, db=Depends(get_db), token_payload: dict = Depends(auth.require_admin)):
+    employee_ids = payload.get("employee_ids", [])
+    updated = await crud.update_course(db, course_id, schemas.CourseUpdate(assigned_employee_ids=employee_ids))
+    if not updated:
+        raise HTTPException(status_code=404, detail="Course not found")
+    return {"message": "Assigned successfully", "course": updated}
+
+@app.post("/courses/{course_id}/progress/{lecture_id}", response_model=schemas.LectureProgressResponse)
+async def update_lecture_progress(
+    course_id: str, 
+    lecture_id: str, 
+    update_data: schemas.LectureProgressUpdate, 
+    db=Depends(get_db), 
+    token_payload: dict = Depends(auth.require_auth)
+):
+    employee_id = token_payload.get("sub")
+    
+    # We need to know module_id, let's fetch lecture to find it
+    lecture = await crud.get_course_lecture(db, lecture_id) if hasattr(crud, "get_course_lecture") else None
+    
+    # Fallback to fetching directly if helper not present
+    if not lecture:
+        from bson import ObjectId
+        lecture = await db.course_lectures.find_one({"_id": ObjectId(lecture_id) if len(lecture_id)==24 else lecture_id})
+        if not lecture:
+            raise HTTPException(status_code=404, detail="Lecture not found")
+            
+    module_id = str(lecture.get("module_id", ""))
+    
+    progress = schemas.LectureProgressBase(
+        employee_id=employee_id,
+        course_id=course_id,
+        module_id=module_id,
+        lecture_id=lecture_id,
+        watched_seconds=update_data.watched_seconds,
+        total_seconds=update_data.total_seconds,
+        is_completed=update_data.watched_seconds >= update_data.total_seconds * 0.9 if update_data.total_seconds > 0 else False
+    )
+    
+    return await crud.update_lecture_progress(db, progress)
+
+@app.get("/courses/{course_id}/progress/my", response_model=List[schemas.LectureProgressResponse])
+async def get_my_course_progress(course_id: str, db=Depends(get_db), token_payload: dict = Depends(auth.require_auth)):
+    employee_id = token_payload.get("sub")
+    return await crud.get_course_progress(db, course_id, employee_id)
+
+@app.get("/courses/{course_id}/progress/all", response_model=List[schemas.LectureProgressResponse])
+async def get_all_course_progress(course_id: str, db=Depends(get_db), token_payload: dict = Depends(auth.require_admin)):
+    return await crud.get_all_course_progress(db, course_id)
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Calendar, User, FileText } from "lucide-react";
+import { Loader2, Calendar, User, FileText, Search, ChevronDown, Check } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import { Textarea } from "@/components/ui/textarea";
 import { INDIAN_STATES } from "@/lib/constants";
@@ -70,6 +70,19 @@ export function ClientForm({ initialData, onSubmit, isSubmitting, departments: p
     ...initialData,
   });
   const [employees, setEmployees] = useState<any[]>([]);
+  const [stateSearchQuery, setStateSearchQuery] = useState("");
+  const [isStateOpen, setIsStateOpen] = useState(false);
+  const stateContainerRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (stateContainerRef.current && !stateContainerRef.current.contains(e.target as Node)) {
+        setIsStateOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   React.useEffect(() => {
     fetchEmployees();
@@ -156,19 +169,73 @@ export function ClientForm({ initialData, onSubmit, isSubmitting, departments: p
               <Label htmlFor="address" className="text-xs font-bold uppercase text-slate-500">Address (Optional)</Label>
               <Input id="address" placeholder="e.g. 123 Main St, City" value={formData.address || ""} onChange={(e) => handleChange("address", e.target.value)} />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2" ref={stateContainerRef}>
               <Label htmlFor="state" className="text-xs font-bold uppercase text-slate-500">State / UT (Optional)</Label>
-              <Select value={formData.state || "none"} onValueChange={(v) => handleChange("state", v === "none" ? "" : v)}>
-                <SelectTrigger className="bg-white border-border"><SelectValue placeholder="Select State..." /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Select State...</SelectItem>
-                  {INDIAN_STATES.map((state) => (
-                    <SelectItem key={state.code} value={state.code}>
-                      {state.code} - {state.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="relative">
+                <button
+                  id="state"
+                  type="button"
+                  onClick={() => setIsStateOpen(!isStateOpen)}
+                  className="w-full flex items-center justify-between px-3 py-2 border border-slate-200 rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal text-slate-700 min-h-9"
+                >
+                  <span className="truncate">
+                    {formData.state
+                      ? `${formData.state} - ${INDIAN_STATES.find(s => s.code === formData.state)?.name || ""}`
+                      : "Select State..."}
+                  </span>
+                  <ChevronDown className="w-4 h-4 text-slate-400 shrink-0 ml-2" />
+                </button>
+
+                {isStateOpen && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-md shadow-lg flex flex-col min-w-[200px]">
+                    <div className="p-2 border-b border-slate-100 flex items-center gap-2 sticky top-0 bg-white">
+                      <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <Input
+                        placeholder="Search states..."
+                        value={stateSearchQuery}
+                        onChange={(e) => setStateSearchQuery(e.target.value)}
+                        className="h-8 text-xs border-transparent focus-visible:ring-0 focus-visible:ring-offset-0 px-0 shadow-none"
+                        autoFocus
+                      />
+                    </div>
+                    <ScrollArea className="max-h-60 overflow-y-auto">
+                      <div className="p-1">
+                        <div
+                          onClick={() => {
+                            handleChange("state", "");
+                            setIsStateOpen(false);
+                            setStateSearchQuery("");
+                          }}
+                          className="flex items-center justify-between px-3 py-2 text-sm hover:bg-slate-50 cursor-pointer rounded-sm text-slate-500"
+                        >
+                          Select State...
+                        </div>
+                        {INDIAN_STATES.filter((state) =>
+                          `${state.code} ${state.name}`
+                            .toLowerCase()
+                            .includes(stateSearchQuery.toLowerCase())
+                        ).map((state) => {
+                          const isSelected = formData.state === state.code;
+                          return (
+                            <div
+                              key={state.code}
+                              onClick={() => {
+                                handleChange("state", state.code);
+                                setIsStateOpen(false);
+                                setStateSearchQuery("");
+                              }}
+                              className={`flex items-center justify-between px-3 py-2 text-sm hover:bg-slate-50 cursor-pointer rounded-sm ${isSelected ? "text-brand-teal font-medium" : "text-slate-700"}`}
+                            >
+                              <span>{state.code} - {state.name}</span>
+                              {isSelected && <Check className="w-4 h-4 text-brand-teal" />}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </ScrollArea>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="gstin" className="text-xs font-bold uppercase text-slate-500">GSTIN (Optional)</Label>

@@ -94,6 +94,10 @@ const PERMISSION_GROUPS = [
       { moduleName: 'review', displayName: 'Remarks', tabUrl: '/remarks' },
       { moduleName: 'invoice', displayName: 'Invoice', tabUrl: '/invoice' },
       { moduleName: 'chat', displayName: 'Chat', tabUrl: '/chat' },
+      { moduleName: 'activity-logs', displayName: 'Activity Logs', tabUrl: '/activity-logs' },
+      { moduleName: 'gallery', displayName: 'Gallery', tabUrl: '/workspace/gallery' },
+      { moduleName: 'training', displayName: 'Course Library', tabUrl: '/training' },
+      { moduleName: 'admin-courses', displayName: 'Manage Courses', tabUrl: '/admin/courses' },
     ]
   },
   {

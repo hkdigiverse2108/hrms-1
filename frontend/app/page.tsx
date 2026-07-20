@@ -62,6 +62,7 @@ import { ViewAllEventsDialog } from "@/components/dashboard/ViewAllEventsDialog"
 import { toast } from "sonner";
 import { useConfirm } from "@/context/ConfirmContext";
 import { PunchInModal } from "@/components/dashboard/PunchInModal";
+import { QuickActionsWidget } from "@/components/dashboard/QuickActionsWidget";
  
 const formatToHhMm = (totalMinutes: number) => {
   const { confirm } = useConfirm();
@@ -97,7 +98,7 @@ const formatWorkHours = (workHours: string) => {
 };
 
 export default function DashboardPage() {
-  const { user, isLoading, getISTNow, isTimeSynced } = useUserContext();
+  const { user, updateUser, isLoading, getISTNow, isTimeSynced } = useUserContext();
   const [hrActiveFilter, setHrActiveFilter] = useState<string | null>(null);
   const [attendanceStatus, setAttendanceStatus] = useState<{isPunchedIn: boolean, record: any} | null>(null);
   const [recentAttendance, setRecentAttendance] = useState<any[]>([]);
@@ -686,15 +687,17 @@ export default function DashboardPage() {
         title="Dashboard"
         description="Here's what's happening in your organization today."
       >
-        {(!isAdmin) && (
-          <Button 
-            onClick={() => setIsRequestDialogOpen(true)}
-            className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-9 px-4 rounded-lg shadow-sm flex items-center gap-2"
-          >
-             <Plus className="w-4 h-4" />
-             Request Punch Out
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2 justify-end mt-4 sm:mt-0">
+          {(!isAdmin) && (
+            <Button 
+              onClick={() => setIsRequestDialogOpen(true)}
+              className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-9 px-4 rounded-lg shadow-sm flex items-center gap-2"
+            >
+               <Plus className="w-4 h-4" />
+               Request Punch Out
+            </Button>
+          )}
+        </div>
       </PageHeader>
  
       {isAdmin ? (

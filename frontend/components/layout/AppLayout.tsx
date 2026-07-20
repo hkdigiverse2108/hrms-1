@@ -66,6 +66,9 @@ function getRequiredModuleForPath(pathname: string): string | null {
   if (pathname.startsWith("/activity-tracker")) return "activity-tracker";
   if (pathname.startsWith("/activity-logs")) return "activity-logs";
   
+  if (pathname.startsWith("/admin/courses")) return "admin-courses";
+  if (pathname.startsWith("/training")) return "training";
+  
   return null;
 }
  

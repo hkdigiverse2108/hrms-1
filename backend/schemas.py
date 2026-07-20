@@ -227,6 +227,7 @@ class EmployeeBase(BaseModel):
     status: Optional[str] = "active"
     gender: Optional[str] = "Male"
     position: Optional[str] = "Intern"
+    quickActions: Optional[List[str]] = []
     salary: RobustFloat = None
     company: Optional[str] = None
     role: Optional[str] = None
@@ -242,6 +243,7 @@ class EmployeeBase(BaseModel):
     panCard: Optional[str] = None
     startTime: Optional[str] = None
     endTime: Optional[str] = None
+    signatureUrl: Optional[str] = None
     profilePhoto: Optional[str] = None
     customStatus: Optional[str] = None
     customEmoji: Optional[str] = None
@@ -280,6 +282,7 @@ class EmployeeUpdate(BaseModel):
     gender: Optional[str] = None
     salary: RobustFloat = None
     company: Optional[str] = None
+    quickActions: Optional[List[str]] = None
     role: Optional[str] = None
     upiId: Optional[str] = None
     accountNumber: Optional[str] = None
@@ -293,6 +296,7 @@ class EmployeeUpdate(BaseModel):
     panCard: Optional[str] = None
     startTime: Optional[str] = None
     endTime: Optional[str] = None
+    signatureUrl: Optional[str] = None
     profilePhoto: Optional[str] = None
     customStatus: Optional[str] = None
     customEmoji: Optional[str] = None
@@ -798,6 +802,8 @@ class ReviewBase(BaseModel):
     date: Optional[RobustDate] = None
     logs: Optional[List[dict]] = None
     updatedBy: Optional[str] = None
+    query: Optional[str] = None
+    adminReply: Optional[str] = None
 
 class ReviewCreate(ReviewBase):
     pass
@@ -806,6 +812,8 @@ class ReviewUpdate(BaseModel):
     summary: Optional[str] = None
     rating: Optional[int] = None
     updatedBy: Optional[str] = None
+    query: Optional[str] = None
+    adminReply: Optional[str] = None
 
 class Review(ReviewBase):
     id: str
@@ -838,6 +846,7 @@ class Remark(RemarkBase):
 class PenaltyTypeBase(BaseModel):
     name: str
     amount: int
+    warningLimit: Optional[int] = 3
 
 class PenaltyTypeCreate(PenaltyTypeBase):
     pass
@@ -845,6 +854,7 @@ class PenaltyTypeCreate(PenaltyTypeBase):
 class PenaltyTypeUpdate(BaseModel):
     name: Optional[str] = None
     amount: Optional[int] = None
+    warningLimit: Optional[int] = None
 
 class PenaltyType(PenaltyTypeBase):
     id: str
@@ -1123,6 +1133,10 @@ class ProjectBase(BaseModel):
     teamLeaderName: Optional[str] = None
     assignedEmployeeId: Optional[str] = None
     assignedEmployeeName: Optional[str] = None
+    revenueAssigneeId: Optional[str] = None
+    followerAssigneeId: Optional[str] = None
+    userRemarkAssigneeId: Optional[str] = None
+    clientRemarkAssigneeId: Optional[str] = None
     assignedTeamIds: Optional[List[str]] = []
     startDate: RobustDate
     endDate: Optional[RobustDate] = None
@@ -1204,6 +1218,10 @@ class ProjectUpdate(BaseModel):
     teamLeaderName: Optional[str] = None
     assignedEmployeeId: Optional[str] = None
     assignedEmployeeName: Optional[str] = None
+    revenueAssigneeId: Optional[str] = None
+    followerAssigneeId: Optional[str] = None
+    userRemarkAssigneeId: Optional[str] = None
+    clientRemarkAssigneeId: Optional[str] = None
     assignedTeamIds: Optional[List[str]] = None
     startDate: Optional[RobustDate] = None
     endDate: Optional[RobustDate] = None
@@ -1309,6 +1327,7 @@ class TaskBase(BaseModel):
     remarks: Optional[str] = None
     createdDate: Optional[RobustDate] = None
     department: Optional[str] = None
+    frequency: Optional[str] = "one-time"
 
 class TaskCreate(TaskBase):
     performedBy: Optional[str] = None
@@ -1328,6 +1347,7 @@ class TaskUpdate(BaseModel):
     performedBy: Optional[str] = None
     userName: Optional[str] = None
     department: Optional[str] = None
+    frequency: Optional[str] = None
 
 class Task(TaskBase):
     id: str
@@ -1499,7 +1519,7 @@ class Meeting(BaseModel):
 
 class LeadBase(BaseModel):
     company: Optional[str] = ""
-    contact: str
+    contact: Optional[str] = ""
     email: Optional[str] = None
     phone: Optional[str] = None
     expectedIncome: Optional[str] = None
@@ -1516,6 +1536,7 @@ class LeadBase(BaseModel):
     createdBy: Optional[str] = None
     createdByUserName: Optional[str] = None
     nextFollowUpDate: Optional[RobustDate] = None
+    category: Optional[str] = None
 
 class LeadCreate(LeadBase):
     performedBy: Optional[str] = None
@@ -1540,6 +1561,7 @@ class LeadUpdate(BaseModel):
     holdResumeDate: Optional[RobustDate] = None
     nextFollowUpDate: Optional[RobustDate] = None
     reason: Optional[str] = None
+    category: Optional[str] = None
 
 class Lead(LeadBase):
     id: str
@@ -1589,6 +1611,7 @@ class SystemSettingsBase(BaseModel):
     autoInactiveAfterResignation: Optional[bool] = False
     otpRequiredRoles: Optional[List[str]] = []
     financeDecimalScaling: Optional[int] = 0
+    leadCategories: Optional[List[str]] = Field(default_factory=list)
 
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
@@ -1630,6 +1653,7 @@ class SystemSettingsUpdate(BaseModel):
     autoInactiveAfterResignation: Optional[bool] = None
     otpRequiredRoles: Optional[List[str]] = None
     financeDecimalScaling: Optional[int] = None
+    leadCategories: Optional[List[str]] = None
 
 class SystemSettings(SystemSettingsBase):
     id: str
@@ -1908,6 +1932,7 @@ class DocumentRequestBase(BaseModel):
     fileUrl: Optional[str] = None
     generatedDate: Optional[RobustDate] = None
     sentDate: Optional[RobustDate] = None
+    neededByDate: Optional[RobustDate] = None
 
 class DocumentRequestCreate(DocumentRequestBase):
     pass
@@ -1918,6 +1943,7 @@ class DocumentRequestUpdate(BaseModel):
     fileUrl: Optional[str] = None
     generatedDate: Optional[RobustDate] = None
     sentDate: Optional[RobustDate] = None
+    neededByDate: Optional[RobustDate] = None
 
 class DocumentRequest(DocumentRequestBase):
     id: str
@@ -1935,6 +1961,7 @@ class EmployeeDailyReportBase(BaseModel):
     hoursWorked: float = 8.0
     status: str = "Submitted" # Submitted, Reviewed
     note: Optional[str] = None
+    rating: Optional[float] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
 
@@ -1949,6 +1976,7 @@ class EmployeeDailyReportUpdate(BaseModel):
     hoursWorked: Optional[float] = None
     status: Optional[str] = None
     note: Optional[str] = None
+    rating: Optional[float] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
 
@@ -1996,6 +2024,7 @@ class SalesTargetBase(BaseModel):
     breakdown: Optional[List[dict]] = []
     status: Optional[str] = "Active"
     createdAt: Optional[str] = None
+    category: Optional[str] = "Overall"
 
 class SalesTargetCreate(SalesTargetBase):
     pass
@@ -2009,6 +2038,7 @@ class SalesTargetUpdate(BaseModel):
     startDate: Optional[str] = None
     endDate: Optional[str] = None
     status: Optional[str] = None
+    category: Optional[str] = None
 
 class SalesTarget(SalesTargetBase):
     id: str
@@ -2683,7 +2713,6 @@ class ResearchResponse(ResearchBase):
     class Config:
         from_attributes = True
 
-
 # --- Monthly Plan Schemas ---
 class MonthlyPlanBase(BaseModel):
     month: str
@@ -2750,5 +2779,97 @@ class SummaryOverridesUpdate(BaseModel):
     values: Dict[str, Any]
 
 
+# --- Courses ---
+class CourseBase(BaseModel):
+    title: str
+    description: Optional[str] = ''
+    image_url: Optional[str] = ''
+    assigned_employee_ids: Optional[List[str]] = []
 
+class CourseCreate(CourseBase):
+    pass
 
+class CourseUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    assigned_employee_ids: Optional[List[str]] = None
+
+class CourseResponse(CourseBase):
+    id: str
+    createdAt: Optional[datetime] = None
+    updatedAt: Optional[datetime] = None
+    class Config:
+        from_attributes = True
+
+# --- Course Modules ---
+class CourseModuleBase(BaseModel):
+    course_id: str
+    title: str
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    order: int
+
+class CourseModuleCreate(CourseModuleBase):
+    pass
+
+class CourseModuleUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    order: Optional[int] = None
+
+class CourseModuleResponse(CourseModuleBase):
+    id: str
+    createdAt: Optional[datetime] = None
+    updatedAt: Optional[datetime] = None
+    class Config:
+        from_attributes = True
+
+# --- Course Lectures ---
+class CourseLectureBase(BaseModel):
+    module_id: str
+    title: str
+    description: Optional[str] = ''
+    url: Optional[str] = ''
+    image_url: Optional[str] = None
+    type: Optional[str] = 'video' # video, document, link
+    order: int = 0
+
+class CourseLectureCreate(CourseLectureBase):
+    pass
+
+class CourseLectureUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    url: Optional[str] = None
+    image_url: Optional[str] = None
+    type: Optional[str] = None
+    order: Optional[int] = None
+
+class CourseLectureResponse(CourseLectureBase):
+    id: str
+    createdAt: Optional[datetime] = None
+    updatedAt: Optional[datetime] = None
+    class Config:
+        from_attributes = True
+
+# --- Course Progress ---
+class LectureProgressBase(BaseModel):
+    employee_id: str
+    course_id: str
+    module_id: str
+    lecture_id: str
+    watched_seconds: float = 0.0
+    total_seconds: float = 0.0
+    is_completed: bool = False
+
+class LectureProgressUpdate(BaseModel):
+    watched_seconds: float
+    total_seconds: float
+
+class LectureProgressResponse(LectureProgressBase):
+    id: str
+    last_watched_at: Optional[datetime] = None
+    class Config:
+        from_attributes = True

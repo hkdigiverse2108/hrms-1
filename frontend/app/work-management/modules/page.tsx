@@ -78,7 +78,18 @@ export default function ModulesPage() {
   const [projects, setProjects] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("modules_selectedProjectId") || null;
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (selectedProjectId) {
+      localStorage.setItem("modules_selectedProjectId", selectedProjectId);
+    }
+  }, [selectedProjectId]);
 
   const selectedProject = projects.find(p => p.id === selectedProjectId);
   const canManageModule = Boolean(user && (
@@ -563,8 +574,10 @@ export default function ModulesPage() {
         const data = await pRes.json();
         const devProjects = data.filter((p: any) => p.department === "Development");
         setProjects(devProjects);
-        if (devProjects.length > 0 && !selectedProjectId) {
-          setSelectedProjectId(devProjects[0].id);
+        if (devProjects.length > 0) {
+          if (!selectedProjectId || !devProjects.find((p: any) => p.id === selectedProjectId)) {
+            setSelectedProjectId(devProjects[0].id);
+          }
         }
       }
       
@@ -658,10 +671,24 @@ export default function ModulesPage() {
 
     if (newTaskDueDate) {
       const taskDate = new Date(newTaskDueDate);
-      const refDeadlineStr = selectedModule.dueDate || selectedProject?.endDate;
-      if (refDeadlineStr) {
-        if (taskDate > new Date(refDeadlineStr)) {
-          toast.error(`Task due date cannot exceed ${selectedModule.dueDate ? "Module" : "Project"} deadline (${refDeadlineStr})`);
+      if (selectedModule.dueDate) {
+        const modDate = new Date(selectedModule.dueDate);
+        if (taskDate > modDate) {
+          toast.error(`Task due date cannot exceed Module deadline (${selectedModule.dueDate})`);
+          return;
+        }
+      }
+      if (selectedProject?.endDate) {
+        const clientDate = new Date(selectedProject.endDate);
+        if (taskDate > clientDate) {
+          toast.error(`Task due date cannot exceed Client deadline (${selectedProject.endDate})`);
+          return;
+        }
+      }
+      if (selectedProject?.teamDeadline) {
+        const teamDate = new Date(selectedProject.teamDeadline);
+        if (taskDate > teamDate) {
+          toast.error(`Task due date cannot exceed Team deadline (${selectedProject.teamDeadline})`);
           return;
         }
       }
@@ -781,10 +808,24 @@ export default function ModulesPage() {
 
     if (editTaskDueDate) {
       const taskDate = new Date(editTaskDueDate);
-      const refDeadlineStr = selectedModule?.dueDate || selectedProject?.endDate;
-      if (refDeadlineStr) {
-        if (taskDate > new Date(refDeadlineStr)) {
-          toast.error(`Task due date cannot exceed ${selectedModule?.dueDate ? "Module" : "Project"} deadline (${refDeadlineStr})`);
+      if (selectedModule?.dueDate) {
+        const modDate = new Date(selectedModule.dueDate);
+        if (taskDate > modDate) {
+          toast.error(`Task due date cannot exceed Module deadline (${selectedModule.dueDate})`);
+          return;
+        }
+      }
+      if (selectedProject?.endDate) {
+        const clientDate = new Date(selectedProject.endDate);
+        if (taskDate > clientDate) {
+          toast.error(`Task due date cannot exceed Client deadline (${selectedProject.endDate})`);
+          return;
+        }
+      }
+      if (selectedProject?.teamDeadline) {
+        const teamDate = new Date(selectedProject.teamDeadline);
+        if (taskDate > teamDate) {
+          toast.error(`Task due date cannot exceed Team deadline (${selectedProject.teamDeadline})`);
           return;
         }
       }

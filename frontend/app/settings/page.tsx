@@ -22,7 +22,8 @@ import {
   FileText,
   Upload,
   Image as ImageIcon,
-  Calendar
+  Calendar,
+  X
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ import { API_URL } from "@/lib/config";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 import { INDIAN_STATES, TIME_OPTIONS } from "@/lib/constants";
 
@@ -47,6 +49,10 @@ export default function SettingsPage() {
   const canEditSettings = isAdmin || checkPermission('settings', 'canEdit');
   const router = useRouter();
   const [settings, setSettings] = useState<any>(null);
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [selectedEmployeeIdForSign, setSelectedEmployeeIdForSign] = useState<string>("");
+  const [selectedSignFile, setSelectedSignFile] = useState<File | null>(null);
+  const [signPreviewUrl, setSignPreviewUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
   const [deptInput, setDeptInput] = useState<string | null>(null);
@@ -54,6 +60,22 @@ export default function SettingsPage() {
   const [meetingsInput, setMeetingsInput] = useState<string | null>(null);
   const [categoriesInput, setCategoriesInput] = useState<string | null>(null);
   const [categoriesInvoiceInput, setCategoriesInvoiceInput] = useState<string | null>(null);
+  const [leadCategoriesInput, setLeadCategoriesInput] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (selectedEmployeeIdForSign) {
+      const emp = employees.find(e => e.id === selectedEmployeeIdForSign);
+      if (emp && emp.signatureUrl) {
+        setSignPreviewUrl(emp.signatureUrl.startsWith('http') ? emp.signatureUrl : `${API_URL}${emp.signatureUrl}`);
+      } else {
+        setSignPreviewUrl(null);
+      }
+      setSelectedSignFile(null);
+    } else {
+      setSignPreviewUrl(null);
+      setSelectedSignFile(null);
+    }
+  }, [selectedEmployeeIdForSign, employees]);
 
   useEffect(() => {
     if (user) {
@@ -65,13 +87,14 @@ export default function SettingsPage() {
         return;
       }
       fetchSettings();
+      fetchEmployees();
     }
   }, [user, router]);
 
   const fetchSettings = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_URL}/system-settings`);
+      const res = await fetch(`${API_URL}/system-settings?t=${Date.now()}`, { cache: 'no-store' });
       if (res.ok) {
         setSettings(await res.json());
       }
@@ -79,6 +102,17 @@ export default function SettingsPage() {
       console.error("Error fetching settings:", err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchEmployees = async () => {
+    try {
+      const res = await fetch(`${API_URL}/employees?t=${Date.now()}`, { cache: 'no-store' });
+      if (res.ok) {
+        setEmployees(await res.json());
+      }
+    } catch (err) {
+      console.error("Error fetching employees:", err);
     }
   };
 
@@ -246,6 +280,7 @@ export default function SettingsPage() {
           otherActivities: activitiesInput !== null ? activitiesInput.split(",").map(s => s.trim()).filter(Boolean) : (settings?.otherActivities || []),
           otherMeetings: meetingsInput !== null ? meetingsInput.split(",").map(s => s.trim()).filter(Boolean) : (settings?.otherMeetings || []),
           otherCategories: categoriesInput !== null ? categoriesInput.split(",").map(s => s.trim()).filter(Boolean) : (settings?.otherCategories || ["Activity", "Meeting"]),
+          leadCategories: leadCategoriesInput !== null ? leadCategoriesInput.split(",").map(s => s.trim()).filter(Boolean) : (settings?.leadCategories || ["Hot Lead", "Warm Lead", "Cold Lead"]),
           companyLetterheadUrl: settings?.companyLetterheadUrl || null,
           companySignatureUrl: settings?.companySignatureUrl || null,
           invoiceColor1: settings?.invoiceColor1 || "#08304b",
@@ -323,6 +358,112 @@ export default function SettingsPage() {
     } catch (err) {
       console.error(err);
       toast.error("An error occurred during upload.");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleEmployeeSignatureUpload = async (employeeId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setIsUpdating(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(`${API_URL}/upload`, {
+        method: 'POST',
+        body: formData
+      });
+      if (res.ok) {
+        const data = await res.json();
+        
+        const updateRes = await fetch(`${API_URL}/employees/${employeeId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ signatureUrl: data.url })
+        });
+        
+        if (updateRes.ok) {
+          toast.success("Employee signature uploaded successfully!");
+          fetchEmployees();
+        } else {
+          toast.error("Failed to update employee.");
+        }
+      } else {
+        toast.error("Failed to upload image.");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("An error occurred during upload.");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedSignFile(file);
+      setSignPreviewUrl(URL.createObjectURL(file));
+    }
+  };
+
+  const handleSaveSignature = async () => {
+    if (!selectedEmployeeIdForSign || !selectedSignFile) return;
+    
+    setIsUpdating(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedSignFile);
+      const res = await fetch(`${API_URL}/upload`, {
+        method: 'POST',
+        body: formData
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const updateRes = await fetch(`${API_URL}/employees/${selectedEmployeeIdForSign}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ signatureUrl: data.url })
+        });
+        
+        if (updateRes.ok) {
+          toast.success("Employee signature saved successfully!");
+          fetchEmployees();
+          setSelectedSignFile(null);
+        } else {
+          toast.error("Failed to update employee.");
+        }
+      } else {
+        toast.error("Failed to upload image.");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("An error occurred during save.");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleRemoveEmployeeSignature = async (employeeId: string) => {
+    setIsUpdating(true);
+    try {
+      const updateRes = await fetch(`${API_URL}/employees/${employeeId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ signatureUrl: null })
+      });
+      
+      if (updateRes.ok) {
+        toast.success("Employee signature removed successfully!");
+        fetchEmployees();
+      } else {
+        toast.error("Failed to remove employee signature.");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("An error occurred.");
     } finally {
       setIsUpdating(false);
     }
@@ -924,6 +1065,106 @@ export default function SettingsPage() {
                       </Button>
                     </div>
                   </div>
+
+                  {/* Employee Signatures */}
+                  <div className="border-t border-slate-100 pt-6 space-y-4">
+                    <Label className="text-sm font-bold text-foreground flex items-center gap-2">
+                      <Users className="w-4 h-4 text-brand-teal" /> Employee Signatures
+                    </Label>
+                    <p className="text-xs text-muted-foreground mb-4">
+                      Manage signatures for all employees. These can be used in dynamic documents like Offer Letters.
+                    </p>
+                    
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" className="border-brand-teal text-brand-teal h-10 px-4">
+                          <Users className="w-4 h-4 mr-2" />
+                          Manage Employee Signatures
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-md" aria-describedby={undefined}>
+                        <DialogHeader>
+                          <DialogTitle className="flex items-center gap-2">
+                            <Users className="w-5 h-5 text-brand-teal" />
+                            Add Employee Signature
+                          </DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-6 mt-4">
+                          <div className="space-y-2">
+                            <Label>Select Employee</Label>
+                            <Select value={selectedEmployeeIdForSign} onValueChange={setSelectedEmployeeIdForSign}>
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Select an employee..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {employees.map(emp => (
+                                  <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.position || emp.role})</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <Label>Upload Signature Image</Label>
+                            <div className="flex flex-col gap-4">
+                              {signPreviewUrl ? (
+                                <div className="relative border border-slate-200 rounded-lg bg-slate-50 p-4 flex justify-center items-center">
+                                  <img 
+                                    src={signPreviewUrl} 
+                                    alt="Signature Preview"
+                                    className="max-h-24 object-contain"
+                                  />
+                                  {employees.find(e => e.id === selectedEmployeeIdForSign)?.signatureUrl && !selectedSignFile && (
+                                    <Button 
+                                      variant="destructive" 
+                                      size="sm" 
+                                      className="absolute top-2 right-2 h-7 px-2"
+                                      onClick={() => handleRemoveEmployeeSignature(selectedEmployeeIdForSign)}
+                                      disabled={isUpdating}
+                                    >
+                                      <X className="w-4 h-4 mr-1" />
+                                      Remove
+                                    </Button>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="border border-dashed border-slate-300 rounded-lg bg-slate-50 h-24 flex items-center justify-center">
+                                  <span className="text-sm text-slate-400">No signature</span>
+                                </div>
+                              )}
+                              
+                              <div className="flex items-center gap-3">
+                                <Button asChild variant="outline" className={`flex-1 border-brand-teal text-brand-teal h-10 cursor-pointer ${!selectedEmployeeIdForSign ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                  <label>
+                                    <Upload className="w-4 h-4 mr-2" />
+                                    {signPreviewUrl ? 'Select Different Image' : 'Select Signature'}
+                                    <input 
+                                      type="file" 
+                                      accept="image/*" 
+                                      className="hidden" 
+                                      onChange={handleFileSelect} 
+                                      disabled={!selectedEmployeeIdForSign || isUpdating} 
+                                    />
+                                  </label>
+                                </Button>
+                                
+                                {selectedSignFile && (
+                                  <Button 
+                                    className="flex-1 bg-brand-teal hover:bg-brand-teal-light text-white h-10"
+                                    onClick={handleSaveSignature}
+                                    disabled={isUpdating}
+                                  >
+                                    {isUpdating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                                    Save Signature
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
                 </div>
               </div>
             </Card>
@@ -1061,6 +1302,23 @@ export default function SettingsPage() {
                       }}
                       disabled={isUpdating || !canEditSettings}
                       placeholder="e.g. Activity, Meeting, Training"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-sm font-bold">Lead Categories (Comma Separated)</Label>
+                    <p className="text-[10px] text-muted-foreground mb-1">These are the categories used to segregate sales leads.</p>
+                    <input 
+                      type="text" 
+                      className="w-full h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold"
+                      value={leadCategoriesInput !== null ? leadCategoriesInput : (settings?.leadCategories || ["Hot Lead", "Warm Lead", "Cold Lead"]).join(", ")}
+                      onChange={(e) => setLeadCategoriesInput(e.target.value)}
+                      onBlur={(e) => {
+                        setSettings({...settings, leadCategories: e.target.value.split(",").map(s => s.trim()).filter(Boolean)});
+                        setLeadCategoriesInput(null);
+                      }}
+                      disabled={isUpdating || !canEditSettings}
+                      placeholder="e.g. Hot Lead, Warm Lead, Cold Lead"
                     />
                   </div>
                 </div>

@@ -238,3 +238,45 @@ export interface WMTask {
   priority: 'low' | 'medium' | 'high' | 'urgent'
   createdDate?: string
 }
+
+export interface Course {
+  id: string;
+  title: string;
+  description: string;
+  image_url: string;
+  createdAt?: string;
+  modules?: CourseModule[];
+  assigned_employee_ids?: string[];
+}
+
+export interface LectureProgress {
+  id: string;
+  employee_id: string;
+  course_id: string;
+  lecture_id: string;
+  watched_seconds: number;
+  total_seconds: number;
+  is_completed: boolean;
+  last_watched_at: string;
+}
+
+export interface CourseModule {
+  id: string;
+  course_id: string;
+  title: string;
+  description?: string;
+  image_url?: string;
+  order: number;
+  lectures?: CourseLecture[];
+}
+
+export interface CourseLecture {
+  id: string;
+  module_id: string;
+  title: string;
+  description?: string;
+  url: string;
+  image_url?: string;
+  type: string;
+  order: number;
+}

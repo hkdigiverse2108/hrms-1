@@ -17,14 +17,7 @@ import {
 import { exportToCSV } from "@/lib/export-utils";
 import { toast } from "sonner";
 import { useAppEvent } from "@/hooks/useAppEvent";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
+import { TablePagination } from "@/components/common/TablePagination";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
@@ -38,6 +31,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUser } from "@/hooks/useUser";
 import { usePermissions } from "@/hooks/usePermissions";
 import { API_URL } from "@/lib/config";
@@ -108,6 +102,7 @@ export default function TaskManagementPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
+  const [viewTab, setViewTab] = useState<'all' | 'today' | 'pending' | 'upcoming' | 'completed'>('all');
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editTaskTitle, setEditTaskTitle] = useState("");
   const [editingDescId, setEditingDescId] = useState<string | null>(null);
@@ -609,10 +604,35 @@ export default function TaskManagementPage() {
     if (a.status !== 'completed' && b.status === 'completed') return -1;
     return (pOrder[a.priority as keyof typeof pOrder] ?? 99) - (pOrder[b.priority as keyof typeof pOrder] ?? 99);
   });
+
+  // Tab-based filtering
+  const tabFilteredTasks = sortedTasks.filter(task => {
+    switch (viewTab) {
+      case 'today':
+        return task.dueDate === todayStr;
+      case 'pending':
+        return task.status !== 'completed' && task.status !== 'rejected';
+      case 'upcoming':
+        return task.dueDate && task.dueDate > todayStr && task.status !== 'completed' && task.status !== 'rejected';
+      case 'completed':
+        return task.status === 'completed';
+      default:
+        return true;
+    }
+  });
+
+  // Tab counts (computed from sortedTasks before tab filter)
+  const tabCounts = {
+    all: sortedTasks.length,
+    today: sortedTasks.filter(t => t.dueDate === todayStr).length,
+    pending: sortedTasks.filter(t => t.status !== 'completed' && t.status !== 'rejected').length,
+    upcoming: sortedTasks.filter(t => t.dueDate && t.dueDate > todayStr && t.status !== 'completed' && t.status !== 'rejected').length,
+    completed: sortedTasks.filter(t => t.status === 'completed').length,
+  };
   
-  const ITEMS_PER_PAGE = 10;
-  const totalPages = Math.max(1, Math.ceil(sortedTasks.length / ITEMS_PER_PAGE));
-  const currentTasks = sortedTasks.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const totalPages = Math.max(1, Math.ceil(tabFilteredTasks.length / itemsPerPage));
+  const currentTasks = tabFilteredTasks.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
     <div className="space-y-6 pb-10">
@@ -1204,7 +1224,37 @@ export default function TaskManagementPage() {
 
       {/* Main Table Container */}
       <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden flex flex-col">
-        <div className="p-6 border-b border-border">
+        {/* Tab Navigation */}
+        <div className="p-4 border-b border-border">
+          <Tabs value={viewTab} onValueChange={(val: any) => { setViewTab(val); setCurrentPage(1); }} className="w-full">
+            <TabsList className="grid w-full grid-cols-5 sm:w-auto sm:inline-grid h-auto p-1 bg-muted/60">
+              {[
+                { value: 'all', label: 'All Tasks', count: tabCounts.all },
+                { value: 'today', label: "Today's Tasks", count: tabCounts.today },
+                { value: 'pending', label: 'Pending Tasks', count: tabCounts.pending },
+                { value: 'upcoming', label: 'Upcoming Tasks', count: tabCounts.upcoming },
+                { value: 'completed', label: 'Completed', count: tabCounts.completed },
+              ].map(tab => (
+                <TabsTrigger 
+                  key={tab.value} 
+                  value={tab.value}
+                  className="data-[state=active]:bg-slate-700 data-[state=active]:text-white flex items-center justify-center gap-2 text-xs sm:text-sm font-semibold px-3 py-2 whitespace-nowrap"
+                >
+                  {tab.label}
+                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                    viewTab === tab.value 
+                      ? 'bg-white/20 text-white' 
+                      : 'bg-slate-200/80 text-slate-600'
+                  }`}>
+                    {tab.count}
+                  </span>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        </div>
+
+        <div className="p-6 border-b border-border bg-gray-50/30">
           {/* Inline Filters */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 animate-in fade-in slide-in-from-top-2">
             {/* Status Filter */}
@@ -1473,7 +1523,7 @@ export default function TaskManagementPage() {
           ) : tasks.length > 0 ? (
             <>
               <table className="w-full text-sm text-left whitespace-nowrap">
-              <thead className="text-xs text-muted-foreground font-semibold border-b border-border">
+              <thead className="text-xs text-muted-foreground font-semibold bg-gray-50/50 border-b border-border">
                 <tr>
                   <th className="px-6 py-4 font-medium w-[30%]">Task</th>
                   <th className="px-6 py-4 font-medium">Assignee</th>
@@ -1891,39 +1941,14 @@ export default function TaskManagementPage() {
               </tbody>
             </table>
             
-            {totalPages > 1 && (
-              <div className="py-4 border-t border-border mt-auto bg-white/50">
-                <Pagination>
-                  <PaginationContent>
-                    <PaginationItem>
-                      <PaginationPrevious 
-                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} 
-                        className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
-                      />
-                    </PaginationItem>
-                    
-                    {Array.from({ length: totalPages }).map((_, idx) => (
-                      <PaginationItem key={idx}>
-                        <PaginationLink 
-                          isActive={currentPage === idx + 1}
-                          onClick={() => setCurrentPage(idx + 1)}
-                          className="cursor-pointer"
-                        >
-                          {idx + 1}
-                        </PaginationLink>
-                      </PaginationItem>
-                    ))}
-                    
-                    <PaginationItem>
-                      <PaginationNext 
-                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} 
-                        className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
-                      />
-                    </PaginationItem>
-                  </PaginationContent>
-                </Pagination>
-              </div>
-            )}
+            <TablePagination 
+              totalItems={tabFilteredTasks.length} 
+              itemsPerPage={itemsPerPage} 
+              currentPage={currentPage} 
+              onPageChange={setCurrentPage} 
+              onItemsPerPageChange={(v) => { setItemsPerPage(v); setCurrentPage(1); }}
+              itemName="tasks" 
+            />
             </>
         ) : (
             <div className="flex flex-col items-center justify-center py-20 text-center space-y-3">

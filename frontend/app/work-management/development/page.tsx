@@ -591,6 +591,38 @@ export default function TasksPage() {
 
   const handleInlineUpdate = async (taskId: string, field: string, value: any) => {
     try {
+      if (field === 'dueDate' && value) {
+        const taskDate = new Date(value);
+        const targetTask = tasks.find(t => t.id === taskId);
+        if (targetTask) {
+          if (targetTask.moduleDeadline) {
+            const modDate = new Date(targetTask.moduleDeadline);
+            if (taskDate > modDate) {
+              toast.error(`Task due date cannot exceed Module deadline (${targetTask.moduleDeadline})`);
+              setEditingCell(null);
+              return;
+            }
+          }
+          const p = projects.find(proj => proj.id === targetTask.projectId);
+          if (p?.endDate) {
+            const clientDate = new Date(p.endDate);
+            if (taskDate > clientDate) {
+              toast.error(`Task due date cannot exceed Client deadline (${p.endDate})`);
+              setEditingCell(null);
+              return;
+            }
+          }
+          if (p?.teamDeadline) {
+            const teamDate = new Date(p.teamDeadline);
+            if (taskDate > teamDate) {
+              toast.error(`Task due date cannot exceed Team deadline (${p.teamDeadline})`);
+              setEditingCell(null);
+              return;
+            }
+          }
+        }
+      }
+
       const payload: any = { 
         [field]: value,
         performedBy: user?.id,
@@ -752,7 +784,6 @@ export default function TasksPage() {
     const todayStr = new Date().toISOString().split('T')[0];
     const taskDate = t.dueDate || t.postingDate;
     if (taskTimeFilter === "today") {
-      if (t.status === "completed" || t.status === "pending" || t.status === "onhold") return false;
       if (!taskDate || taskDate > todayStr) return false;
     } else if (taskTimeFilter === "pending") {
       const isPendingStatus = t.status === "pending" || t.status === "onhold";

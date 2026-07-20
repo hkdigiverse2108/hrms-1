@@ -35,17 +35,24 @@ def load_env():
     return False
 
 def get_venv_python():
-    """Find the Python executable inside the project's venv or .venv."""
-    for venv_name in ["venv", ".venv"]:
-        venv_dir = Path(__file__).parent / venv_name
+    base_dir = Path(__file__).resolve().parent
+    venv_dir = base_dir / ".venv"
+    if venv_dir.exists():
         if os.name == 'nt':
-            venv_python = venv_dir / "Scripts" / "python.exe"
+            windows_python = venv_dir / "Scripts" / "python.exe"
+            if windows_python.exists():
+                return str(windows_python)
         else:
-            venv_python = venv_dir / "bin" / "python3"
-        if venv_python.exists():
-            return str(venv_python)
-    # Fallback to the current interpreter
-    return sys.executable
+            unix_python = venv_dir / "bin" / "python"
+            if unix_python.exists():
+                return str(unix_python)
+            
+    # Fallback to system python/python3
+    if shutil.which("python3"):
+        return "python3"
+    elif shutil.which("python"):
+        return "python"
+    return "python3" if os.name != 'nt' else "python"
 
 def kill_port_owner(port):
     """Clean up any process using the port before starting (cross-platform)."""

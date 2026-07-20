@@ -38,15 +38,15 @@ const getTypeBadge = (type: string) => {
 };
 
 const PENALTIES_FALLBACK = [
-  { name: "Language rule violation", amount: 10 },
-  { name: "Clean desk violation", amount: 20 },
-  { name: "No socks", amount: 10 },
-  { name: "Non-dry snacks", amount: 50 },
-  { name: "Phone not submitted / unauthorized use", amount: 500 },
-  { name: "Phone not on silent", amount: 50 },
-  { name: "Activity not participated", amount: 20 },
-  { name: "Disrespectful behavior", amount: 10 },
-  { name: "Late Punch-in", amount: 50 },
+  { name: "Language rule violation", amount: 10, warningLimit: 3 },
+  { name: "Clean desk violation", amount: 20, warningLimit: 3 },
+  { name: "No socks", amount: 10, warningLimit: 3 },
+  { name: "Non-dry snacks", amount: 50, warningLimit: 3 },
+  { name: "Phone not submitted / unauthorized use", amount: 500, warningLimit: 3 },
+  { name: "Phone not on silent", amount: 50, warningLimit: 3 },
+  { name: "Activity not participated", amount: 20, warningLimit: 3 },
+  { name: "Disrespectful behavior", amount: 10, warningLimit: 3 },
+  { name: "Late Punch-in", amount: 50, warningLimit: 3 },
 ];
 
 const parseRemarkDate = (dateStr: string): Date | null => {
@@ -108,7 +108,7 @@ export default function RemarksPage() {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [penaltyTypes, setPenaltyTypes] = useState<any[]>([]);
   const [manageTypesOpen, setManageTypesOpen] = useState(false);
-  const [newType, setNewType] = useState({ name: "", amount: 0 });
+  const [newType, setNewType] = useState({ name: "", amount: 0, warningLimit: 3 });
   const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
 
   const getPenaltyAmount = (type: string) => {
@@ -192,17 +192,22 @@ export default function RemarksPage() {
     }
   };
 
+
   const handleAddType = async () => {
     if (!newType.name || newType.amount <= 0) return;
+    const bodyData = {
+      ...newType,
+      warningLimit: parseInt(String(newType.warningLimit)) !== undefined && !isNaN(parseInt(String(newType.warningLimit))) ? parseInt(String(newType.warningLimit)) : 3
+    };
     try {
       if (editingTypeId && !editingTypeId.startsWith('fallback-')) {
         const res = await fetch(`${API_URL}/penalty-types/${editingTypeId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newType)
+          body: JSON.stringify(bodyData)
         });
         if (res.ok) {
-          setNewType({ name: "", amount: 0 });
+          setNewType({ name: "", amount: 0, warningLimit: 3 });
           setEditingTypeId(null);
           fetchData();
         }
@@ -210,10 +215,10 @@ export default function RemarksPage() {
         const res = await fetch(`${API_URL}/penalty-types`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newType)
+          body: JSON.stringify(bodyData)
         });
         if (res.ok) {
-          setNewType({ name: "", amount: 0 });
+          setNewType({ name: "", amount: 0, warningLimit: 3 });
           fetchData();
         }
       }
@@ -1071,17 +1076,25 @@ export default function RemarksPage() {
                 />
                 <Input 
                   type="number" 
+                  placeholder="Warning Limit" 
+                  value={newType.warningLimit !== undefined ? newType.warningLimit : ""}
+                  onChange={(e) => setNewType(prev => ({ ...prev, warningLimit: parseInt(e.target.value) || 0 }))}
+                  className="bg-white w-full sm:w-[130px]"
+                  min="0"
+                />
+                <Input 
+                  type="number" 
                   placeholder="Amount (₹)" 
                   value={newType.amount || ""}
                   onChange={(e) => setNewType(prev => ({ ...prev, amount: parseInt(e.target.value) || 0 }))}
-                  className="bg-white w-full sm:w-[120px]"
+                  className="bg-white w-full sm:w-[110px]"
                 />
                 <Button onClick={handleAddType} className="bg-brand-teal hover:bg-brand-teal-light text-white shrink-0">
                   {editingTypeId ? <Edit2 className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
                   {editingTypeId ? 'Update' : 'Add'}
                 </Button>
                 {editingTypeId && (
-                  <Button variant="ghost" onClick={() => { setNewType({ name: "", amount: 0 }); setEditingTypeId(null); }} className="shrink-0 text-muted-foreground">
+                  <Button variant="ghost" onClick={() => { setNewType({ name: "", amount: 0, warningLimit: 3 }); setEditingTypeId(null); }} className="shrink-0 text-muted-foreground">
                     Cancel
                   </Button>
                 )}
@@ -1093,6 +1106,7 @@ export default function RemarksPage() {
                 <thead className="bg-gray-50 sticky top-0 z-10 text-[10px] font-bold uppercase text-muted-foreground border-b border-border">
                   <tr>
                     <th className="px-4 py-3">Violation Name</th>
+                    <th className="px-4 py-3 text-right">Warning Limit</th>
                     <th className="px-4 py-3 text-right">Amount</th>
                     <th className="px-4 py-3 text-right">Action</th>
                   </tr>
@@ -1101,6 +1115,7 @@ export default function RemarksPage() {
                   {penaltyTypes.map((type, idx) => (
                     <tr key={type.id || idx} className="hover:bg-gray-50/30">
                       <td className="px-4 py-3 font-medium text-foreground">{type.name}</td>
+                      <td className="px-4 py-3 text-right text-muted-foreground">{type.warningLimit !== undefined ? type.warningLimit : 3}</td>
                       <td className="px-4 py-3 text-right font-bold text-red-600">₹{type.amount}</td>
                       <td className="px-4 py-3 text-right">
                         {type.id && (
@@ -1111,7 +1126,7 @@ export default function RemarksPage() {
                                 size="icon" 
                                 className="h-7 w-7 text-muted-foreground hover:text-brand-teal"
                                 onClick={() => {
-                                  setNewType({ name: type.name, amount: type.amount });
+                                  setNewType({ name: type.name, amount: type.amount, warningLimit: type.warningLimit !== undefined ? type.warningLimit : 3 });
                                   setEditingTypeId(type.id);
                                 }}
                               >

@@ -57,7 +57,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
       
       if (isUpdateMode && initialActivityType) {
         if (initialActivityType === "Work") {
-          if (['hr', 'sales'].includes(userDept)) {
+          if (['sales'].includes(userDept)) {
             initialTab = "hr_sales_work";
           } else {
             initialTab = isDigitalMarketing ? "assigned_brands" : "today_work";
@@ -68,7 +68,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
           initialTab = `other_${initialActivitySubtype}`;
         }
       } else {
-        if (['hr', 'sales'].includes(userDept)) initialTab = "hr_sales_work";
+        if (['sales'].includes(userDept)) initialTab = "hr_sales_work";
         else if (isDigitalMarketing) initialTab = "assigned_brands";
       }
       
@@ -113,9 +113,19 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
         setPastWorkTasks(Array.from(uniqueWorkTitles));
       }
       if (tasksRes.ok) {
-        const allTasks = await tasksRes.json();
+        let allTasks = [];
+        if (userDept === 'hr') {
+          const genTasksRes = await fetch(`${API_URL}/tasks?userId=${userId}`);
+          if (genTasksRes.ok) {
+            allTasks = await genTasksRes.json();
+          }
+        } else {
+          allTasks = await tasksRes.json();
+        }
         let myTasks = allTasks.filter((t: any) => {
-          if (String(t.assignedToId) !== String(userId)) return false;
+          const isAssigned = String(t.assignedToId) === String(userId) || 
+                             (t.assignedToIds && t.assignedToIds.map(String).includes(String(userId)));
+          if (!isAssigned) return false;
           if (t.status === "completed" || t.status === "onhold" || t.status === "Approved") return false;
           return true;
         });
@@ -423,12 +433,12 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
 
   const todayTasks = tasks.filter(t => {
     const taskDate = t.dueDate || t.postingDate || t.moduleDeadline;
-    if (!taskDate) return false;
+    if (!taskDate) return true;
     const dateObj = parseLocalDate(taskDate);
     return dateObj <= todayDate;
   }).sort((a, b) => {
-    const dateA = parseLocalDate(a.dueDate || a.postingDate || a.moduleDeadline);
-    const dateB = parseLocalDate(b.dueDate || b.postingDate || b.moduleDeadline);
+    const dateA = a.dueDate || a.postingDate || a.moduleDeadline ? parseLocalDate(a.dueDate || a.postingDate || a.moduleDeadline) : new Date(0);
+    const dateB = b.dueDate || b.postingDate || b.moduleDeadline ? parseLocalDate(b.dueDate || b.postingDate || b.moduleDeadline) : new Date(0);
     return dateA.getTime() - dateB.getTime();
   });
   
@@ -467,7 +477,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
               setIsNewWorkTask(false);
             }} className="w-full">
               <TabsList className="w-full flex flex-wrap h-auto gap-1 p-1 bg-muted/50 rounded-lg justify-start">
-                {userDept !== 'hr' && userDept !== 'sales' && !['digital marketing', 'dm'].includes(userDept) && (
+                {userDept !== 'sales' && !['digital marketing', 'dm'].includes(userDept) && (
                   <>
                     <TabsTrigger value="today_work" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Today's Work</TabsTrigger>
                     <TabsTrigger value="upcoming_work" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Upcoming Work</TabsTrigger>
@@ -479,7 +489,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                     <TabsTrigger value="dm_other_work" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Work</TabsTrigger>
                   </>
                 )}
-                {['hr', 'sales'].includes(userDept) && (
+                {['sales'].includes(userDept) && (
                   <TabsTrigger value="hr_sales_work" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Work</TabsTrigger>
                 )}
                 <TabsTrigger value="research" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Research</TabsTrigger>
