@@ -756,7 +756,7 @@ export default function TasksPage() {
     if (selectedDepartment !== "all") {
       const assignee = employees.find(e => e.id === t.assignedToId);
       const dept = assignee?.department || t.department;
-      if (dept?.toLowerCase() !== selectedDepartment.toLowerCase()) return false;
+      if (dept !== selectedDepartment) return false;
     }
 
     // Employee Filter (for Admin)
