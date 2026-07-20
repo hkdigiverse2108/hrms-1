@@ -122,6 +122,8 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
   const items = React.useMemo(() => {
     const workManagementChildren: MenuItem[] = [];
 
+    workManagementChildren.push(getItem(<Link href="/work-management/my-tasks">My Tasks</Link>, "/work-management/my-tasks"));
+
     if (isAdmin || checkPermission('projects', 'canView')) {
       workManagementChildren.push(getItem(<Link href="/work-management/projects">Projects</Link>, "/work-management/projects"));
     }
