@@ -1446,7 +1446,7 @@ export default function TasksPage() {
                     <th className="px-4 py-3 min-w-[120px]">Assignee</th>
                     <th className="px-4 py-3 min-w-[120px]">Stage</th>
                     <th className="px-4 py-3 min-w-[120px]">Due Date</th>
-                    <th className="px-4 py-3 w-24 text-center">Actions</th>
+                    <th className="px-4 py-3 w-24 text-center sticky right-0 z-20 bg-slate-50 shadow-[-1px_0_0_0_#e2e8f0]">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="text-[12px] divide-y divide-slate-100">
@@ -1558,7 +1558,7 @@ export default function TasksPage() {
                                 )}
                               </td>
                             ))}
-                             <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                             <td className="px-4 py-3 sticky right-0 z-10 bg-white group-hover:bg-slate-50 shadow-[-1px_0_0_0_#e2e8f0] transition-colors" onClick={(e) => e.stopPropagation()}>
                               <div className="flex items-center justify-center gap-2">
                                 <button onClick={(e) => { e.stopPropagation(); fetchLogs(task.id, task.title); }} className="p-1.5 hover:bg-brand-teal/10 rounded-md text-brand-teal transition-colors" title="View History"><History className="w-3.5 h-3.5" /></button>
                                 {canTransferTask(task) && !getPendingTransferRequest(task) && (

@@ -340,7 +340,7 @@ export default function RestrictionsPage() {
                       <th className="py-3 px-4">IP Address</th>
                       <th className="py-3 px-4">OS</th>
                       <th className="py-3 px-4">Restrictions</th>
-                      <th className="py-3 px-4 text-right">Actions</th>
+                      <th className="py-3 px-4 text-right sticky right-0 z-20 bg-slate-50 shadow-[-1px_0_0_0_#e2e8f0]">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -359,7 +359,7 @@ export default function RestrictionsPage() {
                           pc.blockUrls?.length > 0;
 
                         return (
-                          <tr key={pc.id} className="border-b border-slate-100 hover:bg-slate-50/30 transition-colors">
+                          <tr key={pc.id} className="border-b border-slate-100 hover:bg-slate-50/30 transition-colors group">
                             <td className="py-3.5 px-4 font-mono font-medium text-slate-800">{pc.hostname}</td>
                             <td className="py-3.5 px-4 text-slate-600 font-semibold">{pc.activeEmployee || "None / Inactive"}</td>
                             <td className="py-3.5 px-4 font-mono text-slate-600">{pc.ipAddress}</td>
@@ -377,7 +377,7 @@ export default function RestrictionsPage() {
                                 </span>
                               )}
                             </td>
-                            <td className="py-3.5 px-4 text-right">
+                            <td className="py-3.5 px-4 text-right sticky right-0 z-10 bg-white group-hover:bg-slate-50 shadow-[-1px_0_0_0_#e2e8f0] transition-colors">
                               <Button
                                 variant="outline"
                                 size="sm"

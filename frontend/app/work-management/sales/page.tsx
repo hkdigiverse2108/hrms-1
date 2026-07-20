@@ -1634,7 +1634,7 @@ export default function SalesPage() {
               })()}
             </div>
           </td>
-          <td className="px-6 py-4 text-right">
+          <td className="px-6 py-4 text-right sticky right-0 z-10 bg-white group-hover:bg-slate-50 shadow-[-1px_0_0_0_#e2e8f0] transition-colors">
             <div className="flex justify-end gap-2">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -1677,7 +1677,7 @@ export default function SalesPage() {
               <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Expected Income</th>
               <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Remarks</th>
               <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Follow-ups</th>
-              <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+              <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right sticky right-0 z-20 bg-slate-50 shadow-[-1px_0_0_0_#e2e8f0]">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -2600,7 +2600,7 @@ export default function SalesPage() {
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right text-indigo-600">Earned</th>
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right text-brand-teal">Progress</th>
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-center">Status</th>
-                            {isAdmin && <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>}
+                            {isAdmin && <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right sticky right-0 z-20 bg-slate-50 shadow-[-1px_0_0_0_#e2e8f0]">Actions</th>}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -2736,7 +2736,7 @@ export default function SalesPage() {
                                       </Select>
                                     </td>
                                     {isAdmin && (
-                                      <td className="px-6 py-4 text-right">
+                                      <td className="px-6 py-4 text-right sticky right-0 z-10 bg-white group-hover:bg-slate-50 shadow-[-1px_0_0_0_#e2e8f0] transition-colors">
                                         <div className="flex justify-end gap-1">
                                           {canDeleteSales && (
                                             <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-300 hover:text-rose-500" onClick={async () => {

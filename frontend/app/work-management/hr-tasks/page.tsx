@@ -492,12 +492,12 @@ export default function HRTasksPage() {
                     <th className="p-4">Duration / Date</th>
                     <th className="p-4">Reason</th>
                     <th className="p-4">Status</th>
-                    <th className="p-4 text-right">Actions</th>
+                    <th className="p-4 text-right sticky right-0 z-20 bg-slate-50 shadow-[-1px_0_0_0_#e2e8f0]">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs">
                   {leaves.map((leave) => (
-                    <tr key={leave.id} className="hover:bg-slate-50/50 transition-colors">
+                    <tr key={leave.id} className="hover:bg-slate-50/50 transition-colors group">
                       <td className="p-4 font-bold text-slate-800">{leave.employee_name || "Unknown"}</td>
                       <td className="p-4">{leave.type}</td>
                       <td className="p-4">
@@ -514,7 +514,7 @@ export default function HRTasksPage() {
                           {leave.status}
                         </Badge>
                       </td>
-                      <td className="p-4 text-right">
+                      <td className="p-4 text-right sticky right-0 z-10 bg-white group-hover:bg-slate-50 shadow-[-1px_0_0_0_#e2e8f0] transition-colors">
                         {leave.status === "Pending" && isAdminOrHR ? (
                           <div className="flex gap-2 justify-end">
                             <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] h-7 px-3" onClick={() => {
