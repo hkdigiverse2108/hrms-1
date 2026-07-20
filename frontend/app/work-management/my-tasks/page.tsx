@@ -120,6 +120,9 @@ export default function MyTasksPage() {
       }
 
       const userDept = currentUser?.department?.toLowerCase() || ''
+      const userRole = currentUser?.role?.toLowerCase() || ''
+      const isHRUser = userDept === 'hr' || userDept === 'human resources' || userRole === 'hr'
+
       const taskDept = t.department?.toLowerCase() || ''
       const isDeptMatched = taskDept !== '' && (
         taskDept === userDept ||
@@ -127,7 +130,9 @@ export default function MyTasksPage() {
         (userDept === 'smm' && taskDept === 'creative')
       )
 
-      const isAssigned = t.assignedToId === uId || assIds.includes(uId) || isDeptMatched
+      const isHRTask = isHRUser && (taskDept === 'hr' || t.assignedToName?.toLowerCase().includes('hr'))
+
+      const isAssigned = t.assignedToId === uId || assIds.includes(uId) || isDeptMatched || isHRTask
 
       if (isAssigned) {
         const isHR = t.department === 'HR' || t.assignedToName?.toLowerCase().includes('hr')
