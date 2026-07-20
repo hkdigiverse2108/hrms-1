@@ -731,6 +731,10 @@ export default function TasksPage() {
   };
 
   const filteredTasks = tasks.filter(t => {
+    const assocProject = projects.find(p => p.id === t.projectId);
+    if (assocProject && (assocProject.status === "on-hold" || assocProject.status === "onhold" || assocProject.status?.toLowerCase() === "on-hold")) {
+      return false;
+    }
     const assignee = employees.find(e => e.id === t.assignedToId);
     const taskDept = assignee?.department || t.department;
     const isProjectTL = projects.some(p => p.id === t.projectId && p.teamLeaderId === user?.id);

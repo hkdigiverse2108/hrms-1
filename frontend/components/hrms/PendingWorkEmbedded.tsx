@@ -406,6 +406,7 @@ export function PendingWorkEmbedded({
       const client = clients.find(c => c.id === entry.clientId);
       const project = clientProjects[entry.clientId];
       if (!project) return; // Only show if active creative project
+      if (project.status === "on-hold" || project.status === "onhold" || project.status?.toLowerCase() === "on-hold") return;
       
       const clientName = client ? (client.companyName || client.clientName || 'Unknown Client') : 'Unknown Client';
       const projectName = project.title;
@@ -516,6 +517,7 @@ export function PendingWorkEmbedded({
 
     if (projects) {
       projects.forEach(project => {
+        if (project.status === "on-hold" || project.status === "onhold" || project.status?.toLowerCase() === "on-hold") return;
         if (!project.nextFollowupDate) return;
         const nextDate = project.nextFollowupDate.split("T")[0].split(" ")[0];
         const client = clients.find(c => c.id === project.clientId) || {};
@@ -583,6 +585,7 @@ export function PendingWorkEmbedded({
 
     // Add client project follow-ups
     Object.values(clientProjects).forEach((project: any) => {
+      if (project.status === "on-hold" || project.status === "onhold" || project.status?.toLowerCase() === "on-hold") return;
       if (!project.nextFollowupDate) return;
       
       const client = clients.find(c => c.id === project.clientId);

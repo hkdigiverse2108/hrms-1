@@ -578,7 +578,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
                   <SelectItem value="in-progress">In Progress</SelectItem>
                   <SelectItem value="on-hold">On Hold</SelectItem>
                   <SelectItem value="rejected">Rejected</SelectItem>
-                  <SelectItem value="testing" disabled={!isAdmin && currentUser?.role?.toLowerCase() !== "cto" && formData.teamLeaderId !== currentUser?.id}>Testing Phase</SelectItem>
+                  {formData.status === "testing" && <SelectItem value="testing" disabled>Testing Phase</SelectItem>}
                   <SelectItem value="completed" disabled={!isAdmin && currentUser?.role?.toLowerCase() !== "cto"}>Completed</SelectItem>
                 </>
               )}
