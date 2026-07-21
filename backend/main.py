@@ -4081,6 +4081,15 @@ async def get_all_course_progress(course_id: str, db=Depends(get_db), token_payl
     return await crud.get_all_course_progress(db, course_id)
 
 
+
+@app.get("/user-permissions/all", response_model=List[schemas.UserPermission])
+async def read_all_user_permissions(db=Depends(get_db)):
+    return await crud.get_all_user_permissions(db)
+
+@app.put("/user-permissions/bulk-module")
+async def update_bulk_module_permissions(request: schemas.ModuleBulkUpdateRequest, db=Depends(get_db), ):
+    return await crud.bulk_update_module_permissions(db, request, performed_by="System", user_name="System User")
+
 if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", os.environ.get("PORT", 8000)))
     print(f"Starting HRMS Backend on http://127.0.0.1:{port}")

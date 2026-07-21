@@ -1,4 +1,4 @@
-  'use client'
+'use client'
 
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -7,11 +7,15 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Loader2, Save, Plus, ArrowLeft, Search, ShieldCheck, ChevronRight, Users, Clock, Briefcase, IndianRupee, MonitorPlay, MessagesSquare, Settings, Trash2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { ModuleBulkAssignment } from "@/components/hrms/ModuleBulkAssignment"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+
 import { API_URL } from '@/lib/config'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import { useConfirm } from "@/context/ConfirmContext";
+import { useConfirm } from "@/context/ConfirmContext"
 
 interface ModulePermission {
   moduleName: string
@@ -127,8 +131,12 @@ export default function PermissionPresetsPage() {
   const [moduleSearch, setModuleSearch] = useState('')
 
   const [isAddOpen, setIsAddOpen] = useState(false)
+  
+  // Form state for creating a preset
+  const [newPresetType, setNewPresetType] = useState('role')
   const [newPresetName, setNewPresetName] = useState('')
   const [newPresetDesc, setNewPresetDesc] = useState('')
+  const [newPresetModule, setNewPresetModule] = useState('')
 
   useEffect(() => {
     fetchPresets()
@@ -209,12 +217,21 @@ export default function PermissionPresetsPage() {
     setSaving(true)
     try {
       const selected = presets.find(p => p.id === selectedPresetId)
+      // Only Role presets actually save permissions inside the preset doc
+      if (selected.presetType === 'module') {
+        toast.error("Module presets are saved instantly using the Save button in the bulk tab.")
+        setSaving(false)
+        return
+      }
+
       const response = await fetch(`${API_URL}/permission-presets/${selectedPresetId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           name: selected.name,
           description: selected.description,
+          presetType: selected.presetType || "role",
+          targetModule: selected.targetModule || null,
           permissions 
         }),
       })
@@ -232,19 +249,36 @@ export default function PermissionPresetsPage() {
   }
 
   const handleAddPreset = async () => {
-    if (!newPresetName.trim()) {
+    const isModule = newPresetType === 'module'
+    if (!isModule && !newPresetName.trim()) {
       toast.error('Name is required')
       return
     }
+    if (isModule && !newPresetModule) {
+      toast.error('Please select a module')
+      return
+    }
+
     setSaving(true)
     try {
+      let finalName = newPresetName
+      let finalDesc = newPresetDesc
+      
+      if (isModule) {
+        const modDef = DEFAULT_MODULES.find(m => m.moduleName === newPresetModule)
+        finalName = modDef ? `${modDef.displayName} Setup` : 'Module Preset'
+        finalDesc = `Bulk permission configuration for ${modDef?.displayName}`
+      }
+
       const defaultPerms = DEFAULT_MODULES.map(m => ({ ...m, canAdd: false, canEdit: false, canDelete: false, canView: false }))
       const res = await fetch(`${API_URL}/permission-presets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          name: newPresetName,
-          description: newPresetDesc,
+          name: finalName,
+          description: finalDesc,
+          presetType: newPresetType,
+          targetModule: isModule ? newPresetModule : null,
           permissions: defaultPerms 
         })
       })
@@ -254,6 +288,7 @@ export default function PermissionPresetsPage() {
         setIsAddOpen(false)
         setNewPresetName('')
         setNewPresetDesc('')
+        setNewPresetModule('')
         await fetchPresets()
         setSelectedPresetId(newPreset.id)
       }
@@ -347,7 +382,7 @@ export default function PermissionPresetsPage() {
                   <div className="font-bold text-sm truncate">{preset.name}</div>
                   <div className={`text-[10px] uppercase font-bold tracking-wider truncate ${
                     preset.id === selectedPresetId ? 'text-white/60' : 'text-slate-400'
-                  }`}>{preset.description || 'Custom Preset'}</div>
+                  }`}>{preset.presetType === 'module' ? 'Module Setup' : (preset.description || 'Custom Role')}</div>
                 </div>
                 <ChevronRight className={`w-4 h-4 shrink-0 ${preset.id === selectedPresetId ? 'text-white/60' : 'text-slate-300'}`} />
               </button>
@@ -363,168 +398,191 @@ export default function PermissionPresetsPage() {
         {/* Right Side: Permissions Form */}
         <div className="xl:col-span-3 bg-slate-50/50 flex flex-col h-full overflow-hidden">
           {selectedPresetId && activePreset ? (
-            <>
-              <div className="p-8 border-b border-slate-200 bg-white flex items-center justify-between sticky top-0 z-10">
-                <div>
-                  <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-                    Preset: {activePreset.name}
-                  </h1>
-                  <p className="text-slate-500 text-sm font-medium mt-1">
-                    {activePreset.description || 'Configure the permissions for this preset.'}
-                  </p>
-                </div>
-                <div className="flex gap-3">
+            activePreset.presetType === 'module' && activePreset.targetModule ? (
+              // MODULE PRESET VIEW
+              <div className="h-full flex flex-col p-4 sm:p-8">
+                <div className="mb-6 flex items-center justify-between">
+                  <div>
+                    <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+                      Preset: {activePreset.name}
+                    </h1>
+                    <p className="text-slate-500 text-sm font-medium mt-1">
+                      Bulk configure permissions for this module across all employees.
+                    </p>
+                  </div>
                   <Button variant="ghost" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={handleDeletePreset}>
                     <Trash2 className="w-4 h-4 mr-2" /> Delete
                   </Button>
-                  <Button 
-                    className="bg-brand-orange hover:bg-brand-orange/90 text-white px-8 font-bold shadow-lg shadow-brand-orange/20" 
-                    onClick={handleSave}
-                    disabled={saving}
-                  >
-                    {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                    Save Template
-                  </Button>
+                </div>
+                <div className="flex-1 overflow-hidden relative rounded-xl border border-gray-200">
+                  <ModuleBulkAssignment defaultModules={DEFAULT_MODULES} fixedModule={activePreset.targetModule} />
                 </div>
               </div>
-
-              <div className="flex-1 p-8 flex flex-col overflow-hidden">
-                <div className="mb-6 flex items-center justify-between">
-                  <div className="relative max-w-md w-full">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <Input 
-                      placeholder="Search modules (e.g. Attendance, Payroll)..." 
-                      className="pl-9 h-11 bg-white border-slate-200 rounded-xl shadow-sm focus-visible:ring-brand-teal"
-                      value={moduleSearch}
-                      onChange={(e) => setModuleSearch(e.target.value)}
-                    />
+            ) : (
+              // USER/ROLE PRESET VIEW
+              <>
+                <div className="p-8 border-b border-slate-200 bg-white flex items-center justify-between sticky top-0 z-10">
+                  <div>
+                    <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+                      Preset: {activePreset.name}
+                    </h1>
+                    <p className="text-slate-500 text-sm font-medium mt-1">
+                      {activePreset.description || 'Configure the permissions for this preset.'}
+                    </p>
                   </div>
-                  <div className="flex items-center gap-4 text-xs font-bold text-slate-500 uppercase tracking-widest">
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-2 h-2 rounded-full bg-brand-teal" /> Group Category
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-2 h-2 rounded-full bg-brand-orange" /> Full Access
-                    </div>
+                  <div className="flex gap-3">
+                    <Button variant="ghost" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={handleDeletePreset}>
+                      <Trash2 className="w-4 h-4 mr-2" /> Delete
+                    </Button>
+                    <Button 
+                      className="bg-brand-orange hover:bg-brand-orange/90 text-white px-8 font-bold shadow-lg shadow-brand-orange/20" 
+                      onClick={handleSave}
+                      disabled={saving}
+                    >
+                      {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                      Save Template
+                    </Button>
                   </div>
                 </div>
 
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-y-auto flex-1 custom-scrollbar">
-                  <table className="w-full text-sm border-collapse">
-                    <thead className="sticky top-0 z-20 bg-slate-50 border-b border-slate-200 shadow-sm">
-                      <tr>
-                        <th className="px-6 py-4 text-left font-black text-slate-700 uppercase tracking-tighter text-[11px]">Module</th>
-                        <th className="px-6 py-4 text-center font-black text-slate-700 uppercase tracking-tighter text-[11px]">Add</th>
-                        <th className="px-6 py-4 text-center font-black text-slate-700 uppercase tracking-tighter text-[11px]">Edit</th>
-                        <th className="px-6 py-4 text-center font-black text-slate-700 uppercase tracking-tighter text-[11px]">Delete</th>
-                        <th className="px-6 py-4 text-center font-black text-slate-700 uppercase tracking-tighter text-[11px]">View</th>
-                        <th className="px-6 py-4 text-center font-black text-slate-700 uppercase tracking-tighter text-[11px] bg-slate-100/50">Full</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {PERMISSION_GROUPS.map((group) => {
-                        const filteredModules = group.modules.filter(m => 
-                          m.displayName.toLowerCase().includes(moduleSearch.toLowerCase()) ||
-                          m.moduleName.toLowerCase().includes(moduleSearch.toLowerCase())
-                        )
-                        
-                        if (filteredModules.length === 0) return null
+                <div className="flex-1 p-8 flex flex-col overflow-hidden">
+                  <div className="mb-6 flex items-center justify-between">
+                    <div className="relative max-w-md w-full">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <Input 
+                        placeholder="Search modules (e.g. Attendance, Payroll)..." 
+                        className="pl-9 h-11 bg-white border-slate-200 rounded-xl shadow-sm focus-visible:ring-brand-teal"
+                        value={moduleSearch}
+                        onChange={(e) => setModuleSearch(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex items-center gap-4 text-xs font-bold text-slate-500 uppercase tracking-widest">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full bg-brand-teal" /> Group Category
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full bg-brand-orange" /> Full Access
+                      </div>
+                    </div>
+                  </div>
 
-                        return (
-                          <React.Fragment key={group.name}>
-                            <tr className="bg-slate-50/50 border-y border-slate-100">
-                              <td className="px-6 py-3">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 rounded-lg bg-brand-teal/10 flex items-center justify-center">
-                                    <group.icon className="w-4 h-4 text-brand-teal" />
+                  <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-y-auto flex-1 custom-scrollbar">
+                    <table className="w-full text-sm border-collapse">
+                      <thead className="sticky top-0 z-20 bg-slate-50 border-b border-slate-200 shadow-sm">
+                        <tr>
+                          <th className="px-6 py-4 text-left font-black text-slate-700 uppercase tracking-tighter text-[11px]">Module</th>
+                          <th className="px-6 py-4 text-center font-black text-slate-700 uppercase tracking-tighter text-[11px]">Add</th>
+                          <th className="px-6 py-4 text-center font-black text-slate-700 uppercase tracking-tighter text-[11px]">Edit</th>
+                          <th className="px-6 py-4 text-center font-black text-slate-700 uppercase tracking-tighter text-[11px]">Delete</th>
+                          <th className="px-6 py-4 text-center font-black text-slate-700 uppercase tracking-tighter text-[11px]">View</th>
+                          <th className="px-6 py-4 text-center font-black text-slate-700 uppercase tracking-tighter text-[11px] bg-slate-100/50">Full</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {PERMISSION_GROUPS.map((group) => {
+                          const filteredModules = group.modules.filter(m => 
+                            m.displayName.toLowerCase().includes(moduleSearch.toLowerCase()) ||
+                            m.moduleName.toLowerCase().includes(moduleSearch.toLowerCase())
+                          )
+                          
+                          if (filteredModules.length === 0) return null
+
+                          return (
+                            <React.Fragment key={group.name}>
+                              <tr className="bg-slate-50/50 border-y border-slate-100">
+                                <td className="px-6 py-3">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-lg bg-brand-teal/10 flex items-center justify-center">
+                                      <group.icon className="w-4 h-4 text-brand-teal" />
+                                    </div>
+                                    <span className="font-black text-slate-800 uppercase tracking-wider text-[11px]">{group.name}</span>
                                   </div>
-                                  <span className="font-black text-slate-800 uppercase tracking-wider text-[11px]">{group.name}</span>
-                                </div>
-                              </td>
-                              <td className="px-6 py-3 text-center">
-                                <Checkbox 
-                                  onCheckedChange={(checked) => handleToggleGroup(group.name, 'canAdd', !!checked)}
-                                  className="w-4 h-4 border-slate-300"
-                                />
-                              </td>
-                              <td className="px-6 py-3 text-center">
-                                <Checkbox 
-                                  onCheckedChange={(checked) => handleToggleGroup(group.name, 'canEdit', !!checked)}
-                                  className="w-4 h-4 border-slate-300"
-                                />
-                              </td>
-                              <td className="px-6 py-3 text-center">
-                                <Checkbox 
-                                  onCheckedChange={(checked) => handleToggleGroup(group.name, 'canDelete', !!checked)}
-                                  className="w-4 h-4 border-slate-300"
-                                />
-                              </td>
-                              <td className="px-6 py-3 text-center">
-                                <Checkbox 
-                                  onCheckedChange={(checked) => handleToggleGroup(group.name, 'canView', !!checked)}
-                                  className="w-4 h-4 border-slate-300"
-                                />
-                              </td>
-                              <td className="px-6 py-3 text-center bg-slate-100/20">
-                                <Checkbox 
-                                  onCheckedChange={(checked) => handleToggleGroup(group.name, 'fullAccess', !!checked)}
-                                  className="w-4 h-4 border-brand-orange data-[state=checked]:bg-brand-orange"
-                                />
-                              </td>
-                            </tr>
-                            {filteredModules.map((m) => {
-                              const p = permissions.find(per => per.moduleName === m.moduleName) || { ...m, canAdd: false, canEdit: false, canDelete: false, canView: false }
-                              return (
-                                <tr key={m.moduleName} className="hover:bg-slate-50/30 transition-colors group">
-                                  <td className="px-6 py-4">
-                                    <div className="font-bold text-slate-900 group-hover:text-brand-teal transition-colors">{p.displayName}</div>
-                                  </td>
-                                  <td className="px-6 py-4 text-center">
-                                    <Checkbox 
-                                      checked={p.canAdd} 
-                                      onCheckedChange={() => handleToggle(p.moduleName, 'canAdd')}
-                                      className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
-                                    />
-                                  </td>
-                                  <td className="px-6 py-4 text-center">
-                                    <Checkbox 
-                                      checked={p.canEdit} 
-                                      onCheckedChange={() => handleToggle(p.moduleName, 'canEdit')}
-                                      className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
-                                    />
-                                  </td>
-                                  <td className="px-6 py-4 text-center">
-                                    <Checkbox 
-                                      checked={p.canDelete} 
-                                      onCheckedChange={() => handleToggle(p.moduleName, 'canDelete')}
-                                      className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
-                                    />
-                                  </td>
-                                  <td className="px-6 py-4 text-center">
-                                    <Checkbox 
-                                      checked={p.canView} 
-                                      onCheckedChange={() => handleToggle(p.moduleName, 'canView')}
-                                      className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
-                                    />
-                                  </td>
-                                  <td className="px-6 py-4 text-center bg-slate-50/50">
-                                    <Checkbox 
-                                      checked={p.canAdd && p.canEdit && p.canDelete && p.canView} 
-                                      onCheckedChange={(checked) => handleToggleAll(p.moduleName, !!checked)}
-                                      className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-orange data-[state=checked]:border-brand-orange"
-                                    />
-                                  </td>
-                                </tr>
-                              )
-                            })}
-                          </React.Fragment>
-                        )
-                      })}
-                    </tbody>
-                  </table>
+                                </td>
+                                <td className="px-6 py-3 text-center">
+                                  <Checkbox 
+                                    onCheckedChange={(checked) => handleToggleGroup(group.name, 'canAdd', !!checked)}
+                                    className="w-4 h-4 border-slate-300"
+                                  />
+                                </td>
+                                <td className="px-6 py-3 text-center">
+                                  <Checkbox 
+                                    onCheckedChange={(checked) => handleToggleGroup(group.name, 'canEdit', !!checked)}
+                                    className="w-4 h-4 border-slate-300"
+                                  />
+                                </td>
+                                <td className="px-6 py-3 text-center">
+                                  <Checkbox 
+                                    onCheckedChange={(checked) => handleToggleGroup(group.name, 'canDelete', !!checked)}
+                                    className="w-4 h-4 border-slate-300"
+                                  />
+                                </td>
+                                <td className="px-6 py-3 text-center">
+                                  <Checkbox 
+                                    onCheckedChange={(checked) => handleToggleGroup(group.name, 'canView', !!checked)}
+                                    className="w-4 h-4 border-slate-300"
+                                  />
+                                </td>
+                                <td className="px-6 py-3 text-center bg-slate-100/20">
+                                  <Checkbox 
+                                    onCheckedChange={(checked) => handleToggleGroup(group.name, 'fullAccess', !!checked)}
+                                    className="w-4 h-4 border-brand-orange data-[state=checked]:bg-brand-orange"
+                                  />
+                                </td>
+                              </tr>
+                              {filteredModules.map((m) => {
+                                const p = permissions.find(per => per.moduleName === m.moduleName) || { ...m, canAdd: false, canEdit: false, canDelete: false, canView: false }
+                                return (
+                                  <tr key={m.moduleName} className="hover:bg-slate-50/30 transition-colors group">
+                                    <td className="px-6 py-4">
+                                      <div className="font-bold text-slate-900 group-hover:text-brand-teal transition-colors">{p.displayName}</div>
+                                    </td>
+                                    <td className="px-6 py-4 text-center">
+                                      <Checkbox 
+                                        checked={p.canAdd} 
+                                        onCheckedChange={() => handleToggle(p.moduleName, 'canAdd')}
+                                        className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
+                                      />
+                                    </td>
+                                    <td className="px-6 py-4 text-center">
+                                      <Checkbox 
+                                        checked={p.canEdit} 
+                                        onCheckedChange={() => handleToggle(p.moduleName, 'canEdit')}
+                                        className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
+                                      />
+                                    </td>
+                                    <td className="px-6 py-4 text-center">
+                                      <Checkbox 
+                                        checked={p.canDelete} 
+                                        onCheckedChange={() => handleToggle(p.moduleName, 'canDelete')}
+                                        className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
+                                      />
+                                    </td>
+                                    <td className="px-6 py-4 text-center">
+                                      <Checkbox 
+                                        checked={p.canView} 
+                                        onCheckedChange={() => handleToggle(p.moduleName, 'canView')}
+                                        className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
+                                      />
+                                    </td>
+                                    <td className="px-6 py-4 text-center bg-slate-50/50">
+                                      <Checkbox 
+                                        checked={p.canAdd && p.canEdit && p.canDelete && p.canView} 
+                                        onCheckedChange={(checked) => handleToggleAll(p.moduleName, !!checked)}
+                                        className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-orange data-[state=checked]:border-brand-orange"
+                                      />
+                                    </td>
+                                  </tr>
+                                )
+                              })}
+                            </React.Fragment>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
-            </>
+              </>
+            )
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
               <ShieldCheck className="w-16 h-16 text-slate-200 mb-4" />
@@ -541,26 +599,62 @@ export default function PermissionPresetsPage() {
             <DialogTitle>Create New Preset</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Preset Name</Label>
-              <Input 
-                placeholder="e.g. Finance Team" 
-                value={newPresetName} 
-                onChange={e => setNewPresetName(e.target.value)} 
-              />
+            
+            <div className="space-y-3 pb-2 border-b border-gray-100">
+              <Label className="text-gray-500">Preset Type</Label>
+              <RadioGroup value={newPresetType} onValueChange={setNewPresetType} className="flex gap-4">
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="role" id="r-role" />
+                  <Label htmlFor="r-role" className="cursor-pointer">User/Role Preset</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="module" id="r-module" />
+                  <Label htmlFor="r-module" className="cursor-pointer">Module Preset</Label>
+                </div>
+              </RadioGroup>
             </div>
-            <div className="space-y-2">
-              <Label>Description</Label>
-              <Input 
-                placeholder="Optional description" 
-                value={newPresetDesc} 
-                onChange={e => setNewPresetDesc(e.target.value)} 
-              />
-            </div>
+
+            {newPresetType === 'role' ? (
+              <>
+                <div className="space-y-2">
+                  <Label>Preset Name</Label>
+                  <Input 
+                    placeholder="e.g. Finance Team" 
+                    value={newPresetName} 
+                    onChange={e => setNewPresetName(e.target.value)} 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Description</Label>
+                  <Input 
+                    placeholder="Optional description" 
+                    value={newPresetDesc} 
+                    onChange={e => setNewPresetDesc(e.target.value)} 
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="space-y-2 pt-2">
+                <Label>Select Target Module</Label>
+                <Select value={newPresetModule} onValueChange={setNewPresetModule}>
+                  <SelectTrigger className="bg-white">
+                    <SelectValue placeholder="Select a Module..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DEFAULT_MODULES.map(m => (
+                      <SelectItem key={m.moduleName} value={m.moduleName}>{m.displayName}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-400 mt-2">
+                  This preset will allow you to quickly assign bulk permissions to all employees for the selected module.
+                </p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
-            <Button onClick={handleAddPreset} disabled={saving || !newPresetName.trim()} className="bg-brand-teal text-white">
+            <Button onClick={handleAddPreset} disabled={saving} className="bg-brand-teal text-white">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Create Preset'}
             </Button>
           </DialogFooter>

@@ -9455,3 +9455,61 @@ async def get_all_course_progress(db, course_id: str):
     docs = await cursor.to_list(length=None)
     return [fix_id(d) for d in docs]
 
+
+
+async def get_all_user_permissions(db):
+    cursor = db.user_permissions.find({})
+    perms = await cursor.to_list(length=2000)
+    return [fix_id(p) for p in perms]
+
+async def bulk_update_module_permissions(db, request: schemas.ModuleBulkUpdateRequest, performed_by: str = "System", user_name: str = "System User"):
+    module_name = request.moduleName
+    updates = request.updates
+    
+    for emp_update in updates:
+        emp_id = emp_update.employeeId
+        existing_doc = await db.user_permissions.find_one({"employeeId": emp_id})
+        if not existing_doc:
+            new_doc = {
+                "employeeId": emp_id,
+                "presetId": None,
+                "permissions": [{
+                    "moduleName": module_name,
+                    "displayName": request.displayName,
+                    "tabUrl": request.tabUrl,
+                    "canAdd": emp_update.canAdd,
+                    "canEdit": emp_update.canEdit,
+                    "canDelete": emp_update.canDelete,
+                    "canView": emp_update.canView
+                }]
+            }
+            await db.user_permissions.insert_one(new_doc)
+        else:
+            perms = existing_doc.get("permissions", [])
+            mod_found = False
+            for m in perms:
+                if m.get("moduleName") == module_name:
+                    m["canAdd"] = emp_update.canAdd
+                    m["canEdit"] = emp_update.canEdit
+                    m["canDelete"] = emp_update.canDelete
+                    m["canView"] = emp_update.canView
+                    m["displayName"] = request.displayName
+                    m["tabUrl"] = request.tabUrl
+                    mod_found = True
+                    break
+            if not mod_found:
+                perms.append({
+                    "moduleName": module_name,
+                    "displayName": request.displayName,
+                    "tabUrl": request.tabUrl,
+                    "canAdd": emp_update.canAdd,
+                    "canEdit": emp_update.canEdit,
+                    "canDelete": emp_update.canDelete,
+                    "canView": emp_update.canView
+                })
+            
+            await db.user_permissions.update_one(
+                {"employeeId": emp_id},
+                {"$set": {"permissions": perms, "presetId": None}}
+            )
+    return {"message": "Bulk permissions updated successfully"}

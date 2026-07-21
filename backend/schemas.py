@@ -2075,12 +2075,27 @@ class UserPermissionUpdate(BaseModel):
     permissions: List[ModulePermission]
     presetId: Optional[str] = None
 
+class ModuleBulkUpdateItem(BaseModel):
+    employeeId: str
+    canAdd: bool = False
+    canEdit: bool = False
+    canDelete: bool = False
+    canView: bool = False
+
+class ModuleBulkUpdateRequest(BaseModel):
+    moduleName: str
+    displayName: str
+    tabUrl: str
+    updates: List[ModuleBulkUpdateItem]
+
 class UserPermission(UserPermissionBase):
     id: Optional[str] = None
 
 class PermissionPresetBase(BaseModel):
     name: str
     description: Optional[str] = ""
+    presetType: Optional[str] = "role"
+    targetModule: Optional[str] = None
     permissions: List[ModulePermission]
 
 class PermissionPresetCreate(PermissionPresetBase):
