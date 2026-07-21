@@ -911,6 +911,54 @@ async def verify_otp(otp_data: schemas.VerifyOTPRequest, db=Depends(get_db)):
     
     return {"message": "Login successful", "user": user_fixed, "token": token, "require_otp": False}
 
+@app.post("/finance-otp/request")
+async def request_finance_otp(req: schemas.FinanceOTPRequest, db=Depends(get_db)):
+    settings = await db.system_settings.find_one({}) or {}
+    company_email = settings.get("companyEmail")
+    
+    if not company_email:
+        raise HTTPException(status_code=400, detail="Company email not configured in settings")
+        
+    otp = str(random.randint(100000, 999999))
+    expiry = datetime.now(pytz.timezone('Asia/Kolkata')) + timedelta(minutes=10)
+    
+    # Save OTP to user document
+    await db.employees.update_one(
+        {"email": req.email},
+        {"$set": {"finance_otp": otp, "finance_otp_expiry": expiry.isoformat()}}
+    )
+    
+    # Send email to companyEmail instead of user email
+    send_otp_email(company_email, otp)
+    
+    return {"message": "OTP sent to company email"}
+
+@app.post("/finance-otp/verify")
+async def verify_finance_otp(otp_data: schemas.VerifyOTPRequest, db=Depends(get_db)):
+    user = await db.employees.find_one({"email": otp_data.email})
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+        
+    stored_otp = user.get("finance_otp")
+    expiry_str = user.get("finance_otp_expiry")
+    
+    if not stored_otp or not expiry_str:
+        raise HTTPException(status_code=400, detail="OTP not requested or expired")
+        
+    expiry = datetime.fromisoformat(expiry_str)
+    now = datetime.now(pytz.timezone('Asia/Kolkata'))
+    
+    if now > expiry:
+        await db.employees.update_one({"email": otp_data.email}, {"$unset": {"finance_otp": "", "finance_otp_expiry": ""}})
+        raise HTTPException(status_code=400, detail="OTP expired")
+        
+    if stored_otp != otp_data.otp:
+        raise HTTPException(status_code=400, detail="Invalid OTP")
+        
+    await db.employees.update_one({"email": otp_data.email}, {"$unset": {"finance_otp": "", "finance_otp_expiry": ""}})
+    
+    return {"message": "Finance OTP verified successfully"}
+
 # Employee Endpoints
 @app.get("/time")
 async def get_system_time():

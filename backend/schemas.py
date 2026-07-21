@@ -913,6 +913,9 @@ class LoginResponse(BaseModel):
     token: Optional[str] = None
     require_otp: Optional[bool] = None
 
+class FinanceOTPRequest(BaseModel):
+    email: str
+
 class VerifyOTPRequest(BaseModel):
     email: str
     otp: str

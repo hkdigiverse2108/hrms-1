@@ -9,6 +9,7 @@ import google_auth
 import google_calendar
 import pytz
 from websocket import manager as ws_manager
+from email_utils import send_caution_email
 
 import time
 import urllib.request
@@ -5259,7 +5260,21 @@ async def get_system_settings(db):
 async def update_system_settings(db, settings_update: schemas.SystemSettingsUpdate):
     update_data = settings_update.dict(exclude_unset=True)
     if update_data:
+        old_settings = await db.system_settings.find_one({}) or {}
+        old_email = old_settings.get("companyEmail")
+        new_email = update_data.get("companyEmail")
+        
         await db.system_settings.update_one({}, {"$set": update_data}, upsert=True)
+        
+        if "companyEmail" in update_data and old_email and new_email and old_email != new_email:
+            await db.system_logs.insert_one({
+                "event": "companyEmail_changed",
+                "old_email": old_email,
+                "new_email": new_email,
+                "timestamp": get_now().isoformat()
+            })
+            send_caution_email(old_email, new_email)
+            
     return await get_system_settings(db)
 # Marketing Reports CRUD
 async def create_marketing_daily_report(db, report: schemas.MarketingDailyReportCreate):
