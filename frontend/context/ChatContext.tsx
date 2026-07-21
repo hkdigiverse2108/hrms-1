@@ -299,7 +299,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                fetch(`${API_URL}/chat/mark-seen/${messageChatId}/${user.id}`, { method: 'POST' });
                // don't increment unread count if actively viewing
             } else {
-               setUnreadCounts(prev => ({ ...prev, [messageChatId]: (prev[messageChatId] || 0) + 1 }));
+               if (data.senderId !== user.id) {
+                 setUnreadCounts(prev => ({ ...prev, [messageChatId]: (prev[messageChatId] || 0) + 1 }));
+               }
 
                const isDnd = localStorage.getItem("globalDndEnabled") === "true";
                if (!isDnd && data.senderId !== user.id) {

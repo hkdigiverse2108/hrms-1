@@ -1532,7 +1532,7 @@ export default function TaskManagementPage() {
                   <th className="px-6 py-4 font-medium">Status</th>
                   <th className="px-6 py-4 font-medium">Priority</th>
                   <th className="px-6 py-4 font-medium">Due date</th>
-                  <th className="px-6 py-4 font-medium text-center">Actions</th>
+                  <th className="px-6 py-4 font-medium text-center sticky right-0 z-20 bg-[#f9fafb] shadow-[-1px_0_0_0_#e2e8f0]">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -1918,7 +1918,7 @@ export default function TaskManagementPage() {
                         </div>
                       )}
                     </td>
-                      <td className="px-6 py-4 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-6 py-4 text-center whitespace-nowrap sticky right-0 z-10 bg-white group-hover:bg-slate-50 shadow-[-1px_0_0_0_#e2e8f0] transition-colors" onClick={(e) => e.stopPropagation()}>
                         <button 
                           onClick={() => fetchTaskLogs(task.id)}
                           className="p-1.5 text-muted-foreground hover:text-brand-teal hover:bg-brand-light/20 rounded-md transition-colors inline-flex items-center justify-center mr-1"

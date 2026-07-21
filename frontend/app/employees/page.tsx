@@ -685,7 +685,7 @@ export default function EmployeeListPage() {
                 {COLUMN_OPTIONS.map((col) => isColVisible(col.key) && (
                   <th key={col.key} className="px-6 py-4 font-medium">{renderHeader(col.key)}</th>
                 ))}
-                <th className="px-6 py-4 font-medium text-right">Actions</th>
+                <th className="px-6 py-4 font-medium text-right sticky right-0 z-20 bg-slate-50 shadow-[-1px_0_0_0_#e2e8f0]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -718,7 +718,7 @@ export default function EmployeeListPage() {
                         {renderCell(emp, col.key)}
                       </td>
                     ))}
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-6 py-4 text-right sticky right-0 z-10 bg-white group-hover:bg-slate-50 shadow-[-1px_0_0_0_#e2e8f0] transition-colors">
                       <div className="flex items-center justify-end">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>

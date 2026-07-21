@@ -1931,7 +1931,7 @@ export default function LeavePage() {
                       <th className="px-6 py-4 font-medium tracking-wider">Holiday Name</th>
                       <th className="px-6 py-4 font-medium tracking-wider">Date</th>
                       <th className="px-6 py-4 font-medium tracking-wider text-center">Type</th>
-                      <th className="px-6 py-4 font-medium tracking-wider text-right">Actions</th>
+                      <th className="px-6 py-4 font-medium tracking-wider text-right sticky right-0 z-20 bg-[#f8fafc] shadow-[-1px_0_0_0_#e2e8f0]">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -1945,7 +1945,7 @@ export default function LeavePage() {
                         .map((item) => {
                           const Icon = getHolidayIcon(item.name);
                           return (
-                            <tr key={item.id} className="hover:bg-muted/50 transition-colors">
+                            <tr key={item.id} className="hover:bg-muted/50 transition-colors group">
                               <td className="px-6 py-4">
                                 <div className="flex items-center gap-3">
                                   <div className="p-1.5 bg-brand-light rounded-md">
@@ -1969,7 +1969,7 @@ export default function LeavePage() {
                                   {item.type}
                                 </span>
                               </td>
-                               <td className="px-6 py-4 text-right">
+                               <td className="px-6 py-4 text-right sticky right-0 z-10 bg-white group-hover:bg-slate-50 shadow-[-1px_0_0_0_#e2e8f0] transition-colors">
                                  {(canEditLeave || canDeleteLeave) && (
                                    <div className="flex gap-2 justify-end">
                                      {canEditLeave && (

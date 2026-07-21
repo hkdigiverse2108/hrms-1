@@ -447,9 +447,9 @@ export default function WorkLogsPage() {
             <h3 className="text-lg font-bold text-slate-800">Employee Activity</h3>
             {user?.role?.toLowerCase() === 'admin' && dateFilterPreset === 'today' && (
               <Tabs value={viewMode} onValueChange={setViewMode} className="w-full sm:w-[300px]">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="current" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Current Activity</TabsTrigger>
-                  <TabsTrigger value="all" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">All Activities</TabsTrigger>
+                <TabsList className="bg-slate-100/70 p-1 rounded-xl shadow-inner border border-slate-200/60 inline-flex items-center gap-1">
+                  <TabsTrigger value="current" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-4 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto">Current Activity</TabsTrigger>
+                  <TabsTrigger value="all" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-4 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto">All Activities</TabsTrigger>
                 </TabsList>
               </Tabs>
             )}
