@@ -63,11 +63,12 @@ export default function SettingsPage() {
   const [activitiesInput, setActivitiesInput] = useState<string | null>(null);
   const [meetingsInput, setMeetingsInput] = useState<string | null>(null);
   const [categoriesInput, setCategoriesInput] = useState<string | null>(null);
+  const [categoriesInvoiceInput, setCategoriesInvoiceInput] = useState<string | null>(null);
   const [leadCategoriesInput, setLeadCategoriesInput] = useState<string | null>(null);
 
   const [isAddBannerModalOpen, setIsAddBannerModalOpen] = useState(false);
   const [editingBannerId, setEditingBannerId] = useState<string | null>(null);
-  const [newBanner, setNewBanner] = useState({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "" });
+  const [newBanner, setNewBanner] = useState({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "", employeeId: "" });
   const [isUploadingBanner, setIsUploadingBanner] = useState(false);
 
   useEffect(() => {
@@ -309,6 +310,7 @@ export default function SettingsPage() {
           proformaInvoicePrefix: settings?.proformaInvoicePrefix || "PINV",
           noTaxInvoicePrefix: settings?.noTaxInvoicePrefix || "NINV",
           invoiceClientDepartments: deptInput !== null ? deptInput.split(",").map(s => s.trim()).filter(Boolean) : (settings?.invoiceClientDepartments || []),
+          invoiceCategories: categoriesInvoiceInput !== null ? categoriesInvoiceInput.split(",").map(s => s.trim()).filter(Boolean) : (settings?.invoiceCategories || []),
           otherActivities: activitiesInput !== null ? activitiesInput.split(",").map(s => s.trim()).filter(Boolean) : (settings?.otherActivities || []),
           otherMeetings: meetingsInput !== null ? meetingsInput.split(",").map(s => s.trim()).filter(Boolean) : (settings?.otherMeetings || []),
           otherCategories: categoriesInput !== null ? categoriesInput.split(",").map(s => s.trim()).filter(Boolean) : (settings?.otherCategories || ["Activity", "Meeting"]),
@@ -324,6 +326,7 @@ export default function SettingsPage() {
           defaultApprovalOffset: settings?.defaultApprovalOffset !== undefined ? settings.defaultApprovalOffset : null,
           addHoldDaysToEndDate: settings?.addHoldDaysToEndDate !== undefined ? settings.addHoldDaysToEndDate : true,
           otpRequiredRoles: settings?.otpRequiredRoles || [],
+          financeDecimalScaling: settings?.financeDecimalScaling !== undefined ? Number(settings.financeDecimalScaling) : 0,
           dashboardBanners: settings?.dashboardBanners || [],
           enabledModules: settings?.enabledModules || []
         })
@@ -400,7 +403,7 @@ export default function SettingsPage() {
     setSettings(newSettings);
     saveSettingsToAPI(newSettings);
     
-    setNewBanner({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "" });
+    setNewBanner({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "", employeeId: "" });
     setEditingBannerId(null);
     setIsAddBannerModalOpen(false);
     toast.success(editingBannerId ? "Banner updated successfully!" : "Banner added successfully!");
@@ -1422,8 +1425,8 @@ export default function SettingsPage() {
 
                 <div className="col-span-1 md:col-span-2 space-y-4">
                   <div className="space-y-2">
-                    <Label className="text-sm font-bold">Client Departments (Comma Separated)</Label>
-                    <p className="text-[10px] text-muted-foreground mb-1">These departments will appear in a dropdown when creating or editing an Invoice.</p>
+                    <Label className="text-sm font-bold">Brands (Comma Separated)</Label>
+                    <p className="text-[10px] text-muted-foreground mb-1">These brands will appear in a dropdown when creating or editing an Invoice.</p>
                     <input 
                       type="text" 
                       className="w-full h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold"
@@ -1434,7 +1437,38 @@ export default function SettingsPage() {
                         setDeptInput(null);
                       }}
                       disabled={isUpdating || !canEditSettings}
-                      placeholder="e.g. Billing Department, Support, Sales"
+                      placeholder="e.g. Brand A, Brand B, Brand C"
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label className="text-sm font-bold">Finance Decimal Scaling</Label>
+                    <p className="text-[10px] text-muted-foreground mb-1">Set the number of decimal places to divide and scale financial reports (Plan & Summary). E.g. setting 3 will divide 12345 by 1000 and display 12.345.</p>
+                    <input 
+                      type="number" 
+                      min={0}
+                      className="w-full h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold bg-white"
+                      value={settings?.financeDecimalScaling !== undefined ? settings.financeDecimalScaling : 0}
+                      onChange={(e) => setSettings({...settings, financeDecimalScaling: Math.max(0, parseInt(e.target.value) || 0)})}
+                      disabled={isUpdating || !canEditSettings}
+                      placeholder="Enter decimal places (e.g. 3)"
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label className="text-sm font-bold">Invoice Categories (Comma Separated)</Label>
+                    <p className="text-[10px] text-muted-foreground mb-1">These categories will appear in a dropdown when creating or editing an Invoice.</p>
+                    <input 
+                      type="text" 
+                      className="w-full h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold"
+                      value={categoriesInvoiceInput !== null ? categoriesInvoiceInput : (settings?.invoiceCategories || []).join(", ")}
+                      onChange={(e) => setCategoriesInvoiceInput(e.target.value)}
+                      onBlur={(e) => {
+                        setSettings({...settings, invoiceCategories: e.target.value.split(",").map(s => s.trim()).filter(Boolean)});
+                        setCategoriesInvoiceInput(null);
+                      }}
+                      disabled={isUpdating || !canEditSettings}
+                      placeholder="e.g. SMM, Digital Marketing, Development"
                     />
                   </div>
                 
@@ -1618,7 +1652,7 @@ export default function SettingsPage() {
                 {canEditSettings && (
                   <Dialog open={isAddBannerModalOpen} onOpenChange={(val) => {
                     if (!val) {
-                      setNewBanner({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "" });
+                      setNewBanner({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "", employeeId: "" });
                       setEditingBannerId(null);
                     }
                     setIsAddBannerModalOpen(val);
@@ -1662,6 +1696,20 @@ export default function SettingsPage() {
                         <div className="space-y-2">
                           <Label>Heading (Optional)</Label>
                           <Input placeholder="Enter announcement heading..." value={newBanner.heading || ""} onChange={e => setNewBanner({...newBanner, heading: e.target.value})} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Employee</Label>
+                          <Select value={newBanner.employeeId || "all"} onValueChange={(val) => setNewBanner({...newBanner, employeeId: val === "all" ? "" : val})}>
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="All Employees" />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-[200px]">
+                              <SelectItem value="all">All Employees</SelectItem>
+                              {employees.map(emp => (
+                                <SelectItem key={emp.id} value={emp.id}>{emp.name || `${emp.firstName} ${emp.lastName}`}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
@@ -1714,6 +1762,14 @@ export default function SettingsPage() {
                             <span className="truncate max-w-[200px] block">{banner.externalUrl}</span>
                           </div>
                         )}
+                        {banner.employeeId && (
+                          <div className="flex items-center gap-2 text-xs text-brand-teal">
+                            <UserCircle className="w-3 h-3" />
+                            <span className="truncate max-w-[200px] block font-semibold">
+                              Targeted: {employees.find((e: any) => e.id === banner.employeeId)?.name || 'Employee'}
+                            </span>
+                          </div>
+                        )}
                       </div>
                       <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
                         <div className="flex items-center gap-2">
@@ -1733,7 +1789,8 @@ export default function SettingsPage() {
                                   endDate: banner.endDate || "",
                                   externalUrl: banner.externalUrl || "",
                                   isActive: banner.isActive ?? true,
-                                  heading: banner.heading || ""
+                                  heading: banner.heading || "",
+                                  employeeId: banner.employeeId || ""
                                 });
                                 setEditingBannerId(banner.id);
                                 setIsAddBannerModalOpen(true);

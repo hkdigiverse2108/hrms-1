@@ -443,7 +443,7 @@ export default function DocumentGeneratorPage() {
         clone.style.height = `${finalNodeHeight}px`;
       }
 
-      const scale = 3
+      const scale = 4
       const dataUrl = await domtoimage.toPng(clone, {
         bgcolor: '#ffffff',
         width: a4WidthPx * scale,
@@ -578,7 +578,7 @@ export default function DocumentGeneratorPage() {
         el.classList.remove('opacity-30')
       })
 
-      const scale = 1
+      const scale = 4
       const dataUrl = await domtoimage.toPng(clone, {
         bgcolor: '#ffffff',
         width: a4WidthPx * scale,

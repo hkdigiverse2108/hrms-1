@@ -144,7 +144,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
               fetch(`${API_URL}/other-work/all`),
               fetch(`${API_URL}/projects`),
               fetch(`${API_URL}/clients`),
-              fetch(`${API_URL}/work-transfer-requests?taskType=digital-marketing`)
+              fetch(`${API_URL}/work-transfer-requests`)
             ]);
             
             if (ccRes.ok && owRes.ok && projRes.ok && clientRes.ok) {
@@ -152,7 +152,11 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
               const acceptedTransfers = (Array.isArray(transferListRaw) ? transferListRaw : []).filter((r: any) => r.status === 'Accepted');
               const smmTasks: any[] = [];
               if (isCreativeUser) {
-                const myOw = owList.filter((o: any) => String(o.assigneeId).trim() === String(userId).trim() && o.status !== 'Approved');
+                const myOw = owList.filter((o: any) => {
+                  const transfer = acceptedTransfers.find((t: any) => String(t.taskId) === String(o.id || o._id) && (t.taskType === 'other-work' || t.taskType === 'creative'));
+                  const currentAssigneeId = transfer ? transfer.receiverId : o.assigneeId;
+                  return String(currentAssigneeId).trim() === String(userId).trim() && o.status !== 'Approved';
+                });
                 myOw.forEach((o: any) => {
                   const client = clientList.find((c: any) => String(c.id || c._id).trim() === String(o.clientId).trim());
                   const project = projList.find((p: any) => String(p.id || p._id).trim() === String(o.projectId).trim());
@@ -190,7 +194,11 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                   });
                 });
                 
-                const myOw = owList.filter((o: any) => String(o.assigneeId).trim() === String(userId).trim() && o.status !== 'Approved' && o.taskType === 'dm-other-work');
+                const myOw = owList.filter((o: any) => {
+                  const transfer = acceptedTransfers.find((t: any) => String(t.taskId) === String(o.id || o._id) && t.taskType === 'dm-other-work');
+                  const currentAssigneeId = transfer ? transfer.receiverId : o.assigneeId;
+                  return String(currentAssigneeId).trim() === String(userId).trim() && o.status !== 'Approved' && o.taskType === 'dm-other-work';
+                });
                 myOw.forEach((o: any) => {
                   smmTasks.push({
                     id: o.id || o._id,
@@ -213,7 +221,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                   const cName = client?.companyName || client?.clientName || "Unknown Client";
                   
                   const checkStage = (stageName: string, idField: string, dateField: string, linkField: string, linkCheck?: (e:any)=>boolean) => {
-                    const assigneeId = entry[idField] || project?.[idField] || client?.[idField];
+                    const originalAssigneeId = entry[idField] || project?.[idField] || client?.[idField];
                     const isDone = linkCheck ? linkCheck(entry) : !!entry[linkField];
                     
                     const hasApplicableRemark = entry.remark && entry.remark.trim() !== '' && (
@@ -228,7 +236,10 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                     const isClientIssue = hasApplicableRemark && entry.remark.startsWith('[CLIENT ISSUE] ');
                     if (isClientIssue) return; // SMM moves these to Pending Work
 
-                    if (String(assigneeId).trim() === String(userId).trim() && !isDone) {
+                    const transfer = acceptedTransfers.find((t: any) => String(t.taskId) === String(entry.id || entry._id) && t.stage === (stageName === 'Editing' && entry.postReel === 'Post' ? 'Post/Graphics' : stageName));
+                    const currentAssigneeId = transfer ? transfer.receiverId : originalAssigneeId;
+
+                    if (String(currentAssigneeId).trim() === String(userId).trim() && !isDone) {
                       let dateStr = entry[dateField];
                       if (!dateStr && (stageName === 'Caption' || stageName === 'Thumbnail')) {
                         dateStr = entry.editingStart;
@@ -282,7 +293,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
     let type = "Work";
     let subtype = "";
 
-    if (selectedTab === "today_work" || selectedTab === "upcoming_work" || selectedTab === "assigned_brands" || selectedTab === "hr_sales_work" || selectedTab === "dm_other_work") {
+    if (selectedTab === "today_work" || selectedTab === "upcoming_work" || selectedTab === "assigned_brands" || selectedTab === "hr_sales_work" || selectedTab === "dm_other_work" || selectedTab === "pending_task") {
       type = "Work";
     } else if (selectedTab === "research") {
       type = "Research";
@@ -387,7 +398,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
   };
 
   const isValid = () => {
-    if (selectedTab === "today_work" || selectedTab === "upcoming_work" || selectedTab === "assigned_brands") {
+    if (selectedTab === "today_work" || selectedTab === "upcoming_work" || selectedTab === "assigned_brands" || selectedTab === "pending_task") {
       if (taskId === "custom") return !!customTaskName.trim();
       return !!taskId;
     }
@@ -481,6 +492,9 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                   <>
                     <TabsTrigger value="today_work" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Today's Work</TabsTrigger>
                     <TabsTrigger value="upcoming_work" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Upcoming Work</TabsTrigger>
+                    {userDept === 'creative' && (
+                      <TabsTrigger value="pending_task" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Pending Task</TabsTrigger>
+                    )}
                   </>
                 )}
                 {['digital marketing', 'dm'].includes(userDept) && (
@@ -499,7 +513,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
               </TabsList>
 
               <div className="mt-6">
-                {(selectedTab === "today_work" || selectedTab === "upcoming_work" || selectedTab === "assigned_brands") && (
+                {(selectedTab === "today_work" || selectedTab === "upcoming_work" || selectedTab === "assigned_brands" || selectedTab === "pending_task") && (
                   <div className="space-y-3">
                     <Label className="text-base">{selectedTab === "assigned_brands" ? 'Select Brand' : 'Select Task'}</Label>
                     <div className="max-h-[500px] overflow-y-scroll flex flex-col gap-1.5 pr-2 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-slate-100/50 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-brand-teal/30 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-brand-teal/50 transition-colors" style={{ scrollbarWidth: 'thin', scrollbarColor: '#09A08A4D transparent' }}>
@@ -507,6 +521,8 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                         let activeTasks = [];
                         if (selectedTab === "assigned_brands") {
                           activeTasks = tasks.filter(t => !t.isDmOtherWork); // All active projects are shown regardless of date
+                        } else if (selectedTab === "pending_task") {
+                          activeTasks = tasks;
                         } else {
                           activeTasks = selectedTab === "today_work" ? todayTasks : upcomingTasks;
                         }
@@ -516,7 +532,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                         if (activeTasks.length === 0) {
                           elements.push(
                             <div key="empty" className="col-span-full py-8 text-center text-muted-foreground bg-muted/20 rounded-lg border border-dashed">
-                              No {selectedTab === "assigned_brands" ? "assigned brands" : selectedTab === "today_work" ? "tasks for today" : "upcoming tasks"}
+                              No {selectedTab === "assigned_brands" ? "assigned brands" : selectedTab === "today_work" ? "tasks for today" : selectedTab === "pending_task" ? "pending tasks" : "upcoming tasks"}
                             </div>
                           );
                         } else {

@@ -165,13 +165,13 @@ export default function AttendancePage() {
   };
  
   useEffect(() => {
-    if (user) {
+    if (user && !permissionsLoading) {
       // Fetch employees first so adminIdsRef is populated before attendance
       fetchEmployees().then(() => fetchAttendance());
       fetchSysSettings();
       fetchRecoveryRequests();
     }
-  }, [user, canManageAttendance]);
+  }, [user, canManageAttendance, permissionsLoading]);
 
   // Update form defaults when time synchronization is complete
   useEffect(() => {

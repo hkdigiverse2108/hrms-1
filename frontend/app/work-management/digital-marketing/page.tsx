@@ -73,6 +73,7 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuCheckboxItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
@@ -229,6 +230,7 @@ export default function MarketingReportsPage() {
     isAdmin || isHR || checkPermission("marketing", "canDelete");
 
   const [activeTab, setActiveTab] = useState("daily");
+  const [workTimeFilter, setWorkTimeFilter] = useState("today");
   const [showTransfers, setShowTransfers] = useState(false);
   const [dailyReports, setDailyReports] = useState<any[]>([]);
   const [projectRemarks, setProjectRemarks] = useState<any[]>([]);
@@ -1735,6 +1737,60 @@ export default function MarketingReportsPage() {
     setMonthlyPage(1);
   }, [searchQuery, selectedClientFilter, dateRange, monthFilter]);
 
+  const handleSaveTaskRemark = async (taskId: string, projectId: string, clientId: string, dateStr: string, remark: string) => {
+    try {
+      const client = clients.find(c => String(c.id) === String(clientId) || String((c as any)._id) === String(clientId));
+      const project = projects.find(p => String(p.id) === String(projectId));
+      
+      let res;
+      if (["reach", "impression", "leads", "spend", "cpl"].includes(taskId)) {
+        res = await fetch(`${API_URL}/marketing/reports/daily`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            clientId,
+            clientName: client?.companyName || client?.name || "",
+            projectId,
+            projectName: project?.title || "",
+            date: dateStr,
+            campaignName: "Added Remark",
+            remarks: remark,
+            performedBy: user?.id,
+            userName: user?.name || user?.firstName || "Unknown User",
+          }),
+        });
+      } else {
+        const payload: any = {
+          projectId,
+          clientId,
+          date: dateStr,
+        };
+        if (taskId === "user_remark") payload.userRemark = remark;
+        else if (taskId === "client_remark") payload.clientRemark = remark;
+        else payload.remark = remark;
+
+        res = await fetch(`${API_URL}/marketing/project-remarks`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+      }
+
+      if (res.ok) {
+        toast.success("Remark saved successfully");
+        fetchData();
+        return true;
+      } else {
+        toast.error("Failed to save remark");
+        return false;
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("An error occurred");
+      return false;
+    }
+  };
+
   const handleDragEndDaily = (result: any) => {
     if (!result.destination) return;
     const sourceId = result.draggableId;
@@ -1935,7 +1991,7 @@ export default function MarketingReportsPage() {
 
     // Filter by User's assigned projects if "My Tasks" is selected
     let matchesTaskType = true;
-    if ((taskFilterType === "my" || isRegularEmployee) && user?.id) {
+    if ((taskFilterType === "my") && user?.id) {
       const assocProj = projects.find(p => String(p.id) === String(r.projectId));
       if (assocProj) {
         const isOriginalAssignee = assocProj.assignedEmployeeId === user.id;
@@ -1969,7 +2025,7 @@ export default function MarketingReportsPage() {
       monthFilter.includes("all") || monthFilter.includes(r.month);
 
     let matchesTaskType = true;
-    if ((taskFilterType === "my" || isRegularEmployee) && user?.id) {
+    if ((taskFilterType === "my") && user?.id) {
       const assocProj = projects.find(p => String(p.id) === String(r.projectId));
       if (assocProj) {
         matchesTaskType = assocProj.assignedEmployeeId === user.id;
@@ -2820,12 +2876,38 @@ export default function MarketingReportsPage() {
 
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
           <TabsList className="inline-flex items-center gap-1 w-max bg-slate-100/70 p-1 rounded-xl shadow-inner border border-slate-200/60 h-auto">
-            <TabsTrigger
-              value="todays-work"
-              className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto"
-            >
-              Today's Work
-            </TabsTrigger>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <div className="relative group cursor-pointer" onClick={() => setActiveTab("todays-work")}>
+                  <TabsTrigger
+                    value="todays-work"
+                    className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto pr-8 w-full pointer-events-none"
+                  >
+                    {workTimeFilter === "today" ? "Today's Work" :
+                     workTimeFilter === "pending" ? "Pending Work" :
+                     workTimeFilter === "upcoming" ? "Upcoming Work" :
+                     "All Work"}
+                  </TabsTrigger>
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 group-hover:text-brand-teal rounded-md transition-colors pointer-events-none">
+                    <ChevronDown className="w-4 h-4" />
+                  </div>
+                </div>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-48">
+                <DropdownMenuItem onClick={() => { setWorkTimeFilter("all"); setActiveTab("todays-work"); }}>
+                  All Work
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => { setWorkTimeFilter("pending"); setActiveTab("todays-work"); }}>
+                  Pending Work
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => { setWorkTimeFilter("today"); setActiveTab("todays-work"); }}>
+                  Today's Work
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => { setWorkTimeFilter("upcoming"); setActiveTab("todays-work"); }}>
+                  Upcoming Work
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <TabsTrigger
               value="daily"
               className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto"
@@ -2891,11 +2973,13 @@ export default function MarketingReportsPage() {
             currentUser={user}
             dailyReports={dailyReports}
             projectRemarks={projectRemarks}
+            timeFilter={workTimeFilter}
+            onSaveRemark={handleSaveTaskRemark}
             onTaskActionClick={(client, project, taskId, dateStr) => {
               setActiveTab("daily");
               setSelectedClientFilter(client.id);
               
-              if (taskId === "data_fill") {
+              if (["reach", "impression", "leads", "spend", "cpl"].includes(taskId)) {
                 setShowAddForm(true);
                 setQuickAddData({
                   date: dateStr || new Date().toISOString().split("T")[0],
@@ -3039,13 +3123,13 @@ export default function MarketingReportsPage() {
                 {(() => {
                   const filteredClients = clients.filter((c) => {
                     const matchesSearch = c.companyName?.toLowerCase().includes(searchQuery.toLowerCase()) || false;
-                    if (!isRegularEmployee) {
+                    if (taskFilterType === "all") {
                       return matchesSearch;
                     }
                     const clientProjs = projects.filter((p) => String(p.clientId) === String(c.id || (c as any)._id) && p.department?.toLowerCase() === "digital marketing");
                     const filteredProjs = clientProjs.filter((p) => {
                       if (p.status === "on-hold") return false;
-                      if ((taskFilterType === "my" || isRegularEmployee) && user?.id) {
+                      if (taskFilterType === "my" && user?.id) {
                         const isOriginalAssignee = p.assignedEmployeeId === user.id;
                         const isTransferredToMe = acceptedTransfers.some(t => 
                           String(t.taskId) === String(p.id) && 

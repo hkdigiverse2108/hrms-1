@@ -75,6 +75,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (pathname.startsWith("/work-management")) return ["work-management"];
     if (pathname.startsWith("/recruitment")) return ["recruitment-sub"];
     if (pathname.startsWith("/payroll")) return ["payroll-sub"];
+    if (pathname.startsWith("/company-finance")) return ["company-finance-sub"];
     if (pathname.startsWith("/training") || pathname.startsWith("/admin/courses")) return ["training"];
     return [];
   }, [pathname]);
@@ -230,6 +231,32 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       menuItems.push(getItem("Recruitment", "recruitment-sub", <Briefcase className="w-5 h-5" />, recruitmentChildren));
     }
 
+    const companyFinanceChildren: MenuItem[] = [];
+    if (isAdmin || checkPermission('company-finance', 'canView')) {
+      companyFinanceChildren.push(getItem(<Link href="/company-finance">Transactions</Link>, "/company-finance"));
+      companyFinanceChildren.push(getItem(<Link href="/company-finance/plan">Plan</Link>, "/company-finance/plan"));
+      companyFinanceChildren.push(getItem(<Link href="/company-finance/summary">Summary</Link>, "/company-finance/summary"));
+      companyFinanceChildren.push(getItem(<Link href="/company-finance/client-transactions">Client Transactions</Link>, "/company-finance/client-transactions"));
+      companyFinanceChildren.push(getItem(<Link href="/company-finance/logs">Audit Logs</Link>, "/company-finance/logs"));
+    }
+
+    if (isAdmin || companyFinanceChildren.length > 0) {
+      menuItems.push(getItem("Company Finance", "company-finance-sub", <Landmark className="w-5 h-5" />, companyFinanceChildren));
+    }
+
+    const companyFinanceChildren: MenuItem[] = [];
+    if (isAdmin || checkPermission('company-finance', 'canView')) {
+      companyFinanceChildren.push(getItem(<Link href="/company-finance">Transactions</Link>, "/company-finance"));
+      companyFinanceChildren.push(getItem(<Link href="/company-finance/plan">Plan</Link>, "/company-finance/plan"));
+      companyFinanceChildren.push(getItem(<Link href="/company-finance/summary">Summary</Link>, "/company-finance/summary"));
+      companyFinanceChildren.push(getItem(<Link href="/company-finance/client-transactions">Client Transactions</Link>, "/company-finance/client-transactions"));
+      companyFinanceChildren.push(getItem(<Link href="/company-finance/logs">Audit Logs</Link>, "/company-finance/logs"));
+    }
+
+    if (isAdmin || companyFinanceChildren.length > 0) {
+      menuItems.push(getItem("Company Finance", "company-finance-sub", <Landmark className="w-5 h-5" />, companyFinanceChildren));
+    }
+
     if (isModuleEnabled('attendance') && (isAdmin || checkPermission('attendance', 'canView'))) {
       menuItems.push(getItem(<Link href="/attendance">Attendance</Link>, "/attendance", <Clock className="w-5 h-5" />));
     }
@@ -361,10 +388,12 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (pathname.startsWith("/payroll")) return [pathname];
     if (pathname.startsWith("/restrictions")) return ["/restrictions"];
     if (pathname.startsWith("/activity-logs")) return ["/activity-logs"];
+    if (pathname.startsWith("/company-finance")) return [pathname];
     if (pathname.startsWith("/training")) return ["/training"];
     if (pathname.startsWith("/admin/courses")) return ["/admin/courses"];
     return [];
   };
+
 
   return (
     <div className="flex flex-col h-full overflow-hidden">

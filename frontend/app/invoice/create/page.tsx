@@ -48,6 +48,8 @@ export default function CreateInvoicePage() {
   const [clientState, setClientState] = useState("");
   const [clientDepartment, setClientDepartment] = useState("Billing Department");
   const [availableDepartments, setAvailableDepartments] = useState<string[]>([]);
+  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
+  const [category, setCategory] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [invoiceType, setInvoiceType] = useState("Tax Invoice");
   const [issueDate, setIssueDate] = useState("");
@@ -108,6 +110,9 @@ export default function CreateInvoicePage() {
         }
         if (data.invoiceClientDepartments) {
           setAvailableDepartments(data.invoiceClientDepartments);
+        }
+        if (data.invoiceCategories) {
+          setAvailableCategories(data.invoiceCategories);
         }
       }
     } catch (err) {
@@ -379,6 +384,7 @@ export default function CreateInvoicePage() {
         status: "Pending",
         createdBy: typeof window !== 'undefined' && localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')!).name : null,
         createdById: typeof window !== 'undefined' && localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')!).id : null,
+        category: category || null,
       };
 
       const res = await fetch(`${API_URL}/invoices`, {
@@ -546,7 +552,7 @@ export default function CreateInvoicePage() {
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-foreground">Client Department</label>
+                  <label className="text-sm font-semibold text-foreground">Brand</label>
                   {availableDepartments.length > 0 ? (
                     <Popover>
                       <PopoverTrigger asChild>
@@ -556,7 +562,7 @@ export default function CreateInvoicePage() {
                           className="w-full justify-between h-11 border-border bg-white text-slate-700 font-medium"
                         >
                           <span className="truncate">
-                            {clientDepartment || "Select Departments..."}
+                            {clientDepartment || "Select Brands..."}
                           </span>
                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
@@ -564,17 +570,16 @@ export default function CreateInvoicePage() {
                       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
                         <div className="max-h-[250px] overflow-y-auto p-2 space-y-1">
                           {availableDepartments.map(dept => {
-                            const isSelected = (clientDepartment || "").split(",").map(d => d.trim()).filter(Boolean).includes(dept);
+                            const isSelected = clientDepartment === dept;
                             return (
                               <div
                                 key={dept}
                                 className="flex items-center gap-3 px-3 py-2.5 hover:bg-brand-teal/5 rounded-md cursor-pointer transition-colors"
                                 onClick={() => {
-                                  const currentDepts = clientDepartment ? clientDepartment.split(",").map(d => d.trim()).filter(Boolean) : [];
-                                  if (currentDepts.includes(dept)) {
-                                    setClientDepartment(currentDepts.filter(d => d !== dept).join(", "));
+                                  if (clientDepartment === dept) {
+                                    setClientDepartment("");
                                   } else {
-                                    setClientDepartment([...currentDepts, dept].join(", "));
+                                    setClientDepartment(dept);
                                   }
                                 }}
                               >
@@ -633,6 +638,21 @@ export default function CreateInvoicePage() {
                 <option value="Proforma Invoice">Proforma Invoice</option>
               </select>
             </div>
+            {availableCategories.length > 0 && (
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-foreground">Category</label>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full px-3 border border-border rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal cursor-pointer h-11 font-medium text-slate-700"
+                >
+                  <option value="">Select Category...</option>
+                  {availableCategories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="space-y-2">
               <label className="text-sm font-semibold text-foreground">Mode of Payment</label>
               <select

@@ -112,6 +112,8 @@ export default function DashboardPage() {
   const [currentTime, setCurrentTime] = useState(getISTNow());
   const serverTimeOffset = getISTNow().getTime() - Date.now();
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
+  const [missingPunchOutDate, setMissingPunchOutDate] = useState<Date | null>(null);
+  const [isForcedRequest, setIsForcedRequest] = useState(false);
   const [isPunchInModalOpen, setIsPunchInModalOpen] = useState(false);
   const [isBreakOutModalOpen, setIsBreakOutModalOpen] = useState(false);
   const [leaveRequests, setLeaveRequests] = useState<any[]>([]);
@@ -121,6 +123,30 @@ export default function DashboardPage() {
   const [applications, setApplications] = useState<any[]>([]);
   const [assets, setAssets] = useState<any[]>([]);
   const [activeTaskTitle, setActiveTaskTitle] = useState<string | null>(null);
+  const [hasTargetedBanner, setHasTargetedBanner] = useState(false);
+
+  useEffect(() => {
+    if (user?.id) {
+      fetch(`${API_URL}/system-settings`)
+        .then(res => res.json())
+        .then(data => {
+          const banners = data.dashboardBanners || [];
+          const todayStr = dayjs().format('YYYY-MM-DD');
+          const active = banners.filter((b: any) => {
+            if (!b.isActive) return false;
+            if (b.employeeId && b.employeeId !== "all" && b.employeeId !== user.id) return false;
+            const hasStartDate = !!b.startDate;
+            const hasEndDate = !!b.endDate;
+            if (!hasStartDate && !hasEndDate) return true;
+            if (hasStartDate && !hasEndDate) return dayjs(todayStr).isSameOrAfter(b.startDate);
+            if (!hasStartDate && hasEndDate) return dayjs(todayStr).isSameOrBefore(b.endDate);
+            return dayjs(todayStr).isSameOrAfter(b.startDate) && dayjs(todayStr).isSameOrBefore(b.endDate);
+          });
+          setHasTargetedBanner(active.some((b: any) => b.employeeId === user.id));
+        })
+        .catch(err => console.error("Error fetching settings for banners:", err));
+    }
+  }, [user?.id]);
 
   useEffect(() => {
     if (attendanceStatus?.isPunchedIn && attendanceStatus.record?.punchInActivityType === "Work" && attendanceStatus.record?.punchInTaskId) {
@@ -420,6 +446,40 @@ export default function DashboardPage() {
       setAllTimeHours(`${h}h ${m}m`);
     }
   }, [recentAttendance]);
+
+  useEffect(() => {
+    const checkForgotPunchOut = async () => {
+      if (!user?.id || user.role?.toLowerCase() === "admin" || !attendanceStatus?.isPunchedIn || !attendanceStatus.record?.date) {
+        setIsForcedRequest(false);
+        return;
+      }
+      
+      const checkInDate = attendanceStatus.record.date;
+      const todayStr = dayjs(getISTNow()).format('YYYY-MM-DD');
+      
+      if (checkInDate < todayStr) {
+        try {
+          const res = await fetch(`${API_URL}/time-recovery/employee/${user.id}`);
+          if (res.ok) {
+            const recoveries = await res.json();
+            const hasRequested = recoveries.some((r: any) => r.date === checkInDate);
+            if (!hasRequested) {
+              setIsForcedRequest(true);
+              setIsRequestDialogOpen(true);
+            } else {
+              setIsForcedRequest(false);
+            }
+          }
+        } catch (err) {
+          console.error("Error checking forgotten punch out:", err);
+        }
+      } else {
+        setIsForcedRequest(false);
+      }
+    };
+
+    checkForgotPunchOut();
+  }, [attendanceStatus, user?.id, getISTNow]);
  
   const fetchStatus = async () => {
     try {
@@ -433,6 +493,16 @@ export default function DashboardPage() {
         // If data has checkIn and no checkOut, it's an active punch-in
         if (data && data.checkIn && data.checkIn !== "--" && data.checkIn !== "--:--" && data.checkOut === null) {
           setAttendanceStatus({ isPunchedIn: true, record: data });
+          
+          // Check for missing punch out from a previous day
+          if (data.date) {
+             const recordDateStr = typeof data.date === 'string' ? data.date.split('T')[0] : dayjs(data.date).format('YYYY-MM-DD');
+             const todayStr = dayjs(getISTNow()).format('YYYY-MM-DD');
+             if (recordDateStr !== todayStr) {
+                setMissingPunchOutDate(new Date(recordDateStr));
+                setIsRequestDialogOpen(true);
+             }
+          }
         } else {
           setAttendanceStatus({ isPunchedIn: false, record: data });
         }
@@ -742,6 +812,9 @@ export default function DashboardPage() {
                 showPunchCardOnly={true}
                 setIsPunchInModalOpen={setIsPunchInModalOpen}
                 activeTaskTitle={activeTaskTitle}
+                missingPunchOutDate={missingPunchOutDate}
+                setIsRequestDialogOpen={setIsRequestDialogOpen}
+                hasTargetedBanner={hasTargetedBanner}
               />
 
               {/* 3. Show Employee stats and Recent Attendance table */}
@@ -763,6 +836,9 @@ export default function DashboardPage() {
                 showStatsAndAttendanceOnly={true}
                 setIsPunchInModalOpen={setIsPunchInModalOpen}
                 activeTaskTitle={activeTaskTitle}
+                missingPunchOutDate={missingPunchOutDate}
+                setIsRequestDialogOpen={setIsRequestDialogOpen}
+                hasTargetedBanner={hasTargetedBanner}
               />
 
               {/* 4. If HR, show HR Lists (Recent Leave Requests, Upcoming Interviews) */}
@@ -787,17 +863,23 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+
       )}
  
       <RequestPunchOutDialog 
         open={isRequestDialogOpen}
-        onOpenChange={setIsRequestDialogOpen}
+        isForced={isForcedRequest}
+        onOpenChange={(open) => {
+          setIsRequestDialogOpen(open);
+          if (!open) setMissingPunchOutDate(null);
+        }}
         isPunchedIn={attendanceStatus?.isPunchedIn || false}
         punchInTime={formatTime12h(attendanceStatus?.record?.checkIn) || "Not Started"}
         employeeId={user?.id || ""}
         employeeName={user?.name || ""}
         onGoToPunchOut={() => {
           setIsRequestDialogOpen(false);
+          setMissingPunchOutDate(null);
           punchCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }}
       />
@@ -1191,12 +1273,15 @@ function EmployeeView({
   isTimeSynced,
   getISTNow,
   punchCardRef,
+  missingPunchOutDate,
+  setIsRequestDialogOpen,
   leaves,
   showPunchCardOnly = false,
   showStatsAndAttendanceOnly = false,
   setIsPunchInModalOpen,
   activeTaskTitle,
-  serverTimeOffset
+  serverTimeOffset,
+  hasTargetedBanner
 }: { 
   user: any, 
   attendanceStatus: any, 
@@ -1211,12 +1296,15 @@ function EmployeeView({
   isTimeSynced: boolean,
   getISTNow: () => Date,
   punchCardRef: React.RefObject<HTMLDivElement | null>,
+  missingPunchOutDate: Date | null,
+  setIsRequestDialogOpen: (open: boolean) => void,
   leaves?: any[],
   showPunchCardOnly?: boolean,
   showStatsAndAttendanceOnly?: boolean,
   setIsPunchInModalOpen: (val: boolean) => void,
   activeTaskTitle?: string | null,
-  serverTimeOffset?: number
+  serverTimeOffset?: number,
+  hasTargetedBanner?: boolean
 }) {
   const userName = user?.name || "Guest";
   const firstName = user?.firstName || userName.split(' ')[0];
@@ -1320,7 +1408,7 @@ function EmployeeView({
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="relative">
-                    <Avatar className="w-16 h-16 border-2 border-border shadow-sm">
+                    <Avatar className={`w-16 h-16 border-2 shadow-sm transition-all duration-500 ${hasTargetedBanner ? 'border-transparent ring-4 ring-brand-teal ring-offset-2' : 'border-border'}`}>
                       <AvatarImage src={getAvatarUrl(user?.profilePhoto, userName)} />
                       <AvatarFallback className="bg-brand-light text-brand-teal font-bold">{initials}</AvatarFallback>
                     </Avatar>
@@ -1389,7 +1477,7 @@ function EmployeeView({
             <div className="flex items-center gap-4 mb-8">
               <Button 
                 onClick={() => handlePunch(isOnBreak ? 'break-out' : 'break-in')} 
-                disabled={isPunching || !isPunchedIn}
+                disabled={isPunching || !isPunchedIn || !!missingPunchOutDate}
                 variant="outline"
                 className={`flex-1 py-7 text-base font-bold shadow-sm transition-all border-[#F3F4F6] rounded-xl bg-white hover:bg-gray-50 text-[#111827]`}
               >
@@ -1401,7 +1489,7 @@ function EmployeeView({
 
               <Button 
                 onClick={() => handlePunch(isPunchedIn ? 'punch-out' : 'punch-in')} 
-                disabled={isPunching || isOnBreak}
+                disabled={isPunching || isOnBreak || !!missingPunchOutDate}
                 className={`flex-1 py-7 text-base font-bold shadow-sm transition-all rounded-xl border border-red-100 ${isPunchedIn ? 'bg-[#FEF2F2] hover:bg-red-100 text-red-600' : 'bg-brand-light hover:bg-brand-teal/10 text-brand-teal border-brand-teal/20'}`}
               >
                 {isPunching ? <Loader2 className="w-5 h-5 animate-spin" /> : (
@@ -1460,6 +1548,12 @@ function EmployeeView({
               </div>
             )}
  
+            {missingPunchOutDate && (
+              <div className="bg-amber-50 text-amber-800 p-4 rounded-xl mb-8 border border-amber-200 flex justify-between items-center">
+                <span className="font-medium text-sm">You have a missing punch-out from {missingPunchOutDate.toLocaleDateString()}.</span>
+                <Button variant="outline" size="sm" onClick={() => setIsRequestDialogOpen(true)} className="border-amber-300 text-amber-700 hover:bg-amber-100">Resolve Now</Button>
+              </div>
+            )}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-0 border border-brand-teal/10 rounded-xl overflow-hidden bg-white">
                {[
                  { label: 'First In', value: punchInTime, highlight: false },
@@ -1613,6 +1707,7 @@ function EventsSidebar({ user, leaves }: { user: any, leaves: any[] }) {
   const today = dayjs().format('YYYY-MM-DD');
   const activeBanners = dashboardBanners.filter(b => {
     if (!b.isActive) return false;
+    if (b.employeeId && b.employeeId !== "all" && b.employeeId !== user?.id) return false;
     const hasStartDate = !!b.startDate;
     const hasEndDate = !!b.endDate;
     if (!hasStartDate && !hasEndDate) return true;
@@ -1620,6 +1715,8 @@ function EventsSidebar({ user, leaves }: { user: any, leaves: any[] }) {
     if (!hasStartDate && hasEndDate) return dayjs(today).isSameOrBefore(b.endDate);
     return dayjs(today).isSameOrAfter(b.startDate) && dayjs(today).isSameOrBefore(b.endDate);
   });
+  
+  const hasTargetedBanner = activeBanners.some(b => b.employeeId === user?.id);
  
   useEffect(() => {
     fetchEvents();

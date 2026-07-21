@@ -1626,7 +1626,7 @@ export default function SalesPage() {
                       </Badge>
                     ) : (
                       <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">
-                        Next: {dayjs(lead.nextFollowUpDate).format("DD MMM")}
+                        Next: {dayjs(lead.nextFollowUpDate).format("DD MMM, hh:mm A")}
                       </span>
                     )}
                   </div>
@@ -2883,67 +2883,7 @@ export default function SalesPage() {
             </TabsContent>
           </>
         )}
-
       </Tabs>
-
-      <Dialog open={!!statusChangeData} onOpenChange={(open) => { if (!open) setStatusChangeData(null); }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Reason for Status Change</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Why did you change the status to {statusChangeData?.newStatus}?</Label>
-              <Select value={selectedReason} onValueChange={(val) => { setSelectedReason(val); if (val !== "Other") setCustomReason(""); }}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a reason" />
-                </SelectTrigger>
-                <SelectContent>
-                  {statusChangeData?.newStatus && STATUS_REASONS[statusChangeData.newStatus]?.map((r) => (
-                    <SelectItem key={r} value={r}>{r}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {selectedReason === "Other" && (
-              <div className="space-y-2">
-                <Label htmlFor="customReason">Specify Reason</Label>
-                <Input 
-                  id="customReason" 
-                  placeholder="Enter custom reason..." 
-                  value={customReason} 
-                  onChange={(e) => setCustomReason(e.target.value)} 
-                />
-              </div>
-            )}
-          </div>
-          <div className="flex justify-end gap-3 border-t pt-4">
-            <Button variant="outline" onClick={() => setStatusChangeData(null)}>Cancel</Button>
-            <Button 
-              className="bg-brand-teal hover:bg-brand-teal-light text-white" 
-              onClick={handleStatusChangeSubmit}
-              disabled={!selectedReason || (selectedReason === "Other" && !customReason.trim())}
-            >
-              Confirm
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={clientDialogOpen} onOpenChange={setClientDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
-          <DialogHeader className="px-6 py-4 border-b border-slate-100 shrink-0">
-            <DialogTitle>Generate Client Details</DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 overflow-hidden">
-            <ClientForm
-              initialData={clientFormData || undefined}
-              onSubmit={handleClientSubmit}
-              isSubmitting={isClientSubmitting}
-            />
-          </div>
-        </DialogContent>
-      </Dialog>
 
       <ActivityLogDialog 
         open={isLogsDialogOpen}

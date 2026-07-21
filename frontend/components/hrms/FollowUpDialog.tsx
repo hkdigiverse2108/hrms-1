@@ -15,6 +15,7 @@ import { Calendar, MessageSquare, User, Clock } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
+import dayjs from "dayjs";
 
 interface FollowUpDialogProps {
   lead: any;
@@ -91,9 +92,9 @@ export function FollowUpDialog({ lead, onUpdate, userId, userName }: FollowUpDia
               className="min-h-[80px] bg-white border-slate-200 focus-visible:ring-brand-teal text-xs"
             />
             <div className="space-y-1.5">
-              <Label htmlFor="nextFollowUpDate" className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Next Follow-up Date (Optional)</Label>
+              <Label htmlFor="nextFollowUpDate" className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Next Follow-up Date & Time (Optional)</Label>
               <input 
-                type="date"
+                type="datetime-local"
                 id="nextFollowUpDate"
                 value={nextDate}
                 onChange={(e) => setNextDate(e.target.value)}
@@ -138,7 +139,7 @@ export function FollowUpDialog({ lead, onUpdate, userId, userName }: FollowUpDia
                           {f.nextFollowUpDate && (
                             <div className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-100 rounded px-1.5 py-0.5 text-[9.5px] font-bold">
                               <Calendar className="w-2.5 h-2.5 text-amber-600" />
-                              Next Follow-up: {f.nextFollowUpDate}
+                              Next Follow-up: {dayjs(f.nextFollowUpDate).format("DD MMM YYYY, hh:mm A")}
                             </div>
                           )}
                         </div>
