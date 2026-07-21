@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
-import { Search, Users, ArrowRight } from "lucide-react";
+import { Search, Users, ArrowRight, ClipboardList, Check, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -12,6 +12,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
 interface TodaysWorkViewProps {
   projects: any[];
   allEmployees: any[];
@@ -20,7 +22,9 @@ interface TodaysWorkViewProps {
   currentUser: any;
   dailyReports?: any[];
   projectRemarks?: any[];
+  timeFilter?: string;
   onTaskActionClick?: (client: any, project: any, taskId: string, dateStr: string) => void;
+  onSaveRemark?: (taskId: string, projectId: string, clientId: string, dateStr: string, remark: string) => Promise<boolean>;
 }
 
 export function TodaysWorkView({
@@ -31,10 +35,15 @@ export function TodaysWorkView({
   currentUser,
   dailyReports = [],
   projectRemarks = [],
+  timeFilter = "all",
   onTaskActionClick,
+  onSaveRemark,
 }: TodaysWorkViewProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
+  const [brandFilter, setBrandFilter] = useState("all");
+  const [editingRemarkId, setEditingRemarkId] = useState<string | null>(null);
+  const [editingRemarkValue, setEditingRemarkValue] = useState("");
+  const [editingIsClientIssue, setEditingIsClientIssue] = useState(false);
 
   const getEmpName = (id?: string) => {
     if (!id) return "Unassigned";
@@ -49,7 +58,7 @@ export function TodaysWorkView({
 
   const getPastDates = (maxDays = 6) => {
     const dates = [];
-    for (let i = 0; i <= maxDays; i++) {
+    for (let i = -2; i <= maxDays; i++) { // Include some upcoming dates just in case
       const d = new Date();
       d.setDate(d.getDate() - 1 - i);
       dates.push(d.toISOString().split("T")[0]);
@@ -71,6 +80,7 @@ export function TodaysWorkView({
         const hasDataFill = dailyReports.some(r => {
           if (r.clientId !== client.id || normalizeDate(r.date) !== dateStr) return false;
           const isFilled = (val: any) => val !== undefined && val !== null && val !== 0 && val !== "" && val !== "0" && val !== 0.0;
+          const isClientIssue = r.remarks && r.remarks.toString().includes("[CLIENT ISSUE]");
           return (
             isFilled(r.reach) ||
             isFilled(r.impression) ||
@@ -79,10 +89,10 @@ export function TodaysWorkView({
             isFilled(r.revenue) ||
             isFilled(r.followers) ||
             isFilled(r.cpl) ||
-            (r.remarks && r.remarks.toString().trim() !== "")
+            (r.remarks && r.remarks.toString().trim() !== "" && !isClientIssue)
           );
         });
-        const hasMetrics = projectRemarks.some(r => r.projectId === proj.id && normalizeDate(r.date) === dateStr);
+        const hasMetrics = projectRemarks.some(r => r.projectId === proj.id && normalizeDate(r.date) === dateStr && !r.userRemark?.includes("[CLIENT ISSUE]") && !r.clientRemark?.includes("[CLIENT ISSUE]") && !r.remark?.includes("[CLIENT ISSUE]"));
 
         let dayTasks = [
           { id: "data_fill", name: "Data Fill", assigneeId: proj.assignedEmployeeId, date: dateStr },
@@ -114,147 +124,240 @@ export function TodaysWorkView({
     };
   }).filter(data => data.project && data.tasks.length > 0); 
 
-  const filteredData = clientData.filter(d => {
-    if (!d.matchesSearch) return false;
-    if (taskFilterType === "my") return d.isMyTask;
+  // Flatten all tasks into a single array
+  const allTasks = clientData.reduce((acc: any[], data) => {
+    const tasksWithClient = data.tasks.map((t: any) => ({
+      ...t,
+      clientName: data.client.companyName || data.client.name,
+      clientId: data.client.id,
+      project: data.project,
+    }));
+    return [...acc, ...tasksWithClient];
+  }, []);
+
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toISOString().split("T")[0];
+
+  const filteredTasks = allTasks.filter(task => {
+    if (taskFilterType === "my") {
+      const isMyTask = task.assigneeId === (currentUser?.id || currentUser?._id);
+      if (!isMyTask) return false;
+    }
+    
+    if (timeFilter === "today") {
+      if (task.date !== yesterdayStr) return false;
+    } else if (timeFilter === "pending") {
+      if (task.date >= yesterdayStr) return false; // older than yesterday
+    } else if (timeFilter === "upcoming") {
+      if (task.date <= yesterdayStr) return false; // newer than yesterday
+    }
+
+    if (brandFilter !== "all" && String(task.clientId) !== String(brandFilter)) {
+      return false;
+    }
+
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      return (
+        task.clientName?.toLowerCase().includes(query) ||
+        task.name?.toLowerCase().includes(query) ||
+        getEmpName(task.assigneeId).toLowerCase().includes(query)
+      );
+    }
     return true;
   });
 
-  const selectedData = selectedClientId ? clientData.find(d => d.client.id === selectedClientId) : null;
+  const sortedTasks = filteredTasks.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  // Unique clients for brand filter
+  const uniqueClients = Array.from(new Set(allTasks.map(t => t.clientId))).map(id => {
+    const task = allTasks.find(t => t.clientId === id);
+    return { id, name: task.clientName };
+  });
 
   return (
-    <ResizablePanelGroup direction="horizontal" className="bg-white rounded-xl border shadow-sm overflow-hidden flex-1 min-h-0">
-      {/* Left Column: Client List */}
-      <ResizablePanel defaultSize={25} minSize={15} maxSize={40} className="border-r border-slate-200 flex flex-col bg-slate-50/50">
-        <div className="p-4 border-b border-slate-200 bg-white">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <Input
-              placeholder="Search clients..."
-              className="pl-10 h-9 bg-slate-50 border-transparent focus:bg-white focus:border-brand-teal/30 focus:ring-brand-teal/20"
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col flex-1 min-h-0 overflow-hidden">
+      {/* Filters Bar */}
+      <div className="flex flex-col border-b border-slate-200 bg-slate-50/50">
+        {/* Top Header Row */}
+        <div className="p-4 pb-3 flex flex-col sm:flex-row gap-4 items-center justify-between">
+          <div className="flex items-center justify-between sm:justify-start gap-4 w-full sm:w-auto">
+            <div className="flex items-center gap-2">
+              <ClipboardList className="w-5 h-5 text-brand-teal" />
+              <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
+                Work Tasks
+              </h2>
+            </div>
+          </div>
+          
+          <div className="relative w-full sm:w-72">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Input 
+              placeholder="Search clients, tasks, assignees..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 h-9 text-sm bg-white border-slate-200 shadow-sm rounded-full focus-visible:ring-brand-teal"
             />
           </div>
         </div>
-        <div className="overflow-auto flex-1 custom-scrollbar p-3 space-y-2">
-          {filteredData.length === 0 ? (
-            <div className="text-center py-8 text-sm text-slate-400 italic">No clients found</div>
-          ) : (
-            filteredData.map(({ client, tasks }) => {
-              const isSelected = selectedClientId === client.id;
-              return (
-                <div
-                  key={client.id}
-                  onClick={() => setSelectedClientId(client.id)}
-                  className={`p-3 rounded-lg cursor-pointer transition-all duration-200 border ${isSelected ? "bg-white border-brand-teal shadow-sm ring-1 ring-brand-teal/20" : "bg-transparent border-transparent hover:bg-white hover:border-slate-200 hover:shadow-sm"}`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-colors ${isSelected ? "bg-brand-teal text-white shadow-md shadow-brand-teal/20" : "bg-brand-teal/10 text-brand-teal"}`}
-                    >
-                      <Users className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-semibold text-slate-800 truncate text-sm">
-                        {client.companyName || client.name}
-                      </h4>
-                      <p className="text-xs text-slate-500 truncate mt-0.5">
-                        {tasks.length} Tasks Assigned
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          )}
+
+        {/* Bottom Filters Row */}
+        <div className="px-4 pb-4 overflow-x-auto hide-scrollbar">
+          <div className="flex items-center gap-2 min-w-max">
+            <Select value={brandFilter} onValueChange={setBrandFilter}>
+              <SelectTrigger className="w-[180px] h-8 bg-white border-slate-200 text-xs font-semibold rounded-md shadow-sm focus:ring-brand-teal">
+                <SelectValue placeholder="All Brands" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Brands</SelectItem>
+                {uniqueClients.map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-      </ResizablePanel>
-
-      <ResizableHandle withHandle />
-
-      {/* Right Column: Tasks Content */}
-      <ResizablePanel defaultSize={75} className="flex flex-col bg-white">
-        {!selectedData ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-8">
-            <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center mb-4 border border-slate-100">
-              <Users className="w-8 h-8 text-slate-300" />
-            </div>
-            <p className="text-lg font-medium text-slate-500">No Client Selected</p>
-            <p className="text-sm mt-1">Please select a client from the left sidebar to view their assigned tasks.</p>
-          </div>
-        ) : (
-          <div className="flex-1 flex flex-col min-h-0">
-            <div className="p-4 border-b border-slate-200 bg-white sticky top-0 z-10">
-              <h2 className="text-lg font-semibold text-slate-800">
-                {selectedData.client.companyName || selectedData.client.name}
-              </h2>
-            </div>
-
-            <div className="p-0 overflow-auto flex-1 custom-scrollbar">
-              <Table>
-                <TableHeader className="bg-slate-50 sticky top-0 shadow-sm z-10">
-                  <TableRow>
-                    <TableHead className="pl-6 font-semibold">Date</TableHead>
-                    <TableHead className="font-semibold">Task</TableHead>
-                    <TableHead className="font-semibold">Assign To</TableHead>
-                    <TableHead className="w-[80px] pr-6"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(() => {
-                    const sortedTasks = [...selectedData.tasks].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                    const yesterday = new Date();
-                    yesterday.setDate(yesterday.getDate() - 1);
-                    const yesterdayStr = yesterday.toISOString().split("T")[0];
-                    const assignBy = selectedData.project?.teamLeaderName || "Admin";
-
-                    return sortedTasks.map((task: any, idx: number) => {
-                      const empName = getEmpName(task.assigneeId);
-                      const isAssignedToMe = task.assigneeId === (currentUser?.id || currentUser?._id);
-                      const isUnassigned = task.assigneeId == null || task.assigneeId === "";
-                      const isToday = task.date === yesterdayStr;
-                      const displayDate = new Date(task.date).toLocaleDateString('en-GB');
-                      
-                      return (
-                        <TableRow key={idx} className={`hover:bg-slate-50/50 transition-colors ${isAssignedToMe ? 'bg-brand-teal/5' : ''}`}>
-                          <TableCell className="pl-6 whitespace-nowrap">
-                            <Badge variant={isToday ? "default" : "destructive"} className={`font-medium ${isToday ? 'bg-brand-teal/10 text-brand-teal hover:bg-brand-teal/20 shadow-none border-0' : 'bg-red-50 text-red-600 hover:bg-red-100 shadow-none border-0'}`}>
-                              {displayDate}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2 font-medium text-slate-700">
-                              {task.name}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <span className={`text-sm ${isUnassigned ? 'text-slate-400 italic' : 'text-slate-700 font-medium'}`}>
-                              {empName}
+      </div>
+      
+      <div className="flex-1 overflow-auto bg-slate-50/30 custom-scrollbar">
+        <Table>
+          <TableHeader className="bg-slate-50 sticky top-0 shadow-sm z-10 border-b border-slate-200">
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="w-[120px] font-semibold text-slate-500 pl-6">Date</TableHead>
+              <TableHead className="font-semibold text-slate-500 min-w-[200px]">Brand</TableHead>
+              <TableHead className="font-semibold text-slate-500 min-w-[150px]">Task</TableHead>
+              <TableHead className="font-semibold text-slate-500 min-w-[150px]">Assign To</TableHead>
+              <TableHead className="font-semibold text-slate-500 min-w-[200px]">Remark</TableHead>
+              <TableHead className="w-[60px] pr-6"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {sortedTasks.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="h-32 text-center text-slate-500">
+                  No tasks found.
+                </TableCell>
+              </TableRow>
+            ) : (
+              sortedTasks.map((task: any, idx: number) => {
+                const empName = getEmpName(task.assigneeId);
+                const isAssignedToMe = task.assigneeId === (currentUser?.id || currentUser?._id);
+                const isUnassigned = task.assigneeId == null || task.assigneeId === "";
+                const isToday = task.date === yesterdayStr;
+                const displayDate = new Date(task.date).toLocaleDateString('en-GB');
+                
+                return (
+                  <TableRow key={`${task.id}-${task.clientId}-${idx}`} className={`hover:bg-slate-50 transition-colors ${isAssignedToMe ? 'bg-brand-teal/[0.02]' : ''}`}>
+                    <TableCell className="pl-6 whitespace-nowrap">
+                      <Badge variant={isToday ? "default" : "destructive"} className={`font-medium ${isToday ? 'bg-brand-teal/10 text-brand-teal hover:bg-brand-teal/20 shadow-none border-0' : 'bg-red-50 text-red-600 hover:bg-red-100 shadow-none border-0'}`}>
+                        {displayDate}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="font-medium text-slate-800">
+                        {task.project?.title || task.clientName}
+                      </div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        {task.clientName}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2 font-medium text-slate-700">
+                        {task.name}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        {!isUnassigned && (
+                          <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200">
+                            <span className="text-[10px] font-bold text-slate-600 uppercase">
+                              {getEmpInitials(empName)}
                             </span>
-                          </TableCell>
-                          <TableCell className="pr-6 text-right text-slate-400">
-                            {onTaskActionClick ? (
-                              <button 
-                                onClick={() => onTaskActionClick(selectedData.client, selectedData.project, task.id, task.date)}
-                                className="p-1.5 hover:bg-brand-teal/10 rounded-md transition-colors text-brand-teal"
-                              >
-                                <ArrowRight className="w-4 h-4 inline-block" />
-                              </button>
-                            ) : (
-                              <ArrowRight className="w-4 h-4 inline-block opacity-50" />
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    });
-                  })()}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-        )}
-      </ResizablePanel>
-    </ResizablePanelGroup>
+                          </div>
+                        )}
+                        <span className={`text-sm ${isUnassigned ? 'text-slate-400 italic' : 'text-slate-700 font-medium'}`}>
+                          {empName}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {editingRemarkId === `${task.id}-${task.date}` ? (
+                        <div className="flex flex-col gap-1.5 min-w-[150px]">
+                          <div className="flex items-center gap-1.5">
+                            <Input 
+                              value={editingRemarkValue}
+                              onChange={(e) => setEditingRemarkValue(e.target.value)}
+                              className="h-8 text-xs px-2 py-1 w-full focus-visible:ring-brand-teal"
+                              autoFocus
+                              placeholder="Type reason..."
+                              onKeyDown={async (e) => {
+                                if (e.key === 'Enter' && onSaveRemark) {
+                                  const finalRemark = editingIsClientIssue ? `[CLIENT ISSUE] ${editingRemarkValue}` : editingRemarkValue;
+                                  const success = await onSaveRemark(task.id, task.project.id, task.clientId, task.date, finalRemark);
+                                  if (success) setEditingRemarkId(null);
+                                }
+                                if (e.key === 'Escape') setEditingRemarkId(null);
+                              }}
+                            />
+                            <button 
+                              onClick={async () => {
+                                if (onSaveRemark) {
+                                  const finalRemark = editingIsClientIssue ? `[CLIENT ISSUE] ${editingRemarkValue}` : editingRemarkValue;
+                                  const success = await onSaveRemark(task.id, task.project.id, task.clientId, task.date, finalRemark);
+                                  if (success) setEditingRemarkId(null);
+                                }
+                              }} 
+                              className="text-green-600 hover:bg-green-50 p-1.5 rounded transition-colors" title="Save"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => setEditingRemarkId(null)} className="text-slate-400 hover:bg-slate-100 p-1.5 rounded transition-colors" title="Cancel">
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <label className="flex items-center gap-2 cursor-pointer mt-0.5">
+                            <input 
+                              type="checkbox" 
+                              className="w-3 h-3 text-red-500 rounded border-slate-300 focus:ring-red-500 cursor-pointer"
+                              checked={editingIsClientIssue}
+                              onChange={(e) => setEditingIsClientIssue(e.target.checked)}
+                            />
+                            <span className="text-[10px] font-bold text-red-500 uppercase tracking-wider">Issue from client</span>
+                          </label>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setEditingRemarkId(`${task.id}-${task.date}`);
+                            setEditingRemarkValue("");
+                            setEditingIsClientIssue(false);
+                          }}
+                          className="text-xs font-semibold text-brand-teal hover:text-brand-teal/80 bg-brand-teal/5 hover:bg-brand-teal/10 px-3 py-1.5 rounded-md transition-colors border border-brand-teal/20"
+                        >
+                          + Add Remark
+                        </button>
+                      )}
+                    </TableCell>
+                    <TableCell className="pr-6 text-right">
+                      {onTaskActionClick ? (
+                        <button 
+                          onClick={() => onTaskActionClick({ id: task.clientId, companyName: task.clientName, name: task.clientName }, task.project, task.id, task.date)}
+                          className="p-2 hover:bg-brand-teal/10 rounded-md transition-colors text-brand-teal"
+                        >
+                          <ArrowRight className="w-4 h-4" />
+                        </button>
+                      ) : (
+                        <ArrowRight className="w-4 h-4 opacity-50 text-slate-400" />
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
   );
 }
