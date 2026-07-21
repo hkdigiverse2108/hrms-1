@@ -932,9 +932,42 @@ async def read_employee(employee_id: str, db=Depends(get_db)):
         raise HTTPException(status_code=404, detail="Employee not found")
     return employee
 
+ROLE_HIERARCHY = {
+    "super admin": 0,
+    "admin": 0,
+    "superadmin": 0,
+    "administrator": 0,
+    "founder": 0,
+    "super_admin": 0,
+    "sub-admin": 1,
+    "hr": 2,
+    "manager": 3,
+    "team leader": 4,
+    "employee": 5,
+    "intern": 6
+}
+
+def get_role_level(role: str) -> int:
+    if not role:
+        return 5
+    return ROLE_HIERARCHY.get(role.lower().strip(), 5)
+
 @app.post("/employees", response_model=schemas.Employee)
 async def create_employee(employee: schemas.EmployeeCreate, request: Request, db=Depends(get_db)):
     performed_by, user_name = await get_actor_from_request(request, db)
+    
+    if performed_by != "System":
+        actor = await db.employees.find_one({"_id": ObjectId(performed_by) if len(performed_by) == 24 else performed_by})
+        if actor:
+            actor_role = actor.get("role", "").lower()
+            target_role = (employee.role or "").lower()
+            
+            actor_level = get_role_level(actor_role)
+            target_level = get_role_level(target_role)
+            
+            if actor_level > 0 and target_level < actor_level:
+                raise HTTPException(status_code=403, detail="You do not have permission to create this role")
+
     return await crud.create_employee(db, employee, performed_by=performed_by, user_name=user_name)
 
 @app.put("/employees/{employee_id}", response_model=schemas.Employee)
@@ -942,8 +975,25 @@ async def update_employee(employee_id: str, employee_update: schemas.EmployeeUpd
     performed_by, user_name = await get_actor_from_request(request, db)
     if performed_by != "System" and performed_by != employee_id:
         actor = await db.employees.find_one({"_id": ObjectId(performed_by) if len(performed_by) == 24 else performed_by})
-        if not actor or actor.get("role", "").lower() not in ["admin", "super admin", "manager"]:
+        if not actor:
             raise HTTPException(status_code=403, detail="You do not have permission to modify this employee's details")
+        
+        actor_role = actor.get("role", "").lower()
+        actor_level = get_role_level(actor_role)
+        
+        target_emp = await db.employees.find_one({"_id": ObjectId(employee_id) if len(employee_id) == 24 else employee_id})
+        if target_emp:
+            target_emp_role = target_emp.get("role", "").lower()
+            new_role = (employee_update.role or "").lower() if employee_update.role is not None else target_emp_role
+            
+            target_emp_level = get_role_level(target_emp_role)
+            new_role_level = get_role_level(new_role)
+            
+            if actor_level > 0:
+                if target_emp_level < actor_level:
+                    raise HTTPException(status_code=403, detail="You cannot modify a profile with a higher role")
+                if new_role_level < actor_level:
+                    raise HTTPException(status_code=403, detail="You cannot assign a role higher than your own")
     updated = await crud.update_employee(db, employee_id, employee_update, performed_by=performed_by, user_name=user_name)
     if not updated:
         raise HTTPException(status_code=404, detail="Employee not found")

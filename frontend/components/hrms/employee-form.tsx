@@ -27,6 +27,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { API_URL, getAvatarUrl } from '@/lib/config'
 import { toast } from "sonner";
 import { TIME_OPTIONS } from '@/lib/constants'
+import { useUser } from '@/hooks/useUser'
 
 export interface EmployeeFormData {
   employeeId: string
@@ -158,13 +159,19 @@ const calculateResignationDate = (startDateStr: string, daysCountStr: string, ho
 };
 
 export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: EmployeeFormProps) {
-  const { data, refresh } = useApi()
+  const { user } = useUser()
+  const { data, mutate, isLoading } = useApi<{ 
+    departments: any[], 
+    designations: any[], 
+    roles: any[] 
+  }>('/api/company-settings')
+  
   const departments = data?.departments || []
   const designations = data?.designations || []
-  const roles = data?.roles || []
   const relations = data?.relations || []
   const documentTypes = (data as any)?.documentTypes || []
   const holidays = (data as any)?.holidays || []
+  const roles = data?.roles || []
   
   const [formData, setFormData] = useState<EmployeeFormData>(defaultFormData)
   const [showPassword, setShowPassword] = useState(false)
@@ -252,7 +259,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
   const isRoleAdmin = (r?: string) => {
     if (!r) return false;
     const clean = r.toLowerCase().trim();
-    return clean === 'admin' || clean === 'super admin' || clean === 'superadmin' || clean === 'administrator' || clean === 'founder' || clean === 'super_admin';
+    return clean === 'admin' || clean === 'super admin' || clean === 'superadmin' || clean === 'administrator' || clean === 'founder' || clean === 'super_admin' || clean === 'sub-admin';
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -391,7 +398,35 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
           options={[
             ...roles.map((r: any) => ({ label: r.name, value: r.name })),
             ...(roles.some((r: any) => r.name?.toLowerCase() === 'intern') ? [] : [{ label: 'Intern', value: 'Intern' }])
-          ]}
+          ].filter(roleOption => {
+            const rName = roleOption.value.toLowerCase().trim();
+            const uRole = user?.role?.toLowerCase().trim() || '';
+            
+            const ROLE_HIERARCHY: Record<string, number> = {
+              'admin': 0, 'super admin': 0, 'superadmin': 0, 'administrator': 0, 'founder': 0, 'super_admin': 0,
+              'sub-admin': 1,
+              'hr': 2,
+              'manager': 3,
+              'team leader': 4,
+              'employee': 5,
+              'intern': 6
+            };
+            const getRoleLevel = (r: string) => ROLE_HIERARCHY[r] ?? 5;
+            
+            const actorLevel = getRoleLevel(uRole);
+            const targetLevel = getRoleLevel(rName);
+            
+            return actorLevel === 0 || targetLevel >= actorLevel;
+          }).sort((a, b) => {
+            const order = ['admin', 'sub-admin', 'hr', 'team leader', 'employee', 'intern'];
+            const indexA = order.indexOf(a.value.toLowerCase());
+            const indexB = order.indexOf(b.value.toLowerCase());
+            
+            if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+            if (indexA !== -1) return -1;
+            if (indexB !== -1) return 1;
+            return a.label.localeCompare(b.label);
+          })}
           placeholder="Select role"
         />
       </div>

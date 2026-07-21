@@ -34,6 +34,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Key } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useUser } from "@/hooks/useUser";
 import { EmployeeModal } from "@/components/hrms/employee-modal";
 import { useConfirm } from "@/context/ConfirmContext";
 import { toast } from "sonner";
@@ -82,6 +83,7 @@ const COLUMN_OPTIONS = [
 export default function EmployeeListPage() {
   const router = useRouter();
   const { data: apiData } = useApi();
+  const { user } = useUser();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
   const { confirm } = useConfirm();
   const [employees, setEmployees] = useState<any[]>([]);
@@ -487,8 +489,24 @@ export default function EmployeeListPage() {
   const isRoleAdmin = (r?: string) => {
     if (!r) return false;
     const clean = r.toLowerCase().trim();
-    return clean === 'admin' || clean === 'super admin' || clean === 'superadmin' || clean === 'administrator' || clean === 'founder' || clean === 'super_admin';
+    return clean === 'admin' || clean === 'super admin' || clean === 'superadmin' || clean === 'administrator' || clean === 'founder' || clean === 'super_admin' || clean === 'sub-admin';
   };
+
+  const getRoleLevel = (r?: string) => {
+    if (!r) return 5;
+    const clean = r.toLowerCase().trim();
+    const ROLE_HIERARCHY: Record<string, number> = {
+      'admin': 0, 'super admin': 0, 'superadmin': 0, 'administrator': 0, 'founder': 0, 'super_admin': 0,
+      'sub-admin': 1,
+      'hr': 2,
+      'manager': 3,
+      'team leader': 4,
+      'employee': 5,
+      'intern': 6
+    };
+    return ROLE_HIERARCHY[clean] ?? 5;
+  };
+  const actorLevel = getRoleLevel(user?.role);
 
   const activeCount = employees.filter(emp => !isRoleAdmin(emp.role) && emp.status?.toLowerCase() !== 'inactive').length;
   const inactiveCount = employees.filter(emp => !isRoleAdmin(emp.role) && emp.status?.toLowerCase() === 'inactive').length;
@@ -709,7 +727,7 @@ export default function EmployeeListPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-32">
-                            {(isAdmin || checkPermission('employee-list', 'canEdit')) && (
+                            {(isAdmin || checkPermission('employee-list', 'canEdit')) && (actorLevel === 0 || getRoleLevel(emp.role) >= actorLevel || user?.id === emp.id) && (
                               <DropdownMenuItem 
                                 onClick={() => router.push(`/employees/edit/${emp.id}`)}
                                 className="cursor-pointer"
@@ -718,7 +736,7 @@ export default function EmployeeListPage() {
                                 Edit
                               </DropdownMenuItem>
                             )}
-                            {(isAdmin || checkPermission('employee-list', 'canDelete')) && (
+                            {(isAdmin || checkPermission('employee-list', 'canDelete')) && (actorLevel === 0 || getRoleLevel(emp.role) >= actorLevel) && user?.id !== emp.id && (
                               <DropdownMenuItem 
                                 onClick={() => handleDelete(emp.id, emp.name)}
                                 className="cursor-pointer text-brand-danger focus:text-brand-danger"
@@ -727,7 +745,7 @@ export default function EmployeeListPage() {
                                 Delete
                               </DropdownMenuItem>
                             )}
-                            {(isAdmin || checkPermission('access-control', 'canView')) && emp.role?.toLowerCase() !== 'admin' && (
+                            {(isAdmin || checkPermission('access-control', 'canView')) && emp.role?.toLowerCase() !== 'admin' && (actorLevel === 0 || getRoleLevel(emp.role) >= actorLevel) && (
                               <DropdownMenuItem 
                                 onClick={() => router.push(`/employees/permissions/${emp.id}`)}
                                 className="cursor-pointer text-brand-teal focus:text-brand-teal"
