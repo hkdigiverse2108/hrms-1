@@ -123,6 +123,30 @@ export default function DashboardPage() {
   const [applications, setApplications] = useState<any[]>([]);
   const [assets, setAssets] = useState<any[]>([]);
   const [activeTaskTitle, setActiveTaskTitle] = useState<string | null>(null);
+  const [hasTargetedBanner, setHasTargetedBanner] = useState(false);
+
+  useEffect(() => {
+    if (user?.id) {
+      fetch(`${API_URL}/system-settings`)
+        .then(res => res.json())
+        .then(data => {
+          const banners = data.dashboardBanners || [];
+          const todayStr = dayjs().format('YYYY-MM-DD');
+          const active = banners.filter((b: any) => {
+            if (!b.isActive) return false;
+            if (b.employeeId && b.employeeId !== "all" && b.employeeId !== user.id) return false;
+            const hasStartDate = !!b.startDate;
+            const hasEndDate = !!b.endDate;
+            if (!hasStartDate && !hasEndDate) return true;
+            if (hasStartDate && !hasEndDate) return dayjs(todayStr).isSameOrAfter(b.startDate);
+            if (!hasStartDate && hasEndDate) return dayjs(todayStr).isSameOrBefore(b.endDate);
+            return dayjs(todayStr).isSameOrAfter(b.startDate) && dayjs(todayStr).isSameOrBefore(b.endDate);
+          });
+          setHasTargetedBanner(active.some((b: any) => b.employeeId === user.id));
+        })
+        .catch(err => console.error("Error fetching settings for banners:", err));
+    }
+  }, [user?.id]);
 
   useEffect(() => {
     if (attendanceStatus?.isPunchedIn && attendanceStatus.record?.punchInActivityType === "Work" && attendanceStatus.record?.punchInTaskId) {
@@ -790,6 +814,7 @@ export default function DashboardPage() {
                 activeTaskTitle={activeTaskTitle}
                 missingPunchOutDate={missingPunchOutDate}
                 setIsRequestDialogOpen={setIsRequestDialogOpen}
+                hasTargetedBanner={hasTargetedBanner}
               />
 
               {/* 3. Show Employee stats and Recent Attendance table */}
@@ -813,6 +838,7 @@ export default function DashboardPage() {
                 activeTaskTitle={activeTaskTitle}
                 missingPunchOutDate={missingPunchOutDate}
                 setIsRequestDialogOpen={setIsRequestDialogOpen}
+                hasTargetedBanner={hasTargetedBanner}
               />
 
               {/* 4. If HR, show HR Lists (Recent Leave Requests, Upcoming Interviews) */}
@@ -1254,7 +1280,8 @@ function EmployeeView({
   showStatsAndAttendanceOnly = false,
   setIsPunchInModalOpen,
   activeTaskTitle,
-  serverTimeOffset
+  serverTimeOffset,
+  hasTargetedBanner
 }: { 
   user: any, 
   attendanceStatus: any, 
@@ -1276,7 +1303,8 @@ function EmployeeView({
   showStatsAndAttendanceOnly?: boolean,
   setIsPunchInModalOpen: (val: boolean) => void,
   activeTaskTitle?: string | null,
-  serverTimeOffset?: number
+  serverTimeOffset?: number,
+  hasTargetedBanner?: boolean
 }) {
   const userName = user?.name || "Guest";
   const firstName = user?.firstName || userName.split(' ')[0];
@@ -1380,7 +1408,7 @@ function EmployeeView({
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="relative">
-                    <Avatar className="w-16 h-16 border-2 border-border shadow-sm">
+                    <Avatar className={`w-16 h-16 border-2 shadow-sm transition-all duration-500 ${hasTargetedBanner ? 'border-transparent ring-4 ring-brand-teal ring-offset-2' : 'border-border'}`}>
                       <AvatarImage src={getAvatarUrl(user?.profilePhoto, userName)} />
                       <AvatarFallback className="bg-brand-light text-brand-teal font-bold">{initials}</AvatarFallback>
                     </Avatar>
@@ -1679,6 +1707,7 @@ function EventsSidebar({ user, leaves }: { user: any, leaves: any[] }) {
   const today = dayjs().format('YYYY-MM-DD');
   const activeBanners = dashboardBanners.filter(b => {
     if (!b.isActive) return false;
+    if (b.employeeId && b.employeeId !== "all" && b.employeeId !== user?.id) return false;
     const hasStartDate = !!b.startDate;
     const hasEndDate = !!b.endDate;
     if (!hasStartDate && !hasEndDate) return true;
@@ -1686,6 +1715,8 @@ function EventsSidebar({ user, leaves }: { user: any, leaves: any[] }) {
     if (!hasStartDate && hasEndDate) return dayjs(today).isSameOrBefore(b.endDate);
     return dayjs(today).isSameOrAfter(b.startDate) && dayjs(today).isSameOrBefore(b.endDate);
   });
+  
+  const hasTargetedBanner = activeBanners.some(b => b.employeeId === user?.id);
  
   useEffect(() => {
     fetchEvents();

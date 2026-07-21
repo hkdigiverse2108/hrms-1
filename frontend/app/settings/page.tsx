@@ -1603,7 +1603,7 @@ export default function SettingsPage() {
                           <Input placeholder="Enter announcement heading..." value={newBanner.heading || ""} onChange={e => setNewBanner({...newBanner, heading: e.target.value})} />
                         </div>
                         <div className="space-y-2">
-                          <Label>Target Employee (Optional)</Label>
+                          <Label>Employee</Label>
                           <Select value={newBanner.employeeId || "all"} onValueChange={(val) => setNewBanner({...newBanner, employeeId: val === "all" ? "" : val})}>
                             <SelectTrigger className="w-full">
                               <SelectValue placeholder="All Employees" />
