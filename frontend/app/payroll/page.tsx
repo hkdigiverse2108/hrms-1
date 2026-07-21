@@ -76,7 +76,7 @@ export default function PayrollPage() {
 
   const userStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null
   const user = userStr ? JSON.parse(userStr) : null
-  const isAdminOrHR = user?.role === 'Admin' || user?.role === 'HR'
+  const isAdminOrHR = user?.role === 'Admin' || user?.designation?.toLowerCase() === 'hr'
 
   const finalPayroll = isAdminOrHR 
     ? filteredPayroll 

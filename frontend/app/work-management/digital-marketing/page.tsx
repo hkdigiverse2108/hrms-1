@@ -200,7 +200,7 @@ export default function MarketingReportsPage() {
   }, [user]);
 
   const isEmployee = user && !["Admin", "Manager", "HR"].includes(user.role) && !hasFullDMAccess;
-  const isRegularEmployee = !user || !(['admin', 'super admin', 'superadmin', 'team leader', 'hr'].includes(user.role?.toLowerCase() || '') || user.designation?.toLowerCase() === 'team leader');
+  const isRegularEmployee = !user || !((['admin', 'super admin', 'superadmin'].includes(user.role?.toLowerCase() || '')  || user.designation?.toLowerCase() === 'head' || user.designation?.toLowerCase() === 'hr') );
 
   const getLocalDateString = () => {
     const d = new Date();
@@ -221,7 +221,7 @@ export default function MarketingReportsPage() {
     return new Date().toLocaleString("default", { month: "long" });
   };
 
-  const isHR = user?.role === 'HR' || user?.role?.toLowerCase() === 'hr';
+  const isHR = user?.designation?.toLowerCase() === 'hr' || user?.role?.toLowerCase() === 'hr';
   const canViewMarketing = isAdmin || isHR || checkPermission("marketing", "canView");
   const canAddMarketing = isAdmin || isHR || checkPermission("marketing", "canAdd");
   const canEditMarketing = isAdmin || isHR || checkPermission("marketing", "canEdit");
@@ -932,7 +932,7 @@ export default function MarketingReportsPage() {
     setViewClientReports(clientId);
     setLoadingClientReports(true);
     try {
-      const roleParam = user?.role === 'HR' || user?.role?.toLowerCase() === 'hr' ? 'Admin' : (user?.role || "");
+      const roleParam = user?.designation?.toLowerCase() === 'hr' || user?.role?.toLowerCase() === 'hr' ? 'Admin' : (user?.role || "");
       const userParams = user ? `&userId=${user.id}&role=${roleParam}` : "";
       const [dailyRes, monthlyRes] = await Promise.all([
         fetch(`${API_URL}/marketing/reports/daily?client_id=${clientId}${userParams}`),
@@ -1052,7 +1052,7 @@ export default function MarketingReportsPage() {
 
   const fetchClients = async () => {
     try {
-      const roleParam = user?.role === 'HR' || user?.role?.toLowerCase() === 'hr' ? 'Admin' : (user?.role || "");
+      const roleParam = user?.designation?.toLowerCase() === 'hr' || user?.role?.toLowerCase() === 'hr' ? 'Admin' : (user?.role || "");
       const userParams = user ? `?userId=${user.id}&role=${roleParam}` : "";
       const [res, sysSetRes] = await Promise.all([
         fetch(`${API_URL}/clients${userParams}`),
@@ -1108,7 +1108,7 @@ export default function MarketingReportsPage() {
         params.append("client_id", selectedClientFilter);
       if (user) {
         params.append("userId", user.id);
-        const roleParam = user.role === 'HR' || user.role?.toLowerCase() === 'hr' ? 'Admin' : user.role;
+        const roleParam = user.designation?.toLowerCase() === 'hr' || user.role?.toLowerCase() === 'hr' ? 'Admin' : user.role;
         params.append("role", roleParam);
       }
       if (activeTab === "daily" || activeTab === "analysis" || activeTab === "todays-work") {
@@ -2533,7 +2533,7 @@ export default function MarketingReportsPage() {
 
       {/* Header Area */}
       {(() => {
-        const isUserAdminOrTL = isAdmin || user?.role === 'Team Leader' || user?.role === 'HR' || user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin' || user?.designation?.toLowerCase() === 'team leader';
+        const isUserAdminOrTL = isAdmin || (user?.designation?.toLowerCase() === 'team leader' || user?.designation?.toLowerCase() === 'head') || user?.designation?.toLowerCase() === 'hr' || user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin' || user?.designation?.toLowerCase() === 'team leader';
         const pendingCount = transferRequests.filter((r: any) => {
           const isPending = r.status === 'Pending';
           if (!isPending) return false;
@@ -2569,7 +2569,7 @@ export default function MarketingReportsPage() {
                   </span>
                 )}
               </Button>
-              {(isAdmin || user?.role === 'Team Leader' || user?.role === 'HR') && <OtherWorkDialog source="digital-marketing" />}
+              {(isAdmin || (user?.designation?.toLowerCase() === 'team leader' || user?.designation?.toLowerCase() === 'head') || user?.designation?.toLowerCase() === 'hr') && <OtherWorkDialog source="digital-marketing" />}
               <DMOtherWorkDialog />
             </div>
           </div>
@@ -2604,7 +2604,7 @@ export default function MarketingReportsPage() {
                 />
               </div>
             </div>
-            {user && (['admin', 'super admin', 'superadmin', 'team leader'].includes(user.role?.toLowerCase() || '') || user.designation?.toLowerCase() === 'team leader') && (
+            {user && ((['admin', 'super admin', 'superadmin'].includes(user.role?.toLowerCase() || '')  || user.designation?.toLowerCase() === 'head') ) && (
               <div className="space-y-1.5">
                 <Label className="text-xs text-slate-500">Task Scope</Label>
                 <div className="flex bg-slate-100 p-0.5 rounded-lg border h-9">
@@ -2859,7 +2859,7 @@ export default function MarketingReportsPage() {
                 Analysis
               </TabsTrigger>
             )}
-            {(user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'team leader' || user?.designation?.toLowerCase() === 'team leader') && (
+            {(user?.role?.toLowerCase() === 'admin' || (user?.designation?.toLowerCase() === 'team leader' || user?.designation?.toLowerCase() === 'head') || user?.designation?.toLowerCase() === 'team leader') && (
               <TabsTrigger
                 value="all_clients"
                 className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto"
@@ -2948,7 +2948,7 @@ export default function MarketingReportsPage() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                 </div>
-                {user && (['admin', 'super admin', 'superadmin', 'team leader'].includes(user.role?.toLowerCase() || '') || user.designation?.toLowerCase() === 'team leader') && (
+                {user && ((['admin', 'super admin', 'superadmin'].includes(user.role?.toLowerCase() || '')  || user.designation?.toLowerCase() === 'head') ) && (
                   <div className="flex bg-slate-100 p-0.5 rounded-lg border h-9">
                     <button
                       type="button"
@@ -4630,7 +4630,7 @@ export default function MarketingReportsPage() {
             </div>
           </TabsContent>
         )}
-        {(user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'team leader' || user?.designation?.toLowerCase() === 'team leader') && (
+        {(user?.role?.toLowerCase() === 'admin' || (user?.designation?.toLowerCase() === 'team leader' || user?.designation?.toLowerCase() === 'head') || user?.designation?.toLowerCase() === 'team leader') && (
           <TabsContent value="all_clients" className="m-0 flex-1 overflow-auto h-full mt-4 px-1 pb-10">
             <div className="bg-white rounded-xl shadow-sm border p-5">
               <h3 className="font-bold text-slate-800 text-lg mb-4">All Clients & Projects (Digital Marketing)</h3>

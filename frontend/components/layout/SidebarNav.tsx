@@ -131,16 +131,14 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
 
     workManagementChildren.push(getItem(<Link href="/work-management/my-tasks">My Tasks</Link>, "/work-management/my-tasks"));
 
-    workManagementChildren.push(getItem(<Link href="/work-management/my-tasks">My Tasks</Link>, "/work-management/my-tasks"));
-
     if (isModuleEnabled('projects') && (isAdmin || checkPermission('projects', 'canView'))) {
       workManagementChildren.push(getItem(<Link href="/work-management/projects">Projects</Link>, "/work-management/projects"));
     }
-    const isTL = Boolean(user && (user.role?.toLowerCase() === 'team leader' || user.designation?.toLowerCase() === 'team leader'));
+    const isTL = Boolean(user && ((user.designation?.toLowerCase() === 'team leader' || user.designation?.toLowerCase() === 'head') ));
     if (isModuleEnabled('tasks') && (isAdmin || isTL || checkPermission('tasks', 'canView') || checkPermission('development', 'canView'))) {
       workManagementChildren.push(getItem(<Link href="/work-management/development">Development</Link>, "/work-management/development"));
     }
-    const isHRUser = user?.role === 'HR' || user?.department?.toLowerCase() === 'hr';
+    const isHRUser = user?.designation?.toLowerCase() === 'hr' || user?.department?.toLowerCase() === 'hr';
     if (isModuleEnabled('daily-progress') && (isAdmin || isHRUser || checkPermission('daily-progress', 'canView'))) {
       workManagementChildren.push(getItem(<Link href="/work-management/daily-progress">Daily Progress</Link>, "/work-management/daily-progress"));
     }
@@ -159,7 +157,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (isModuleEnabled('marketing') && (isAdmin || checkPermission('marketing', 'canView'))) {
       workManagementChildren.push(getItem(<Link href="/work-management/digital-marketing">Digital Marketing</Link>, "/work-management/digital-marketing"));
     }
-    if (isModuleEnabled('creative') && (isAdmin || user?.role === 'HR' || user?.role === 'Team Leader' || checkPermission('creative', 'canView'))) {
+    if (isModuleEnabled('creative') && (isAdmin || user?.designation?.toLowerCase() === 'hr' || (user?.designation?.toLowerCase() === 'team leader' || user?.designation?.toLowerCase() === 'head') || checkPermission('creative', 'canView'))) {
       workManagementChildren.push(getItem(<Link href="/work-management/smm">Social Media Management</Link>, "/work-management/smm"));
     }
     if (isModuleEnabled('research') && (isAdmin || checkPermission('research', 'canView'))) {

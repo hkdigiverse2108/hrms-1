@@ -806,7 +806,7 @@ export default function LeavePage() {
         description="View your leave balances, history, and upcoming time off."
       >
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto mt-4 sm:mt-0">
-          {(user?.role === 'Admin' || user?.role === 'HR') && (
+          {(user?.role === 'Admin' || user?.designation?.toLowerCase() === 'hr') && (
             <Button variant="outline" className="shadow-sm w-full sm:w-auto font-medium" onClick={() => exportToCSV(leaves, 'leaves')}>
               <Download className="w-4 h-4 mr-2" />
               Export PDF
@@ -1329,7 +1329,7 @@ export default function LeavePage() {
                 </TabsTrigger>
               </>
             )}
-            {(user?.role === 'Admin' || user?.role === 'HR') && (
+            {(user?.role === 'Admin' || user?.designation?.toLowerCase() === 'hr') && (
               <TabsTrigger 
                 value="public" 
                 className="rounded-none border-b-2 border-transparent data-[state=active]:border-brand-teal data-[state=active]:text-brand-teal text-muted-foreground data-[state=active]:bg-transparent px-1 py-3 data-[state=active]:shadow-none font-medium"
@@ -1728,7 +1728,7 @@ export default function LeavePage() {
             />
           </TabsContent>
 
-          {(user?.role === 'Admin' || user?.role === 'HR') && (
+          {(user?.role === 'Admin' || user?.designation?.toLowerCase() === 'hr') && (
             <TabsContent value="public" className="mt-6 bg-white border border-border rounded-xl shadow-sm overflow-hidden">
               <div className="p-5 flex flex-col sm:flex-row justify-between items-center border-b border-border gap-4">
                 <h3 className="font-bold text-lg">Public Holidays</h3>
@@ -1937,7 +1937,7 @@ export default function LeavePage() {
                   <tbody className="divide-y divide-border">
                     {(() => {
                       const filteredHolidays = holidays.filter(h => 
-                        user?.role === 'Admin' || user?.role === 'HR' || 
+                        user?.role === 'Admin' || user?.designation?.toLowerCase() === 'hr' || 
                         !h.company || h.company === "All Companies" || h.company === user?.company
                       );
                       return filteredHolidays
@@ -1994,7 +1994,7 @@ export default function LeavePage() {
               </div>
               <TablePagination 
                 totalItems={holidays.filter(h => 
-                  user?.role === 'Admin' || user?.role === 'HR' || 
+                  user?.role === 'Admin' || user?.designation?.toLowerCase() === 'hr' || 
                   !h.company || h.company === "All Companies" || h.company === user?.company
                 ).length}
                 itemsPerPage={itemsPerPage}

@@ -332,7 +332,7 @@ export function PendingWorkEmbedded({
       ]);
 
       if (user?.id) {
-        const isUserAdminOrTL = user.role === 'Team Leader' || user.role === 'HR' || user.role?.toLowerCase() === 'admin' || user.name === 'Admin Admin';
+        const isUserAdminOrTL = (user.designation?.toLowerCase() === 'team leader' || user.designation?.toLowerCase() === 'head') || user.designation?.toLowerCase() === 'hr' || user.role?.toLowerCase() === 'admin' || user.name === 'Admin Admin';
         const taskTypeQuery = defaultTaskType ? `?taskType=${defaultTaskType}` : "";
         if (isUserAdminOrTL) {
           const [allRes, outgoingRes] = await Promise.all([

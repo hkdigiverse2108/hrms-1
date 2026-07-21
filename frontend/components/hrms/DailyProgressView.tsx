@@ -44,7 +44,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
   const router = useRouter()
   const { checkPermission, isAdmin: isUserAdmin, loading: permissionsLoading } = usePermissions()
 
-  const isHRRoleOrDept = user?.role === 'HR' || user?.department?.toLowerCase() === 'hr'
+  const isHRRoleOrDept = user?.designation?.toLowerCase() === 'hr' || user?.department?.toLowerCase() === 'hr'
   const canViewDailyProgress = isUserAdmin || isHRRoleOrDept || checkPermission('daily-progress', 'canView') || ['Employee', 'Team Leader', 'Manager', 'Social Media Manager'].includes(user?.role || '')
   const canEditDailyProgress = isUserAdmin || isHRRoleOrDept || checkPermission('daily-progress', 'canEdit')
 
@@ -84,8 +84,8 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
   }, [employees])
 
   const isAdmin = user?.role?.toLowerCase() === 'admin'
-  const isTeamLeader = user?.role === 'Team Leader'
-  const isHRUser = user?.role === 'HR' || user?.department?.toLowerCase() === 'hr'
+  const isTeamLeader = (user?.designation?.toLowerCase() === 'team leader' || user?.designation?.toLowerCase() === 'head')
+  const isHRUser = user?.designation?.toLowerCase() === 'hr' || user?.department?.toLowerCase() === 'hr'
 
   useEffect(() => {
     if (isTeamLeader && user?.department && !activeDeptTab) {

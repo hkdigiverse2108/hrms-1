@@ -498,11 +498,7 @@ export default function EmployeeListPage() {
     const ROLE_HIERARCHY: Record<string, number> = {
       'admin': 0, 'super admin': 0, 'superadmin': 0, 'administrator': 0, 'founder': 0, 'super_admin': 0,
       'sub-admin': 1,
-      'hr': 2,
-      'manager': 3,
-      'team leader': 4,
-      'employee': 5,
-      'intern': 6
+      'employee': 5
     };
     return ROLE_HIERARCHY[clean] ?? 5;
   };

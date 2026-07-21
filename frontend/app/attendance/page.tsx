@@ -702,7 +702,7 @@ export default function AttendancePage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-          {(user?.role === 'Admin' || user?.role === 'HR') && (
+          {(user?.role === 'Admin' || user?.designation?.toLowerCase() === 'hr') && (
             <Button variant="outline" className="shadow-sm w-full sm:w-auto font-medium" onClick={() => exportToCSV(attendance, 'attendance')}>
               <Download className="w-4 h-4 mr-2" />
               Export PDF

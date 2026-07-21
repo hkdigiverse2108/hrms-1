@@ -224,20 +224,17 @@ export default function DesignationsPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Department</Label>
-              <Select value={desigForm.department} onValueChange={v => setDesigForm({ ...desigForm, department: v, sub_department: '' })}>
-                <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
-                <SelectContent>
-                  {departments.map(d => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
               <Label>Sub Department</Label>
-              <Select value={desigForm.sub_department} onValueChange={v => setDesigForm({ ...desigForm, sub_department: v })}>
+              <Select 
+                value={desigForm.sub_department} 
+                onValueChange={v => {
+                  const selectedSd = subDepartments.find((sd: any) => sd.name === v);
+                  setDesigForm({ ...desigForm, sub_department: v, department: selectedSd?.department || '' });
+                }}
+              >
                 <SelectTrigger><SelectValue placeholder="Select sub department" /></SelectTrigger>
                 <SelectContent>
-                  {subDepartments.filter((sd: any) => sd.department === desigForm.department).map((sd: any) => (
+                  {subDepartments.map((sd: any) => (
                     <SelectItem key={sd.id} value={sd.name}>{sd.name}</SelectItem>
                   ))}
                 </SelectContent>

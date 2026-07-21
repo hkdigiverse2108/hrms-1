@@ -406,8 +406,9 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
           value={formData.role}
           onValueChange={(v: string) => handleChange('role', v)}
           options={[
-            ...roles.map((r: any) => ({ label: r.name, value: r.name })),
-            ...(roles.some((r: any) => r.name?.toLowerCase() === 'intern') ? [] : [{ label: 'Intern', value: 'Intern' }])
+            { label: 'Admin', value: 'Admin' },
+            { label: 'Sub-Admin', value: 'Sub-Admin' },
+            { label: 'Employee', value: 'Employee' }
           ].filter(roleOption => {
             const rName = roleOption.value.toLowerCase().trim();
             const uRole = user?.role?.toLowerCase().trim() || '';
@@ -415,11 +416,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
             const ROLE_HIERARCHY: Record<string, number> = {
               'admin': 0, 'super admin': 0, 'superadmin': 0, 'administrator': 0, 'founder': 0, 'super_admin': 0,
               'sub-admin': 1,
-              'hr': 2,
-              'manager': 3,
-              'team leader': 4,
-              'employee': 5,
-              'intern': 6
+              'employee': 5
             };
             const getRoleLevel = (r: string) => ROLE_HIERARCHY[r] ?? 5;
             
@@ -427,15 +424,6 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
             const targetLevel = getRoleLevel(rName);
             
             return actorLevel === 0 || targetLevel >= actorLevel;
-          }).sort((a, b) => {
-            const order = ['admin', 'sub-admin', 'hr', 'team leader', 'employee', 'intern'];
-            const indexA = order.indexOf(a.value.toLowerCase());
-            const indexB = order.indexOf(b.value.toLowerCase());
-            
-            if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-            if (indexA !== -1) return -1;
-            if (indexB !== -1) return 1;
-            return a.label.localeCompare(b.label);
           })}
           placeholder="Select role"
         />

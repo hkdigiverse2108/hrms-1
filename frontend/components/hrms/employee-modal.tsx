@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useApi } from '@/hooks/useApi'
+import { useUser } from '@/hooks/useUser'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Building2, Landmark, Users2, Clock, ShieldCheck, CreditCard, UserCircle, FileText, Plus, Trash2 } from 'lucide-react'
 import { TIME_OPTIONS } from '@/lib/constants'
@@ -72,6 +73,7 @@ export function EmployeeModal({
   mode,
 }: EmployeeModalProps) {
   const { data } = useApi()
+  const { user } = useUser()
   const departments = data?.departments || []
   const designations = data?.designations || []
   const documentTypes = (data as any)?.documentTypes || []
@@ -305,11 +307,12 @@ export function EmployeeModal({
                     <SelectValue placeholder="Select role" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Admin">Admin</SelectItem>
-                    <SelectItem value="Manager">Manager</SelectItem>
-                    <SelectItem value="Social Media Manager">Social Media Manager</SelectItem>
-                    <SelectItem value="HR">HR</SelectItem>
-                    <SelectItem value="Team Leader">Team Leader</SelectItem>
+                    {(user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'super admin') && (
+                      <SelectItem value="Admin">Admin</SelectItem>
+                    )}
+                    {(!user?.role || ['admin', 'super admin', 'sub-admin'].includes(user.role.toLowerCase())) && (
+                      <SelectItem value="Sub-Admin">Sub-Admin</SelectItem>
+                    )}
                     <SelectItem value="Employee">Employee</SelectItem>
                   </SelectContent>
                 </Select>
