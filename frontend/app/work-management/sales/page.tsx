@@ -1626,7 +1626,7 @@ export default function SalesPage() {
                       </Badge>
                     ) : (
                       <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">
-                        Next: {dayjs(lead.nextFollowUpDate).format("DD MMM")}
+                        Next: {dayjs(lead.nextFollowUpDate).format("DD MMM, hh:mm A")}
                       </span>
                     )}
                   </div>
