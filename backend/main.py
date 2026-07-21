@@ -1308,6 +1308,24 @@ async def delete_department(department_id: str, db=Depends(get_db)):
     await crud.delete_department(db, department_id)
     return {"message": "Department deleted successfully"}
 
+# SubDepartment Endpoints
+@app.get("/sub-departments", response_model=List[schemas.SubDepartment])
+async def read_sub_departments(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
+    return await crud.get_sub_departments(db, skip=skip, limit=limit)
+
+@app.post("/sub-departments", response_model=schemas.SubDepartment)
+async def create_sub_department(sub_department: schemas.SubDepartmentCreate, db=Depends(get_db)):
+    return await crud.create_sub_department(db, sub_department)
+
+@app.put("/sub-departments/{sub_department_id}", response_model=schemas.SubDepartment)
+async def update_sub_department(sub_department_id: str, sub_department_update: schemas.SubDepartmentUpdate, db=Depends(get_db)):
+    return await crud.update_sub_department(db, sub_department_id, sub_department_update)
+
+@app.delete("/sub-departments/{sub_department_id}")
+async def delete_sub_department(sub_department_id: str, db=Depends(get_db)):
+    await crud.delete_sub_department(db, sub_department_id)
+    return {"message": "SubDepartment deleted successfully"}
+
 # Designation Endpoints
 @app.get("/designations", response_model=List[schemas.Designation])
 async def read_designations(skip: int = 0, limit: int = 10000, db=Depends(get_db)):

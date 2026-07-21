@@ -103,6 +103,7 @@ const defaultFormData: EmployeeFormData = {
   aadharCard: '',
   panCard: '',
   department: '',
+  sub_department: '',
   designation: '',
   startTime: '',
   endTime: '',
@@ -162,11 +163,13 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
   const { user } = useUser()
   const { data, mutate, isLoading } = useApi<{ 
     departments: any[], 
+    subDepartments: any[],
     designations: any[], 
     roles: any[] 
   }>('/api/company-settings')
   
   const departments = data?.departments || []
+  const subDepartments = (data as any)?.subDepartments || []
   const designations = data?.designations || []
   const relations = data?.relations || []
   const documentTypes = (data as any)?.documentTypes || []
@@ -274,6 +277,13 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
   const handleChange = (field: keyof EmployeeFormData, value: any) => {
     setFormData((prev) => {
       const next = { ...prev, [field]: value }
+      if (field === 'department') {
+        next.sub_department = ''
+        next.designation = ''
+      }
+      if (field === 'sub_department') {
+        next.designation = ''
+      }
       if (field === 'noticePeriodDays' || field === 'noticePeriodStartDate' || field === 'hasNoticePeriod') {
         if (next.hasNoticePeriod && next.noticePeriodStartDate && next.noticePeriodDays) {
           const calculatedDate = calculateResignationDate(next.noticePeriodStartDate, next.noticePeriodDays, holidays)
@@ -512,7 +522,17 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
               options={departments.map((d: any) => ({ label: d.name, value: d.name }))} 
               placeholder="Select department" 
             />
-            <FormSelect key={`des-${designations.length}-${formData.department}`} label="Designation" id="designation" required value={formData.designation} onValueChange={(v: string) => handleChange('designation', v)} options={designations.filter((d: any) => d.department === formData.department).map((d: any) => ({ label: d.title, value: d.title }))} placeholder="Select designation" />
+            <FormSelect 
+              key={`subdept-${subDepartments.length}-${formData.department}`} 
+              label="Sub Department" 
+              id="sub_department" 
+              required
+              value={formData.sub_department || ''} 
+              onValueChange={(v: string) => handleChange('sub_department', v)} 
+              options={subDepartments.filter((d: any) => d.department === formData.department).map((d: any) => ({ label: d.name, value: d.name }))} 
+              placeholder="Select sub department" 
+            />
+            <FormSelect key={`des-${designations.length}-${formData.sub_department}`} label="Designation" id="designation" required value={formData.designation} onValueChange={(v: string) => handleChange('designation', v)} options={designations.filter((d: any) => d.sub_department === formData.sub_department).map((d: any) => ({ label: d.title, value: d.title }))} placeholder="Select designation" />
             
             <FormSelect 
               label="Status" 

@@ -1515,6 +1515,8 @@ async def update_department(db, department_id: str, department_update: schemas.D
         await db.clients.update_many({"department": old_name}, {"$set": {"department": new_name}})
         await db.tasks.update_many({"department": old_name}, {"$set": {"department": new_name}})
         await db.projects.update_many({"department": old_name}, {"$set": {"department": new_name}})
+        await db.designations.update_many({"department": old_name}, {"$set": {"department": new_name}})
+        await db.sub_departments.update_many({"department": old_name}, {"$set": {"department": new_name}})
         
     updated_doc = await db.departments.find_one({"_id": ObjectId(department_id)})
     return fix_id(updated_doc)
@@ -1523,11 +1525,61 @@ async def delete_department(db, department_id: str):
     await db.departments.delete_one({"_id": ObjectId(department_id)})
     return True
 
+# SubDepartment CRUD
+async def get_sub_departments(db, skip: int = 0, limit: int = 100):
+    cursor = db.sub_departments.find().sort("_id", -1).skip(skip).limit(limit)
+    rows = await cursor.to_list(length=limit)
+    result = []
+    for row in rows:
+        r = fix_id(row)
+        if 'department' not in r or r['department'] is None:
+            r['department'] = ''
+        result.append(r)
+    return result
+
+async def create_sub_department(db, sub_department: schemas.SubDepartmentCreate):
+    sub_department_dict = sub_department.dict()
+    result = await db.sub_departments.insert_one(sub_department_dict)
+    sub_department_dict["id"] = str(result.inserted_id)
+    if "_id" in sub_department_dict:
+        sub_department_dict.pop("_id")
+    return sub_department_dict
+
+async def update_sub_department(db, sub_department_id: str, sub_department_update: schemas.SubDepartmentUpdate):
+    update_data = sub_department_update.dict(exclude_unset=True)
+    
+    old_doc = await db.sub_departments.find_one({"_id": ObjectId(sub_department_id)})
+    
+    await db.sub_departments.update_one(
+        {"_id": ObjectId(sub_department_id)},
+        {"$set": update_data}
+    )
+    
+    if old_doc and "name" in update_data and old_doc.get("name") != update_data["name"]:
+        old_name = old_doc.get("name")
+        new_name = update_data["name"]
+        await db.employees.update_many({"sub_department": old_name}, {"$set": {"sub_department": new_name}})
+        await db.designations.update_many({"sub_department": old_name}, {"$set": {"sub_department": new_name}})
+        
+    updated_doc = await db.sub_departments.find_one({"_id": ObjectId(sub_department_id)})
+    return fix_id(updated_doc)
+
+async def delete_sub_department(db, sub_department_id: str):
+    await db.sub_departments.delete_one({"_id": ObjectId(sub_department_id)})
+    return True
+
+
 # Designation CRUD
 async def get_designations(db, skip: int = 0, limit: int = 100):
     cursor = db.designations.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
-    return [fix_id(row) for row in rows]
+    result = []
+    for row in rows:
+        r = fix_id(row)
+        if 'sub_department' not in r or r['sub_department'] is None:
+            r['sub_department'] = ''
+        result.append(r)
+    return result
 
 async def create_designation(db, designation: schemas.DesignationCreate):
     designation_dict = designation.dict()

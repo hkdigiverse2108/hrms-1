@@ -222,6 +222,8 @@ class EmployeeBase(BaseModel):
     password: Optional[str] = None
     dob: Optional[RobustDate] = None
     department: Optional[str] = None
+    sub_department: Optional[str] = ''
+
     designation: Optional[str] = None
     joinDate: Optional[RobustDate] = None
     status: Optional[str] = "active"
@@ -544,6 +546,20 @@ class DepartmentBase(BaseModel):
 class DepartmentCreate(DepartmentBase):
     pass
 
+class SubDepartmentBase(BaseModel):
+    name: str
+    department: Optional[str] = ''
+
+class SubDepartmentCreate(SubDepartmentBase):
+    pass
+
+class SubDepartmentUpdate(BaseModel):
+    name: Optional[str] = None
+    department: Optional[str] = None
+
+class SubDepartment(SubDepartmentBase):
+    id: str
+
 class DepartmentUpdate(BaseModel):
     name: Optional[str] = None
     head: Optional[str] = None
@@ -554,6 +570,7 @@ class Department(DepartmentBase):
 class DesignationBase(BaseModel):
     title: str
     department: str
+    sub_department: Optional[str] = ''
 
 class DesignationCreate(DesignationBase):
     pass
@@ -561,6 +578,7 @@ class DesignationCreate(DesignationBase):
 class DesignationUpdate(BaseModel):
     title: Optional[str] = None
     department: Optional[str] = None
+    sub_department: Optional[str] = None
 
 class Designation(DesignationBase):
     id: str
