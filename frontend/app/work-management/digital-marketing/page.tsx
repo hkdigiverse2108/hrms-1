@@ -1991,7 +1991,7 @@ export default function MarketingReportsPage() {
 
     // Filter by User's assigned projects if "My Tasks" is selected
     let matchesTaskType = true;
-    if ((taskFilterType === "my" || isRegularEmployee) && user?.id) {
+    if ((taskFilterType === "my") && user?.id) {
       const assocProj = projects.find(p => String(p.id) === String(r.projectId));
       if (assocProj) {
         const isOriginalAssignee = assocProj.assignedEmployeeId === user.id;
@@ -2025,7 +2025,7 @@ export default function MarketingReportsPage() {
       monthFilter.includes("all") || monthFilter.includes(r.month);
 
     let matchesTaskType = true;
-    if ((taskFilterType === "my" || isRegularEmployee) && user?.id) {
+    if ((taskFilterType === "my") && user?.id) {
       const assocProj = projects.find(p => String(p.id) === String(r.projectId));
       if (assocProj) {
         matchesTaskType = assocProj.assignedEmployeeId === user.id;
@@ -2660,7 +2660,7 @@ export default function MarketingReportsPage() {
                 />
               </div>
             </div>
-            {user && (['admin', 'super admin', 'superadmin', 'team leader'].includes(user.role?.toLowerCase() || '') || user.designation?.toLowerCase() === 'team leader') && (
+            {user && (
               <div className="space-y-1.5">
                 <Label className="text-xs text-slate-500">Task Scope</Label>
                 <div className="flex bg-slate-100 p-0.5 rounded-lg border h-9">
@@ -3032,7 +3032,7 @@ export default function MarketingReportsPage() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                 </div>
-                {user && (['admin', 'super admin', 'superadmin', 'team leader'].includes(user.role?.toLowerCase() || '') || user.designation?.toLowerCase() === 'team leader') && (
+                {user && (
                   <div className="flex bg-slate-100 p-0.5 rounded-lg border h-9">
                     <button
                       type="button"
@@ -3123,13 +3123,13 @@ export default function MarketingReportsPage() {
                 {(() => {
                   const filteredClients = clients.filter((c) => {
                     const matchesSearch = c.companyName?.toLowerCase().includes(searchQuery.toLowerCase()) || false;
-                    if (!isRegularEmployee) {
+                    if (taskFilterType === "all") {
                       return matchesSearch;
                     }
                     const clientProjs = projects.filter((p) => String(p.clientId) === String(c.id || (c as any)._id) && p.department?.toLowerCase() === "digital marketing");
                     const filteredProjs = clientProjs.filter((p) => {
                       if (p.status === "on-hold") return false;
-                      if ((taskFilterType === "my" || isRegularEmployee) && user?.id) {
+                      if (taskFilterType === "my" && user?.id) {
                         const isOriginalAssignee = p.assignedEmployeeId === user.id;
                         const isTransferredToMe = acceptedTransfers.some(t => 
                           String(t.taskId) === String(p.id) && 
