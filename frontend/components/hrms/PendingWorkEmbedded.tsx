@@ -451,27 +451,28 @@ export function PendingWorkEmbedded({
       };
 
       const canSeeTask = (stage: string) => {
-        if (!isEmployeeOrIntern) return true;
         const uId = user?.id;
         if (!uId) return false;
         
         const transfer = incomingRequests.find(r => r.taskId === (entry.id || entry._id) && r.stage === (stage === 'Editing' && entry.postReel === 'Post' ? 'Post/Graphics' : stage) && r.status === 'Accepted');
         
-        if (stage === 'Script') return String(transfer ? transfer.receiverId : (entry.assignedScriptwriterId || project.assignedScriptwriterId || client?.assignedScriptwriterId)) === String(uId);
-        if (stage === 'Shoot') return String(transfer ? transfer.receiverId : (entry.assignedShooterId || project.assignedShooterId || client?.assignedShooterId)) === String(uId);
-        if (stage === 'Caption') return String(transfer ? transfer.receiverId : (entry.assignedCaptionWriterId || project.assignedCaptionWriterId || client?.assignedCaptionWriterId)) === String(uId);
-        if (stage === 'Thumbnail') return String(transfer ? transfer.receiverId : (entry.assignedThumbnailDesignerId || project.assignedThumbnailDesignerId || client?.assignedThumbnailDesignerId)) === String(uId);
-        if (stage === 'Editing') {
+        let isAssignedToMe = false;
+        if (stage === 'Script') isAssignedToMe = String(transfer ? transfer.receiverId : (entry.assignedScriptwriterId || project.assignedScriptwriterId || client?.assignedScriptwriterId)) === String(uId);
+        else if (stage === 'Shoot') isAssignedToMe = String(transfer ? transfer.receiverId : (entry.assignedShooterId || project.assignedShooterId || client?.assignedShooterId)) === String(uId);
+        else if (stage === 'Caption') isAssignedToMe = String(transfer ? transfer.receiverId : (entry.assignedCaptionWriterId || project.assignedCaptionWriterId || client?.assignedCaptionWriterId)) === String(uId);
+        else if (stage === 'Thumbnail') isAssignedToMe = String(transfer ? transfer.receiverId : (entry.assignedThumbnailDesignerId || project.assignedThumbnailDesignerId || client?.assignedThumbnailDesignerId)) === String(uId);
+        else if (stage === 'Editing') {
           if (entry.postReel === 'Post') {
-            return String(transfer ? transfer.receiverId : (entry.assignedPostDesignerId || project.assignedPostDesignerId || client?.assignedPostDesignerId)) === String(uId);
+            isAssignedToMe = String(transfer ? transfer.receiverId : (entry.assignedPostDesignerId || project.assignedPostDesignerId || client?.assignedPostDesignerId)) === String(uId);
           } else {
-            return String(transfer ? transfer.receiverId : (entry.assignedReelEditorId || project.assignedReelEditorId || client?.assignedReelEditorId)) === String(uId);
+            isAssignedToMe = String(transfer ? transfer.receiverId : (entry.assignedReelEditorId || project.assignedReelEditorId || client?.assignedReelEditorId)) === String(uId);
           }
         }
-        if (stage === 'Approval') return String(transfer ? transfer.receiverId : (entry.assignedApproverId || project.assignedApproverId || client?.assignedApproverId)) === String(uId);
-        if (stage === 'Posting') return String(transfer ? transfer.receiverId : (entry.assignedPosterId || project.assignedPosterId || client?.assignedPosterId)) === String(uId);
+        else if (stage === 'Approval') isAssignedToMe = String(transfer ? transfer.receiverId : (entry.assignedApproverId || project.assignedApproverId || client?.assignedApproverId)) === String(uId);
+        else if (stage === 'Posting') isAssignedToMe = String(transfer ? transfer.receiverId : (entry.assignedPosterId || project.assignedPosterId || client?.assignedPosterId)) === String(uId);
         
-        return true;
+        if (!isEmployeeOrIntern && type === 'all') return true;
+        return isAssignedToMe;
       };
 
       if (entry.postReel !== 'Post' && entry.scriptDate && !entry.scriptLink && canSeeTask('Script')) tasks.push(enrich('Script', entry.scriptDate, 'scripts'));
@@ -482,7 +483,7 @@ export function PendingWorkEmbedded({
         const bpIds = Array.isArray(bpIdsRaw) ? bpIdsRaw : (typeof bpIdsRaw === 'string' ? bpIdsRaw.split(',').map((id: string) => id.trim()).filter(Boolean) : []);
         bpIds.forEach((bpId: string) => {
           const isAssignedToMe = user?.id === bpId;
-          if (!isEmployeeOrIntern || isAssignedToMe) {
+          if ((!isEmployeeOrIntern && type === 'all') || isAssignedToMe) {
              const assignerId = project.teamLeaderId || client?.teamLeaderId;
              const assigner = employees.find((e: any) => e.id === assignerId);
              const assignee = employees.find((e: any) => e.id === bpId);
@@ -566,7 +567,7 @@ export function PendingWorkEmbedded({
       else if (ow.status === 'Approved') canSee = isAssignee || isAssigner;
 
       const isManagerOrAdmin = ['Team Leader', 'Admin', 'HR', 'Manager', 'Social Media Manager'].includes(user?.role) || user?.role?.toLowerCase() === 'admin';
-      if (isManagerOrAdmin || isAssignee || isAssigner) {
+      if ((isManagerOrAdmin && type === 'all') || isAssignee || isAssigner) {
         if (type === 'all' || (type === 'completed-work' ? ow.status === 'Approved' : ow.status !== 'Approved')) {
           
           const assignee = employees.find((e: any) => e.id === ow.assigneeId);
@@ -603,7 +604,7 @@ export function PendingWorkEmbedded({
       
       const isManagerOrAdmin = ['Team Leader', 'Admin', 'HR', 'Manager', 'Social Media Manager'].includes(user?.role) || user?.role?.toLowerCase() === 'admin';
       
-      if (isManagerOrAdmin || isAssignee) {
+      if ((isManagerOrAdmin && type === 'all') || isAssignee) {
         const deadlineStr = typeof project.nextFollowupDate === 'string' && project.nextFollowupDate.includes('T') 
           ? project.nextFollowupDate.split('T')[0] 
           : String(project.nextFollowupDate);
@@ -640,7 +641,7 @@ export function PendingWorkEmbedded({
       // 1. WhatsApp Group
       const waAssigneeId = project.assignedWhatsappGroupCreatorId || client.assignedWhatsappGroupCreatorId;
       if (waAssigneeId && !client.whatsappGroup) {
-        if (isManagerOrAdmin || waAssigneeId === uId) {
+        if ((isManagerOrAdmin && type === 'all') || waAssigneeId === uId) {
           const assignee = employees.find((e: any) => e.id === waAssigneeId);
           tasks.push({
             id: `${project.id}-whatsapp`,
@@ -662,7 +663,7 @@ export function PendingWorkEmbedded({
       // 2. Greetings Msg
       const greetingAssigneeId = project.assignedGreetingsMsgSenderId || client.assignedGreetingsMsgSenderId;
       if (greetingAssigneeId && !client.greetingsMsgSent) {
-        if (isManagerOrAdmin || greetingAssigneeId === uId) {
+        if ((isManagerOrAdmin && type === 'all') || greetingAssigneeId === uId) {
           const assignee = employees.find((e: any) => e.id === greetingAssigneeId);
           tasks.push({
             id: `${project.id}-greetings`,
@@ -684,7 +685,7 @@ export function PendingWorkEmbedded({
       // 3. Meetings
       const meetingAssigneeId = project.assignedMeetingsAssigneeId || client.assignedMeetingsAssigneeId;
       if (meetingAssigneeId && (!client.meetings || client.meetings.length === 0)) {
-        if (isManagerOrAdmin || meetingAssigneeId === uId) {
+        if ((isManagerOrAdmin && type === 'all') || meetingAssigneeId === uId) {
           const assignee = employees.find((e: any) => e.id === meetingAssigneeId);
           tasks.push({
             id: `${project.id}-meetings`,
@@ -707,7 +708,7 @@ export function PendingWorkEmbedded({
       const ccAssigneeId = project.assignedContentCalendarCreatorId || client.assignedContentCalendarCreatorId;
       const ccCreated = entries.some(e => e.clientId === project.clientId || e.projectId === project.id);
       if (ccAssigneeId && !ccCreated) {
-        if (isManagerOrAdmin || ccAssigneeId === uId) {
+        if ((isManagerOrAdmin && type === 'all') || ccAssigneeId === uId) {
           const assignee = employees.find((e: any) => e.id === ccAssigneeId);
           tasks.push({
             id: `${project.id}-cc-create`,
