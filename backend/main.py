@@ -2486,11 +2486,7 @@ async def create_lead(lead: schemas.LeadCreate, db=Depends(get_db)):
 
 @app.post("/leads/bulk", response_model=List[schemas.Lead])
 async def create_leads_bulk(leads: List[schemas.LeadCreate], db=Depends(get_db)):
-    results = []
-    for lead in leads:
-        res = await crud.create_lead(db, lead)
-        results.append(res)
-    return results
+    return await crud.create_leads_bulk(db, leads)
 
 @app.put("/leads/{lead_id}", response_model=schemas.Lead)
 async def update_lead(lead_id: str, lead_update: schemas.LeadUpdate, db=Depends(get_db)):
