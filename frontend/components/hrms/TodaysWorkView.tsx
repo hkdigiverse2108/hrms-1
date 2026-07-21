@@ -78,34 +78,30 @@ export function TodaysWorkView({
       const dates = getPastDates(6); // Today + past 6 days
       dates.forEach(dateStr => {
         const report = dailyReports.find(r => r.clientId === client.id && normalizeDate(r.date) === dateStr);
-        const hasDataFill = (() => {
-          if (!report) return false;
-          const isFilled = (val: any) => val !== undefined && val !== null && val !== 0 && val !== "" && val !== "0" && val !== 0.0;
-          const isClientIssue = report.remarks && report.remarks.toString().includes("[CLIENT ISSUE]");
-          return (
-            isFilled(report.reach) ||
-            isFilled(report.impression) ||
-            isFilled(report.leads) ||
-            isFilled(report.spend) ||
-            isFilled(report.revenue) ||
-            isFilled(report.followers) ||
-            isFilled(report.cpl) ||
-            (report.remarks && report.remarks.toString().trim() !== "" && !isClientIssue)
-          );
-        })();
+        const isFilled = (val: any) => val !== undefined && val !== null && val !== 0 && val !== "" && val !== "0" && val !== 0.0;
+        const isClientIssue = report?.remarks && report.remarks.toString().includes("[CLIENT ISSUE]");
 
         const metricsRecord = projectRemarks.find(r => r.projectId === proj.id && normalizeDate(r.date) === dateStr);
         const hasMetrics = !!metricsRecord && (!metricsRecord.userRemark?.includes("[CLIENT ISSUE]") && !metricsRecord.clientRemark?.includes("[CLIENT ISSUE]") && !metricsRecord.remark?.includes("[CLIENT ISSUE]"));
 
         let dayTasks = [
-          { id: "data_fill", name: "Data Fill", assigneeId: proj.assignedEmployeeId, date: dateStr, existingRemark: report?.remarks },
+          { id: "reach", name: "Reach", assigneeId: proj.assignedEmployeeId, date: dateStr, existingRemark: report?.remarks },
+          { id: "impression", name: "Impressions", assigneeId: proj.assignedEmployeeId, date: dateStr, existingRemark: report?.remarks },
+          { id: "leads", name: "Leads", assigneeId: proj.assignedEmployeeId, date: dateStr, existingRemark: report?.remarks },
+          { id: "spend", name: "Spend", assigneeId: proj.assignedEmployeeId, date: dateStr, existingRemark: report?.remarks },
+          { id: "cpl", name: "Cost Metric", assigneeId: proj.assignedEmployeeId, date: dateStr, existingRemark: report?.remarks },
           { id: "revenue", name: "Revenue", assigneeId: proj.revenueAssigneeId, date: dateStr, existingRemark: metricsRecord?.remark },
           { id: "follower", name: "Follower", assigneeId: proj.followerAssigneeId, date: dateStr, existingRemark: metricsRecord?.remark },
         ].filter(t => t.assigneeId);
 
-        if (hasDataFill) {
-          dayTasks = dayTasks.filter(t => t.id !== "data_fill");
+        if (report && !isClientIssue) {
+          if (isFilled(report.reach)) dayTasks = dayTasks.filter(t => t.id !== "reach");
+          if (isFilled(report.impression)) dayTasks = dayTasks.filter(t => t.id !== "impression");
+          if (isFilled(report.leads)) dayTasks = dayTasks.filter(t => t.id !== "leads");
+          if (isFilled(report.spend)) dayTasks = dayTasks.filter(t => t.id !== "spend");
+          if (isFilled(report.cpl)) dayTasks = dayTasks.filter(t => t.id !== "cpl");
         }
+        
         if (hasMetrics) {
           dayTasks = dayTasks.filter(t => !["revenue", "follower"].includes(t.id));
         }

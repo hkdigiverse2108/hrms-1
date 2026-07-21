@@ -1743,7 +1743,7 @@ export default function MarketingReportsPage() {
       const project = projects.find(p => String(p.id) === String(projectId));
       
       let res;
-      if (taskId === "data_fill") {
+      if (["reach", "impression", "leads", "spend", "cpl"].includes(taskId)) {
         res = await fetch(`${API_URL}/marketing/reports/daily`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -2979,7 +2979,7 @@ export default function MarketingReportsPage() {
               setActiveTab("daily");
               setSelectedClientFilter(client.id);
               
-              if (taskId === "data_fill") {
+              if (["reach", "impression", "leads", "spend", "cpl"].includes(taskId)) {
                 setShowAddForm(true);
                 setQuickAddData({
                   date: dateStr || new Date().toISOString().split("T")[0],
