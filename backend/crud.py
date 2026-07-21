@@ -4749,6 +4749,24 @@ def format_field_changes(old_doc: dict, update_data: dict, entity_prefix: str = 
     return prefix_str + ", ".join(details), diffs
 
 # Activity Log CRUD
+async def resolve_performer(db, current_user) -> tuple:
+    """Returns (user_id, user_name) based on current_user token payload."""
+    if not current_user:
+        return "System", "System User"
+    
+    user_id = current_user.get("sub")
+    if not user_id:
+        return "Unknown", "Unknown User"
+        
+    try:
+        user = await db.employees.find_one({"_id": ObjectId(user_id) if len(user_id) == 24 else user_id})
+        if user:
+            name = f"{user.get('firstName', '')} {user.get('lastName', '')}".strip()
+            return user_id, name or "Unknown User"
+    except Exception:
+        pass
+    return user_id, "Unknown User"
+
 async def log_activity(db, action: str, performedBy: str, userName: str, details: str, diffs: list = None, taskId: str = None, projectId: str = None, clientId: str = None, leadId: str = None, dailyReportId: str = None, monthlyReportId: str = None, applicationId: str = None, assetId: str = None, categoryId: str = None, employeeId: str = None, leaveId: str = None, attendanceId: str = None, remarkId: str = None):
     log_entry = {
         "action": action,
@@ -4833,6 +4851,38 @@ async def get_all_activity_logs(db, performedBy: str = None, action: str = None,
             {"action": {"$regex": search, "$options": "i"}},
             {"userName": {"$regex": search, "$options": "i"}},
             {"performedBy": {"$regex": search, "$options": "i"}}
+        ]
+    if startDate or endDate:
+        time_query = {}
+        if startDate:
+            time_query["$gte"] = f"{startDate} 00:00:00"
+        if endDate:
+            time_query["$lte"] = f"{endDate} 23:59:59"
+        query["timestamp"] = time_query
+
+    cursor = db.task_logs.find(query).sort("timestamp", -1).skip(skip).limit(limit)
+    total = await db.task_logs.count_documents(query)
+    rows = await cursor.to_list(length=limit)
+    return [fix_id(row) for row in rows], total
+
+
+async def get_finance_activity_logs(db, performedBy: str = None, action: str = None, search: str = None, startDate: str = None, endDate: str = None, limit: int = 50, skip: int = 0):
+    query = {
+        "action": {"$regex": "^Finance ", "$options": "i"}
+    }
+    if performedBy:
+        query["userName"] = {"$regex": performedBy, "$options": "i"}
+    if action:
+        query["action"] = action
+    if search:
+        query["$and"] = [
+            {"action": {"$regex": "^Finance ", "$options": "i"}},
+            {"$or": [
+                {"details": {"$regex": search, "$options": "i"}},
+                {"action": {"$regex": search, "$options": "i"}},
+                {"userName": {"$regex": search, "$options": "i"}},
+                {"performedBy": {"$regex": search, "$options": "i"}}
+            ]}
         ]
     if startDate or endDate:
         time_query = {}
@@ -9292,6 +9342,421 @@ async def update_gallery(db, gallery_id: str, update: dict):
 async def delete_gallery(db, gallery_id: str):
     return await delete_item(db, "gallery", gallery_id)
 
+# --- Company Finance CRUD ---
+async def get_next_expense_number(db, date_str: str = None):
+    try:
+        if date_str:
+            try:
+                # Support "YYYY-MM-DD" or similar ISO strings
+                dt = datetime.strptime(date_str.split("T")[0], "%Y-%m-%d")
+                prefix = dt.strftime("%y%m")
+            except Exception:
+                now = datetime.now(pytz.timezone('Asia/Kolkata'))
+                prefix = now.strftime("%y%m")
+        else:
+            now = datetime.now(pytz.timezone('Asia/Kolkata'))
+            prefix = now.strftime("%y%m")
+        
+        # Find highest expenseNo starting with this prefix
+        cursor = db.company_finance_transactions.find({"expenseNo": {"$regex": f"^{prefix}"}})
+        max_seq = 0
+        async for doc in cursor:
+            exp_no = str(doc.get("expenseNo", ""))
+            if exp_no.startswith(prefix) and len(exp_no) >= len(prefix) + 1:
+                try:
+                    seq = int(exp_no[len(prefix):])
+                    if seq > max_seq:
+                        max_seq = seq
+                except ValueError:
+                    pass
+        
+        next_seq = max_seq + 1
+        return f"{prefix}{next_seq:03d}"
+    except Exception as e:
+        print(f"Error generating expense number: {e}")
+        import random
+        now = datetime.now(pytz.timezone('Asia/Kolkata'))
+        prefix = now.strftime("%y%m")
+        return f"{prefix}{random.randint(100, 999)}"
+
+async def get_finance_transactions(db, payment_method: str = None, type_filter: str = None, search: str = None):
+    transactions = []
+    
+    # 1. Fetch manual transactions from company_finance_transactions
+    query = {}
+    if payment_method:
+        query["paymentMethod"] = payment_method.lower()
+    if type_filter:
+        query["type"] = type_filter.lower()
+        
+    cursor = db.company_finance_transactions.find(query)
+    async for doc in cursor:
+        tx = fix_id(doc)
+        transactions.append(tx)
+        
+    # 2. Auto-sync Invoices into Credit Transactions (if type_filter is None or 'credit')
+    if not type_filter or type_filter.lower() == "credit":
+        try:
+            inv_cursor = db.invoices.find({})
+            async for inv in inv_cursor:
+                # Skip Proforma invoices
+                if inv.get("invoiceType") == "Proforma Invoice":
+                    continue
+                    
+                inv_id = str(inv.get("_id") or inv.get("id", ""))
+                if not inv_id:
+                    continue
+                    
+                # Determine payment method
+                pm_str = str(inv.get("paymentMode", "")).lower()
+                inv_payment_method = "cash" if "cash" in pm_str else "bank"
+                
+                if payment_method and inv_payment_method != payment_method.lower():
+                    continue
+                    
+                # Extract descriptions & services from line items
+                line_items = inv.get("lineItems", [])
+                descs = [li.get("description", "") for li in line_items if li.get("description")]
+                descriptions = ", ".join(descs) if descs else inv.get("clientName", "Invoice")
+                
+                srvs = [li.get("subDescription", "") or li.get("description", "") for li in line_items if li.get("subDescription") or li.get("description")]
+                services = ", ".join(srvs) if srvs else "Services"
+                
+                synced_tx = {
+                    "id": f"inv_{inv_id}",
+                    "_id": f"inv_{inv_id}",
+                    "description": inv.get("clientName", "General Client"),
+                    "descriptions": inv.get("clientName", "General Client"),
+                    "amount": float(inv.get("total", 0.0) or 0.0),
+                    "type": "credit",
+                    "category": inv.get("clientDepartment") or inv.get("category") or "General",
+                    "paymentMethod": inv_payment_method,
+                    "date": inv.get("issueDate", "") or inv.get("timestamp", ""),
+                    "invoiceNumber": inv.get("invoiceNumber", f"INV-{inv_id[:6]}"),
+                    "services": services,
+                    "remarks": inv.get("notes", "") or inv.get("remarks", "") or f"Status: {inv.get('status', 'Pending')}",
+                    "isSyncedInvoice": True,
+                    "invoiceId": inv_id
+                }
+                transactions.append(synced_tx)
+        except Exception as e:
+            print(f"Error syncing invoices into finance transactions: {e}")
+            
+    # 3. Apply search filter in memory if provided
+    if search:
+        s_lower = search.lower()
+        filtered = []
+        for tx in transactions:
+            if (
+                s_lower in str(tx.get("description", "")).lower() or
+                s_lower in str(tx.get("descriptions", "")).lower() or
+                s_lower in str(tx.get("category", "")).lower() or
+                s_lower in str(tx.get("invoiceNumber", "")).lower() or
+                s_lower in str(tx.get("expenseNo", "")).lower() or
+                s_lower in str(tx.get("things", "")).lower() or
+                s_lower in str(tx.get("narrative", "")).lower() or
+                s_lower in str(tx.get("remarks", "")).lower()
+            ):
+                filtered.append(tx)
+        transactions = filtered
+        
+    # Sort by date / id (newest first)
+    transactions.sort(key=lambda x: str(x.get("date") or x.get("id") or ""), reverse=True)
+    return transactions
+
+async def resequence_all_expenses(db):
+    try:
+        cursor = db.company_finance_transactions.find({"type": "debit"})
+        all_debits = []
+        async for tx in cursor:
+            all_debits.append(tx)
+            
+        from collections import defaultdict
+        grouped = defaultdict(list)
+        
+        for tx in all_debits:
+            tx_date = tx.get("date")
+            if tx_date:
+                try:
+                    dt = datetime.strptime(tx_date.split("T")[0], "%Y-%m-%d")
+                    prefix = dt.strftime("%y%m")
+                    grouped[prefix].append(tx)
+                except Exception:
+                    pass
+                    
+        for prefix, txs in grouped.items():
+            def sort_key(t):
+                d = t.get("date") or ""
+                return (d, str(t.get("_id")))
+                
+            txs.sort(key=sort_key)
+            
+            for idx, tx in enumerate(txs):
+                new_exp_no = f"{prefix}{idx + 1:03d}"
+                if tx.get("expenseNo") != new_exp_no:
+                    await db.company_finance_transactions.update_one(
+                        {"_id": tx["_id"]},
+                        {"$set": {"expenseNo": new_exp_no}}
+                    )
+    except Exception as e:
+        print(f"Error during resequencing: {e}")
+
+async def create_finance_transaction(db, tx_data: dict, current_user=None):
+    if not tx_data.get("date"):
+        now = datetime.now(pytz.timezone('Asia/Kolkata'))
+        tx_data["date"] = now.strftime("%Y-%m-%d")
+
+    if tx_data.get("type") == "debit" and (not tx_data.get("expenseNo") or str(tx_data.get("expenseNo")).strip() == ""):
+        tx_data["expenseNo"] = await get_next_expense_number(db, tx_data.get("date"))
+        
+    result = await db.company_finance_transactions.insert_one(tx_data)
+    if tx_data.get("type") == "debit":
+        await resequence_all_expenses(db)
+    created = await db.company_finance_transactions.find_one({"_id": result.inserted_id})
+    
+    # Log activity
+    performed_by_id, performed_by_name = await resolve_performer(db, current_user)
+    tx_type = tx_data.get("type", "transaction").capitalize()
+    details = f"{tx_type} transaction created: {tx_data.get('category', 'General')} - {tx_data.get('description', '')} (Amount: {tx_data.get('amount')}, Method: {tx_data.get('paymentMethod')})"
+    await log_activity(db, "Finance Transaction Created", performed_by_id, performed_by_name, details)
+    
+    return fix_id(created)
+
+async def update_finance_transaction(db, tx_id: str, update_data: dict, current_user=None):
+    # Remove None values
+    clean_update = {k: v for k, v in update_data.items() if v is not None}
+    if not clean_update:
+        return await get_finance_transaction_by_id(db, tx_id)
+        
+    performed_by_id, performed_by_name = await resolve_performer(db, current_user)
+    
+    if tx_id.startswith("inv_"):
+        # If updating a synced invoice, update the underlying invoice notes/remarks/clientName
+        inv_id = tx_id[4:]
+        existing = await get_finance_transaction_by_id(db, tx_id)
+        
+        inv_update = {}
+        if "category" in clean_update:
+            inv_update["clientName"] = clean_update["category"]
+        if "remarks" in clean_update:
+            inv_update["notes"] = clean_update["remarks"]
+        if "amount" in clean_update:
+            inv_update["total"] = float(clean_update["amount"])
+            
+        if inv_update:
+            try:
+                await db.invoices.update_one({"_id": ObjectId(inv_id)}, {"$set": inv_update})
+                if existing:
+                    log_details, diffs = format_field_changes(existing, clean_update, f"Synced Invoice Transaction '{tx_id}'")
+                    await log_activity(db, "Finance Transaction Updated", performed_by_id, performed_by_name, log_details, diffs=diffs)
+            except Exception as e:
+                print(f"Error updating synced invoice: {e}")
+        return await get_finance_transaction_by_id(db, tx_id)
+    else:
+        try:
+            existing = await db.company_finance_transactions.find_one({"_id": ObjectId(tx_id)})
+            await db.company_finance_transactions.update_one({"_id": ObjectId(tx_id)}, {"$set": clean_update})
+            await resequence_all_expenses(db)
+            updated = await db.company_finance_transactions.find_one({"_id": ObjectId(tx_id)})
+            
+            if existing:
+                log_details, diffs = format_field_changes(existing, clean_update, f"Finance Transaction")
+                await log_activity(db, "Finance Transaction Updated", performed_by_id, performed_by_name, log_details, diffs=diffs)
+                
+            return fix_id(updated)
+        except Exception as e:
+            print(f"Error updating transaction {tx_id}: {e}")
+            return None
+
+async def get_finance_transaction_by_id(db, tx_id: str):
+    if tx_id.startswith("inv_"):
+        inv_id = tx_id[4:]
+        try:
+            inv = await db.invoices.find_one({"_id": ObjectId(inv_id)})
+            if inv:
+                line_items = inv.get("lineItems", [])
+                descs = [li.get("description", "") for li in line_items if li.get("description")]
+                descriptions = ", ".join(descs) if descs else inv.get("clientName", "Invoice")
+                srvs = [li.get("subDescription", "") or li.get("description", "") for li in line_items if li.get("subDescription") or li.get("description")]
+                services = ", ".join(srvs) if srvs else "Services"
+                return {
+                    "id": tx_id,
+                    "_id": tx_id,
+                    "description": descriptions,
+                    "descriptions": descriptions,
+                    "amount": float(inv.get("total", 0.0) or 0.0),
+                    "type": "credit",
+                    "category": inv.get("clientName", "General"),
+                    "paymentMethod": "cash" if "cash" in str(inv.get("paymentMode", "")).lower() else "bank",
+                    "date": inv.get("issueDate", "") or inv.get("timestamp", ""),
+                    "invoiceNumber": inv.get("invoiceNumber", f"INV-{inv_id[:6]}"),
+                    "services": services,
+                    "remarks": inv.get("notes", "") or inv.get("remarks", "") or f"Status: {inv.get('status', 'Pending')}",
+                    "isSyncedInvoice": True,
+                    "invoiceId": inv_id
+                }
+        except Exception as e:
+            print(f"Error fetching synced invoice by id: {e}")
+        return None
+    else:
+        try:
+            doc = await db.company_finance_transactions.find_one({"_id": ObjectId(tx_id)})
+            return fix_id(doc) if doc else None
+        except Exception:
+            return None
+
+async def delete_finance_transaction(db, tx_id: str, current_user=None):
+    performed_by_id, performed_by_name = await resolve_performer(db, current_user)
+    if tx_id.startswith("inv_"):
+        inv_id = tx_id[4:]
+        try:
+            existing = await get_finance_transaction_by_id(db, tx_id)
+            res = await db.invoices.delete_one({"_id": ObjectId(inv_id)})
+            if res.deleted_count > 0 and existing:
+                details = f"Deleted synced invoice transaction: {existing.get('category')} - {existing.get('description')} (Amount: {existing.get('amount')})"
+                await log_activity(db, "Finance Transaction Deleted", performed_by_id, performed_by_name, details)
+            return res.deleted_count > 0
+        except Exception as e:
+            print(f"Error deleting synced invoice: {e}")
+            return False
+    else:
+        try:
+            tx = await db.company_finance_transactions.find_one({"_id": ObjectId(tx_id)})
+            res = await db.company_finance_transactions.delete_one({"_id": ObjectId(tx_id)})
+            if res.deleted_count > 0:
+                if tx and tx.get("type") == "debit":
+                    await resequence_all_expenses(db)
+                if tx:
+                    tx_type = tx.get("type", "transaction").capitalize()
+                    details = f"Deleted {tx_type.lower()} transaction: {tx.get('category')} - {tx.get('description')} (Amount: {tx.get('amount')})"
+                    await log_activity(db, "Finance Transaction Deleted", performed_by_id, performed_by_name, details)
+                return True
+            return False
+        except Exception:
+            return False
+
+async def get_finance_balances(db):
+    doc = await db.company_finance_balances.find_one({"year": "Global"})
+    if not doc:
+        default_bal = {"bankOpeningBalance": 0.0, "cashOpeningBalance": 0.0, "year": "Global"}
+        await db.company_finance_balances.insert_one(default_bal)
+        doc = await db.company_finance_balances.find_one({"year": "Global"})
+    return fix_id(doc)
+
+async def update_finance_balances(db, balance_data: dict, current_user=None):
+    existing = await db.company_finance_balances.find_one({"year": "Global"})
+    clean_data = {k: float(v) if k in ["bankOpeningBalance", "cashOpeningBalance"] else v for k, v in balance_data.items() if v is not None}
+    await db.company_finance_balances.update_one(
+        {"year": "Global"},
+        {"$set": clean_data},
+        upsert=True
+    )
+    doc = await db.company_finance_balances.find_one({"year": "Global"})
+    
+    performed_by_id, performed_by_name = await resolve_performer(db, current_user)
+    log_details, diffs = format_field_changes(existing, clean_data, f"Finance Balances")
+    await log_activity(db, "Finance Balances Updated", performed_by_id, performed_by_name, log_details, diffs=diffs)
+    
+    return fix_id(doc)
+
+async def get_finance_plans(db):
+    return await get_items(db, "company_finance_plans", 0, 1000)
+
+async def create_finance_plan(db, plan_data: dict, current_user=None):
+    created = await create_item(db, "company_finance_plans", plan_data)
+    performed_by_id, performed_by_name = await resolve_performer(db, current_user)
+    details = f"Created finance plan for category '{plan_data.get('category')}' with amount {plan_data.get('amount')}"
+    await log_activity(db, "Finance Plan Created", performed_by_id, performed_by_name, details)
+    return created
+
+async def update_finance_plan(db, plan_id: str, update_data: dict, current_user=None):
+    existing = await db.company_finance_plans.find_one({"_id": ObjectId(plan_id) if len(plan_id) == 24 else plan_id})
+    updated = await update_item(db, "company_finance_plans", plan_id, update_data)
+    performed_by_id, performed_by_name = await resolve_performer(db, current_user)
+    if existing:
+        log_details, diffs = format_field_changes(existing, update_data, f"Finance Plan")
+        await log_activity(db, "Finance Plan Updated", performed_by_id, performed_by_name, log_details, diffs=diffs)
+    return updated
+
+async def delete_finance_plan(db, plan_id: str, current_user=None):
+    existing = await db.company_finance_plans.find_one({"_id": ObjectId(plan_id) if len(plan_id) == 24 else plan_id})
+    deleted = await delete_item(db, "company_finance_plans", plan_id)
+    performed_by_id, performed_by_name = await resolve_performer(db, current_user)
+    if deleted and existing:
+        details = f"Deleted finance plan for category '{existing.get('category')}' with amount {existing.get('amount')}"
+        await log_activity(db, "Finance Plan Deleted", performed_by_id, performed_by_name, details)
+    return deleted
+
+async def get_monthly_plan(db, month: str):
+    doc = await db.company_finance_monthly_plans.find_one({"month": month})
+    if not doc:
+        return {"month": month, "values": {}}
+    return fix_id(doc)
+
+async def save_monthly_plan(db, month: str, values: dict, current_user=None):
+    existing = await db.company_finance_monthly_plans.find_one({"month": month})
+    await db.company_finance_monthly_plans.update_one(
+        {"month": month},
+        {"$set": {"month": month, "values": values}},
+        upsert=True
+    )
+    doc = await db.company_finance_monthly_plans.find_one({"month": month})
+    
+    performed_by_id, performed_by_name = await resolve_performer(db, current_user)
+    if existing:
+        log_details, diffs = format_field_changes(existing, {"values": values}, f"Monthly Plan for {month}")
+        await log_activity(db, "Finance Monthly Plan Saved", performed_by_id, performed_by_name, log_details, diffs=diffs)
+    else:
+        details = f"Saved initial monthly plan values for {month}"
+        await log_activity(db, "Finance Monthly Plan Saved", performed_by_id, performed_by_name, details)
+        
+    return fix_id(doc)
+
+async def get_finance_summary(db):
+    all_txs = await get_finance_transactions(db)
+    balances = await get_finance_balances(db)
+    
+    total_income = sum(float(tx.get("amount", 0.0) or 0.0) for tx in all_txs if tx.get("type") == "credit")
+    total_expenses = sum(float(tx.get("amount", 0.0) or 0.0) for tx in all_txs if tx.get("type") == "debit")
+    net_balance = total_income - total_expenses
+    
+    bank_opening = float(balances.get("bankOpeningBalance", 0.0) or 0.0)
+    cash_opening = float(balances.get("cashOpeningBalance", 0.0) or 0.0)
+    
+    bank_txs = [tx for tx in all_txs if tx.get("paymentMethod", "").lower() == "bank"]
+    cash_txs = [tx for tx in all_txs if tx.get("paymentMethod", "").lower() == "cash"]
+    
+    bank_credit = sum(float(tx.get("amount", 0.0) or 0.0) for tx in bank_txs if tx.get("type") == "credit")
+    bank_debit = sum(float(tx.get("amount", 0.0) or 0.0) for tx in bank_txs if tx.get("type") == "debit")
+    bank_closing = bank_opening + bank_credit - bank_debit
+    
+    cash_credit = sum(float(tx.get("amount", 0.0) or 0.0) for tx in cash_txs if tx.get("type") == "credit")
+    cash_debit = sum(float(tx.get("amount", 0.0) or 0.0) for tx in cash_txs if tx.get("type") == "debit")
+    cash_in_hand = cash_opening + cash_credit - cash_debit
+    
+    # Calculate pending payments from invoices
+    pending_payments = 0.0
+    try:
+        inv_cursor = db.invoices.find({"status": {"$in": ["Pending", "Overdue"]}})
+        async for inv in inv_cursor:
+            if inv.get("invoiceType") != "Proforma Invoice":
+                pending_payments += float(inv.get("total", 0.0) or 0.0)
+    except Exception as e:
+        print(f"Error calculating pending payments: {e}")
+        
+    return {
+        "totalIncome": total_income,
+        "totalExpenses": total_expenses,
+        "netBalance": net_balance,
+        "pendingPayments": pending_payments,
+        "bankOpeningBalance": bank_opening,
+        "bankClosingBalance": bank_closing,
+        "cashOpeningBalance": cash_opening,
+        "cashInHand": cash_in_hand,
+        "incomeTrend": 12.5,
+        "expenseTrend": -4.2
+    }
+
 # --- Task Presets CRUD ---
 async def get_task_presets(db, skip: int = 0, limit: int = 100):
     return await get_items(db, "task_presets", skip, limit)
@@ -9360,6 +9825,99 @@ async def delete_research(db, research_id: str):
     from bson import ObjectId
     result = await db.research.delete_one({"_id": ObjectId(research_id)})
     return result.deleted_count > 0
+
+# --- Client Transactions ---
+async def get_client_transactions(db):
+    cursor = db.client_transactions.find().sort("date", -1)
+    rows = await cursor.to_list(length=None)
+    return [fix_id(row) for row in rows]
+
+async def create_client_transaction(db, tx_data: dict):
+    result = await db.client_transactions.insert_one(tx_data)
+    created = await db.client_transactions.find_one({"_id": result.inserted_id})
+    return fix_id(created)
+
+async def update_client_transaction(db, tx_id: str, update_data: dict):
+    from bson import ObjectId
+    if not update_data:
+        updated = await db.client_transactions.find_one({"_id": ObjectId(tx_id)})
+        return fix_id(updated) if updated else None
+    
+    await db.client_transactions.update_one(
+         {"_id": ObjectId(tx_id)},
+         {"$set": update_data}
+    )
+    updated = await db.client_transactions.find_one({"_id": ObjectId(tx_id)})
+    return fix_id(updated) if updated else None
+
+async def delete_client_transaction(db, tx_id: str):
+    from bson import ObjectId
+    result = await db.client_transactions.delete_one({"_id": ObjectId(tx_id)})
+    return result.deleted_count > 0
+
+
+# --- Row Definitions ---
+async def get_row_definitions(db, month: str):
+    doc = await db.company_finance_row_definitions.find_one({"month": month})
+    if not doc:
+        global_doc = await db.company_finance_row_definitions.find_one({"id": "config"})
+        if global_doc:
+            return fix_id(global_doc)
+        return {"month": month, "rows": []}
+    return fix_id(doc)
+
+async def save_row_definitions(db, month: str, rows: list, current_user=None):
+    existing = await db.company_finance_row_definitions.find_one({"month": month})
+    await db.company_finance_row_definitions.update_one(
+        {"month": month},
+        {"$set": {"month": month, "rows": rows}},
+        upsert=True
+    )
+    # Update global config so new months start with the latest configuration
+    await db.company_finance_row_definitions.update_one(
+        {"id": "config"},
+        {"$set": {"id": "config", "rows": rows}},
+        upsert=True
+    )
+    doc = await db.company_finance_row_definitions.find_one({"month": month})
+    
+    performed_by_id, performed_by_name = await resolve_performer(db, current_user)
+    if existing:
+        log_details, diffs = format_field_changes(existing, {"rows": rows}, f"Row Definitions for {month}")
+        await log_activity(db, "Finance Row Definitions Saved", performed_by_id, performed_by_name, log_details, diffs=diffs)
+    else:
+        details = f"Saved initial row definitions for {month}"
+        await log_activity(db, "Finance Row Definitions Saved", performed_by_id, performed_by_name, details)
+        
+    return fix_id(doc)
+
+
+# --- Summary Actual Overrides ---
+async def get_summary_actual_overrides(db, month: str):
+    doc = await db.company_finance_actual_overrides.find_one({"month": month})
+    if not doc:
+        return {"month": month, "values": {}}
+    return fix_id(doc)
+
+async def save_summary_actual_overrides(db, month: str, values: dict, current_user=None):
+    existing = await db.company_finance_actual_overrides.find_one({"month": month})
+    await db.company_finance_actual_overrides.update_one(
+        {"month": month},
+        {"$set": {"month": month, "values": values}},
+        upsert=True
+    )
+    doc = await db.company_finance_actual_overrides.find_one({"month": month})
+    
+    performed_by_id, performed_by_name = await resolve_performer(db, current_user)
+    if existing:
+        log_details, diffs = format_field_changes(existing, {"values": values}, f"Actual Overrides for {month}")
+        await log_activity(db, "Finance Actual Overrides Saved", performed_by_id, performed_by_name, log_details, diffs=diffs)
+    else:
+        details = f"Saved initial actual overrides for {month}"
+        await log_activity(db, "Finance Actual Overrides Saved", performed_by_id, performed_by_name, details)
+        
+    return fix_id(doc)
+
 
 # --- Courses CRUD ---
 async def create_course(db, course: schemas.CourseCreate):

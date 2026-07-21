@@ -59,6 +59,7 @@ export default function SettingsPage() {
   const [activitiesInput, setActivitiesInput] = useState<string | null>(null);
   const [meetingsInput, setMeetingsInput] = useState<string | null>(null);
   const [categoriesInput, setCategoriesInput] = useState<string | null>(null);
+  const [categoriesInvoiceInput, setCategoriesInvoiceInput] = useState<string | null>(null);
   const [leadCategoriesInput, setLeadCategoriesInput] = useState<string | null>(null);
 
   useEffect(() => {
@@ -275,6 +276,7 @@ export default function SettingsPage() {
           proformaInvoicePrefix: settings?.proformaInvoicePrefix || "PINV",
           noTaxInvoicePrefix: settings?.noTaxInvoicePrefix || "NINV",
           invoiceClientDepartments: deptInput !== null ? deptInput.split(",").map(s => s.trim()).filter(Boolean) : (settings?.invoiceClientDepartments || []),
+          invoiceCategories: categoriesInvoiceInput !== null ? categoriesInvoiceInput.split(",").map(s => s.trim()).filter(Boolean) : (settings?.invoiceCategories || []),
           otherActivities: activitiesInput !== null ? activitiesInput.split(",").map(s => s.trim()).filter(Boolean) : (settings?.otherActivities || []),
           otherMeetings: meetingsInput !== null ? meetingsInput.split(",").map(s => s.trim()).filter(Boolean) : (settings?.otherMeetings || []),
           otherCategories: categoriesInput !== null ? categoriesInput.split(",").map(s => s.trim()).filter(Boolean) : (settings?.otherCategories || ["Activity", "Meeting"]),
@@ -289,7 +291,8 @@ export default function SettingsPage() {
           defaultEditingStartOffset: settings?.defaultEditingStartOffset !== undefined ? settings.defaultEditingStartOffset : null,
           defaultApprovalOffset: settings?.defaultApprovalOffset !== undefined ? settings.defaultApprovalOffset : null,
           addHoldDaysToEndDate: settings?.addHoldDaysToEndDate !== undefined ? settings.addHoldDaysToEndDate : true,
-          otpRequiredRoles: settings?.otpRequiredRoles || []
+          otpRequiredRoles: settings?.otpRequiredRoles || [],
+          financeDecimalScaling: settings?.financeDecimalScaling !== undefined ? Number(settings.financeDecimalScaling) : 0
         })
       });
       if (res.ok) {
@@ -1238,8 +1241,8 @@ export default function SettingsPage() {
 
                 <div className="col-span-1 md:col-span-2 space-y-4">
                   <div className="space-y-2">
-                    <Label className="text-sm font-bold">Client Departments (Comma Separated)</Label>
-                    <p className="text-[10px] text-muted-foreground mb-1">These departments will appear in a dropdown when creating or editing an Invoice.</p>
+                    <Label className="text-sm font-bold">Brands (Comma Separated)</Label>
+                    <p className="text-[10px] text-muted-foreground mb-1">These brands will appear in a dropdown when creating or editing an Invoice.</p>
                     <input 
                       type="text" 
                       className="w-full h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold"
@@ -1250,7 +1253,38 @@ export default function SettingsPage() {
                         setDeptInput(null);
                       }}
                       disabled={isUpdating || !canEditSettings}
-                      placeholder="e.g. Billing Department, Support, Sales"
+                      placeholder="e.g. Brand A, Brand B, Brand C"
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label className="text-sm font-bold">Finance Decimal Scaling</Label>
+                    <p className="text-[10px] text-muted-foreground mb-1">Set the number of decimal places to divide and scale financial reports (Plan & Summary). E.g. setting 3 will divide 12345 by 1000 and display 12.345.</p>
+                    <input 
+                      type="number" 
+                      min={0}
+                      className="w-full h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold bg-white"
+                      value={settings?.financeDecimalScaling !== undefined ? settings.financeDecimalScaling : 0}
+                      onChange={(e) => setSettings({...settings, financeDecimalScaling: Math.max(0, parseInt(e.target.value) || 0)})}
+                      disabled={isUpdating || !canEditSettings}
+                      placeholder="Enter decimal places (e.g. 3)"
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label className="text-sm font-bold">Invoice Categories (Comma Separated)</Label>
+                    <p className="text-[10px] text-muted-foreground mb-1">These categories will appear in a dropdown when creating or editing an Invoice.</p>
+                    <input 
+                      type="text" 
+                      className="w-full h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold"
+                      value={categoriesInvoiceInput !== null ? categoriesInvoiceInput : (settings?.invoiceCategories || []).join(", ")}
+                      onChange={(e) => setCategoriesInvoiceInput(e.target.value)}
+                      onBlur={(e) => {
+                        setSettings({...settings, invoiceCategories: e.target.value.split(",").map(s => s.trim()).filter(Boolean)});
+                        setCategoriesInvoiceInput(null);
+                      }}
+                      disabled={isUpdating || !canEditSettings}
+                      placeholder="e.g. SMM, Digital Marketing, Development"
                     />
                   </div>
                 

@@ -38,6 +38,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     icon: Users,
     modules: [
       { moduleName: 'employee-list', displayName: 'Employee List', tabUrl: '/employees' },
+      { moduleName: 'company-finance', displayName: 'Company Finance', tabUrl: '/company-finance' },
       { moduleName: 'org-structure', displayName: 'Org Structure', tabUrl: '/employees/organization/departments' },
       { moduleName: 'employee-attendance', displayName: 'Employee Attendance List', tabUrl: '/employees/attendance' },
       { moduleName: 'leave-requests', displayName: 'Leave Requests', tabUrl: '/employees/leave' },
