@@ -125,6 +125,7 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
   const [saving, setSaving] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [moduleSearch, setModuleSearch] = useState('')
+  const [activeModules, setActiveModules] = useState<string[]>([])
 
   useEffect(() => {
     if (employeeId) {
@@ -139,6 +140,17 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
       const listRes = await fetch(`${API_URL}/employees`)
       if (listRes.ok) {
         setEmployees(await listRes.json())
+      }
+
+      // Fetch System Settings
+      const settingsRes = await fetch(`${API_URL}/system-settings`)
+      if (settingsRes.ok) {
+        const settingsData = await settingsRes.json()
+        if (settingsData.enabledModules) {
+          setActiveModules(settingsData.enabledModules)
+        } else {
+          setActiveModules(DEFAULT_MODULES.map(m => m.moduleName))
+        }
       }
 
       // Fetch Presets
@@ -423,8 +435,9 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
                 <tbody className="divide-y divide-slate-100">
                   {PERMISSION_GROUPS.map((group) => {
                     const filteredModules = group.modules.filter(m => 
-                      m.displayName.toLowerCase().includes(moduleSearch.toLowerCase()) ||
-                      m.moduleName.toLowerCase().includes(moduleSearch.toLowerCase())
+                      activeModules.includes(m.moduleName) &&
+                      (m.displayName.toLowerCase().includes(moduleSearch.toLowerCase()) ||
+                      m.moduleName.toLowerCase().includes(moduleSearch.toLowerCase()))
                     )
                     
                     if (filteredModules.length === 0) return null

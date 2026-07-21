@@ -85,6 +85,13 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
   }, []);
 
 
+  const isModuleEnabled = (moduleKey: string) => {
+    if (isAdmin) return true;
+    if (!settings) return true;
+    if (!settings.enabledModules) return true;
+    return settings.enabledModules.includes(moduleKey);
+  };
+
   const showClients = () => {
     if (isAdmin) return true;
     if (!settings) return true; // Show by default while loading
@@ -95,146 +102,147 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
   const items = React.useMemo(() => {
     const workManagementChildren: MenuItem[] = [];
 
-    if (isAdmin || checkPermission('projects', 'canView')) {
+    if (isModuleEnabled('projects') && (isAdmin || checkPermission('projects', 'canView'))) {
       workManagementChildren.push(getItem(<Link href="/work-management/projects">Projects</Link>, "/work-management/projects"));
     }
     const isTL = Boolean(user && (user.role?.toLowerCase() === 'team leader' || user.designation?.toLowerCase() === 'team leader'));
-    if (isAdmin || isTL || checkPermission('tasks', 'canView') || checkPermission('development', 'canView')) {
+    if (isModuleEnabled('tasks') && (isAdmin || isTL || checkPermission('tasks', 'canView') || checkPermission('development', 'canView'))) {
       workManagementChildren.push(getItem(<Link href="/work-management/development">Development</Link>, "/work-management/development"));
     }
     const isHRUser = user?.role === 'HR' || user?.department?.toLowerCase() === 'hr';
-    if (isAdmin || isHRUser || checkPermission('daily-progress', 'canView')) {
+    if (isModuleEnabled('daily-progress') && (isAdmin || isHRUser || checkPermission('daily-progress', 'canView'))) {
       workManagementChildren.push(getItem(<Link href="/work-management/daily-progress">Daily Progress</Link>, "/work-management/daily-progress"));
     }
-    if (isAdmin || isHRUser) {
+    if (isModuleEnabled('tasks') && (isAdmin || isHRUser)) {
       workManagementChildren.push(getItem(<Link href="/work-management/hr-tasks">HR Tasks</Link>, "/work-management/hr-tasks"));
     }
-    if (isAdmin || checkPermission('sales', 'canView')) {
+    if (isModuleEnabled('sales') && (isAdmin || checkPermission('sales', 'canView'))) {
       workManagementChildren.push(getItem(<Link href="/work-management/sales">Sales</Link>, "/work-management/sales"));
     }
-    if (isAdmin || checkPermission('work-logs', 'canView')) {
+    if (isModuleEnabled('work-logs') && (isAdmin || checkPermission('work-logs', 'canView'))) {
       workManagementChildren.push(getItem(<Link href="/work-management/work-logs">Work Logs</Link>, "/work-management/work-logs"));
     }
-    if (isAdmin || checkPermission('clients', 'canView')) {
+    if (isModuleEnabled('clients') && (isAdmin || checkPermission('clients', 'canView'))) {
       workManagementChildren.push(getItem(<Link href="/work-management/clients">Clients</Link>, "/work-management/clients"));
     }
-    if (isAdmin || checkPermission('marketing', 'canView')) {
+    if (isModuleEnabled('marketing') && (isAdmin || checkPermission('marketing', 'canView'))) {
       workManagementChildren.push(getItem(<Link href="/work-management/digital-marketing">Digital Marketing</Link>, "/work-management/digital-marketing"));
     }
-    if (isAdmin || user?.role === 'HR' || user?.role === 'Team Leader' || checkPermission('creative', 'canView')) {
+    if (isModuleEnabled('creative') && (isAdmin || user?.role === 'HR' || user?.role === 'Team Leader' || checkPermission('creative', 'canView'))) {
       workManagementChildren.push(getItem(<Link href="/work-management/smm">Social Media Management</Link>, "/work-management/smm"));
     }
-    if (isAdmin || checkPermission('research', 'canView')) {
+    if (isModuleEnabled('research') && (isAdmin || checkPermission('research', 'canView'))) {
       workManagementChildren.push(getItem(<Link href="/work-management/research">Research</Link>, "/work-management/research"));
     }
 
 
     const employeeChildren: MenuItem[] = [];
-    if (isAdmin || checkPermission('employee-list', 'canView')) {
+    if (isModuleEnabled('employee-list') && (isAdmin || checkPermission('employee-list', 'canView'))) {
       employeeChildren.push(getItem(<Link href="/employees">Employee List</Link>, "/employees"));
     }
-    if (isAdmin || checkPermission('org-structure', 'canView')) {
+    if (isModuleEnabled('org-structure') && (isAdmin || checkPermission('org-structure', 'canView'))) {
       employeeChildren.push(getItem(<Link href="/employees/organization/departments">Org Structure</Link>, "/employees/organization/departments"));
     }
-    if (isAdmin || checkPermission('employee-attendance', 'canView')) {
+    if (isModuleEnabled('employee-attendance') && (isAdmin || checkPermission('employee-attendance', 'canView'))) {
       employeeChildren.push(getItem(<Link href="/employees/attendance">Employee Attendance List</Link>, "/employees/attendance"));
     }
-    if (isAdmin || checkPermission('leave-requests', 'canView')) {
+    if (isModuleEnabled('leave-requests') && (isAdmin || checkPermission('leave-requests', 'canView'))) {
       employeeChildren.push(getItem(<Link href="/employees/leave">Leave Requests</Link>, "/employees/leave"));
     }
 
     const documentsChildren: MenuItem[] = [];
-    if (isAdmin || checkPermission('employee-documents', 'canView')) {
+    if (isModuleEnabled('employee-documents') && (isAdmin || checkPermission('employee-documents', 'canView'))) {
       documentsChildren.push(getItem(<Link href="/employees/documents">Employee Documents</Link>, "/employees/documents"));
     }
-    if (isAdmin || checkPermission('document-generator', 'canView')) {
+    if (isModuleEnabled('document-generator') && (isAdmin || checkPermission('document-generator', 'canView'))) {
       documentsChildren.push(getItem(<Link href="/employees/documents/generate">Document Generator</Link>, "/employees/documents/generate"));
     }
 
     const payrollChildren: MenuItem[] = [];
-    if (isAdmin || checkPermission('salary-structure', 'canView')) {
+    if (isModuleEnabled('salary-structure') && (isAdmin || checkPermission('salary-structure', 'canView'))) {
       payrollChildren.push(getItem(<Link href="/payroll/salary-structure">Salary Structure</Link>, "/payroll/salary-structure"));
     }
-    if (isAdmin || checkPermission('payroll-processing', 'canView')) {
+    if (isModuleEnabled('payroll-processing') && (isAdmin || checkPermission('payroll-processing', 'canView'))) {
       payrollChildren.push(getItem(<Link href="/payroll">Payroll Processing</Link>, "/payroll"));
     }
-    if (isAdmin || checkPermission('payslips', 'canView')) {
+    if (isModuleEnabled('payslips') && (isAdmin || checkPermission('payslips', 'canView'))) {
       payrollChildren.push(getItem(<Link href="/payroll/payslips">Payslips</Link>, "/payroll/payslips"));
     }
-    if (isAdmin || checkPermission('bonuses-deductions', 'canView')) {
+    if (isModuleEnabled('bonuses-deductions') && (isAdmin || checkPermission('bonuses-deductions', 'canView'))) {
       payrollChildren.push(getItem(<Link href="/payroll/bonuses">Bonuses & Deductions</Link>, "/payroll/bonuses"));
     }
 
     const recruitmentChildren: MenuItem[] = [];
-    if (isAdmin || checkPermission('interviews', 'canView')) {
+    if (isModuleEnabled('interviews') && (isAdmin || checkPermission('interviews', 'canView'))) {
       recruitmentChildren.push(getItem(<Link href="/recruitment/hiring-board">Interviews</Link>, "/recruitment/hiring-board"));
     }
-    if (isAdmin || checkPermission('hirings', 'canView')) {
+    if (isModuleEnabled('hirings') && (isAdmin || checkPermission('hirings', 'canView'))) {
       recruitmentChildren.push(getItem(<Link href="/recruitment">Hirings</Link>, "/recruitment"));
     }
 
-    const menuItems: MenuItem[] = [
-      getItem(<Link href="/">Dashboard</Link>, "/", <LayoutDashboard className="w-5 h-5" />),
-    ];
+    const menuItems: MenuItem[] = [];
+    if (isModuleEnabled('dashboard')) {
+      menuItems.push(getItem(<Link href="/">Dashboard</Link>, "/", <LayoutDashboard className="w-5 h-5" />));
+    }
 
-    if (isAdmin || employeeChildren.length > 0) {
+    if (employeeChildren.length > 0) {
       menuItems.push(getItem("Employees", "employees-sub", <Users className="w-5 h-5" />, employeeChildren));
     }
 
-    if (isAdmin || documentsChildren.length > 0) {
+    if (documentsChildren.length > 0) {
       menuItems.push(getItem("Documents", "documents-sub", <Files className="w-5 h-5" />, documentsChildren));
     }
 
-    if (isAdmin || payrollChildren.length > 0) {
+    if (payrollChildren.length > 0) {
       menuItems.push(getItem("Payroll", "payroll-sub", <IndianRupee className="w-5 h-5" />, payrollChildren));
     }
 
-    if (isAdmin || recruitmentChildren.length > 0) {
+    if (recruitmentChildren.length > 0) {
       menuItems.push(getItem("Recruitment", "recruitment-sub", <Briefcase className="w-5 h-5" />, recruitmentChildren));
     }
 
-    if (isAdmin || checkPermission('attendance', 'canView')) {
+    if (isModuleEnabled('attendance') && (isAdmin || checkPermission('attendance', 'canView'))) {
       menuItems.push(getItem(<Link href="/attendance">Attendance</Link>, "/attendance", <Clock className="w-5 h-5" />));
     }
 
-    if (isAdmin || checkPermission('leave', 'canView')) {
+    if (isModuleEnabled('leave') && (isAdmin || checkPermission('leave', 'canView'))) {
       menuItems.push(getItem(<Link href="/leave">Leave</Link>, "/leave", <Calendar className="w-5 h-5" />));
     }
 
-    if (isAdmin || checkPermission('schedule', 'canView')) {
+    if (isModuleEnabled('schedule') && (isAdmin || checkPermission('schedule', 'canView'))) {
       menuItems.push(getItem(<Link href="/schedule">Schedule</Link>, "/schedule", <CalendarDays className="w-5 h-5" />));
     }
 
     
     const workspaceChildren: MenuItem[] = [];
-    if (isAdmin || checkPermission('seating-arrangement', 'canView')) {
+    if (isModuleEnabled('seating-arrangement') && (isAdmin || checkPermission('seating-arrangement', 'canView'))) {
       workspaceChildren.push(getItem(<Link href="/workspace/seating">Seating Arrangement</Link>, "/workspace/seating"));
     }
-    if (isAdmin || checkPermission('resource-management', 'canView')) {
+    if (isModuleEnabled('resource-management') && (isAdmin || checkPermission('resource-management', 'canView'))) {
       workspaceChildren.push(getItem(<Link href="/workspace/resource">Resource Management</Link>, "/workspace/resource"));
     }
-    if (isAdmin || checkPermission('gallery', 'canView')) {
+    if (isModuleEnabled('gallery') && (isAdmin || checkPermission('gallery', 'canView'))) {
       workspaceChildren.push(getItem(<Link href="/workspace/gallery">Gallery</Link>, "/workspace/gallery"));
     }
 
-    if (isAdmin || workspaceChildren.length > 0) {
+    if (workspaceChildren.length > 0) {
       menuItems.push(getItem("Workspace", "workspace", <MonitorPlay className="w-5 h-5" />, workspaceChildren));
     }
     
-    if (isAdmin || checkPermission('remarks', 'canView')) {
+    if (isModuleEnabled('remarks') && (isAdmin || checkPermission('remarks', 'canView'))) {
       menuItems.push(getItem(<Link href="/penalty">Penalty</Link>, "/penalty", <MessagesSquare className="w-5 h-5" />));
     }
 
-    if (isAdmin || checkPermission('review', 'canView')) {
+    if (isModuleEnabled('review') && (isAdmin || checkPermission('review', 'canView'))) {
       menuItems.push(getItem(<Link href="/remarks">Remarks</Link>, "/remarks", <Star className="w-5 h-5" />));
     }
 
-    if (isAdmin || checkPermission('activity-tracker', 'canView')) {
+    if (isModuleEnabled('activity-tracker') && (isAdmin || checkPermission('activity-tracker', 'canView'))) {
       menuItems.push(getItem(<Link href="/activity-tracker">Activity Tracker</Link>, "/activity-tracker", <Activity className="w-5 h-5" />));
     }
 
     const invoiceChildren: MenuItem[] = [];
-    if (isAdmin || checkPermission('invoice', 'canView')) {
+    if (isModuleEnabled('invoice') && (isAdmin || checkPermission('invoice', 'canView'))) {
       invoiceChildren.push(getItem(<Link href="/invoice">All Invoices</Link>, "/invoice"));
       invoiceChildren.push(getItem(<Link href="/invoice/ledger">Invoice Ledger</Link>, "/invoice/ledger"));
       invoiceChildren.push(getItem(<Link href="/invoice/create">Create Invoice</Link>, "/invoice/create"));
@@ -245,7 +253,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       menuItems.push(getItem("Invoice", "invoice", <FileText className="w-5 h-5" />, invoiceChildren));
     }
 
-    if (isAdmin || checkPermission('chat', 'canView')) {
+    if (isModuleEnabled('chat') && (isAdmin || checkPermission('chat', 'canView'))) {
       menuItems.push(getItem(
         <Link href="/chat">Chat</Link>,
         "/chat",
@@ -261,17 +269,17 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       ));
     }
 
-    if (isAdmin || workManagementChildren.length > 0) {
+    if (workManagementChildren.length > 0) {
       menuItems.push(getItem("Work Management", "work-management", <Briefcase className="w-5 h-5" />, workManagementChildren));
     }
 
     const trainingChildren: MenuItem[] = [];
     
-    if (isAdmin || checkPermission('training', 'canView')) {
+    if (isModuleEnabled('training') && (isAdmin || checkPermission('training', 'canView'))) {
       trainingChildren.push(getItem(<Link href="/training">Course Library</Link>, "/training"));
     }
     
-    if (isAdmin || checkPermission('admin-courses', 'canView')) {
+    if (isModuleEnabled('admin-courses') && (isAdmin || checkPermission('admin-courses', 'canView'))) {
       trainingChildren.push(getItem(<Link href="/admin/courses">Manage Courses</Link>, "/admin/courses"));
     }
 
@@ -287,7 +295,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       menuItems.push(getItem(<Link href="/restrictions">Restrictions</Link>, "/restrictions", <ShieldHalf className="w-5 h-5" />));
     }
 
-    if (isAdmin || checkPermission('activity-logs', 'canView')) {
+    if (isModuleEnabled('activity-logs') && (isAdmin || checkPermission('activity-logs', 'canView'))) {
       menuItems.push(getItem(<Link href="/activity-logs">Activity Logs</Link>, "/activity-logs", <Activity className="w-5 h-5" />));
     }
 

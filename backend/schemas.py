@@ -1610,6 +1610,17 @@ class SystemSettingsBase(BaseModel):
     autoInactiveAfterResignation: Optional[bool] = False
     otpRequiredRoles: Optional[List[str]] = []
     leadCategories: Optional[List[str]] = Field(default_factory=list)
+    enabledModules: Optional[List[str]] = Field(default_factory=lambda: [
+        "dashboard", "employee-list", "org-structure", "employee-attendance", 
+        "leave-requests", "employee-documents", "document-generator",
+        "salary-structure", "payroll-processing", "payslips", "bonuses-deductions",
+        "interviews", "hirings", "attendance", "leave", "schedule",
+        "projects", "tasks", "personal-tasks", "daily-progress", "work-logs", 
+        "sales", "clients", "marketing", "creative", "research",
+        "seating-arrangement", "resource-management", "gallery",
+        "remarks", "review", "invoice", "chat", "activity-tracker", 
+        "activity-logs", "training", "admin-courses"
+    ])
 
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
@@ -1650,6 +1661,7 @@ class SystemSettingsUpdate(BaseModel):
     autoInactiveAfterResignation: Optional[bool] = None
     otpRequiredRoles: Optional[List[str]] = None
     leadCategories: Optional[List[str]] = None
+    enabledModules: Optional[List[str]] = None
 
 class SystemSettings(SystemSettingsBase):
     id: str
