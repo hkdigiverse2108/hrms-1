@@ -1037,6 +1037,16 @@ class ClientBase(BaseModel):
     assignedCaptionWriterName: Optional[str] = None
     assignedThumbnailDesignerId: Optional[str] = None
     assignedThumbnailDesignerName: Optional[str] = None
+    assignedWhatsappGroupCreatorId: Optional[str] = None
+    assignedWhatsappGroupCreatorName: Optional[str] = None
+    assignedGreetingsMsgSenderId: Optional[str] = None
+    assignedGreetingsMsgSenderName: Optional[str] = None
+    assignedMeetingsAssigneeId: Optional[str] = None
+    assignedMeetingsAssigneeName: Optional[str] = None
+    assignedContentCalendarCreatorId: Optional[str] = None
+    assignedContentCalendarCreatorName: Optional[str] = None
+    assignedFollowUpId: Optional[str] = None
+    assignedFollowUpName: Optional[str] = None
     campaigns: Optional[RobustCampaigns] = []
 
 class ClientCreate(ClientBase):
@@ -1113,6 +1123,16 @@ class ClientUpdate(BaseModel):
     assignedCaptionWriterName: Optional[str] = None
     assignedThumbnailDesignerId: Optional[str] = None
     assignedThumbnailDesignerName: Optional[str] = None
+    assignedWhatsappGroupCreatorId: Optional[str] = None
+    assignedWhatsappGroupCreatorName: Optional[str] = None
+    assignedGreetingsMsgSenderId: Optional[str] = None
+    assignedGreetingsMsgSenderName: Optional[str] = None
+    assignedMeetingsAssigneeId: Optional[str] = None
+    assignedMeetingsAssigneeName: Optional[str] = None
+    assignedContentCalendarCreatorId: Optional[str] = None
+    assignedContentCalendarCreatorName: Optional[str] = None
+    assignedFollowUpId: Optional[str] = None
+    assignedFollowUpName: Optional[str] = None
 
 class Client(ClientBase):
     id: str
@@ -1191,6 +1211,16 @@ class ProjectBase(BaseModel):
     assignedCaptionWriterName: Optional[str] = None
     assignedThumbnailDesignerId: Optional[str] = None
     assignedThumbnailDesignerName: Optional[str] = None
+    assignedWhatsappGroupCreatorId: Optional[str] = None
+    assignedWhatsappGroupCreatorName: Optional[str] = None
+    assignedGreetingsMsgSenderId: Optional[str] = None
+    assignedGreetingsMsgSenderName: Optional[str] = None
+    assignedMeetingsAssigneeId: Optional[str] = None
+    assignedMeetingsAssigneeName: Optional[str] = None
+    assignedContentCalendarCreatorId: Optional[str] = None
+    assignedContentCalendarCreatorName: Optional[str] = None
+    assignedFollowUpId: Optional[str] = None
+    assignedFollowUpName: Optional[str] = None
     
     # Phase Wise Project Fields
     isPhaseWise: Optional[bool] = False
@@ -1276,6 +1306,16 @@ class ProjectUpdate(BaseModel):
     assignedCaptionWriterName: Optional[str] = None
     assignedThumbnailDesignerId: Optional[str] = None
     assignedThumbnailDesignerName: Optional[str] = None
+    assignedWhatsappGroupCreatorId: Optional[str] = None
+    assignedWhatsappGroupCreatorName: Optional[str] = None
+    assignedGreetingsMsgSenderId: Optional[str] = None
+    assignedGreetingsMsgSenderName: Optional[str] = None
+    assignedMeetingsAssigneeId: Optional[str] = None
+    assignedMeetingsAssigneeName: Optional[str] = None
+    assignedContentCalendarCreatorId: Optional[str] = None
+    assignedContentCalendarCreatorName: Optional[str] = None
+    assignedFollowUpId: Optional[str] = None
+    assignedFollowUpName: Optional[str] = None
     
     # Phase Wise Project Fields
     isPhaseWise: Optional[bool] = None

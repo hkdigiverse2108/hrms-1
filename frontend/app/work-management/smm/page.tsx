@@ -168,7 +168,7 @@ export default function CreativeClientsPage() {
     if (!user) return false;
     const r = (user.role || "").toLowerCase();
     const d = (user.designation || "").toLowerCase();
-    const fullRoles = ["admin", "manager", "social media manager", "smm", "director", "head", "super admin", "digital marketer", "digital marketing"];
+    const fullRoles = ["admin", "manager", "social media manager", "smm", "director", "head", "super admin", "digital marketer", "digital marketing", "team leader", "sub admin", "sub-admin"];
     if (fullRoles.includes(r) || fullRoles.includes(d) || r.includes("social media") || d.includes("social media") || r.includes("digital marketing") || d.includes("digital marketing")) {
       return true;
     }
@@ -221,6 +221,10 @@ export default function CreativeClientsPage() {
   const [posterId, setPosterId] = useState("");
   const [captionWriterId, setCaptionWriterId] = useState("");
   const [thumbnailDesignerId, setThumbnailDesignerId] = useState("");
+  const [whatsappGroupCreatorId, setWhatsappGroupCreatorId] = useState("");
+  const [greetingsMsgSenderId, setGreetingsMsgSenderId] = useState("");
+  const [meetingsAssigneeId, setMeetingsAssigneeId] = useState("");
+  const [contentCalendarCreatorId, setContentCalendarCreatorId] = useState("");
   const [followupAssigneeId, setFollowupAssigneeId] = useState("");
 
   const [logsOpen, setLogsOpen] = useState(false);
@@ -683,6 +687,10 @@ export default function CreativeClientsPage() {
     const poster = creativeEmployees.find(e => e.id === posterId);
     const captionWriter = creativeEmployees.find(e => e.id === captionWriterId);
     const thumbnailDesigner = creativeEmployees.find(e => e.id === thumbnailDesignerId);
+    const whatsappGroupCreator = creativeEmployees.find(e => e.id === whatsappGroupCreatorId);
+    const greetingsMsgSender = creativeEmployees.find(e => e.id === greetingsMsgSenderId);
+    const meetingsAssignee = creativeEmployees.find(e => e.id === meetingsAssigneeId);
+    const contentCalendarCreator = creativeEmployees.find(e => e.id === contentCalendarCreatorId);
     const followupAssignee = creativeEmployees.find(e => e.id === followupAssigneeId);
     
     try {
@@ -706,6 +714,14 @@ export default function CreativeClientsPage() {
           assignedCaptionWriterName: captionWriterId === "none" ? null : captionWriter?.name || null,
           assignedThumbnailDesignerId: thumbnailDesignerId === "none" ? null : thumbnailDesignerId || null,
           assignedThumbnailDesignerName: thumbnailDesignerId === "none" ? null : thumbnailDesigner?.name || null,
+          assignedWhatsappGroupCreatorId: whatsappGroupCreatorId === "none" ? null : whatsappGroupCreatorId || null,
+          assignedWhatsappGroupCreatorName: whatsappGroupCreatorId === "none" ? null : whatsappGroupCreator?.name || null,
+          assignedGreetingsMsgSenderId: greetingsMsgSenderId === "none" ? null : greetingsMsgSenderId || null,
+          assignedGreetingsMsgSenderName: greetingsMsgSenderId === "none" ? null : greetingsMsgSender?.name || null,
+          assignedMeetingsAssigneeId: meetingsAssigneeId === "none" ? null : meetingsAssigneeId || null,
+          assignedMeetingsAssigneeName: meetingsAssigneeId === "none" ? null : meetingsAssignee?.name || null,
+          assignedContentCalendarCreatorId: contentCalendarCreatorId === "none" ? null : contentCalendarCreatorId || null,
+          assignedContentCalendarCreatorName: contentCalendarCreatorId === "none" ? null : contentCalendarCreator?.name || null,
           assignedFollowUpId: followupAssigneeId === "none" ? null : followupAssigneeId || null,
           assignedFollowUpName: followupAssigneeId === "none" ? null : followupAssignee?.name || null,
           performedBy: user?.id,
@@ -808,7 +824,14 @@ export default function CreativeClientsPage() {
                            (proj.assignedPostDesignerId || c.assignedPostDesignerId) === user.id ||
                            (proj.assignedShooterId || c.assignedShooterId) === user.id ||
                            (proj.assignedApproverId || c.assignedApproverId) === user.id ||
-                           (proj.assignedPosterId || c.assignedPosterId) === user.id;
+                           (proj.assignedPosterId || c.assignedPosterId) === user.id ||
+                           (proj.assignedCaptionWriterId || c.assignedCaptionWriterId) === user.id ||
+                           (proj.assignedThumbnailDesignerId || c.assignedThumbnailDesignerId) === user.id ||
+                           (proj.assignedWhatsappGroupCreatorId || c.assignedWhatsappGroupCreatorId) === user.id ||
+                           (proj.assignedGreetingsMsgSenderId || c.assignedGreetingsMsgSenderId) === user.id ||
+                           (proj.assignedMeetingsAssigneeId || c.assignedMeetingsAssigneeId) === user.id ||
+                           (proj.assignedContentCalendarCreatorId || c.assignedContentCalendarCreatorId) === user.id ||
+                           (proj.assignedFollowUpId || c.assignedFollowUpId) === user.id;
         if (!isAssigned) return false;
       }
 
@@ -854,7 +877,12 @@ export default function CreativeClientsPage() {
                            (proj.assignedApproverId || c.assignedApproverId) === creativeFilter ||
                            (proj.assignedPosterId || c.assignedPosterId) === creativeFilter ||
                            (proj.assignedCaptionWriterId || c.assignedCaptionWriterId) === creativeFilter ||
-                           (proj.assignedThumbnailDesignerId || c.assignedThumbnailDesignerId) === creativeFilter;
+                           (proj.assignedThumbnailDesignerId || c.assignedThumbnailDesignerId) === creativeFilter ||
+                           (proj.assignedWhatsappGroupCreatorId || c.assignedWhatsappGroupCreatorId) === creativeFilter ||
+                           (proj.assignedGreetingsMsgSenderId || c.assignedGreetingsMsgSenderId) === creativeFilter ||
+                           (proj.assignedMeetingsAssigneeId || c.assignedMeetingsAssigneeId) === creativeFilter ||
+                           (proj.assignedContentCalendarCreatorId || c.assignedContentCalendarCreatorId) === creativeFilter ||
+                           (proj.assignedFollowUpId || c.assignedFollowUpId) === creativeFilter;
         if (!isAssigned) return false;
       }
 
@@ -1380,6 +1408,10 @@ export default function CreativeClientsPage() {
                               setPosterId(p.assignedPosterId || client.assignedPosterId || "none");
                               setCaptionWriterId(p.assignedCaptionWriterId || client.assignedCaptionWriterId || "none");
                               setThumbnailDesignerId(p.assignedThumbnailDesignerId || client.assignedThumbnailDesignerId || "none");
+                              setWhatsappGroupCreatorId(p.assignedWhatsappGroupCreatorId || client.assignedWhatsappGroupCreatorId || "none");
+                              setGreetingsMsgSenderId(p.assignedGreetingsMsgSenderId || client.assignedGreetingsMsgSenderId || "none");
+                              setMeetingsAssigneeId(p.assignedMeetingsAssigneeId || client.assignedMeetingsAssigneeId || "none");
+                              setContentCalendarCreatorId(p.assignedContentCalendarCreatorId || client.assignedContentCalendarCreatorId || "none");
                               setFollowupAssigneeId(p.assignedFollowUpId || client.assignedFollowUpId || "none");
                               setAssignTeamOpen(true);
                             }}>
@@ -1705,7 +1737,7 @@ export default function CreativeClientsPage() {
           <DialogHeader>
             <DialogTitle>Assign Creative Team</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto px-1">
             <div className="space-y-2">
               <Label>Scripting</Label>
               <SearchableEmployeeSelect 
@@ -1779,7 +1811,43 @@ export default function CreativeClientsPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Follow-up</Label>
+              <Label>Create WhatsApp Group</Label>
+              <SearchableEmployeeSelect 
+                value={whatsappGroupCreatorId} 
+                onChange={setWhatsappGroupCreatorId} 
+                placeholder="Select assignee..." 
+                employees={creativeEmployees} 
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Send Greetings Msg</Label>
+              <SearchableEmployeeSelect 
+                value={greetingsMsgSenderId} 
+                onChange={setGreetingsMsgSenderId} 
+                placeholder="Select assignee..." 
+                employees={creativeEmployees} 
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Meetings</Label>
+              <SearchableEmployeeSelect 
+                value={meetingsAssigneeId} 
+                onChange={setMeetingsAssigneeId} 
+                placeholder="Select assignee..." 
+                employees={creativeEmployees} 
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Create Content Calendar</Label>
+              <SearchableEmployeeSelect 
+                value={contentCalendarCreatorId} 
+                onChange={setContentCalendarCreatorId} 
+                placeholder="Select assignee..." 
+                employees={creativeEmployees} 
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Client Follow-up</Label>
               <SearchableEmployeeSelect 
                 value={followupAssigneeId} 
                 onChange={setFollowupAssigneeId} 

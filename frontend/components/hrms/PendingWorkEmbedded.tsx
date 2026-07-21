@@ -394,7 +394,8 @@ export function PendingWorkEmbedded({
     }
   };
 
-  const isAdminOrTL = currentUser?.role === 'Team Leader' || currentUser?.role === 'HR' || currentUser?.role?.toLowerCase() === 'admin' || currentUser?.name === 'Admin Admin';
+  const fullRoles = ["admin", "manager", "social media manager", "smm", "director", "head", "super admin", "digital marketer", "digital marketing", "team leader", "sub admin", "sub-admin"];
+  const isAdminOrTL = currentUser?.name === 'Admin Admin' || currentUser?.role === 'HR' || fullRoles.includes(currentUser?.role?.toLowerCase() || '') || fullRoles.includes(currentUser?.designation?.toLowerCase() || '');
 
   const preFilteredTasks = useMemo(() => {
     const tasks: any[] = [];
@@ -454,19 +455,21 @@ export function PendingWorkEmbedded({
         const uId = user?.id;
         if (!uId) return false;
         
-        if (stage === 'Script') return (entry.assignedScriptwriterId || project.assignedScriptwriterId || client?.assignedScriptwriterId) === uId;
-        if (stage === 'Shoot') return (entry.assignedShooterId || project.assignedShooterId || client?.assignedShooterId) === uId;
-        if (stage === 'Caption') return (entry.assignedCaptionWriterId || project.assignedCaptionWriterId || client?.assignedCaptionWriterId) === uId;
-        if (stage === 'Thumbnail') return (entry.assignedThumbnailDesignerId || project.assignedThumbnailDesignerId || client?.assignedThumbnailDesignerId) === uId;
+        const transfer = incomingRequests.find(r => r.taskId === (entry.id || entry._id) && r.stage === (stage === 'Editing' && entry.postReel === 'Post' ? 'Post/Graphics' : stage) && r.status === 'Accepted');
+        
+        if (stage === 'Script') return String(transfer ? transfer.receiverId : (entry.assignedScriptwriterId || project.assignedScriptwriterId || client?.assignedScriptwriterId)) === String(uId);
+        if (stage === 'Shoot') return String(transfer ? transfer.receiverId : (entry.assignedShooterId || project.assignedShooterId || client?.assignedShooterId)) === String(uId);
+        if (stage === 'Caption') return String(transfer ? transfer.receiverId : (entry.assignedCaptionWriterId || project.assignedCaptionWriterId || client?.assignedCaptionWriterId)) === String(uId);
+        if (stage === 'Thumbnail') return String(transfer ? transfer.receiverId : (entry.assignedThumbnailDesignerId || project.assignedThumbnailDesignerId || client?.assignedThumbnailDesignerId)) === String(uId);
         if (stage === 'Editing') {
           if (entry.postReel === 'Post') {
-            return (entry.assignedPostDesignerId || project.assignedPostDesignerId || client?.assignedPostDesignerId) === uId;
+            return String(transfer ? transfer.receiverId : (entry.assignedPostDesignerId || project.assignedPostDesignerId || client?.assignedPostDesignerId)) === String(uId);
           } else {
-            return (entry.assignedReelEditorId || project.assignedReelEditorId || client?.assignedReelEditorId) === uId;
+            return String(transfer ? transfer.receiverId : (entry.assignedReelEditorId || project.assignedReelEditorId || client?.assignedReelEditorId)) === String(uId);
           }
         }
-        if (stage === 'Approval') return (entry.assignedApproverId || project.assignedApproverId || client?.assignedApproverId) === uId;
-        if (stage === 'Posting') return (entry.assignedPosterId || project.assignedPosterId || client?.assignedPosterId) === uId;
+        if (stage === 'Approval') return String(transfer ? transfer.receiverId : (entry.assignedApproverId || project.assignedApproverId || client?.assignedApproverId)) === String(uId);
+        if (stage === 'Posting') return String(transfer ? transfer.receiverId : (entry.assignedPosterId || project.assignedPosterId || client?.assignedPosterId)) === String(uId);
         
         return true;
       };
@@ -550,8 +553,10 @@ export function PendingWorkEmbedded({
 
     otherWorkEntries.forEach(ow => {
       const uId = user?.id;
-      const isAssignee = ow.assigneeId === uId;
-      const isAssigner = ow.assignerId === uId;
+      const transfer = incomingRequests.find(r => r.taskId === (ow.id || ow._id) && (r.taskType === 'other-work' || r.taskType === 'dm-other-work' || r.taskType === 'creative') && r.status === 'Accepted');
+      const currentAssigneeId = transfer ? transfer.receiverId : ow.assigneeId;
+      const isAssignee = String(currentAssigneeId) === String(uId);
+      const isAssigner = String(ow.assignerId) === String(uId);
       
       // Assignee sees it in their today/upcoming/pending until they submit for review
       // Assigner sees it in their pending when it's Ready for Review
@@ -617,6 +622,108 @@ export function PendingWorkEmbedded({
           assignerId: null,
           isFollowup: true
         });
+      }
+    });
+
+    // Add assigned SMM onboarding tasks
+    Object.values(clientProjects).forEach((project: any) => {
+      if (project.status === "on-hold" || project.status === "onhold" || project.status?.toLowerCase() === "on-hold") return;
+      
+      const client = clients.find(c => c.id === project.clientId) || {};
+      const clientName = client ? (client.companyName || client.clientName || 'Unknown Client') : 'Unknown Client';
+      const displayName = `${project.title} (${clientName})`;
+      
+      const uId = user?.id;
+      const isManagerOrAdmin = ['Team Leader', 'Admin', 'HR', 'Manager', 'Social Media Manager'].includes(user?.role) || user?.role?.toLowerCase() === 'admin';
+      const deadlineStr = new Date().toISOString().split('T')[0];
+
+      // 1. WhatsApp Group
+      const waAssigneeId = project.assignedWhatsappGroupCreatorId || client.assignedWhatsappGroupCreatorId;
+      if (waAssigneeId && !client.whatsappGroup) {
+        if (isManagerOrAdmin || waAssigneeId === uId) {
+          const assignee = employees.find((e: any) => e.id === waAssigneeId);
+          tasks.push({
+            id: `${project.id}-whatsapp`,
+            clientDisplayName: displayName,
+            clientId: project.clientId || project.id,
+            stage: 'WhatsApp Group',
+            deadline: deadlineStr,
+            type: 'whatsapp-group',
+            taskName: 'Create WhatsApp Group',
+            assigneeName: assignee ? `${assignee.firstName} ${assignee.lastName}` : 'Unassigned',
+            assigneeId: waAssigneeId,
+            assignerName: null,
+            assignerId: null,
+            isFollowup: false
+          });
+        }
+      }
+
+      // 2. Greetings Msg
+      const greetingAssigneeId = project.assignedGreetingsMsgSenderId || client.assignedGreetingsMsgSenderId;
+      if (greetingAssigneeId && !client.greetingsMsgSent) {
+        if (isManagerOrAdmin || greetingAssigneeId === uId) {
+          const assignee = employees.find((e: any) => e.id === greetingAssigneeId);
+          tasks.push({
+            id: `${project.id}-greetings`,
+            clientDisplayName: displayName,
+            clientId: project.clientId || project.id,
+            stage: 'Greetings Msg',
+            deadline: deadlineStr,
+            type: 'greetings-msg',
+            taskName: 'Send Greetings Msg',
+            assigneeName: assignee ? `${assignee.firstName} ${assignee.lastName}` : 'Unassigned',
+            assigneeId: greetingAssigneeId,
+            assignerName: null,
+            assignerId: null,
+            isFollowup: false
+          });
+        }
+      }
+
+      // 3. Meetings
+      const meetingAssigneeId = project.assignedMeetingsAssigneeId || client.assignedMeetingsAssigneeId;
+      if (meetingAssigneeId && (!client.meetings || client.meetings.length === 0)) {
+        if (isManagerOrAdmin || meetingAssigneeId === uId) {
+          const assignee = employees.find((e: any) => e.id === meetingAssigneeId);
+          tasks.push({
+            id: `${project.id}-meetings`,
+            clientDisplayName: displayName,
+            clientId: project.clientId || project.id,
+            stage: 'Meeting',
+            deadline: deadlineStr,
+            type: 'meetings',
+            taskName: 'Schedule/Conduct Meeting',
+            assigneeName: assignee ? `${assignee.firstName} ${assignee.lastName}` : 'Unassigned',
+            assigneeId: meetingAssigneeId,
+            assignerName: null,
+            assignerId: null,
+            isFollowup: false
+          });
+        }
+      }
+
+      // 4. Content Calendar Create
+      const ccAssigneeId = project.assignedContentCalendarCreatorId || client.assignedContentCalendarCreatorId;
+      const ccCreated = entries.some(e => e.clientId === project.clientId || e.projectId === project.id);
+      if (ccAssigneeId && !ccCreated) {
+        if (isManagerOrAdmin || ccAssigneeId === uId) {
+          const assignee = employees.find((e: any) => e.id === ccAssigneeId);
+          tasks.push({
+            id: `${project.id}-cc-create`,
+            clientDisplayName: displayName,
+            clientId: project.clientId || project.id,
+            stage: 'Content Calendar',
+            deadline: deadlineStr,
+            type: 'content-calendar-create',
+            taskName: 'Create Content Calendar (Sheet)',
+            assigneeName: assignee ? `${assignee.firstName} ${assignee.lastName}` : 'Unassigned',
+            assigneeId: ccAssigneeId,
+            assignerName: null,
+            assignerId: null,
+            isFollowup: false
+          });
+        }
       }
     });
 
@@ -733,7 +840,7 @@ export function PendingWorkEmbedded({
   }, [preFilteredTasks, filterStage]);
 
   const availableStages = useMemo(() => {
-    const defaultStages = ['script', 'shoot', 'brand person', 'caption', 'thumbnail', 'editing', 'post/graphics', 'approval', 'posting', 'follow-up'];
+    const defaultStages = ['script', 'shoot', 'brand person', 'caption', 'thumbnail', 'editing', 'post/graphics', 'approval', 'posting', 'follow-up', 'whatsapp group', 'greetings msg', 'meeting', 'content calendar'];
     if (isAdminOrTL) {
       return defaultStages;
     }
@@ -1060,6 +1167,10 @@ export function PendingWorkEmbedded({
                   {availableStages.includes('approval') && <SelectItem value="approval">Approval</SelectItem>}
                   {availableStages.includes('posting') && <SelectItem value="posting">Posting</SelectItem>}
                   {availableStages.includes('follow-up') && <SelectItem value="follow-up">Follow-up</SelectItem>}
+                  {availableStages.includes('whatsapp group') && <SelectItem value="whatsapp group">WhatsApp Group</SelectItem>}
+                  {availableStages.includes('greetings msg') && <SelectItem value="greetings msg">Greetings Msg</SelectItem>}
+                  {availableStages.includes('meeting') && <SelectItem value="meeting">Meeting</SelectItem>}
+                  {availableStages.includes('content calendar') && <SelectItem value="content calendar">Content Calendar</SelectItem>}
                 </SelectContent>
               </Select>
             )}
@@ -1275,8 +1386,8 @@ export function PendingWorkEmbedded({
                           const uId = currentUser?.id || currentUser?._id;
                           const isAssigner = item.assignerId === uId;
                           const isAssignee = item.assigneeId === uId;
-                          const isAdminOrTL = currentUser?.role === 'Team Leader' || currentUser?.designation?.toLowerCase() === 'team leader' || currentUser?.role?.toLowerCase() === 'admin' || currentUser?.name === 'Admin Admin' || currentUser?.role === 'HR';
-                          
+                          const fullRoles = ["admin", "manager", "social media manager", "smm", "director", "head", "super admin", "digital marketer", "digital marketing", "team leader", "sub admin", "sub-admin"];
+                          const isAdminOrTL = currentUser?.name === 'Admin Admin' || currentUser?.role === 'HR' || fullRoles.includes(currentUser?.role?.toLowerCase() || '') || fullRoles.includes(currentUser?.designation?.toLowerCase() || '');
                           return item.isFollowup ? (
                             <>
                               <Button
