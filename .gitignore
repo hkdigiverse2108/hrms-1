@@ -90,4 +90,4 @@ frontend/next-env.d.ts
 *.tsbuildinfo
 
 # Root level temp files
-test_script*.py
+test_script*.pyvalidation_error.json

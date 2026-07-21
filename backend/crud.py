@@ -4868,6 +4868,50 @@ async def get_leads(db, skip: int = 0, limit: int = 100):
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
+async def create_leads_bulk(db, leads: List[schemas.LeadCreate]):
+    if not leads:
+        return []
+    
+    lead_dicts = []
+    log_dicts = []
+    log_time = get_now()
+    
+    for lead in leads:
+        lead_dict = lead.dict()
+        performedBy = lead_dict.pop("performedBy", "Unknown")
+        userName = lead_dict.pop("userName", "Unknown User")
+        
+        if not lead_dict.get("date"):
+            lead_dict["date"] = log_time.strftime("%Y-%m-%d")
+            
+        if lead_dict.get("status") in ["On Hold", "Client Won", "Client Loss"]:
+            lead_dict["isHot"] = False
+            
+        lead_dict["createdBy"] = performedBy
+        lead_dict["createdByUserName"] = userName
+        lead_dicts.append(lead_dict)
+        
+    if lead_dicts:
+        result = await db.leads.insert_many(lead_dicts)
+        
+        # log activity for all
+        for i, lead_id in enumerate(result.inserted_ids):
+            lead_dict = lead_dicts[i]
+            lead_dict["_id"] = lead_id  # for fix_id
+            log_dicts.append({
+                "action": "Lead Created",
+                "performedBy": lead_dict["createdBy"],
+                "userName": lead_dict["createdByUserName"],
+                "details": f"Lead for '{lead_dict['company']}' was created.",
+                "leadId": str(lead_id),
+                "timestamp": log_time
+            })
+            
+        if log_dicts:
+            await db.activity_logs.insert_many(log_dicts)
+            
+    return [fix_id(doc) for doc in lead_dicts]
+
 async def create_lead(db, lead: schemas.LeadCreate):
     lead_dict = lead.dict()
     performedBy = lead_dict.pop("performedBy", "Unknown")
