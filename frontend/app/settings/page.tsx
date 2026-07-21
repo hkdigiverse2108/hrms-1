@@ -68,7 +68,7 @@ export default function SettingsPage() {
 
   const [isAddBannerModalOpen, setIsAddBannerModalOpen] = useState(false);
   const [editingBannerId, setEditingBannerId] = useState<string | null>(null);
-  const [newBanner, setNewBanner] = useState({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "" });
+  const [newBanner, setNewBanner] = useState({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "", employeeId: "" });
   const [isUploadingBanner, setIsUploadingBanner] = useState(false);
 
   useEffect(() => {
@@ -377,7 +377,7 @@ export default function SettingsPage() {
     setSettings(newSettings);
     saveSettingsToAPI(newSettings);
     
-    setNewBanner({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "" });
+    setNewBanner({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "", employeeId: "" });
     setEditingBannerId(null);
     setIsAddBannerModalOpen(false);
     toast.success(editingBannerId ? "Banner updated successfully!" : "Banner added successfully!");
@@ -1557,7 +1557,7 @@ export default function SettingsPage() {
                 {canEditSettings && (
                   <Dialog open={isAddBannerModalOpen} onOpenChange={(val) => {
                     if (!val) {
-                      setNewBanner({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "" });
+                      setNewBanner({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "", employeeId: "" });
                       setEditingBannerId(null);
                     }
                     setIsAddBannerModalOpen(val);
@@ -1601,6 +1601,20 @@ export default function SettingsPage() {
                         <div className="space-y-2">
                           <Label>Heading (Optional)</Label>
                           <Input placeholder="Enter announcement heading..." value={newBanner.heading || ""} onChange={e => setNewBanner({...newBanner, heading: e.target.value})} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Target Employee (Optional)</Label>
+                          <Select value={newBanner.employeeId || "all"} onValueChange={(val) => setNewBanner({...newBanner, employeeId: val === "all" ? "" : val})}>
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="All Employees" />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-[200px]">
+                              <SelectItem value="all">All Employees</SelectItem>
+                              {employees.map(emp => (
+                                <SelectItem key={emp.id} value={emp.id}>{emp.name || `${emp.firstName} ${emp.lastName}`}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
@@ -1653,6 +1667,14 @@ export default function SettingsPage() {
                             <span className="truncate max-w-[200px] block">{banner.externalUrl}</span>
                           </div>
                         )}
+                        {banner.employeeId && (
+                          <div className="flex items-center gap-2 text-xs text-brand-teal">
+                            <UserCircle className="w-3 h-3" />
+                            <span className="truncate max-w-[200px] block font-semibold">
+                              Targeted: {employees.find((e: any) => e.id === banner.employeeId)?.name || 'Employee'}
+                            </span>
+                          </div>
+                        )}
                       </div>
                       <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
                         <div className="flex items-center gap-2">
@@ -1672,7 +1694,8 @@ export default function SettingsPage() {
                                   endDate: banner.endDate || "",
                                   externalUrl: banner.externalUrl || "",
                                   isActive: banner.isActive ?? true,
-                                  heading: banner.heading || ""
+                                  heading: banner.heading || "",
+                                  employeeId: banner.employeeId || ""
                                 });
                                 setEditingBannerId(banner.id);
                                 setIsAddBannerModalOpen(true);
