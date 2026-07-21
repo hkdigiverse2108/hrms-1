@@ -10,6 +10,7 @@ import { useApi } from '@/hooks/useApi'
 import { useUser } from '@/hooks/useUser'
 import { API_URL } from '@/lib/config'
 import { toast } from 'sonner'
+import { MyTasksView } from '@/components/hrms/MyTasksView'
 import { useRouter } from 'next/navigation'
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar as CalendarComponent } from "@/components/ui/calendar"
@@ -848,7 +849,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
       </div>
 
       <Dialog open={!!verifyRecord} onOpenChange={(open) => !open && setVerifyRecord(null)}>
-        <DialogContent className="sm:max-w-[600px] bg-white rounded-2xl shadow-xl border border-slate-100 p-6 max-h-[85vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[1000px] bg-white rounded-2xl shadow-xl border border-slate-100 p-6 max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5 text-brand-teal" />
@@ -878,83 +879,8 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
 
               return (
                 <>
-                  {/* KPI Summary Cards */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-emerald-50/40 border border-emerald-100/60 rounded-2xl p-4 flex items-center justify-between shadow-sm">
-                      <div>
-                        <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Tasks Logged</p>
-                        <p className="text-2xl font-black text-slate-800 mt-1">{workLogs.length}</p>
-                      </div>
-                      <div className="h-10 w-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-500 shadow-sm">
-                        <CheckCircle2 className="w-5 h-5" />
-                      </div>
-                    </div>
-                    <div className="bg-amber-50/40 border border-amber-100/60 rounded-2xl p-4 flex items-center justify-between shadow-sm">
-                      <div>
-                        <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">Pending Tasks</p>
-                        <p className="text-2xl font-black text-slate-800 mt-1">{filteredPending.length}</p>
-                      </div>
-                      <div className="h-10 w-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500 shadow-sm">
-                        <AlertCircle className="w-5 h-5" />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <Label className="text-xs font-bold text-slate-700 mb-2 block">Tasks Logged</Label>
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3 max-h-[250px] overflow-y-auto">
-                      {workLogs.length > 0 ? (
-                        <ul className="list-disc pl-5 space-y-1.5">
-                          {workLogs.map((punch: any, i: number) => {
-                            const text = punch.activityType === 'Work' && punch.activityValue ? punch.activityValue : 
-                                         punch.activityType === 'Other' ? `${punch.activitySubtype || 'Other'}: ${punch.activityValue || ''}` :
-                                         punch.activityType === 'Research' ? `Research: ${punch.activityValue || ''}` :
-                                         punch.activityType || 'Work Log';
-                            return (
-                              <li key={i} className="text-[13px] text-slate-700 leading-snug">{text}</li>
-                            );
-                          })}
-                        </ul>
-                      ) : (
-                        <div className="text-[13px] text-slate-500 italic">No tasks logged for this date.</div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div>
-                    <Label className="text-xs font-bold text-slate-700 mb-2 block">Today's Pending Tasks</Label>
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-4 max-h-[250px] overflow-y-auto">
-                      {isLoadingPendingTasks ? (
-                        <div className="flex items-center justify-center py-4">
-                          <Loader2 className="w-5 h-5 animate-spin text-brand-teal" />
-                        </div>
-                      ) : filteredPending.length > 0 ? (
-                        <>
-                          {(() => {
-                            // Group by task department name
-                            const grouped = filteredPending.reduce((acc: any, task: any) => {
-                              const dept = task.department || 'Other';
-                              if (!acc[dept]) acc[dept] = [];
-                              acc[dept].push(task);
-                              return acc;
-                            }, {});
-
-                            return Object.entries(grouped).map(([dept, tasks]: [string, any]) => (
-                              <div key={dept} className="space-y-1.5">
-                                <h4 className="text-[11px] font-bold text-brand-teal uppercase tracking-wider">{dept}</h4>
-                                <ul className="list-disc pl-5 space-y-1">
-                                  {tasks.map((t: any) => (
-                                    <li key={t.id} className="text-[13px] text-slate-700 leading-snug">{t.title}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            ));
-                          })()}
-                        </>
-                      ) : (
-                        <div className="text-[13px] text-slate-500 italic">No pending tasks for this date.</div>
-                      )}
-                    </div>
+                  <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50 max-h-[500px] overflow-y-auto">
+                    {verifyRecord && <MyTasksView targetUserId={verifyRecord?.employeeId} isEmbedded={true} />}
                   </div>
                 </>
               );
