@@ -13,6 +13,7 @@ import {
   UserX, 
   GraduationCap, 
   Calendar as CalendarIcon, 
+  Image as ImageIcon,
   MessageSquare, 
   Gift, 
   ArrowUpRight,
@@ -53,7 +54,9 @@ import { useUserContext } from "@/context/UserContext";
 import { API_URL, getAvatarUrl } from "@/lib/config";
 import dayjs from "dayjs";
 import isSameOrAfter from "dayjs/plugin/isSameOrAfter";
+import isSameOrBefore from "dayjs/plugin/isSameOrBefore";
 dayjs.extend(isSameOrAfter);
+dayjs.extend(isSameOrBefore);
 import { TablePagination } from "@/components/common/TablePagination";
 import { formatTime12h } from "@/lib/utils";
 import { RequestPunchOutDialog } from "@/components/dashboard/RequestPunchOutDialog";
@@ -63,6 +66,7 @@ import { toast } from "sonner";
 import { useConfirm } from "@/context/ConfirmContext";
 import { PunchInModal } from "@/components/dashboard/PunchInModal";
 import { QuickActionsWidget } from "@/components/dashboard/QuickActionsWidget";
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
  
 const formatToHhMm = (totalMinutes: number) => {
   const { confirm } = useConfirm();
@@ -1666,18 +1670,53 @@ function EventsSidebar({ user, leaves }: { user: any, leaves: any[] }) {
   const [editingEvent, setEditingEvent] = useState<any>(null);
   const [currentMonth, setCurrentMonth] = useState(dayjs());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [dashboardBanners, setDashboardBanners] = useState<any[]>([]);
+  const [carouselApi, setCarouselApi] = useState<any>();
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const canAddEvents = user?.role === "Admin" || user?.role === "HR";
   const { confirm } = useConfirm();
+ 
+  const today = dayjs().format('YYYY-MM-DD');
+  const activeBanners = dashboardBanners.filter(b => {
+    if (!b.isActive) return false;
+    const hasStartDate = !!b.startDate;
+    const hasEndDate = !!b.endDate;
+    if (!hasStartDate && !hasEndDate) return true;
+    if (hasStartDate && !hasEndDate) return dayjs(today).isSameOrAfter(b.startDate);
+    if (!hasStartDate && hasEndDate) return dayjs(today).isSameOrBefore(b.endDate);
+    return dayjs(today).isSameOrAfter(b.startDate) && dayjs(today).isSameOrBefore(b.endDate);
+  });
  
   useEffect(() => {
     fetchEvents();
   }, []);
+
+  useEffect(() => {
+    if (!carouselApi || activeBanners.length <= 1) return;
+    const interval = setInterval(() => {
+      carouselApi.scrollNext();
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [carouselApi, activeBanners.length]);
+
+  useEffect(() => {
+    if (!carouselApi) return;
+    const onSelect = () => {
+      setCurrentSlideIndex(carouselApi.selectedScrollSnap());
+    };
+    carouselApi.on("select", onSelect);
+    onSelect();
+    return () => {
+      carouselApi.off("select", onSelect);
+    };
+  }, [carouselApi]);
  
   const fetchEvents = async () => {
     try {
-      const [resEvents, resEmp] = await Promise.all([
+      const [resEvents, resEmp, resSettings] = await Promise.all([
         fetch(`${API_URL}/events`),
-        fetch(`${API_URL}/employees`)
+        fetch(`${API_URL}/employees`),
+        fetch(`${API_URL}/system-settings`)
       ]);
       
       let eventsData = [];
@@ -1688,6 +1727,11 @@ function EventsSidebar({ user, leaves }: { user: any, leaves: any[] }) {
       let empData = [];
       if (resEmp.ok) {
         empData = await resEmp.json();
+      }
+
+      if (resSettings.ok) {
+        const settingsData = await resSettings.json();
+        setDashboardBanners(settingsData.dashboardBanners || []);
       }
 
       const birthdayEvents = empData.filter((emp: any) => emp.dob).map((emp: any) => {
@@ -1809,21 +1853,66 @@ function EventsSidebar({ user, leaves }: { user: any, leaves: any[] }) {
     .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   return (
-    <div className="bg-white border border-border rounded-2xl p-6 shadow-sm h-fit">
-      <div className="flex justify-between items-start mb-1">
-        <h3 className="font-bold text-lg text-[#111827]">View Events</h3>
-        <Button onClick={() => setIsViewAllOpen(true)} variant="outline" size="sm" className="h-8 text-[11px] font-bold border-gray-200 px-3 rounded-lg text-gray-600">View all</Button>
-      </div>
-      <div className="flex items-center justify-between mb-6">
-        <p className="text-[13px] text-gray-500 font-medium">This month events</p>
-        {selectedDate && (
-          <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] text-brand-teal" onClick={() => setSelectedDate(null)}>
-            Clear Filter <X className="w-3 h-3 ml-1" />
-          </Button>
+    <div className="space-y-6">
+      {/* Banner Card */}
+      <div className="bg-white border border-border rounded-2xl p-6 shadow-sm h-fit">
+        <div className="flex justify-between items-start mb-4">
+          <h3 className="font-bold text-lg text-[#111827] transition-all duration-300">
+            {activeBanners[currentSlideIndex]?.heading || "Announcements"}
+          </h3>
+        </div>
+        {activeBanners.length > 0 ? (
+          <div className="rounded-xl overflow-hidden shadow-sm relative group w-full h-[380px]">
+            <Carousel setApi={setCarouselApi} opts={{ loop: true }} className="w-full h-full">
+              <CarouselContent className="h-full">
+                {activeBanners.map(banner => (
+                  <CarouselItem key={banner.id} className="h-full flex items-center justify-center">
+                    {banner.externalUrl ? (
+                      <a href={banner.externalUrl} target="_blank" rel="noreferrer" className="block w-full h-full cursor-pointer">
+                        <img 
+                          src={banner.imageUrl.startsWith('http') ? banner.imageUrl : `${API_URL}${banner.imageUrl}`} 
+                          alt="Banner" 
+                          className="w-full h-full object-cover rounded-xl"
+                        />
+                      </a>
+                    ) : (
+                      <img 
+                        src={banner.imageUrl.startsWith('http') ? banner.imageUrl : `${API_URL}${banner.imageUrl}`} 
+                        alt="Banner" 
+                        className="w-full h-full object-cover rounded-xl"
+                      />
+                    )}
+                  </CarouselItem>
+                ))}
+              </CarouselContent>
+              <CarouselPrevious className="absolute left-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 hover:bg-white text-brand-teal border-none" />
+              <CarouselNext className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 hover:bg-white text-brand-teal border-none" />
+            </Carousel>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50/50 flex flex-col items-center justify-center p-6 h-[380px] text-gray-400">
+            <ImageIcon className="w-8 h-8 mb-2 text-gray-300" />
+            <span className="text-[12px] font-semibold">No Active Banners</span>
+          </div>
         )}
       </div>
+
+      {/* Events / Calendar Card */}
+      <div className="bg-white border border-border rounded-2xl p-6 shadow-sm h-fit">
+        <div className="flex justify-between items-start mb-1">
+          <h3 className="font-bold text-lg text-[#111827]">View Events</h3>
+          <Button onClick={() => setIsViewAllOpen(true)} variant="outline" size="sm" className="h-8 text-[11px] font-bold border-gray-200 px-3 rounded-lg text-gray-600">View all</Button>
+        </div>
+        <div className="flex items-center justify-between mb-6">
+          <p className="text-[13px] text-gray-500 font-medium">This month events</p>
+          {selectedDate && (
+            <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] text-brand-teal" onClick={() => setSelectedDate(null)}>
+              Clear Filter <X className="w-3 h-3 ml-1" />
+            </Button>
+          )}
+        </div>
  
-      <div className="bg-[#F9FAFB] border border-[#F3F4F6] rounded-2xl p-5 mb-6">
+        <div className="bg-[#F9FAFB] border border-[#F3F4F6] rounded-2xl p-5 mb-6">
         <div className="flex items-center justify-between mb-6">
            <Button 
              variant="ghost" 
@@ -1973,6 +2062,7 @@ function EventsSidebar({ user, leaves }: { user: any, leaves: any[] }) {
         onEditEvent={handleEditClick}
         onDeleteEvent={handleDeleteEvent}
       />
+    </div>
     </div>
   );
 }

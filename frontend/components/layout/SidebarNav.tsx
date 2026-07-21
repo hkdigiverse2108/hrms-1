@@ -67,6 +67,34 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     return null;
   });
 
+  const getOpenKeys = React.useCallback(() => {
+    if (pathname.startsWith("/employees/documents")) return ["documents-sub"];
+    if (pathname.startsWith("/employees")) return ["employees-sub"];
+    if (pathname.startsWith("/workspace")) return ["workspace"];
+    if (pathname.startsWith("/invoice")) return ["invoice"];
+    if (pathname.startsWith("/work-management")) return ["work-management"];
+    if (pathname.startsWith("/recruitment")) return ["recruitment-sub"];
+    if (pathname.startsWith("/payroll")) return ["payroll-sub"];
+    if (pathname.startsWith("/company-finance")) return ["company-finance-sub"];
+    if (pathname.startsWith("/training") || pathname.startsWith("/admin/courses")) return ["training"];
+    return [];
+  }, [pathname]);
+
+  const [openKeys, setOpenKeys] = useState<string[]>([]);
+
+  useEffect(() => {
+    setOpenKeys(getOpenKeys());
+  }, [getOpenKeys]);
+
+  const onOpenChange: MenuProps['onOpenChange'] = (keys) => {
+    const latestOpenKey = keys.find((key) => openKeys.indexOf(key) === -1);
+    if (latestOpenKey) {
+      setOpenKeys([latestOpenKey]);
+    } else {
+      setOpenKeys(keys);
+    }
+  };
+
   useEffect(() => {
     // Refresh settings in background (deferred to avoid competing with critical calls)
     const timer = setTimeout(async () => {
@@ -94,6 +122,8 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
 
   const items = React.useMemo(() => {
     const workManagementChildren: MenuItem[] = [];
+
+    workManagementChildren.push(getItem(<Link href="/work-management/my-tasks">My Tasks</Link>, "/work-management/my-tasks"));
 
     if (isAdmin || checkPermission('projects', 'canView')) {
       workManagementChildren.push(getItem(<Link href="/work-management/projects">Projects</Link>, "/work-management/projects"));
@@ -343,19 +373,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     return [];
   };
 
-  const getOpenKeys = () => {
-    if (pathname.startsWith("/employees/documents")) return ["documents-sub"];
-    if (pathname.startsWith("/employees")) return ["employees-sub"];
-    if (pathname.startsWith("/workspace")) return ["workspace"];
-    if (pathname.startsWith("/invoice")) return ["invoice"];
-    if (pathname.startsWith("/work-management")) return ["work-management"];
-    if (pathname.startsWith("/recruitment")) return ["recruitment-sub"];
-    if (pathname.startsWith("/payroll")) return ["payroll-sub"];
-    if (pathname.startsWith("/company-finance")) return ["company-finance-sub"];
-    if (pathname.startsWith("/training") || pathname.startsWith("/admin/courses")) return ["training"];
-    return [];
-  };
- 
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Logo Area */}
@@ -382,7 +400,8 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
           mode="inline"
           inlineCollapsed={collapsed}
           selectedKeys={getSelectedKeys()}
-          defaultOpenKeys={getOpenKeys()}
+          openKeys={openKeys}
+          onOpenChange={onOpenChange}
           items={items}
           style={{ borderRight: 0, background: 'transparent' }}
           className="px-3 custom-sidebar-menu font-medium"

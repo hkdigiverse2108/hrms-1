@@ -289,7 +289,7 @@ export default function GalleryPage() {
                   <th className="px-6 py-4 text-left font-semibold text-slate-700">Link</th>
                   <th className="px-6 py-4 text-left font-semibold text-slate-700">Purpose</th>
                   {(isAdmin || canEdit || canDelete) && (
-                    <th className="px-6 py-4 text-right font-semibold text-slate-700">Actions</th>
+                    <th className="px-6 py-4 text-right font-semibold text-slate-700 sticky right-0 z-20 bg-slate-50 shadow-[-1px_0_0_0_#e2e8f0]">Actions</th>
                   )}
                 </tr>
               </thead>
@@ -325,7 +325,7 @@ export default function GalleryPage() {
                     </td>
                     <td className="px-6 py-4 text-slate-600 max-w-[300px] truncate">{item.purpose || <span className="text-slate-400 italic">None</span>}</td>
                     {(isAdmin || canEdit || canDelete) && (
-                      <td className="px-6 py-4 text-right">
+                      <td className="px-6 py-4 text-right sticky right-0 z-10 bg-white group-hover:bg-slate-50 shadow-[-1px_0_0_0_#e2e8f0] transition-colors">
                         <div className="flex items-center justify-end gap-2 opacity-90 group-hover:opacity-100">
                           {(isAdmin || canEdit) && (
                             <Button 

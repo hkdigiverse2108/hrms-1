@@ -1210,48 +1210,8 @@ export default function EmployeeDocumentsPage() {
       </PageHeader>
 
       <Tabs value={activeMainTab} onValueChange={(val: any) => setActiveMainTab(val)} className="w-full">
-        <TabsList className={`grid w-full p-1 bg-slate-100/80 rounded-xl ${isAdminOrHR ? 'grid-cols-5 max-w-[1000px]' : 'grid-cols-2 max-w-[400px]'}`}>
-          <TabsTrigger 
-            value="submitted" 
-            className="font-bold data-[state=active]:bg-brand-teal data-[state=active]:text-white transition-all duration-200"
-          >
-            Submitted Documents
-          </TabsTrigger>
-          <TabsTrigger 
-            value="requests" 
-            className="font-bold data-[state=active]:bg-brand-teal data-[state=active]:text-white transition-all duration-200"
-          >
-            Official Letters & Requests
-          </TabsTrigger>
-          {isAdminOrHR && (
-            <TabsTrigger 
-              value="types" 
-              className="font-bold data-[state=active]:bg-brand-teal data-[state=active]:text-white transition-all duration-200"
-            >
-              Document Types
-            </TabsTrigger>
-          )}
-          {isAdminOrHR && (
-            <TabsTrigger 
-              value="templates" 
-              className="font-bold data-[state=active]:bg-brand-teal data-[state=active]:text-white transition-all duration-200"
-            >
-              Document Templates
-            </TabsTrigger>
-          )}
-          {isAdminOrHR && (
-            <TabsTrigger 
-              value="contracts" 
-              className="font-bold data-[state=active]:bg-brand-teal data-[state=active]:text-white transition-all duration-200"
-            >
-              Verify Contracts
-            </TabsTrigger>
-          )}
-        </TabsList>
-
-        <TabsContent value="submitted" className="mt-6 space-y-6">
-          {isAdminOrHR && (
-            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-5">
+          {activeMainTab === 'submitted' && isAdminOrHR && (
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-5 mb-4">
               <div className="flex items-center gap-4">
                 <div className="w-64">
                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Filter by Employee</span>
@@ -1353,6 +1313,48 @@ export default function EmployeeDocumentsPage() {
               )}
             </div>
           )}
+
+        <TabsList className="inline-flex items-center gap-1 w-max bg-slate-100/70 p-1 rounded-xl shadow-inner border border-slate-200/60 h-auto justify-start shrink-0 mb-6">
+          <TabsTrigger 
+            value="submitted" 
+            className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto"
+          >
+            Submitted Documents
+          </TabsTrigger>
+          <TabsTrigger 
+            value="requests" 
+            className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto"
+          >
+            Official Letters & Requests
+          </TabsTrigger>
+          {isAdminOrHR && (
+            <TabsTrigger 
+              value="types" 
+              className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto"
+            >
+              Document Types
+            </TabsTrigger>
+          )}
+          {isAdminOrHR && (
+            <TabsTrigger 
+              value="templates" 
+              className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto"
+            >
+              Document Templates
+            </TabsTrigger>
+          )}
+          {isAdminOrHR && (
+            <TabsTrigger 
+              value="contracts" 
+              className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto"
+            >
+              Verify Contracts
+            </TabsTrigger>
+          )}
+        </TabsList>
+
+
+        <TabsContent value="submitted" className="mt-6 space-y-6">
           
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <DataTable

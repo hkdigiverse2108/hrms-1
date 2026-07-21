@@ -1089,7 +1089,7 @@ export default function ResourceManagementPage() {
                   <th className="px-6 py-4 font-bold text-foreground text-center">Condition</th>
                   <th className="px-6 py-4 font-bold text-foreground">Status</th>
                   <th className="px-6 py-4 font-bold text-foreground">Assigned To</th>
-                  {!isEmployeeOnly && <th className="px-6 py-4 font-bold text-foreground text-right">Actions</th>}
+                  {!isEmployeeOnly && <th className="px-6 py-4 font-bold text-foreground text-right sticky right-0 z-20 bg-[#f9fafb] shadow-[-1px_0_0_0_#e2e8f0]">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -1217,7 +1217,7 @@ export default function ResourceManagementPage() {
                         )}
                       </td>
                       {!isEmployeeOnly && (
-                        <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
+                        <td className="px-6 py-4 text-right sticky right-0 z-10 bg-white group-hover:bg-slate-50 shadow-[-1px_0_0_0_#e2e8f0] transition-colors" onClick={(e) => e.stopPropagation()}>
                           <div className="flex justify-end gap-1">
                             <Button 
                               variant="ghost" 
@@ -1372,7 +1372,7 @@ export default function ResourceManagementPage() {
                       <th className="px-6 py-4 font-bold text-foreground">Category</th>
                       <th className="px-6 py-4 font-bold text-foreground">Description</th>
                       <th className="px-6 py-4 font-bold text-foreground">Total Resources</th>
-                      <th className="px-6 py-4 font-bold text-foreground text-right">Actions</th>
+                      <th className="px-6 py-4 font-bold text-foreground text-right sticky right-0 z-20 bg-[#f9fafb] shadow-[-1px_0_0_0_#e2e8f0]">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -1393,7 +1393,7 @@ export default function ResourceManagementPage() {
                         <td className="px-6 py-4 text-sm font-semibold text-foreground">
                           {cat.total}
                         </td>
-                        <td className="px-6 py-4 text-right">
+                        <td className="px-6 py-4 text-right sticky right-0 z-10 bg-white group-hover:bg-slate-50 shadow-[-1px_0_0_0_#e2e8f0] transition-colors">
                           <div className="flex justify-end gap-1">
                             <Button 
                               variant="ghost" 

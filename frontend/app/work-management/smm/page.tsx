@@ -821,6 +821,7 @@ export default function CreativeClientsPage() {
 
       const projectStatus = p?.status || "";
       const isOnHold = projectStatus.toLowerCase() === "on-hold";
+      if (isOnHold && masterFilter !== "on-hold") return false;
       const isFollowupDue = p?.nextFollowupDate && new Date(p.nextFollowupDate) <= new Date();
       
       const hasPendingWork = pendingCounts[c.id] > 0;

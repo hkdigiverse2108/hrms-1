@@ -1386,9 +1386,9 @@ class TaskPreset(TaskPresetBase):
 class WMTaskBase(BaseModel):
     title: str
     description: Optional[str] = None
-    projectId: str
+    projectId: Optional[str] = ""
     projectName: Optional[str] = None
-    assignedToId: str # Employee ID
+    assignedToId: Optional[str] = "" # Employee ID
     assignedToName: Optional[str] = None
     department: Optional[str] = None
     dueDate: Optional[RobustDate] = None
@@ -1612,6 +1612,7 @@ class SystemSettingsBase(BaseModel):
     otpRequiredRoles: Optional[List[str]] = []
     financeDecimalScaling: Optional[int] = 0
     leadCategories: Optional[List[str]] = Field(default_factory=list)
+    dashboardBanners: Optional[List[Dict[str, Any]]] = Field(default_factory=list)
 
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
@@ -1654,6 +1655,7 @@ class SystemSettingsUpdate(BaseModel):
     otpRequiredRoles: Optional[List[str]] = None
     financeDecimalScaling: Optional[int] = None
     leadCategories: Optional[List[str]] = None
+    dashboardBanners: Optional[List[Dict[str, Any]]] = None
 
 class SystemSettings(SystemSettingsBase):
     id: str
