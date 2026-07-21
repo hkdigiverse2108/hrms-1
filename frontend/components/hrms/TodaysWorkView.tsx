@@ -77,36 +77,37 @@ export function TodaysWorkView({
     if (proj) {
       const dates = getPastDates(6); // Today + past 6 days
       dates.forEach(dateStr => {
-        const hasDataFill = dailyReports.some(r => {
-          if (r.clientId !== client.id || normalizeDate(r.date) !== dateStr) return false;
+        const report = dailyReports.find(r => r.clientId === client.id && normalizeDate(r.date) === dateStr);
+        const hasDataFill = (() => {
+          if (!report) return false;
           const isFilled = (val: any) => val !== undefined && val !== null && val !== 0 && val !== "" && val !== "0" && val !== 0.0;
-          const isClientIssue = r.remarks && r.remarks.toString().includes("[CLIENT ISSUE]");
+          const isClientIssue = report.remarks && report.remarks.toString().includes("[CLIENT ISSUE]");
           return (
-            isFilled(r.reach) ||
-            isFilled(r.impression) ||
-            isFilled(r.leads) ||
-            isFilled(r.spend) ||
-            isFilled(r.revenue) ||
-            isFilled(r.followers) ||
-            isFilled(r.cpl) ||
-            (r.remarks && r.remarks.toString().trim() !== "" && !isClientIssue)
+            isFilled(report.reach) ||
+            isFilled(report.impression) ||
+            isFilled(report.leads) ||
+            isFilled(report.spend) ||
+            isFilled(report.revenue) ||
+            isFilled(report.followers) ||
+            isFilled(report.cpl) ||
+            (report.remarks && report.remarks.toString().trim() !== "" && !isClientIssue)
           );
-        });
-        const hasMetrics = projectRemarks.some(r => r.projectId === proj.id && normalizeDate(r.date) === dateStr && !r.userRemark?.includes("[CLIENT ISSUE]") && !r.clientRemark?.includes("[CLIENT ISSUE]") && !r.remark?.includes("[CLIENT ISSUE]"));
+        })();
+
+        const metricsRecord = projectRemarks.find(r => r.projectId === proj.id && normalizeDate(r.date) === dateStr);
+        const hasMetrics = !!metricsRecord && (!metricsRecord.userRemark?.includes("[CLIENT ISSUE]") && !metricsRecord.clientRemark?.includes("[CLIENT ISSUE]") && !metricsRecord.remark?.includes("[CLIENT ISSUE]"));
 
         let dayTasks = [
-          { id: "data_fill", name: "Data Fill", assigneeId: proj.assignedEmployeeId, date: dateStr },
-          { id: "revenue", name: "Revenue", assigneeId: proj.revenueAssigneeId, date: dateStr },
-          { id: "follower", name: "Follower", assigneeId: proj.followerAssigneeId, date: dateStr },
-          { id: "user_remark", name: "User Remark", assigneeId: proj.userRemarkAssigneeId, date: dateStr },
-          { id: "client_remark", name: "Client Remark", assigneeId: proj.clientRemarkAssigneeId, date: dateStr },
+          { id: "data_fill", name: "Data Fill", assigneeId: proj.assignedEmployeeId, date: dateStr, existingRemark: report?.remarks },
+          { id: "revenue", name: "Revenue", assigneeId: proj.revenueAssigneeId, date: dateStr, existingRemark: metricsRecord?.remark },
+          { id: "follower", name: "Follower", assigneeId: proj.followerAssigneeId, date: dateStr, existingRemark: metricsRecord?.remark },
         ].filter(t => t.assigneeId);
 
         if (hasDataFill) {
           dayTasks = dayTasks.filter(t => t.id !== "data_fill");
         }
         if (hasMetrics) {
-          dayTasks = dayTasks.filter(t => !["revenue", "follower", "user_remark", "client_remark"].includes(t.id));
+          dayTasks = dayTasks.filter(t => !["revenue", "follower"].includes(t.id));
         }
 
         allMissingTasks = [...allMissingTasks, ...dayTasks];
@@ -145,12 +146,16 @@ export function TodaysWorkView({
       if (!isMyTask) return false;
     }
     
+    const isClientIssue = task.existingRemark && task.existingRemark.includes('[CLIENT ISSUE]');
+
     if (timeFilter === "today") {
-      if (task.date !== yesterdayStr) return false;
+      if (task.date > yesterdayStr) return false; // keep yesterday and older
+      if (isClientIssue) return false; // exclude client issues from today
     } else if (timeFilter === "pending") {
-      if (task.date >= yesterdayStr) return false; // older than yesterday
+      if (!isClientIssue) return false; // ONLY show client issues in pending
     } else if (timeFilter === "upcoming") {
       if (task.date <= yesterdayStr) return false; // newer than yesterday
+      if (isClientIssue) return false; // usually upcoming wouldn't have issues, but just in case
     }
 
     if (brandFilter !== "all" && String(task.clientId) !== String(brandFilter)) {
@@ -282,7 +287,7 @@ export function TodaysWorkView({
                       </div>
                     </TableCell>
                     <TableCell>
-                      {editingRemarkId === `${task.id}-${task.date}` ? (
+                      {editingRemarkId === `${task.clientId}-${task.project?.id}-${task.id}-${task.date}` ? (
                         <div className="flex flex-col gap-1.5 min-w-[150px]">
                           <div className="flex items-center gap-1.5">
                             <Input 
@@ -294,7 +299,7 @@ export function TodaysWorkView({
                               onKeyDown={async (e) => {
                                 if (e.key === 'Enter' && onSaveRemark) {
                                   const finalRemark = editingIsClientIssue ? `[CLIENT ISSUE] ${editingRemarkValue}` : editingRemarkValue;
-                                  const success = await onSaveRemark(task.id, task.project.id, task.clientId, task.date, finalRemark);
+                                  const success = await onSaveRemark(task.id, task.project?.id, task.clientId, task.date, finalRemark);
                                   if (success) setEditingRemarkId(null);
                                 }
                                 if (e.key === 'Escape') setEditingRemarkId(null);
@@ -304,7 +309,7 @@ export function TodaysWorkView({
                               onClick={async () => {
                                 if (onSaveRemark) {
                                   const finalRemark = editingIsClientIssue ? `[CLIENT ISSUE] ${editingRemarkValue}` : editingRemarkValue;
-                                  const success = await onSaveRemark(task.id, task.project.id, task.clientId, task.date, finalRemark);
+                                  const success = await onSaveRemark(task.id, task.project?.id, task.clientId, task.date, finalRemark);
                                   if (success) setEditingRemarkId(null);
                                 }
                               }} 
@@ -326,10 +331,29 @@ export function TodaysWorkView({
                             <span className="text-[10px] font-bold text-red-500 uppercase tracking-wider">Issue from client</span>
                           </label>
                         </div>
+                      ) : task.existingRemark ? (
+                        <div className="group relative flex items-center gap-2">
+                          <span className="text-xs text-slate-700 truncate max-w-[120px] font-medium" title={task.existingRemark}>
+                            {task.existingRemark.replace('[CLIENT ISSUE] ', '').replace('[CLIENT ISSUE]', '')}
+                          </span>
+                          {task.existingRemark.includes('[CLIENT ISSUE]') && (
+                            <span className="text-[9px] font-bold text-red-500 uppercase tracking-wider border border-red-200 bg-red-50 px-1 rounded">Issue</span>
+                          )}
+                          <button 
+                            onClick={() => {
+                              setEditingRemarkId(`${task.clientId}-${task.project?.id}-${task.id}-${task.date}`);
+                              setEditingRemarkValue(task.existingRemark.replace('[CLIENT ISSUE] ', '').replace('[CLIENT ISSUE]', '').trim());
+                              setEditingIsClientIssue(task.existingRemark.includes('[CLIENT ISSUE]'));
+                            }}
+                            className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-brand-teal p-1 rounded-md transition-all ml-1"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                          </button>
+                        </div>
                       ) : (
                         <button
                           onClick={() => {
-                            setEditingRemarkId(`${task.id}-${task.date}`);
+                            setEditingRemarkId(`${task.clientId}-${task.project?.id}-${task.id}-${task.date}`);
                             setEditingRemarkValue("");
                             setEditingIsClientIssue(false);
                           }}

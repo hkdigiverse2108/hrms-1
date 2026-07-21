@@ -1753,6 +1753,7 @@ export default function MarketingReportsPage() {
             projectId,
             projectName: project?.title || "",
             date: dateStr,
+            campaignName: "Added Remark",
             remarks: remark,
             performedBy: user?.id,
             userName: user?.name || user?.firstName || "Unknown User",

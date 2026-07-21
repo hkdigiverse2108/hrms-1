@@ -1,0 +1,24 @@
+{
+  "url": "http://127.0.0.1:8005/marketing/reports/daily",
+  "errors": [
+    {
+      "type": "missing",
+      "loc": [
+        "body",
+        "campaignName"
+      ],
+      "msg": "Field required",
+      "input": {
+        "clientId": "6a38b4aa99f693cfe8e0f56b",
+        "clientName": "zzzzzzzz",
+        "projectId": "6a3ea18a8afd68632803d670",
+        "projectName": "VALIDA IMPEX - Digital Marketing Project",
+        "date": "2026-07-14",
+        "remarks": "[CLIENT ISSUE] sdf",
+        "performedBy": "69ef0a4c11ab517b772b88cb",
+        "userName": "Admin    "
+      }
+    }
+  ],
+  "body": "{\"clientId\":\"6a38b4aa99f693cfe8e0f56b\",\"clientName\":\"zzzzzzzz\",\"projectId\":\"6a3ea18a8afd68632803d670\",\"projectName\":\"VALIDA IMPEX - Digital Marketing Project\",\"date\":\"2026-07-14\",\"remarks\":\"[CLIENT ISSUE] sdf\",\"performedBy\":\"69ef0a4c11ab517b772b88cb\",\"userName\":\"Admin    \"}"
+}
