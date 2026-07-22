@@ -439,16 +439,34 @@ export default function ProjectsPage() {
       const completedModulesCount = project.modules.filter((m: any) => m.stage === "completed").length;
       const inProgressModules = project.modules.filter((m: any) => m.stage === "in_progress" || m.stage === "in-progress" || m.stage === "testing" || m.stage === "bugs");
       const percent = Math.round((completedModulesCount / project.modules.length) * 100);
-      return { percent, inProgressNames: inProgressModules.map((m: any) => m.name), isTaskFallback: false };
+      
+      const assignedTeamIds = project.assignedTeamIds || [];
+      const teamMembersStats = assignedTeamIds.map((empId: string) => {
+        const emp = employees.find(e => String(e.id) === empId);
+        const empName = emp ? `${emp.firstName || ""} ${emp.lastName || ""}`.trim() || emp.name : "Unknown";
+        const memberModules = inProgressModules.filter((m: any) => m.assignedToId === empId).map((m: any) => m.name);
+        return { id: empId, name: empName, items: memberModules };
+      });
+
+      return { percent, inProgressNames: inProgressModules.map((m: any) => m.name), teamMembersStats, isTaskFallback: false };
     }
 
     const projectTasks = tasks.filter(t => t.projectId === project.id);
-    if (projectTasks.length === 0) return { percent: 0, inProgressNames: [], isTaskFallback: false };
+    if (projectTasks.length === 0) return { percent: 0, inProgressNames: [], teamMembersStats: [], isTaskFallback: false };
     
     const completedTasks = projectTasks.filter(t => t.status === "completed").length;
     const inProgressTasks = projectTasks.filter(t => t.status === "in_progress" || t.status === "in-progress" || t.status === "testing" || t.status === "bugs");
     const percent = Math.round((completedTasks / projectTasks.length) * 100);
-    return { percent, inProgressNames: inProgressTasks.map(t => t.title), isTaskFallback: true };
+
+    const assignedTeamIds = project.assignedTeamIds || [];
+    const teamMembersStats = assignedTeamIds.map((empId: string) => {
+      const emp = employees.find(e => String(e.id) === empId);
+      const empName = emp ? `${emp.firstName || ""} ${emp.lastName || ""}`.trim() || emp.name : "Unknown";
+      const memberTasks = inProgressTasks.filter((t: any) => t.assignedToId === empId).map((t: any) => t.title);
+      return { id: empId, name: empName, items: memberTasks };
+    });
+
+    return { percent, inProgressNames: inProgressTasks.map(t => t.title), teamMembersStats, isTaskFallback: true };
   };
 
   const getStatusColor = (status: string, progress: number) => {
@@ -1363,6 +1381,37 @@ export default function ProjectsPage() {
                                 <Badge key={i} variant="outline" className="text-[9px] bg-blue-50 text-blue-700 border-blue-200 shadow-none font-bold">
                                   {name}
                                 </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {stats.teamMembersStats && stats.teamMembersStats.length > 0 && (
+                          <div className="pt-3 border-t border-slate-100 mt-2">
+                            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                              Assigned Team Members
+                            </p>
+                            <div className="flex flex-wrap gap-4">
+                              {stats.teamMembersStats.map((member: any, idx: number) => (
+                                <div key={idx} className="flex flex-col gap-1.5 min-w-[120px]">
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="w-5 h-5 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-[9px] font-bold text-indigo-700 shadow-sm">
+                                      {member.name !== 'Unknown' ? member.name.charAt(0).toUpperCase() : '?'}
+                                    </div>
+                                    <span className="text-[11px] font-bold text-slate-700">
+                                      {member.name}
+                                    </span>
+                                  </div>
+                                  {member.items.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 pl-6">
+                                      {member.items.map((itemName: string, i: number) => (
+                                        <Badge key={i} variant="outline" className="text-[9px] bg-blue-50 text-blue-700 border-blue-200 shadow-none font-bold py-0.5 px-1.5">
+                                          {itemName}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
                               ))}
                             </div>
                           </div>
