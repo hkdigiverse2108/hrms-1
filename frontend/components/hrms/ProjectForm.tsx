@@ -181,6 +181,94 @@ function PhaseMemberMultiSelect({
   );
 }
 
+function SingleEmployeeSelectWithSearch({ 
+  employees, 
+  selectedId, 
+  onChange,
+  placeholder = "Search employee..."
+}: { 
+  employees: any[]; 
+  selectedId: string; 
+  onChange: (id: string) => void;
+  placeholder?: string;
+}) {
+  const [search, setSearch] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const selectedEmployee = employees.find(e => e.id === selectedId);
+
+  // When dropdown is closed, reset search or keep it empty. We actually want to show the selected employee name in the input if not typing
+  useEffect(() => {
+    if (!isOpen) {
+      if (selectedEmployee) {
+        setSearch(`${selectedEmployee.firstName} ${selectedEmployee.lastName}`);
+      } else {
+        setSearch("");
+      }
+    } else {
+      setSearch("");
+    }
+  }, [isOpen, selectedEmployee]);
+
+  const filtered = employees.filter(emp => {
+    const fullName = `${emp.firstName || ""} ${emp.lastName || ""}`.toLowerCase();
+    return fullName.includes(search.toLowerCase());
+  });
+
+  const handleSelect = (id: string) => {
+    onChange(id);
+    setIsOpen(false);
+  };
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <Input
+        placeholder={placeholder}
+        value={search}
+        onChange={(e) => { setSearch(e.target.value); setIsOpen(true); }}
+        onFocus={() => setIsOpen(true)}
+        className="w-full bg-white border-slate-200 focus-visible:ring-brand-teal text-sm h-10"
+      />
+      
+      {isOpen && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-md shadow-lg max-h-60 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <div className="p-3 text-sm text-slate-500 text-center">No employee found</div>
+          ) : (
+            filtered.map(emp => {
+              const isSelected = selectedId === emp.id;
+              return (
+                <div 
+                  key={emp.id}
+                  onClick={() => handleSelect(emp.id)}
+                  className="flex items-center justify-between p-2.5 text-sm hover:bg-slate-50 cursor-pointer"
+                >
+                  <div>
+                    <span>{emp.firstName} {emp.lastName}</span>
+                    {emp.department && <span className="text-xs text-slate-400 ml-2">({emp.department})</span>}
+                  </div>
+                  {isSelected && <Check className="w-4 h-4 text-brand-teal" />}
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = true, currentUser }: ProjectFormProps) {
   const isTeamLeader = currentUser?.role === "Team Leader" || currentUser?.designation?.toLowerCase() === "team leader";
   const [formData, setFormData] = useState<ProjectFormData>({
@@ -367,23 +455,12 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
             </div>
             <div className="space-y-2">
               <Label htmlFor="teamLeaderId">Team Leader</Label>
-              <Select 
-                value={formData.teamLeaderId} 
-                onValueChange={(v) => handleChange("teamLeaderId", v)}
-                disabled={isLoadingMeta}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder={isLoadingMeta ? "Loading..." : "Select Team Leader"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {employees
-                    .map((emp) => (
-                      <SelectItem key={emp.id} value={emp.id}>
-                        {emp.firstName} {emp.lastName} {emp.department ? `(${emp.department})` : ""}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+              <SingleEmployeeSelectWithSearch 
+                employees={allEmployees} 
+                selectedId={formData.teamLeaderId}
+                onChange={(v) => handleChange("teamLeaderId", v)}
+                placeholder={isLoadingMeta ? "Loading..." : "Search Team Leader..."}
+              />
             </div>
             {formData.department === "Digital Marketing" && (
               <div className="space-y-2">
