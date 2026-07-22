@@ -441,6 +441,7 @@ export function PendingWorkEmbedded({
         const assigner = employees.find((e: any) => e.id === assignerId);
 
         const finalStage = (stage === 'Editing' && entry.postReel === 'Post') ? 'Post/Graphics' : stage;
+        const transfer = incomingRequests.find((r: any) => r.taskId === (entry.id || entry._id) && r.stage === finalStage && r.status === 'Accepted' && String(r.receiverId) === String(user?.id));
         return {
           ...entry,
           clientDisplayName: displayName,
@@ -448,6 +449,7 @@ export function PendingWorkEmbedded({
           projectId: entry.projectId || project.id,
           stage: finalStage,
           deadline,
+          isTransferredToMe: !!transfer,
           type,
           taskName: entry.concept || entry.topic || (entry.postReel ? `${entry.postReel} Content` : `Task for ${entry.postingDate || entry.monthYear || 'Unknown Date'}`),
           assigneeName: assignee ? `${assignee.firstName} ${assignee.lastName}` : null,
@@ -591,7 +593,8 @@ export function PendingWorkEmbedded({
             taskName: ow.title,
             assigneeName: assignee ? `${assignee.firstName} ${assignee.lastName}` : (ow.assigneeName || null),
             assignerName: assigner ? `${assigner.firstName} ${assigner.lastName}` : (ow.assignerName || null),
-            isOtherWork: true
+            isOtherWork: true,
+            isTransferredToMe: !!transfer && String(transfer.receiverId) === String(user?.id)
           });
         }
       }
@@ -814,8 +817,8 @@ export function PendingWorkEmbedded({
           
           const deadlineDate = parseLocalDate(t.deadline);
           
-          if (type === 'todays-work') return deadlineDate <= today && t.status !== 'Approved';
-          if (type === 'upcoming-work') return deadlineDate > today && t.status !== 'Approved';
+          if (type === 'todays-work') return (deadlineDate <= today || t.isTransferredToMe) && t.status !== 'Approved';
+          if (type === 'upcoming-work') return (deadlineDate > today && !t.isTransferredToMe) && t.status !== 'Approved';
           return true;
         }
 
@@ -838,8 +841,8 @@ export function PendingWorkEmbedded({
         
         const deadlineDate = parseLocalDate(t.deadline);
         
-        if (type === 'todays-work') return deadlineDate <= today;
-        if (type === 'upcoming-work') return deadlineDate > today;
+        if (type === 'todays-work') return deadlineDate <= today || t.isTransferredToMe;
+        if (type === 'upcoming-work') return deadlineDate > today && !t.isTransferredToMe;
         return true;
       });
     }
@@ -866,6 +869,34 @@ export function PendingWorkEmbedded({
     });
     return defaultStages.filter(s => stages.has(s));
   }, [preFilteredTasks, isAdminOrTL]);
+
+  const renderTaskDetails = (req: any) => {
+    if (req.taskType === 'content-calendar') {
+      const entry = entries.find(e => e.id === req.taskId || e._id === req.taskId);
+      if (!entry) return null;
+      const client = clients.find(c => c.id === entry.clientId);
+      const cName = client ? (client.companyName || client.clientName) : '';
+      return (
+        <div className="flex flex-col gap-0.5 mt-1.5 p-2 bg-slate-50 rounded border border-slate-100 text-[10px] font-normal text-slate-500 max-w-sm">
+          {cName && <div><span className="font-semibold text-slate-600">Client:</span> {cName}</div>}
+          {entry.platform && <div><span className="font-semibold text-slate-600">Platform:</span> {entry.platform}</div>}
+          {entry.postReel && <div><span className="font-semibold text-slate-600">Format:</span> {entry.postReel}</div>}
+          {entry.concept && <div><span className="font-semibold text-slate-600">Concept:</span> {entry.concept}</div>}
+          {entry.topic && <div><span className="font-semibold text-slate-600">Topic:</span> {entry.topic}</div>}
+          {entry.caption && <div><span className="font-semibold text-slate-600">Caption:</span> {entry.caption}</div>}
+        </div>
+      );
+    } else {
+      const ow = otherWorkEntries.find(e => e.id === req.taskId || e._id === req.taskId);
+      if (!ow) return null;
+      return (
+        <div className="flex flex-col gap-0.5 mt-1.5 p-2 bg-slate-50 rounded border border-slate-100 text-[10px] font-normal text-slate-500 max-w-sm">
+          {ow.clientDisplayName && <div><span className="font-semibold text-slate-600">Context:</span> {ow.clientDisplayName}</div>}
+          {ow.description && <div><span className="font-semibold text-slate-600">Description:</span> {ow.description}</div>}
+        </div>
+      );
+    }
+  };
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden min-h-[calc(100vh-250px)] flex flex-col">
@@ -945,6 +976,7 @@ export function PendingWorkEmbedded({
                         </td>
                         <td className="px-6 py-4 font-semibold text-slate-800">
                           {req.taskName}
+                          {renderTaskDetails(req)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <Badge variant="outline" className="text-xs text-brand-teal border-brand-teal/30 bg-brand-teal/5">
@@ -1026,6 +1058,7 @@ export function PendingWorkEmbedded({
                         </td>
                         <td className="px-6 py-4 font-semibold text-slate-800">
                           {req.taskName}
+                          {renderTaskDetails(req)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <Badge variant="outline" className="text-xs text-brand-teal border-brand-teal/30 bg-brand-teal/5">
