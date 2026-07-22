@@ -676,10 +676,8 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
     const isHighLevelRole = ['team leader', 'manager', 'social media manager', 'head'].some(r => recordRole.includes(r) || recordDesig.includes(r));
     
     let hasAccess = false;
-    if (isAdmin) {
+    if (isAdmin || isHRUser) {
       hasAccess = true;
-    } else if (isHRUser) {
-      hasAccess = isHighLevelRole || record.department?.toLowerCase() === 'hr';
     } else if (isTeamLeader) {
       hasAccess = user?.department === record.department && !isHighLevelRole;
     } else if (checkPermission('daily-progress', 'canEdit')) {
