@@ -471,7 +471,7 @@ export function PendingWorkEmbedded({
         else if (stage === 'Approval') isAssignedToMe = String(transfer ? transfer.receiverId : (entry.assignedApproverId || project.assignedApproverId || client?.assignedApproverId)) === String(uId);
         else if (stage === 'Posting') isAssignedToMe = String(transfer ? transfer.receiverId : (entry.assignedPosterId || project.assignedPosterId || client?.assignedPosterId)) === String(uId);
         
-        if (!isEmployeeOrIntern && type === 'all') return true;
+        if (isAdminOrTL && (type === 'all' || workScope === 'all')) return true;
         return isAssignedToMe;
       };
 
@@ -483,7 +483,7 @@ export function PendingWorkEmbedded({
         const bpIds = Array.isArray(bpIdsRaw) ? bpIdsRaw : (typeof bpIdsRaw === 'string' ? bpIdsRaw.split(',').map((id: string) => id.trim()).filter(Boolean) : []);
         bpIds.forEach((bpId: string) => {
           const isAssignedToMe = user?.id === bpId;
-          if ((!isEmployeeOrIntern && type === 'all') || isAssignedToMe) {
+          if ((isAdminOrTL && (type === 'all' || workScope === 'all')) || isAssignedToMe) {
              const assignerId = project.teamLeaderId || client?.teamLeaderId;
              const assigner = employees.find((e: any) => e.id === assignerId);
              const assignee = employees.find((e: any) => e.id === bpId);
@@ -567,7 +567,7 @@ export function PendingWorkEmbedded({
       else if (ow.status === 'Approved') canSee = isAssignee || isAssigner;
 
       const isManagerOrAdmin = ['Team Leader', 'Admin', 'HR', 'Manager', 'Social Media Manager'].includes(user?.role) || user?.role?.toLowerCase() === 'admin';
-      if ((isManagerOrAdmin && type === 'all') || isAssignee || isAssigner) {
+      if ((isManagerOrAdmin && (type === 'all' || workScope === 'all')) || isAssignee || isAssigner) {
         if (type === 'all' || (type === 'completed-work' ? ow.status === 'Approved' : ow.status !== 'Approved')) {
           
           const assignee = employees.find((e: any) => e.id === ow.assigneeId);
@@ -604,7 +604,7 @@ export function PendingWorkEmbedded({
       
       const isManagerOrAdmin = ['Team Leader', 'Admin', 'HR', 'Manager', 'Social Media Manager'].includes(user?.role) || user?.role?.toLowerCase() === 'admin';
       
-      if ((isManagerOrAdmin && type === 'all') || isAssignee) {
+      if ((isManagerOrAdmin && (type === 'all' || workScope === 'all')) || isAssignee) {
         const deadlineStr = typeof project.nextFollowupDate === 'string' && project.nextFollowupDate.includes('T') 
           ? project.nextFollowupDate.split('T')[0] 
           : String(project.nextFollowupDate);
@@ -641,7 +641,7 @@ export function PendingWorkEmbedded({
       // 1. WhatsApp Group
       const waAssigneeId = project.assignedWhatsappGroupCreatorId || client.assignedWhatsappGroupCreatorId;
       if (waAssigneeId && !client.whatsappGroup) {
-        if ((isManagerOrAdmin && type === 'all') || waAssigneeId === uId) {
+        if ((isManagerOrAdmin && (type === 'all' || workScope === 'all')) || waAssigneeId === uId) {
           const assignee = employees.find((e: any) => e.id === waAssigneeId);
           tasks.push({
             id: `${project.id}-whatsapp`,
@@ -663,7 +663,7 @@ export function PendingWorkEmbedded({
       // 2. Greetings Msg
       const greetingAssigneeId = project.assignedGreetingsMsgSenderId || client.assignedGreetingsMsgSenderId;
       if (greetingAssigneeId && !client.greetingsMsgSent) {
-        if ((isManagerOrAdmin && type === 'all') || greetingAssigneeId === uId) {
+        if ((isManagerOrAdmin && (type === 'all' || workScope === 'all')) || greetingAssigneeId === uId) {
           const assignee = employees.find((e: any) => e.id === greetingAssigneeId);
           tasks.push({
             id: `${project.id}-greetings`,
@@ -685,7 +685,7 @@ export function PendingWorkEmbedded({
       // 3. Meetings
       const meetingAssigneeId = project.assignedMeetingsAssigneeId || client.assignedMeetingsAssigneeId;
       if (meetingAssigneeId && (!client.meetings || client.meetings.length === 0)) {
-        if ((isManagerOrAdmin && type === 'all') || meetingAssigneeId === uId) {
+        if ((isManagerOrAdmin && (type === 'all' || workScope === 'all')) || meetingAssigneeId === uId) {
           const assignee = employees.find((e: any) => e.id === meetingAssigneeId);
           tasks.push({
             id: `${project.id}-meetings`,
@@ -708,7 +708,7 @@ export function PendingWorkEmbedded({
       const ccAssigneeId = project.assignedContentCalendarCreatorId || client.assignedContentCalendarCreatorId;
       const ccCreated = entries.some(e => e.clientId === project.clientId || e.projectId === project.id);
       if (ccAssigneeId && !ccCreated) {
-        if ((isManagerOrAdmin && type === 'all') || ccAssigneeId === uId) {
+        if ((isManagerOrAdmin && (type === 'all' || workScope === 'all')) || ccAssigneeId === uId) {
           const assignee = employees.find((e: any) => e.id === ccAssigneeId);
           tasks.push({
             id: `${project.id}-cc-create`,
@@ -1498,7 +1498,7 @@ export function PendingWorkEmbedded({
                                 <History className="w-4 h-4" />
                               </Button>
                               <Button
-                                onClick={() => router.push(`/work-management/smm/${item.clientId}?highlightTask=${item.id}`)}
+                                onClick={() => router.push(`/work-management/smm/${item.clientId}?projectId=${item.projectId}&highlightTask=${item.id}&highlightDate=${item.postingDate || ''}`)}
                                 variant="ghost"
                                 size="icon"
                                 title="Show in Calendar"
