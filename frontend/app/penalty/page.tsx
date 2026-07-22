@@ -133,7 +133,7 @@ export default function RemarksPage() {
       const empId = r.employeeId;
       if (!empId) return;
       
-      const penaltyAmount = r.computedAmount !== undefined ? r.computedAmount : (r.amount || getPenaltyAmount(r.type));
+      const penaltyAmount = r.computedAmount != null ? r.computedAmount : (r.amount || getPenaltyAmount(r.type));
       
       if (!counts[empId]) {
         counts[empId] = {
@@ -423,7 +423,7 @@ export default function RemarksPage() {
         r.type || "",
         (r.details || "").replace(/₹/g, "Rs."),
         r.addedBy || "",
-        r.isWarning ? "Warning" : `Rs. ${Number((r.computedAmount !== undefined ? r.computedAmount : (r.amount || getPenaltyAmount(r.type))).toFixed(2))}`
+        r.isWarning ? "Warning" : `Rs. ${Number((r.computedAmount != null ? r.computedAmount : (r.amount || getPenaltyAmount(r.type))) || 0).toFixed(2)}`
       ])
 
       if (rows.length > 0) {
@@ -544,7 +544,7 @@ export default function RemarksPage() {
     currentPage * itemsPerPage
   );
 
-  const totalPenalty = Number(tabRemarks.reduce((sum, r) => sum + (r.computedAmount !== undefined ? r.computedAmount : (r.amount || getPenaltyAmount(r.type))), 0).toFixed(2));
+  const totalPenalty = Number(tabRemarks.reduce((sum, r) => sum + ((r.computedAmount != null ? r.computedAmount : (r.amount || getPenaltyAmount(r.type))) || 0), 0).toFixed(2));
 
   if (permissionsLoading) {
     return (
@@ -984,7 +984,7 @@ export default function RemarksPage() {
                         </span>
                       ) : (
                         <span className="text-red-600">
-                          ₹{Number((remark.computedAmount !== undefined ? remark.computedAmount : (remark.amount || getPenaltyAmount(remark.type))).toFixed(2))}
+                          ₹{Number((remark.computedAmount != null ? remark.computedAmount : (remark.amount || getPenaltyAmount(remark.type))) || 0).toFixed(2)}
                         </span>
                       )}
                     </td>

@@ -2052,14 +2052,15 @@ async def get_remarks(db, skip: int = 0, limit: int = 100):
     items = await get_items(db, "remarks", skip, limit)
     # Enrich with penalty amount
     penalty_types = await get_penalty_types(db)
-    
+
     # Cache salary structures to avoid repeated DB calls
     salary_cache = {}
     # Cache for employee month remarks to compute warnings
     emp_month_remarks_cache = {}
 
     for item in items:
-        p_amount = next((p["amount"] for p in penalty_types if p["name"] == item.get("type")), 0)
+        remark_type_lower = item.get("type", "").lower() if item.get("type") else ""
+        p_amount = next((p["amount"] for p in penalty_types if p["name"].lower() == remark_type_lower), 0)
         
         month_num = None
         r_year = None
@@ -2093,7 +2094,7 @@ async def get_remarks(db, skip: int = 0, limit: int = 100):
                 pass
 
         # Calculate one-day salary for Late Punch-in if amount is 0
-        if item.get("type") == "Late Punch-in" and p_amount == 0 and month_num and r_year:
+        if remark_type_lower == "late punch-in" and p_amount == 0 and month_num and r_year:
             if emp_id not in salary_cache:
                 salary_cache[emp_id] = await get_salary_structure_by_employee(db, emp_id)
             
@@ -2110,9 +2111,9 @@ async def get_remarks(db, skip: int = 0, limit: int = 100):
         
         is_warning = False
         remark_type = item.get("type")
-        pt_names = [p["name"] for p in penalty_types]
-        is_in_penalty_types = remark_type in pt_names
-        is_penalty = p_amount > 0 or is_in_penalty_types or remark_type == "Late Punch-in"
+        pt_names = [p["name"].lower() for p in penalty_types]
+        is_in_penalty_types = remark_type_lower in pt_names
+        is_penalty = p_amount > 0 or is_in_penalty_types or remark_type_lower == "late punch-in"
         
         if is_in_penalty_types and month_num and r_year and emp_id:
             cache_key = (str(emp_id), month_num, r_year, remark_type)
@@ -2194,13 +2195,16 @@ async def get_remarks(db, skip: int = 0, limit: int = 100):
             except ValueError:
                 rank = 999
                 
-            pt_obj = next((p for p in penalty_types if p["name"] == remark_type), None)
+            pt_obj = next((p for p in penalty_types if p["name"].lower() == remark_type_lower), None)
             type_warning_limit = pt_obj.get("warningLimit", 3) if pt_obj else 3
             if rank <= type_warning_limit:
                 is_warning = True
 
         item["amount"] = p_amount
-        item["computedAmount"] = 0 if is_warning else p_amount
+        if is_warning:
+            item["computedAmount"] = 0
+        elif p_amount > 0 or is_in_penalty_types:
+            item["computedAmount"] = p_amount
         item["isWarning"] = is_warning
         
     return items
