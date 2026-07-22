@@ -141,6 +141,7 @@ export default function DocumentGeneratorPage() {
   const previewRef = useRef<HTMLDivElement>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [includeAcceptance, setIncludeAcceptance] = useState(false)
+  const [includeSignatures, setIncludeSignatures] = useState(false)
 
   const templateData = documentTemplates.find((t: any) => t.template_id === selectedTemplate)
 
@@ -227,26 +228,35 @@ export default function DocumentGeneratorPage() {
 
     // Add employee signature image
     if (htmlContent.includes('{{employeeSignature}}')) {
-      if (currentEmployee.signatureUrl) {
-        const signUrl = currentEmployee.signatureUrl.startsWith('http') ? currentEmployee.signatureUrl : `${API_URL}${currentEmployee.signatureUrl}`
-        const signHtml = `<span style="display: inline-block; text-align: center; border-bottom: 1px solid black; margin: 0 5px; min-width: 100px; vertical-align: baseline;"><img src="${signUrl}" alt="Employee Signature" style="display: inline-block; max-height: 25px; max-width: 100px; object-fit: contain; vertical-align: bottom;" /></span>`
-        htmlContent = htmlContent.replace(/\{\{employeeSignature\}\}/g, signHtml)
+      if (includeSignatures) {
+        if (currentEmployee.signatureUrl) {
+          const signUrl = currentEmployee.signatureUrl.startsWith('http') ? currentEmployee.signatureUrl : `${API_URL}${currentEmployee.signatureUrl}`
+          const signHtml = `<span style="display: inline-block; text-align: center; border-bottom: 1px solid black; margin: 0 5px; min-width: 100px; vertical-align: baseline;"><img src="${signUrl}" alt="Employee Signature" style="display: inline-block; max-height: 25px; max-width: 100px; object-fit: contain; vertical-align: bottom;" /></span>`
+          htmlContent = htmlContent.replace(/\{\{employeeSignature\}\}/g, signHtml)
+        } else {
+          htmlContent = htmlContent.replace(/\{\{employeeSignature\}\}/g, '<span style="display: inline-block; border-bottom: 1px solid black; color: #999; font-style: italic; min-width: 100px; text-align: center; margin: 0 5px; vertical-align: baseline;">[Signature Not Uploaded]</span>')
+        }
       } else {
-        htmlContent = htmlContent.replace(/\{\{employeeSignature\}\}/g, '<span style="display: inline-block; border-bottom: 1px solid black; color: #999; font-style: italic; min-width: 100px; text-align: center; margin: 0 5px; vertical-align: baseline;">[Signature Not Uploaded]</span>')
+        htmlContent = htmlContent.replace(/\{\{employeeSignature\}\}/g, '')
       }
     }
 
     // Add admin/company signature image
     if (htmlContent.includes('{{adminSignature}}') || htmlContent.includes('{{companySignature}}')) {
-      if (systemSettings && systemSettings.companySignatureUrl) {
-        const signUrl = systemSettings.companySignatureUrl.startsWith('http') ? systemSettings.companySignatureUrl : `${API_URL}${systemSettings.companySignatureUrl}`
-        const signHtml = `<span style="display: inline-block; text-align: center; border-bottom: 1px solid black; margin: 0 5px; min-width: 100px; vertical-align: baseline;"><img src="${signUrl}" alt="Authorized Signature" style="display: inline-block; max-height: 25px; max-width: 100px; object-fit: contain; vertical-align: bottom;" /></span>`
-        htmlContent = htmlContent.replace(/\{\{adminSignature\}\}/g, signHtml)
-        htmlContent = htmlContent.replace(/\{\{companySignature\}\}/g, signHtml)
+      if (includeSignatures) {
+        if (systemSettings && systemSettings.companySignatureUrl) {
+          const signUrl = systemSettings.companySignatureUrl.startsWith('http') ? systemSettings.companySignatureUrl : `${API_URL}${systemSettings.companySignatureUrl}`
+          const signHtml = `<span style="display: inline-block; text-align: center; border-bottom: 1px solid black; margin: 0 5px; min-width: 100px; vertical-align: baseline;"><img src="${signUrl}" alt="Authorized Signature" style="display: inline-block; max-height: 25px; max-width: 100px; object-fit: contain; vertical-align: bottom;" /></span>`
+          htmlContent = htmlContent.replace(/\{\{adminSignature\}\}/g, signHtml)
+          htmlContent = htmlContent.replace(/\{\{companySignature\}\}/g, signHtml)
+        } else {
+          const placeholder = '<span style="display: inline-block; border-bottom: 1px solid black; color: #999; font-style: italic; min-width: 100px; text-align: center; margin: 0 5px; vertical-align: baseline;">[Signature Not Uploaded]</span>'
+          htmlContent = htmlContent.replace(/\{\{adminSignature\}\}/g, placeholder)
+          htmlContent = htmlContent.replace(/\{\{companySignature\}\}/g, placeholder)
+        }
       } else {
-        const placeholder = '<span style="display: inline-block; border-bottom: 1px solid black; color: #999; font-style: italic; min-width: 100px; text-align: center; margin: 0 5px; vertical-align: baseline;">[Signature Not Uploaded]</span>'
-        htmlContent = htmlContent.replace(/\{\{adminSignature\}\}/g, placeholder)
-        htmlContent = htmlContent.replace(/\{\{companySignature\}\}/g, placeholder)
+        htmlContent = htmlContent.replace(/\{\{adminSignature\}\}/g, '')
+        htmlContent = htmlContent.replace(/\{\{companySignature\}\}/g, '')
       }
     }
 
@@ -978,6 +988,17 @@ export default function DocumentGeneratorPage() {
                     </Label>
                   </div>
                 )}
+
+                <div className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
+                  <Checkbox
+                    id="include-signatures"
+                    checked={includeSignatures}
+                    onCheckedChange={(checked) => setIncludeSignatures(checked === true)}
+                  />
+                  <Label htmlFor="include-signatures" className="text-sm font-semibold text-slate-700 cursor-pointer">
+                    Consent to Include Signatures
+                  </Label>
+                </div>
 
                 <Button 
                   className="w-full bg-brand-teal hover:bg-brand-teal/90 text-white font-bold h-12 shadow-lg shadow-brand-teal/20"
