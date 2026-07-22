@@ -9,7 +9,7 @@ export function usePermissions(moduleName?: string) {
   const permissions = user?.permissions || null
   const loading = userLoading
 
-  const isRoleAdmin = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'super admin' || user?.role?.toLowerCase() === 'sub-admin' || user?.name === 'Admin Admin'
+  const isRoleAdmin = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'super admin' || user?.role?.toLowerCase() === 'sub-admin' || user?.role?.toLowerCase() === 'hr' || user?.designation?.toLowerCase() === 'hr' || user?.department?.toLowerCase() === 'hr' || user?.name === 'Admin Admin'
 
   const checkPermission = (module: string, action: 'canAdd' | 'canEdit' | 'canDelete' | 'canView') => {
     // Admin override
