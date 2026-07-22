@@ -52,6 +52,9 @@ export default function EmployeeDocumentsPage() {
   const [contractEmployeeFilter, setContractEmployeeFilter] = useState('all')
   const [contractTypeFilter, setContractTypeFilter] = useState('all')
   
+  const [signatureEmployeeFilter, setSignatureEmployeeFilter] = useState('all')
+  const [signatureStatusFilter, setSignatureStatusFilter] = useState('all')
+  
   // Deposit Ledger States
   const [isLedgerModalOpen, setIsLedgerModalOpen] = useState(false)
   const [ledgerLoading, setLedgerLoading] = useState(false)
@@ -1351,6 +1354,14 @@ export default function EmployeeDocumentsPage() {
               Verify Contracts
             </TabsTrigger>
           )}
+          {isAdminOrHR && (
+            <TabsTrigger 
+              value="signatures" 
+              className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto"
+            >
+              Employee Signatures
+            </TabsTrigger>
+          )}
         </TabsList>
 
 
@@ -1543,6 +1554,103 @@ export default function EmployeeDocumentsPage() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          </TabsContent>
+        )}
+
+        {isAdminOrHR && (
+          <TabsContent value="signatures" className="mt-6 space-y-6">
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+              <DataTable
+                extraFilters={
+                  <>
+                    <Select value={signatureEmployeeFilter} onValueChange={setSignatureEmployeeFilter}>
+                      <SelectTrigger className="h-10 w-[200px] border-slate-200 bg-slate-50/50 font-semibold">
+                        <SelectValue placeholder="All Employees" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Employees</SelectItem>
+                        {employees.map((emp: any) => (
+                          <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.employeeId})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={signatureStatusFilter} onValueChange={setSignatureStatusFilter}>
+                      <SelectTrigger className="h-10 w-[160px] border-slate-200 bg-slate-50/50 font-semibold">
+                        <SelectValue placeholder="All Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value="completed">Completed</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </>
+                }
+                data={employees
+                  .filter((emp: any) => signatureEmployeeFilter === 'all' || emp.id === signatureEmployeeFilter)
+                  .map((emp: any) => ({
+                    id: emp.id,
+                    employeeName: emp.name,
+                    signatureUrl: emp.signatureUrl,
+                    status: emp.signatureUrl ? 'Completed' : 'Pending'
+                  }))
+                  .filter((record: any) => signatureStatusFilter === 'all' || record.status.toLowerCase() === signatureStatusFilter.toLowerCase())
+                }
+                columns={[
+                  { key: 'employeeName' as const, header: 'Employee Name' },
+                  { 
+                    key: 'status' as const, 
+                    header: 'Status', 
+                    render: (record: any) => (
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                        record.status === 'Completed' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
+                      }`}>
+                        {record.status}
+                      </span>
+                    )
+                  },
+                  { 
+                    key: 'actions' as const, 
+                    header: 'Actions',
+                    render: (record: any) => (
+                      <div className="flex items-center gap-2">
+                        {record.signatureUrl ? (
+                          <>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="text-brand-teal hover:bg-brand-teal/10 h-8 px-2"
+                              onClick={() => window.open(record.signatureUrl, '_blank')}
+                            >
+                              <Eye className="w-4 h-4 mr-1.5" /> View
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="text-blue-600 hover:bg-blue-50 h-8 px-2"
+                              onClick={() => {
+                                const a = document.createElement('a');
+                                a.href = record.signatureUrl;
+                                a.download = `${record.employeeName}_Signature.png`;
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                              }}
+                            >
+                              <Download className="w-4 h-4 mr-1.5" /> Download
+                            </Button>
+                          </>
+                        ) : (
+                          <span className="text-xs text-slate-400 italic px-2">Not Uploaded</span>
+                        )}
+                      </div>
+                    )
+                  }
+                ]}
+                searchKey="employeeName"
+                searchPlaceholder="Search by employee name..."
+              />
             </div>
           </TabsContent>
         )}
