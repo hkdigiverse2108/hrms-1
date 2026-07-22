@@ -1920,26 +1920,6 @@ export default function TaskManagementPage() {
                       )}
                     </td>
                       <td className="px-6 py-4 text-center whitespace-nowrap sticky right-0 z-10 bg-white group-hover:bg-slate-50 shadow-[-1px_0_0_0_#e2e8f0] transition-colors" onClick={(e) => e.stopPropagation()}>
-                        {task.status !== 'completed' && (
-                          <Button
-                            size="sm"
-                            onClick={() => {
-                              const isAssigner = (task.assignedBy === user?.id || task.assignedById === user?.id || task.performedBy === user?.id || task.createdBy === user?.id);
-                              const isAdminUser = isAdmin || user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'hr';
-                              if (isAssigner || isAdminUser) {
-                                handleUpdateField(task.id, 'status', 'completed');
-                              } else {
-                                handleUpdateField(task.id, 'status', 'review');
-                                toast.success("Task sent for review to the assigner.");
-                              }
-                            }}
-                            className="h-7 px-2.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm rounded-lg inline-flex items-center mr-1.5"
-                            title="Mark task as completed"
-                          >
-                            <Check className="w-3.5 h-3.5 mr-1" />
-                            Completed
-                          </Button>
-                        )}
                         <button 
                           onClick={() => fetchTaskLogs(task.id)}
                           className="p-1.5 text-muted-foreground hover:text-brand-teal hover:bg-brand-light/20 rounded-md transition-colors inline-flex items-center justify-center mr-1"

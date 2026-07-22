@@ -833,15 +833,7 @@ export function MyTasksView({ targetUserId, isEmbedded = false }: MyTasksViewPro
                                           {task.originalTask?.remark || '-'}
                                         </td>
                                         <td className="p-4 text-right">
-                                          <Button
-                                            size="sm"
-                                            onClick={() => handleMarkComplete(task)}
-                                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-7 px-2.5 text-xs rounded-lg inline-flex items-center gap-1 shadow-sm"
-                                            title="Mark as completed"
-                                          >
-                                            <CheckCircle2 className="w-3.5 h-3.5" />
-                                            Completed
-                                          </Button>
+                                           <span className="text-slate-400 font-medium text-xs">-</span>
                                         </td>
                                       </tr>
                                     )
@@ -881,15 +873,7 @@ export function MyTasksView({ targetUserId, isEmbedded = false }: MyTasksViewPro
                                         </Badge>
                                       </td>
                                       <td className="p-4 text-right">
-                                        <Button
-                                          size="sm"
-                                          onClick={() => handleMarkComplete(task)}
-                                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-7 px-2.5 text-xs rounded-lg inline-flex items-center gap-1 shadow-sm"
-                                          title="Mark as completed"
-                                        >
-                                          <CheckCircle2 className="w-3.5 h-3.5" />
-                                          Completed
-                                        </Button>
+                                        <span className="text-slate-400 font-medium text-xs">-</span>
                                       </td>
                                     </tr>
                                   ))}
