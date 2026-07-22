@@ -124,127 +124,44 @@ export function PendingWorkEmbedded({
   const [logsDialogOpen, setLogsDialogOpen] = useState(false);
   const [currentLogs, setCurrentLogs] = useState<any[]>([]);
 
-  // Query Thread State
-  const [queryDialogOpen, setQueryDialogOpen] = useState(false);
-  const [currentQueryItem, setCurrentQueryItem] = useState<any>(null);
-  const [newQueryText, setNewQueryText] = useState('');
-  const [newReplyText, setNewReplyText] = useState('');
-  const [isClientIssueQuery, setIsClientIssueQuery] = useState(false);
   const handleOpenLogs = (entry: any) => {
     setCurrentLogs(entry.logs || []);
     setLogsDialogOpen(true);
   };
 
-  const handleAddQueryOrReply = async (id: string, stage: string, isOtherWork?: boolean, threadId?: string) => {
-    try {
-      const storedUser = localStorage.getItem('user');
-      const user = storedUser ? JSON.parse(storedUser) : null;
-      const userName = user?.name || (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : null) || "Unknown User";
-      const userId = user?.id || user?._id || "unknown";
-
-      const endpoint = isOtherWork ? `${API_URL}/other-work/${id}` : `${API_URL}/content-calendar/${id}`;
-      
-      const itemToUpdate = isOtherWork ? otherWorkEntries.find(e => e.id === id) : entries.find(e => e.id === id);
-      if (!itemToUpdate) return;
-
-      const currentQueries = JSON.parse(JSON.stringify(itemToUpdate.queries || []));
-      
-      if (threadId) {
-        // Adding a reply
-        if (!newReplyText.trim()) return;
-        const threadIndex = currentQueries.findIndex((q: any) => q.id === threadId);
-        if (threadIndex === -1) return;
-        
-        currentQueries[threadIndex].replies.push({
-          id: `reply-${Date.now()}`,
-          text: newReplyText,
-          createdBy: userName,
-          createdById: userId,
-          createdAt: new Date().toISOString()
-        });
-      } else {
-        // Adding a new query thread
-        if (!newQueryText.trim()) return;
-        currentQueries.push({
-          id: `thread-${Date.now()}`,
-          stage: stage,
-          text: newQueryText,
-          isClientIssue: isClientIssueQuery,
-          createdBy: userName,
-          createdById: userId,
-          createdAt: new Date().toISOString(),
-          status: "Pending",
-          replies: []
-        });
-      }
-
-      const response = await fetch(endpoint, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ queries: currentQueries, updatedBy: userName }),
-      });
-
-      if (response.ok) {
-        if (isOtherWork) {
-          setOtherWorkEntries(otherWorkEntries.map(e => e.id === id ? { ...e, queries: currentQueries } : e));
-          setEntries(entries.map(e => e.id === id ? { ...e, queries: currentQueries } : e)); 
-        } else {
-          setEntries(entries.map(e => e.id === id ? { ...e, queries: currentQueries } : e));
-        }
-        setNewQueryText('');
-        setNewReplyText('');
-        setIsClientIssueQuery(false);
-        // Also update the current modal item
-        setCurrentQueryItem({ ...itemToUpdate, queries: currentQueries });
-        toast.success(threadId ? "Reply added" : "Query added");
-      } else {
-        toast.error("Failed to save query");
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to save query");
-    }
-  };
-
-  const handleApproveQuery = async (id: string, stage: string, threadId: string, isOtherWork?: boolean) => {
+  const handleSaveRemark = async (id: string, stage: string, isOtherWork?: boolean) => {
     try {
       const storedUser = localStorage.getItem('user');
       const user = storedUser ? JSON.parse(storedUser) : null;
       const userName = user?.name || (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : null) || "Unknown User";
 
-      const endpoint = isOtherWork ? `${API_URL}/other-work/${id}` : `${API_URL}/content-calendar/${id}`;
-      
-      const itemToUpdate = isOtherWork ? otherWorkEntries.find(e => e.id === id) : entries.find(e => e.id === id);
-      if (!itemToUpdate) return;
+      const finalRemark = editingIsClientIssue ? `[CLIENT ISSUE] ${editingRemarkValue}` : editingRemarkValue;
 
-      const currentQueries = JSON.parse(JSON.stringify(itemToUpdate.queries || []));
-      const threadIndex = currentQueries.findIndex((q: any) => q.id === threadId);
-      if (threadIndex === -1) return;
-      
-      currentQueries[threadIndex].status = "Approved";
-      currentQueries[threadIndex].approvedBy = userName;
+      const endpoint = isOtherWork ? `${API_URL}/other-work/${id}` : `${API_URL}/content-calendar/${id}`;
+      const payload = isOtherWork 
+        ? { remark: finalRemark, remarkStage: stage, updatedBy: userName } 
+        : { remark: finalRemark, remarkStage: stage, updatedBy: userName };
 
       const response = await fetch(endpoint, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ queries: currentQueries, updatedBy: userName }),
+        body: JSON.stringify(payload),
       });
-
       if (response.ok) {
         if (isOtherWork) {
-          setOtherWorkEntries(otherWorkEntries.map(e => e.id === id ? { ...e, queries: currentQueries } : e));
-          setEntries(entries.map(e => e.id === id ? { ...e, queries: currentQueries } : e)); 
+          setOtherWorkEntries(otherWorkEntries.map(e => e.id === id ? { ...e, remark: finalRemark, remarkStage: stage } : e));
+          setEntries(entries.map(e => e.id === id ? { ...e, remark: finalRemark, remarkStage: stage } : e)); 
         } else {
-          setEntries(entries.map(e => e.id === id ? { ...e, queries: currentQueries } : e));
+          setEntries(entries.map(e => e.id === id ? { ...e, remark: finalRemark, remarkStage: stage } : e));
         }
-        setCurrentQueryItem({ ...itemToUpdate, queries: currentQueries });
-        toast.success("Query marked as Approved");
+        setEditingRemarkId(null);
+        toast.success("Remark saved successfully");
       } else {
-        toast.error("Failed to approve query");
+        toast.error("Failed to save remark");
       }
     } catch (err) {
       console.error(err);
-      toast.error("Failed to approve query");
+      toast.error("Failed to save remark");
     }
   };
 
@@ -1398,38 +1315,68 @@ export function PendingWorkEmbedded({
                     </td>
                     <td className="px-6 py-4 text-slate-600 max-w-[200px]">
                       {(() => {
-                        const queriesForStage = (item.queries || []).filter((q: any) => q.stage === item.stage);
-                        const pendingCount = queriesForStage.filter((q: any) => q.status !== 'Approved').length;
-                        const hasOldRemark = item.remarkStage === item.stage && item.remark;
-                        
-                        return (
-                          <div 
-                            className="cursor-pointer py-1 px-1.5 -mx-1 rounded hover:bg-slate-100 flex items-center justify-between group transition-colors"
-                            onClick={() => {
-                              setCurrentQueryItem(item);
-                              setQueryDialogOpen(true);
-                            }}
-                          >
-                            <div className="flex flex-col gap-0.5 w-full">
-                              {pendingCount > 0 ? (
-                                <Badge variant="destructive" className="w-fit text-[10px] h-5 px-1.5 bg-red-500 text-white flex items-center gap-1">
-                                  <AlertCircle className="w-3 h-3" /> {pendingCount} Pending
-                                </Badge>
-                              ) : queriesForStage.length > 0 ? (
-                                <Badge className="w-fit text-[10px] h-5 px-1.5 bg-green-100 text-green-700 hover:bg-green-200 flex items-center gap-1">
-                                  <Check className="w-3 h-3" /> Resolved
-                                </Badge>
-                              ) : hasOldRemark ? (
-                                <span className="text-xs text-slate-600 truncate max-w-[120px]" title={item.remark}>
-                                  {item.remark.startsWith('[CLIENT ISSUE] ') ? (
-                                    <span className="text-red-500 font-medium flex items-center gap-1"><AlertCircle className="w-3 h-3"/> Issue</span>
-                                  ) : item.remark}
-                                </span>
-                              ) : (
-                                <span className="text-xs text-slate-400 italic">Add Query</span>
-                              )}
+                        const isApplicable = !item.remarkStage || (item.isOtherWork ? item.stage === item.remarkStage : isStageSubsequentOrEqual(item.stage, item.remarkStage, item.postReel));
+                        const displayRemark = isApplicable ? item.remark : null;
+
+                        return editingRemarkId === `${item.id}-${item.stage}` ? (
+                          <div className="flex flex-col gap-1.5 min-w-[150px]">
+                            <div className="flex items-center gap-1.5">
+                              <Input 
+                                value={editingRemarkValue}
+                                onChange={(e) => setEditingRemarkValue(e.target.value)}
+                                className="h-8 text-xs px-2 py-1 w-full focus-visible:ring-brand-teal"
+                                autoFocus
+                                placeholder="Type reason..."
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleSaveRemark(item.id, item.stage, item.isOtherWork);
+                                  if (e.key === 'Escape') setEditingRemarkId(null);
+                                }}
+                              />
+                              <button onClick={() => handleSaveRemark(item.id, item.stage, item.isOtherWork)} className="text-green-600 hover:bg-green-50 p-1.5 rounded transition-colors" title="Save">
+                                <Check className="w-4 h-4" />
+                              </button>
+                              <button onClick={() => setEditingRemarkId(null)} className="text-slate-400 hover:bg-slate-100 p-1.5 rounded transition-colors" title="Cancel">
+                                <X className="w-4 h-4" />
+                              </button>
                             </div>
-                            <Edit2 className="w-3 h-3 text-slate-300 group-hover:text-brand-teal flex-shrink-0" />
+                            <label className="flex items-center gap-2 cursor-pointer mt-0.5">
+                              <input 
+                                type="checkbox" 
+                                className="w-3 h-3 text-red-500 rounded border-slate-300 focus:ring-red-500 cursor-pointer"
+                                checked={editingIsClientIssue}
+                                onChange={(e) => setEditingIsClientIssue(e.target.checked)}
+                              />
+                              <span className="text-[10px] font-bold text-red-500 uppercase tracking-wider">Issue from client</span>
+                            </label>
+                          </div>
+                        ) : (
+                          <div 
+                            className="cursor-pointer py-1 px-1 -mx-1 rounded hover:bg-slate-100 truncate flex-1 flex flex-col gap-0.5"
+                            onClick={() => {
+                              setEditingRemarkId(`${item.id}-${item.stage}`);
+                              const remarkText = displayRemark || '';
+                              if (remarkText.startsWith('[CLIENT ISSUE] ')) {
+                                setEditingIsClientIssue(true);
+                                setEditingRemarkValue(remarkText.replace('[CLIENT ISSUE] ', ''));
+                              } else {
+                                setEditingIsClientIssue(false);
+                                setEditingRemarkValue(remarkText);
+                              }
+                            }}
+                            title={displayRemark || ""}
+                          >
+                            {displayRemark ? (
+                                displayRemark.startsWith('[CLIENT ISSUE] ') ? (
+                                  <>
+                                    <span className="text-[10px] font-bold text-red-500 uppercase tracking-wider flex items-center gap-1"><AlertCircle className="w-3 h-3" /> Client Issue</span>
+                                    <span className="text-slate-600 truncate">{displayRemark.replace('[CLIENT ISSUE] ', '')}</span>
+                                  </>
+                                ) : (
+                                  <span className="text-slate-600 truncate">{displayRemark}</span>
+                                )
+                            ) : (
+                                "-"
+                            )}
                           </div>
                         );
                       })()}
@@ -1748,151 +1695,6 @@ export function PendingWorkEmbedded({
             >
               Send Request
             </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={queryDialogOpen} onOpenChange={setQueryDialogOpen}>
-        <DialogContent className="sm:max-w-xl max-h-[85vh] flex flex-col overflow-hidden p-0 gap-0">
-          <DialogHeader className="px-6 py-4 border-b border-slate-100 bg-white">
-            <DialogTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-brand-teal" />
-              Queries & Remarks
-            </DialogTitle>
-            {currentQueryItem && (
-              <div className="text-xs text-slate-500 mt-1 flex items-center gap-2">
-                <span className="font-semibold text-slate-700">{currentQueryItem.taskName}</span>
-                <span className="text-slate-300">•</span>
-                <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600">{currentQueryItem.stage} Stage</span>
-              </div>
-            )}
-          </DialogHeader>
-
-          <div className="flex-1 overflow-y-auto bg-slate-50 p-6 space-y-6 relative">
-            {currentQueryItem?.remarkStage === currentQueryItem?.stage && currentQueryItem?.remark && (
-              <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
-                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Legacy Remark</div>
-                <div className="text-sm text-slate-700">{currentQueryItem.remark}</div>
-              </div>
-            )}
-
-            {currentQueryItem?.queries?.filter((q: any) => q.stage === currentQueryItem.stage).map((thread: any) => (
-              <div key={thread.id} className={`bg-white border rounded-lg overflow-hidden shadow-sm transition-all ${thread.status === 'Approved' ? 'border-green-200 shadow-green-50/50' : 'border-slate-200'}`}>
-                <div className={`px-4 py-3 border-b flex items-start justify-between gap-4 ${thread.status === 'Approved' ? 'bg-green-50/50 border-green-100' : 'bg-white border-slate-100'}`}>
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-slate-900">{thread.createdBy}</span>
-                      <span className="text-[10px] text-slate-400 font-medium">{new Date(thread.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                      {thread.isClientIssue && (
-                        <Badge className="h-5 px-1.5 text-[9px] bg-red-100 text-red-700 hover:bg-red-200 border-none font-bold uppercase tracking-wider">Client Issue</Badge>
-                      )}
-                      {thread.status === 'Approved' && (
-                        <Badge className="h-5 px-1.5 text-[9px] bg-green-500 text-white border-none font-bold uppercase tracking-wider flex items-center gap-0.5"><Check className="w-2.5 h-2.5"/> Approved</Badge>
-                      )}
-                    </div>
-                    <div className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{thread.text}</div>
-                  </div>
-                  {thread.status !== 'Approved' && currentUser && (currentUser.id === thread.createdById || currentUser._id === thread.createdById) && (
-                    <Button 
-                      size="sm" 
-                      onClick={() => handleApproveQuery(currentQueryItem.id, currentQueryItem.stage, thread.id, currentQueryItem.isOtherWork)}
-                      className="h-7 text-xs bg-green-50 text-green-700 hover:bg-green-100 hover:text-green-800 border-none font-semibold shrink-0"
-                    >
-                      <Check className="w-3.5 h-3.5 mr-1" /> Resolve
-                    </Button>
-                  )}
-                </div>
-
-                <div className="bg-slate-50/50 divide-y divide-slate-100">
-                  {thread.replies?.map((reply: any) => (
-                    <div key={reply.id} className="px-4 py-3 flex gap-3">
-                      <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center shrink-0 mt-0.5">
-                        <span className="text-[10px] font-bold text-slate-600">{reply.createdBy.charAt(0).toUpperCase()}</span>
-                      </div>
-                      <div className="space-y-0.5 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-semibold text-slate-800">{reply.createdBy}</span>
-                          <span className="text-[10px] text-slate-400">{new Date(reply.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                        </div>
-                        <div className="text-sm text-slate-600 whitespace-pre-wrap">{reply.text}</div>
-                      </div>
-                    </div>
-                  ))}
-                  
-                  {thread.status !== 'Approved' && (
-                    <div className="p-3 bg-white">
-                      <div className="flex gap-2">
-                        <Input 
-                          placeholder="Reply to this thread..." 
-                          className="h-8 text-sm focus-visible:ring-brand-teal"
-                          value={newReplyText}
-                          onChange={(e) => setNewReplyText(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              handleAddQueryOrReply(currentQueryItem.id, currentQueryItem.stage, currentQueryItem.isOtherWork, thread.id);
-                            }
-                          }}
-                        />
-                        <Button 
-                          size="sm" 
-                          className="h-8 px-3 bg-brand-teal hover:bg-brand-teal/90 text-white"
-                          disabled={!newReplyText.trim()}
-                          onClick={() => handleAddQueryOrReply(currentQueryItem.id, currentQueryItem.stage, currentQueryItem.isOtherWork, thread.id)}
-                        >
-                          Reply
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-
-            {(!currentQueryItem?.queries || currentQueryItem.queries.filter((q: any) => q.stage === currentQueryItem.stage).length === 0) && !currentQueryItem?.remark && (
-              <div className="text-center py-10">
-                <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
-                  <AlertCircle className="w-5 h-5 text-slate-400" />
-                </div>
-                <h3 className="text-sm font-semibold text-slate-700">No queries yet</h3>
-                <p className="text-xs text-slate-500 mt-1">Start a new query thread below to discuss this task.</p>
-              </div>
-            )}
-          </div>
-
-          <div className="p-4 border-t border-slate-100 bg-white">
-            <div className="space-y-3">
-              <Textarea 
-                placeholder="Start a new query thread..." 
-                className="min-h-[80px] text-sm resize-none focus-visible:ring-brand-teal"
-                value={newQueryText}
-                onChange={(e) => setNewQueryText(e.target.value)}
-              />
-              <div className="flex items-center justify-between">
-                <label className="flex items-center gap-2 cursor-pointer group">
-                  <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${isClientIssueQuery ? 'bg-red-500 border-red-500' : 'border-slate-300 group-hover:border-red-400'}`}>
-                    {isClientIssueQuery && <Check className="w-3 h-3 text-white" />}
-                  </div>
-                  <input 
-                    type="checkbox" 
-                    className="sr-only"
-                    checked={isClientIssueQuery}
-                    onChange={(e) => setIsClientIssueQuery(e.target.checked)}
-                  />
-                  <span className={`text-xs font-semibold uppercase tracking-wider ${isClientIssueQuery ? 'text-red-500' : 'text-slate-500 group-hover:text-red-400'}`}>Issue from client</span>
-                </label>
-                <div className="flex gap-2">
-                  <Button variant="ghost" size="sm" onClick={() => setQueryDialogOpen(false)} className="text-slate-500">Close</Button>
-                  <Button 
-                    size="sm" 
-                    className="bg-brand-teal hover:bg-brand-teal/90 text-white shadow-sm"
-                    disabled={!newQueryText.trim()}
-                    onClick={() => handleAddQueryOrReply(currentQueryItem.id, currentQueryItem.stage, currentQueryItem.isOtherWork)}
-                  >
-                    Post Query
-                  </Button>
-                </div>
-              </div>
-            </div>
           </div>
         </DialogContent>
       </Dialog>
