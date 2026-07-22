@@ -100,19 +100,19 @@ export function QuickActionsWidget({
       if (!action.perm) return true;
       
       if (action.id === 'wm_development') {
-        const isTL = Boolean(user && (user.role?.toLowerCase() === 'team leader' || user.designation?.toLowerCase() === 'team leader'));
+        const isTL = Boolean(user && ((user.designation?.toLowerCase() === 'team leader' || user.designation?.toLowerCase() === 'head') ));
         if (isTL || checkPermission('tasks', 'canView') || checkPermission('development', 'canView')) return true;
         return false;
       }
       
       if (action.id === 'wm_daily_progress') {
-        const isHRUser = user?.role === 'HR' || user?.department?.toLowerCase() === 'hr';
+        const isHRUser = user?.designation?.toLowerCase() === 'hr' || user?.department?.toLowerCase() === 'hr';
         if (isHRUser || checkPermission(action.perm, 'canView')) return true;
         return false;
       }
       
       if (action.id === 'wm_smm') {
-        const isCreativeSpecial = user?.role === 'HR' || user?.role === 'Team Leader';
+        const isCreativeSpecial = user?.designation?.toLowerCase() === 'hr' || (user?.designation?.toLowerCase() === 'team leader' || user?.designation?.toLowerCase() === 'head');
         if (isCreativeSpecial || checkPermission('creative', 'canView')) return true;
         return false;
       }

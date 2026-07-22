@@ -34,9 +34,16 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Key } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useUser } from "@/hooks/useUser";
 import { EmployeeModal } from "@/components/hrms/employee-modal";
 import { useConfirm } from "@/context/ConfirmContext";
 import { toast } from "sonner";
+import dayjs from "dayjs";
+import isSameOrAfter from "dayjs/plugin/isSameOrAfter";
+import isSameOrBefore from "dayjs/plugin/isSameOrBefore";
+
+dayjs.extend(isSameOrAfter);
+dayjs.extend(isSameOrBefore);
 
 const COLUMN_OPTIONS = [
   { key: "firstName", label: "First Name", default: false },
@@ -82,6 +89,7 @@ const COLUMN_OPTIONS = [
 export default function EmployeeListPage() {
   const router = useRouter();
   const { data: apiData } = useApi();
+  const { user } = useUser();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
   const { confirm } = useConfirm();
   const [employees, setEmployees] = useState<any[]>([]);
@@ -116,19 +124,34 @@ export default function EmployeeListPage() {
 
   const renderCell = (emp: any, colKey: string) => {
     switch (colKey) {
-      case "name":
+      case "name": {
+        const isTargeted = targetedEmployeeIds.has(emp.id);
         return (
           <div className="flex items-center gap-3">
-            <Avatar className="w-9 h-9">
-              <AvatarImage src={getAvatarUrl(emp.profilePhoto, emp.name)} alt={emp.name} />
-              <AvatarFallback>{emp.name?.charAt(0) || "U"}</AvatarFallback>
-            </Avatar>
+            <div className="relative flex items-center justify-center">
+              {isTargeted && (
+                <div className="absolute -inset-[2.5px] rounded-full bg-gradient-to-tr from-yellow-400 via-amber-300 to-yellow-600 shadow-sm animate-pulse"></div>
+              )}
+              <Avatar className={`relative z-10 w-9 h-9 ${isTargeted ? 'border-2 border-white' : ''}`}>
+                <AvatarImage src={getAvatarUrl(emp.profilePhoto, emp.name)} alt={emp.name} />
+                <AvatarFallback>{emp.name?.charAt(0) || "U"}</AvatarFallback>
+              </Avatar>
+            </div>
             <div>
               <div className="font-semibold text-foreground">{emp.name}</div>
-              <div className="text-xs text-muted-foreground">{emp.email}</div>
+              <div className="text-xs text-muted-foreground">
+                {emp.role?.toLowerCase().includes('admin')
+                  ? emp.designation || emp.role
+                  : (emp.sub_department && emp.designation)
+                    ? `${emp.sub_department} - ${emp.designation}`
+                    : (emp.department && emp.designation)
+                      ? `${emp.department} - ${emp.designation}`
+                      : emp.email}
+              </div>
             </div>
           </div>
         );
+      }
       case "employeeId":
         return <span className="font-medium">{emp.employeeId}</span>;
       case "gender":
@@ -407,12 +430,35 @@ export default function EmployeeListPage() {
     });
   };
 
+  const [targetedEmployeeIds, setTargetedEmployeeIds] = useState<Set<string>>(new Set());
+
   const fetchEmployees = async () => {
     try {
       const response = await fetch(`${API_URL}/employees?include_inactive=true`);
       if (!response.ok) throw new Error("Failed to fetch employees");
       const data = await response.json();
       setEmployees(data);
+      
+      // Fetch settings for banners
+      const settingsRes = await fetch(`${API_URL}/system-settings`);
+      if (settingsRes.ok) {
+        const settingsData = await settingsRes.json();
+        const banners = settingsData.dashboardBanners || [];
+        const todayStr = dayjs().format('YYYY-MM-DD');
+        const active = banners.filter((b: any) => {
+          if (!b.isActive) return false;
+          if (!b.employeeId || b.employeeId === "all") return false;
+          const hasStartDate = !!b.startDate;
+          const hasEndDate = !!b.endDate;
+          if (!hasStartDate && !hasEndDate) return true;
+          if (hasStartDate && !hasEndDate) return dayjs(todayStr).isSameOrAfter(b.startDate);
+          if (!hasStartDate && hasEndDate) return dayjs(todayStr).isSameOrBefore(b.endDate);
+          return dayjs(todayStr).isSameOrAfter(b.startDate) && dayjs(todayStr).isSameOrBefore(b.endDate);
+        });
+        const targetedSet = new Set<string>();
+        active.forEach((b: any) => targetedSet.add(b.employeeId));
+        setTargetedEmployeeIds(targetedSet);
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -487,8 +533,20 @@ export default function EmployeeListPage() {
   const isRoleAdmin = (r?: string) => {
     if (!r) return false;
     const clean = r.toLowerCase().trim();
-    return clean === 'admin' || clean === 'super admin' || clean === 'superadmin' || clean === 'administrator' || clean === 'founder' || clean === 'super_admin';
+    return clean === 'admin' || clean === 'super admin' || clean === 'superadmin' || clean === 'administrator' || clean === 'founder' || clean === 'super_admin' || clean === 'sub-admin' || clean === 'sub admin';
   };
+
+  const getRoleLevel = (r?: string) => {
+    if (!r) return 5;
+    const clean = r.toLowerCase().trim();
+    const ROLE_HIERARCHY: Record<string, number> = {
+      'admin': 0, 'super admin': 0, 'superadmin': 0, 'administrator': 0, 'founder': 0, 'super_admin': 0,
+      'sub-admin': 1,
+      'employee': 5
+    };
+    return ROLE_HIERARCHY[clean] ?? 5;
+  };
+  const actorLevel = getRoleLevel(user?.role);
 
   const activeCount = employees.filter(emp => !isRoleAdmin(emp.role) && emp.status?.toLowerCase() !== 'inactive').length;
   const inactiveCount = employees.filter(emp => !isRoleAdmin(emp.role) && emp.status?.toLowerCase() === 'inactive').length;
@@ -709,7 +767,7 @@ export default function EmployeeListPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-32">
-                            {(isAdmin || checkPermission('employee-list', 'canEdit')) && (
+                            {(isAdmin || checkPermission('employee-list', 'canEdit')) && (actorLevel === 0 || getRoleLevel(emp.role) >= actorLevel || user?.id === emp.id) && (
                               <DropdownMenuItem 
                                 onClick={() => router.push(`/employees/edit/${emp.id}`)}
                                 className="cursor-pointer"
@@ -718,7 +776,7 @@ export default function EmployeeListPage() {
                                 Edit
                               </DropdownMenuItem>
                             )}
-                            {(isAdmin || checkPermission('employee-list', 'canDelete')) && (
+                            {(isAdmin || checkPermission('employee-list', 'canDelete')) && (actorLevel === 0 || getRoleLevel(emp.role) >= actorLevel) && user?.id !== emp.id && (
                               <DropdownMenuItem 
                                 onClick={() => handleDelete(emp.id, emp.name)}
                                 className="cursor-pointer text-brand-danger focus:text-brand-danger"
@@ -727,7 +785,7 @@ export default function EmployeeListPage() {
                                 Delete
                               </DropdownMenuItem>
                             )}
-                            {(isAdmin || checkPermission('access-control', 'canView')) && emp.role?.toLowerCase() !== 'admin' && (
+                            {(isAdmin || checkPermission('access-control', 'canView')) && emp.role?.toLowerCase() !== 'admin' && (actorLevel === 0 || getRoleLevel(emp.role) >= actorLevel) && (
                               <DropdownMenuItem 
                                 onClick={() => router.push(`/employees/permissions/${emp.id}`)}
                                 className="cursor-pointer text-brand-teal focus:text-brand-teal"

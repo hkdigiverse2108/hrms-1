@@ -1516,6 +1516,8 @@ async def update_department(db, department_id: str, department_update: schemas.D
         await db.clients.update_many({"department": old_name}, {"$set": {"department": new_name}})
         await db.tasks.update_many({"department": old_name}, {"$set": {"department": new_name}})
         await db.projects.update_many({"department": old_name}, {"$set": {"department": new_name}})
+        await db.designations.update_many({"department": old_name}, {"$set": {"department": new_name}})
+        await db.sub_departments.update_many({"department": old_name}, {"$set": {"department": new_name}})
         
     updated_doc = await db.departments.find_one({"_id": ObjectId(department_id)})
     return fix_id(updated_doc)
@@ -1524,11 +1526,61 @@ async def delete_department(db, department_id: str):
     await db.departments.delete_one({"_id": ObjectId(department_id)})
     return True
 
+# SubDepartment CRUD
+async def get_sub_departments(db, skip: int = 0, limit: int = 100):
+    cursor = db.sub_departments.find().sort("_id", -1).skip(skip).limit(limit)
+    rows = await cursor.to_list(length=limit)
+    result = []
+    for row in rows:
+        r = fix_id(row)
+        if 'department' not in r or r['department'] is None:
+            r['department'] = ''
+        result.append(r)
+    return result
+
+async def create_sub_department(db, sub_department: schemas.SubDepartmentCreate):
+    sub_department_dict = sub_department.dict()
+    result = await db.sub_departments.insert_one(sub_department_dict)
+    sub_department_dict["id"] = str(result.inserted_id)
+    if "_id" in sub_department_dict:
+        sub_department_dict.pop("_id")
+    return sub_department_dict
+
+async def update_sub_department(db, sub_department_id: str, sub_department_update: schemas.SubDepartmentUpdate):
+    update_data = sub_department_update.dict(exclude_unset=True)
+    
+    old_doc = await db.sub_departments.find_one({"_id": ObjectId(sub_department_id)})
+    
+    await db.sub_departments.update_one(
+        {"_id": ObjectId(sub_department_id)},
+        {"$set": update_data}
+    )
+    
+    if old_doc and "name" in update_data and old_doc.get("name") != update_data["name"]:
+        old_name = old_doc.get("name")
+        new_name = update_data["name"]
+        await db.employees.update_many({"sub_department": old_name}, {"$set": {"sub_department": new_name}})
+        await db.designations.update_many({"sub_department": old_name}, {"$set": {"sub_department": new_name}})
+        
+    updated_doc = await db.sub_departments.find_one({"_id": ObjectId(sub_department_id)})
+    return fix_id(updated_doc)
+
+async def delete_sub_department(db, sub_department_id: str):
+    await db.sub_departments.delete_one({"_id": ObjectId(sub_department_id)})
+    return True
+
+
 # Designation CRUD
 async def get_designations(db, skip: int = 0, limit: int = 100):
     cursor = db.designations.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
-    return [fix_id(row) for row in rows]
+    result = []
+    for row in rows:
+        r = fix_id(row)
+        if 'sub_department' not in r or r['sub_department'] is None:
+            r['sub_department'] = ''
+        result.append(r)
+    return result
 
 async def create_designation(db, designation: schemas.DesignationCreate):
     designation_dict = designation.dict()
@@ -1536,18 +1588,72 @@ async def create_designation(db, designation: schemas.DesignationCreate):
     designation_dict["id"] = str(result.inserted_id)
     if "_id" in designation_dict:
         designation_dict.pop("_id")
+
+    dept_name = designation_dict.get("department")
+    title = designation_dict.get("title")
+    if dept_name and title:
+        dept_preset = await db.permission_presets.find_one({
+            "presetType": "department",
+            "name": dept_name
+        })
+        permissions = dept_preset.get("permissions", []) if dept_preset else []
+        
+        preset_name = f"{dept_name} - {title}"
+        existing_preset = await db.permission_presets.find_one({
+            "presetType": "designation",
+            "department": dept_name,
+            "designation": title
+        })
+        if not existing_preset:
+            await db.permission_presets.insert_one({
+                "name": preset_name,
+                "description": f"Designation preset for {title} in {dept_name}",
+                "presetType": "designation",
+                "department": dept_name,
+                "designation": title,
+                "permissions": permissions
+            })
+
     return designation_dict
 
 async def update_designation(db, designation_id: str, designation_update: schemas.DesignationUpdate):
+    old_doc = await db.designations.find_one({"_id": ObjectId(designation_id)})
     update_data = designation_update.dict(exclude_unset=True)
     await db.designations.update_one(
         {"_id": ObjectId(designation_id)},
         {"$set": update_data}
     )
     updated_doc = await db.designations.find_one({"_id": ObjectId(designation_id)})
+
+    if old_doc and updated_doc:
+        old_dept = old_doc.get("department")
+        old_title = old_doc.get("title")
+        new_dept = updated_doc.get("department")
+        new_title = updated_doc.get("title")
+        
+        if old_dept != new_dept or old_title != new_title:
+            await db.permission_presets.update_many(
+                {"presetType": "designation", "department": old_dept, "designation": old_title},
+                {"$set": {
+                    "name": f"{new_dept} - {new_title}",
+                    "department": new_dept,
+                    "designation": new_title
+                }}
+            )
+
     return fix_id(updated_doc)
 
 async def delete_designation(db, designation_id: str):
+    desig = await db.designations.find_one({"_id": ObjectId(designation_id)})
+    if desig:
+        dept = desig.get("department")
+        title = desig.get("title")
+        if dept and title:
+            await db.permission_presets.delete_many({
+                "presetType": "designation",
+                "department": dept,
+                "designation": title
+            })
     await db.designations.delete_one({"_id": ObjectId(designation_id)})
     return True
 
@@ -7175,35 +7281,96 @@ async def get_permission_presets(db, skip: int = 0, limit: int = 100):
     return [fix_id(row) for row in rows]
 
 async def get_permission_preset(db, preset_id: str):
-    doc = await db.permission_presets.find_one({"_id": ObjectId(preset_id)})
+    query = {"_id": ObjectId(preset_id)} if ObjectId.is_valid(preset_id) else {"_id": preset_id}
+    doc = await db.permission_presets.find_one(query)
     if doc:
         return fix_id(doc)
     return None
+
+async def sync_designation_presets_for_department(db, department_name: str, permissions: list):
+    if not department_name:
+        return
+    cursor = db.designations.find({"department": department_name})
+    designations = await cursor.to_list(length=1000)
+    
+    clean_perms = [p.dict() if hasattr(p, 'dict') else p for p in permissions]
+    
+    for desig in designations:
+        title = desig.get("title")
+        if not title:
+            continue
+        preset_name = f"{department_name} - {title}"
+        
+        existing = await db.permission_presets.find_one({
+            "presetType": "designation",
+            "department": department_name,
+            "designation": title
+        })
+        
+        if existing:
+            await db.permission_presets.update_one(
+                {"_id": existing["_id"]},
+                {"$set": {"permissions": clean_perms, "name": preset_name}}
+            )
+            await db.user_permissions.update_many(
+                {"presetId": str(existing["_id"])},
+                {"$set": {"permissions": clean_perms}}
+            )
+        else:
+            new_doc = {
+                "name": preset_name,
+                "description": f"Designation preset for {title} in {department_name}",
+                "presetType": "designation",
+                "department": department_name,
+                "designation": title,
+                "permissions": clean_perms
+            }
+            await db.permission_presets.insert_one(new_doc)
 
 async def create_permission_preset(db, preset: schemas.PermissionPresetCreate):
     doc = preset.dict()
     result = await db.permission_presets.insert_one(doc)
     doc["_id"] = result.inserted_id
+    
+    if doc.get("presetType") == "department" and (doc.get("department") or doc.get("name")):
+        dept_name = doc.get("department") or doc.get("name")
+        await sync_designation_presets_for_department(db, dept_name, doc.get("permissions", []))
+        
     return fix_id(doc)
 
 async def update_permission_preset(db, preset_id: str, preset_update: schemas.PermissionPresetUpdate):
-    update_data = preset_update.dict(exclude_unset=True)
-    if update_data:
-        await db.permission_presets.update_one({"_id": ObjectId(preset_id)}, {"$set": update_data})
-    
-    # Propagate permissions to linked employees if permissions were updated
-    if "permissions" in update_data and update_data["permissions"] is not None:
-        permissions_list = [p.dict() for p in preset_update.permissions]
-        await db.user_permissions.update_many(
-            {"presetId": preset_id},
-            {"$set": {"permissions": permissions_list}}
-        )
+    try:
+        update_data = preset_update.dict(exclude_unset=True)
+        query = {"_id": ObjectId(preset_id)} if ObjectId.is_valid(preset_id) else {"_id": preset_id}
         
-    doc = await db.permission_presets.find_one({"_id": ObjectId(preset_id)})
-    return fix_id(doc)
+        if update_data:
+            await db.permission_presets.update_one(query, {"$set": update_data})
+        
+        doc = await db.permission_presets.find_one(query)
+        
+        if "permissions" in update_data and update_data["permissions"] is not None:
+            raw_perms = update_data["permissions"]
+            permissions_list = [p.dict() if hasattr(p, 'dict') else p for p in raw_perms]
+            await db.user_permissions.update_many(
+                {"presetId": preset_id},
+                {"$set": {"permissions": permissions_list}}
+            )
+            
+        if doc and doc.get("presetType") == "department":
+            dept_name = doc.get("department") or doc.get("name")
+            current_perms = doc.get("permissions", [])
+            await sync_designation_presets_for_department(db, dept_name, current_perms)
+
+        return fix_id(doc) if doc else None
+    except Exception as e:
+        print(f"Error updating permission preset {preset_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        raise e
 
 async def delete_permission_preset(db, preset_id: str):
-    result = await db.permission_presets.delete_one({"_id": ObjectId(preset_id)})
+    query = {"_id": ObjectId(preset_id)} if ObjectId.is_valid(preset_id) else {"_id": preset_id}
+    result = await db.permission_presets.delete_one(query)
     return result.deleted_count > 0
 
 async def create_time_recovery(db, recovery: schemas.TimeRecoveryCreate):
@@ -10114,3 +10281,61 @@ async def get_all_course_progress(db, course_id: str):
     docs = await cursor.to_list(length=None)
     return [fix_id(d) for d in docs]
 
+
+
+async def get_all_user_permissions(db):
+    cursor = db.user_permissions.find({})
+    perms = await cursor.to_list(length=2000)
+    return [fix_id(p) for p in perms]
+
+async def bulk_update_module_permissions(db, request: schemas.ModuleBulkUpdateRequest, performed_by: str = "System", user_name: str = "System User"):
+    module_name = request.moduleName
+    updates = request.updates
+    
+    for emp_update in updates:
+        emp_id = emp_update.employeeId
+        existing_doc = await db.user_permissions.find_one({"employeeId": emp_id})
+        if not existing_doc:
+            new_doc = {
+                "employeeId": emp_id,
+                "presetId": None,
+                "permissions": [{
+                    "moduleName": module_name,
+                    "displayName": request.displayName,
+                    "tabUrl": request.tabUrl,
+                    "canAdd": emp_update.canAdd,
+                    "canEdit": emp_update.canEdit,
+                    "canDelete": emp_update.canDelete,
+                    "canView": emp_update.canView
+                }]
+            }
+            await db.user_permissions.insert_one(new_doc)
+        else:
+            perms = existing_doc.get("permissions", [])
+            mod_found = False
+            for m in perms:
+                if m.get("moduleName") == module_name:
+                    m["canAdd"] = emp_update.canAdd
+                    m["canEdit"] = emp_update.canEdit
+                    m["canDelete"] = emp_update.canDelete
+                    m["canView"] = emp_update.canView
+                    m["displayName"] = request.displayName
+                    m["tabUrl"] = request.tabUrl
+                    mod_found = True
+                    break
+            if not mod_found:
+                perms.append({
+                    "moduleName": module_name,
+                    "displayName": request.displayName,
+                    "tabUrl": request.tabUrl,
+                    "canAdd": emp_update.canAdd,
+                    "canEdit": emp_update.canEdit,
+                    "canDelete": emp_update.canDelete,
+                    "canView": emp_update.canView
+                })
+            
+            await db.user_permissions.update_one(
+                {"employeeId": emp_id},
+                {"$set": {"permissions": perms, "presetId": None}}
+            )
+    return {"message": "Bulk permissions updated successfully"}

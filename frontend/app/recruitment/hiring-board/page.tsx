@@ -838,7 +838,7 @@ export default function HiringBoardPage() {
                       }}
                     >
                       <option value="">Select Interviewer</option>
-                      {employees.filter(emp => emp.role === 'Team Leader' || emp.role === 'Manager' || emp.role === 'Admin').map(emp => (
+                      {employees.filter(emp => (emp.designation?.toLowerCase() === 'team leader' || emp.designation?.toLowerCase() === 'head') || emp.role === 'Manager' || emp.role === 'Admin').map(emp => (
                         <option key={emp.id} value={emp.id}>{emp.name || emp.id}</option>
                       ))}
                     </select>

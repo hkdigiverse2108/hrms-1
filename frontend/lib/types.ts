@@ -9,6 +9,7 @@ export interface Employee {
   password?: string
   dob?: string
   department: string
+  sub_department?: string
   designation: string
   joinDate: string
   status: 'active' | 'inactive' | 'probation'
@@ -39,10 +40,17 @@ export interface Department {
   employeeCount: number
 }
 
+export interface SubDepartment {
+  id: string
+  name: string
+  department: string
+}
+
 export interface Designation {
   id: string
   title: string
   department: string
+  sub_department: string
 }
 
 export interface Attendance {

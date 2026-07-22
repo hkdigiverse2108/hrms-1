@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Building2, UserCircle2, Loader2 } from 'lucide-react'
+import { Building2, UserCircle2, Loader2, Network } from 'lucide-react'
 import { useEffect } from 'react'
 import { usePermissions } from '@/hooks/usePermissions'
 
@@ -20,7 +20,7 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
     }
   }, [permissionsLoading, isAdmin, router, checkPermission])
 
-  const currentTab = pathname.includes('designations') ? 'designations' : 'departments'
+  const currentTab = pathname.includes('designations') ? 'designations' : pathname.includes('sub-departments') ? 'sub-departments' : 'departments'
 
   if (permissionsLoading) {
     return (
@@ -45,6 +45,13 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
           >
             <Building2 className="w-4 h-4 mr-2" />
             Departments
+          </TabsTrigger>
+          <TabsTrigger 
+            value="sub-departments" 
+            className="rounded-lg data-[state=active]:bg-brand-teal data-[state=active]:text-white transition-all px-8 py-2.5 font-bold text-xs uppercase tracking-wider"
+          >
+            <Network className="w-4 h-4 mr-2" />
+            Sub Departments
           </TabsTrigger>
           <TabsTrigger 
             value="designations" 

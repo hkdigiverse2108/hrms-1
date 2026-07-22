@@ -44,7 +44,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 import { INDIAN_STATES, TIME_OPTIONS } from "@/lib/constants";
-
+import { FLAT_MODULES } from "@/lib/modules";
 
 export default function SettingsPage() {
   const { user, updateUser } = useUserContext();
@@ -240,6 +240,31 @@ export default function SettingsPage() {
     }
   };
 
+  const handleToggleModule = async (moduleKey: string, checked: boolean) => {
+    setIsUpdating(true);
+    try {
+      const current = settings?.enabledModules || [];
+      let newModules = [...current];
+      if (checked && !newModules.includes(moduleKey)) {
+        newModules.push(moduleKey);
+      } else if (!checked && newModules.includes(moduleKey)) {
+        newModules = newModules.filter(m => m !== moduleKey);
+      }
+      const res = await fetch(`${API_URL}/system-settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabledModules: newModules })
+      });
+      if (res.ok) {
+        setSettings(await res.json());
+      }
+    } catch (err) {
+      console.error("Error updating settings:", err);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const handleUpdateShiftSettings = async (key: string, value: any) => {
     setIsUpdating(true);
     try {
@@ -302,7 +327,8 @@ export default function SettingsPage() {
           addHoldDaysToEndDate: settings?.addHoldDaysToEndDate !== undefined ? settings.addHoldDaysToEndDate : true,
           otpRequiredRoles: settings?.otpRequiredRoles || [],
           financeDecimalScaling: settings?.financeDecimalScaling !== undefined ? Number(settings.financeDecimalScaling) : 0,
-          dashboardBanners: settings?.dashboardBanners || []
+          dashboardBanners: settings?.dashboardBanners || [],
+          enabledModules: settings?.enabledModules || []
         })
       });
       if (res.ok) {
@@ -766,6 +792,37 @@ export default function SettingsPage() {
                         Manage Presets
                       </Button>
                     </div>
+              </div>
+            </Card>
+          )}
+
+          {/* Global Module Configuration Card */}
+          {isAdmin && (
+            <Card className="p-6 border-border shadow-sm">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-indigo-50 rounded-lg">
+                  <LayoutDashboard className="w-5 h-5 text-indigo-600" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg text-foreground">Global Module Configuration</h3>
+                  <p className="text-xs text-muted-foreground">Select which modules are actively used by your company. Disabled modules will be hidden globally.</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {FLAT_MODULES.filter(m => m.moduleName !== 'access-control' && m.moduleName !== 'settings' && m.moduleName !== 'dashboard').map(module => (
+                  <div key={module.moduleName} className="flex items-center justify-between p-3 rounded-lg border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                    <Label className="text-sm font-medium cursor-pointer flex-1" htmlFor={`module-${module.moduleName}`}>
+                      {module.displayName}
+                    </Label>
+                    <Switch
+                      id={`module-${module.moduleName}`}
+                      checked={settings?.enabledModules?.includes(module.moduleName) ?? true}
+                      onCheckedChange={(c) => handleToggleModule(module.moduleName, c)}
+                      disabled={isUpdating}
+                    />
+                  </div>
+                ))}
               </div>
             </Card>
           )}

@@ -9,9 +9,11 @@ export function usePermissions(moduleName?: string) {
   const permissions = user?.permissions || null
   const loading = userLoading
 
+  const isRoleAdmin = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'super admin' || user?.role?.toLowerCase() === 'sub-admin' || user?.name === 'Admin Admin'
+
   const checkPermission = (module: string, action: 'canAdd' | 'canEdit' | 'canDelete' | 'canView') => {
     // Admin override
-    if (user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin') return true
+    if (isRoleAdmin) return true
     
     if (!permissions) return false
     
@@ -31,6 +33,6 @@ export function usePermissions(moduleName?: string) {
     loading,
     checkPermission,
     ...currentModulePermission,
-    isAdmin: user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin'
+    isAdmin: isRoleAdmin
   }
 }
