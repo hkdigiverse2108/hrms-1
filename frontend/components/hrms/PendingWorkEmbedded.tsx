@@ -1416,16 +1416,29 @@ export function PendingWorkEmbedded({
                             </>
                           ) : item.isOtherWork ? (
                             <>
-                              {item.status === 'Pending' && item.description !== 'Custom task created from Punch-In' && isAssignee && (
-                                <Button 
-                                  size="sm" 
-                                  className="bg-brand-teal hover:bg-brand-teal/90 text-white text-xs h-7"
-                                  onClick={() => handleUpdateOtherWorkStatus(item.id, 'Ready for Review')}
-                                >
-                                  Submit for Review
-                                </Button>
+                              {item.status === 'Pending' && isAssignee && (
+                                <>
+                                  {(isAssigner || isAdminOrTL || !item.assignerId || item.assignerId === item.assigneeId) ? (
+                                    <Button 
+                                      size="sm" 
+                                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-7 rounded-lg flex items-center gap-1 shadow-sm"
+                                      onClick={() => handleUpdateOtherWorkStatus(item.id, 'Approved')}
+                                    >
+                                      <Check className="w-3.5 h-3.5" />
+                                      Completed
+                                    </Button>
+                                  ) : (
+                                    <Button 
+                                      size="sm" 
+                                      className="bg-brand-teal hover:bg-brand-teal/90 text-white text-xs h-7"
+                                      onClick={() => handleUpdateOtherWorkStatus(item.id, 'Ready for Review')}
+                                    >
+                                      Submit for Review
+                                    </Button>
+                                  )}
+                                </>
                               )}
-                              {item.status === 'Ready for Review' && item.description !== 'Custom task created from Punch-In' && (isAssigner || isAdminOrTL) && (
+                              {item.status === 'Ready for Review' && (isAssigner || isAdminOrTL) && (
                                 <>
                                   <Button 
                                     size="sm" 

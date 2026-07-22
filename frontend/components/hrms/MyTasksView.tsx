@@ -25,6 +25,7 @@ import { Calendar as DayCalendar } from '@/components/ui/calendar'
 import { format } from 'date-fns'
 import { API_URL } from '@/lib/config'
 import { PageHeader } from '@/components/common/PageHeader'
+import { toast } from 'sonner'
 
 const parseLocalDate = (dateStr: string) => {
   if (!dateStr) return new Date(0);
@@ -112,6 +113,54 @@ export function MyTasksView({ targetUserId, isEmbedded = false }: MyTasksViewPro
   useEffect(() => {
     fetchData()
   }, [])
+
+  const handleMarkComplete = async (task: any) => {
+    try {
+      let url = ''
+      let payload: any = {}
+
+      if (task.sourceType === 'general-task') {
+        url = `${API_URL}/tasks/${task.id}`
+        payload = { status: 'completed', performedBy: currentUser?.id, userName: currentUser?.name }
+      } else if (task.sourceType === 'wm-task') {
+        url = `${API_URL}/wm-tasks/${task.id}`
+        payload = { status: 'completed', updatedBy: currentUser?.name }
+      } else if (task.sourceType === 'smm-other') {
+        url = `${API_URL}/other-work/${task.id}`
+        payload = { status: 'Approved', updatedBy: currentUser?.name }
+      } else if (task.sourceType === 'smm-creative') {
+        url = `${API_URL}/content-calendar/${task.originalTask?.id || task.id}`
+        const stage = task.stage
+        if (stage === 'Script') payload = { scriptLink: 'Completed', status: 'Script Done' }
+        else if (stage === 'Shoot') payload = { shootLink: 'Completed', status: 'Shoot Done' }
+        else if (stage === 'Caption') payload = { caption: 'Completed' }
+        else if (stage === 'Thumbnail') payload = { thumbnailLink: 'Completed' }
+        else if (stage === 'Editing' || stage === 'Post/Graphics') payload = { finalPostLink: 'Completed', finalReelLink: 'Completed' }
+        else if (stage === 'Approval') payload = { isApproved: 'Yes' }
+        else if (stage === 'Posting') payload = { postingLinkOfIg: 'Completed' }
+        else payload = { status: 'Completed' }
+      } else {
+        url = `${API_URL}/tasks/${task.id}`
+        payload = { status: 'completed' }
+      }
+
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+
+      if (res.ok) {
+        toast.success(`Task marked as completed!`)
+        fetchData()
+      } else {
+        toast.error(`Failed to mark task as completed.`)
+      }
+    } catch (err) {
+      console.error(err)
+      toast.error(`Error marking task as completed.`)
+    }
+  }
 
   // Process all tasks assigned to the current user
   const effectiveUserId = targetUserId || (selectedEmployeeId !== 'all' ? selectedEmployeeId : currentUser?.id);
@@ -747,6 +796,7 @@ export function MyTasksView({ targetUserId, isEmbedded = false }: MyTasksViewPro
                                     <th className="p-4 w-[120px]">Stage</th>
                                     <th className="p-4">Task Details</th>
                                     <th className="p-4 w-[200px]">Remark</th>
+                                    <th className="p-4 w-[120px] text-right">Actions</th>
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100 text-xs">
@@ -782,6 +832,17 @@ export function MyTasksView({ targetUserId, isEmbedded = false }: MyTasksViewPro
                                         <td className="p-4 text-slate-500 italic max-w-[200px] truncate" title={task.originalTask?.remark || '-'}>
                                           {task.originalTask?.remark || '-'}
                                         </td>
+                                        <td className="p-4 text-right">
+                                          <Button
+                                            size="sm"
+                                            onClick={() => handleMarkComplete(task)}
+                                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-7 px-2.5 text-xs rounded-lg inline-flex items-center gap-1 shadow-sm"
+                                            title="Mark as completed"
+                                          >
+                                            <CheckCircle2 className="w-3.5 h-3.5" />
+                                            Completed
+                                          </Button>
+                                        </td>
                                       </tr>
                                     )
                                   })}
@@ -795,6 +856,7 @@ export function MyTasksView({ targetUserId, isEmbedded = false }: MyTasksViewPro
                                     <th className="p-4 w-[250px]">Project</th>
                                     <th className="p-4">Task Details</th>
                                     <th className="p-4 w-[100px]">Priority</th>
+                                    <th className="p-4 w-[120px] text-right">Actions</th>
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100 text-xs">
@@ -817,6 +879,17 @@ export function MyTasksView({ targetUserId, isEmbedded = false }: MyTasksViewPro
                                         <Badge className={`${getPriorityColor(task.priority)} border font-bold text-[9px] uppercase shadow-none`}>
                                           {task.priority}
                                         </Badge>
+                                      </td>
+                                      <td className="p-4 text-right">
+                                        <Button
+                                          size="sm"
+                                          onClick={() => handleMarkComplete(task)}
+                                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-7 px-2.5 text-xs rounded-lg inline-flex items-center gap-1 shadow-sm"
+                                          title="Mark as completed"
+                                        >
+                                          <CheckCircle2 className="w-3.5 h-3.5" />
+                                          Completed
+                                        </Button>
                                       </td>
                                     </tr>
                                   ))}
