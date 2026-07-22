@@ -5227,6 +5227,7 @@ async def get_system_settings(db):
             "officeStartTime": "09:30",
             "officeEndTime": "18:30",
             "lateBufferMins": 10,
+            "financeOtpEmail": "",
             "inactivityTimeoutEnabled": False,
             "inactivityTimeoutMins": 5,
             "allowedMonthlyPaidLeaves": 1,

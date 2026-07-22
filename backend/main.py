@@ -914,10 +914,12 @@ async def verify_otp(otp_data: schemas.VerifyOTPRequest, db=Depends(get_db)):
 @app.post("/finance-otp/request")
 async def request_finance_otp(req: schemas.FinanceOTPRequest, db=Depends(get_db)):
     settings = await db.system_settings.find_one({}) or {}
-    company_email = settings.get("companyEmail")
+    finance_email = settings.get("financeOtpEmail")
+    if not finance_email:
+        finance_email = settings.get("companyEmail")
     
-    if not company_email:
-        raise HTTPException(status_code=400, detail="Company email not configured in settings")
+    if not finance_email:
+        raise HTTPException(status_code=400, detail="Finance or Company email not configured in settings")
         
     otp = str(random.randint(100000, 999999))
     expiry = datetime.now(pytz.timezone('Asia/Kolkata')) + timedelta(minutes=10)
@@ -928,10 +930,10 @@ async def request_finance_otp(req: schemas.FinanceOTPRequest, db=Depends(get_db)
         {"$set": {"finance_otp": otp, "finance_otp_expiry": expiry.isoformat()}}
     )
     
-    # Send email to companyEmail instead of user email
-    send_otp_email(company_email, otp)
+    # Send email to finance_email instead of user email
+    send_otp_email(finance_email, otp)
     
-    return {"message": "OTP sent to company email"}
+    return {"message": "OTP sent to finance admin email"}
 
 @app.post("/finance-otp/verify")
 async def verify_finance_otp(otp_data: schemas.VerifyOTPRequest, db=Depends(get_db)):

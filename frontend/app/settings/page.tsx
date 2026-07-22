@@ -275,6 +275,7 @@ export default function SettingsPage() {
           companyAddress: settings?.companyAddress || "",
           companyPhone: settings?.companyPhone || "",
           companyEmail: settings?.companyEmail || "",
+          financeOtpEmail: settings?.financeOtpEmail || "",
           companyPan: settings?.companyPan || "",
           companyLlpin: settings?.companyLlpin || "",
           companyState: settings?.companyState || "",
@@ -958,7 +959,7 @@ export default function SettingsPage() {
                         disabled={isUpdating || !canEditSettings}
                       />
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                       <Label className="text-xs font-bold text-muted-foreground uppercase">Company Email</Label>
                       <Input 
                         type="email" 
@@ -968,6 +969,19 @@ export default function SettingsPage() {
                         onChange={(e) => setSettings({...settings, companyEmail: e.target.value})}
                         disabled={isUpdating || !canEditSettings}
                       />
+                    </div>
+                    
+                    <div className="space-y-1">
+                      <Label className="text-xs font-bold text-muted-foreground uppercase">Finance OTP Email</Label>
+                      <Input 
+                        type="email" 
+                        className="w-full bg-white border-border focus-visible:ring-brand-teal"
+                        placeholder="e.g. finance@hkdigiverse.com (Defaults to Company Email)"
+                        value={settings?.financeOtpEmail || ""}
+                        onChange={(e) => setSettings({...settings, financeOtpEmail: e.target.value})}
+                        disabled={isUpdating || !canEditSettings}
+                      />
+                      <p className="text-[10px] text-muted-foreground">Overrides the company email for Finance OTPs.</p>
                     </div>
                   </div>
                 </div>

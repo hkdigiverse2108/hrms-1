@@ -1623,6 +1623,7 @@ class SystemSettingsBase(BaseModel):
     inactivityTimeoutMins: Optional[int] = 5
     allowedMonthlyPaidLeaves: Optional[int] = 1
     companyGstin: Optional[str] = "24AAXFN3372M1ZK"
+    financeOtpEmail: Optional[str] = ""
     otherActivities: Optional[List[str]] = Field(default_factory=list)
     otherMeetings: Optional[List[str]] = Field(default_factory=list)
     otherCategories: Optional[List[str]] = ["Activity", "Meeting"]
@@ -1668,6 +1669,7 @@ class SystemSettingsUpdate(BaseModel):
     inactivityTimeoutMins: Optional[int] = None
     allowedMonthlyPaidLeaves: Optional[int] = None
     companyGstin: Optional[str] = None
+    financeOtpEmail: Optional[str] = None
     otherCategories: Optional[List[str]] = None
     companyAddress: Optional[str] = None
     companyPhone: Optional[str] = None

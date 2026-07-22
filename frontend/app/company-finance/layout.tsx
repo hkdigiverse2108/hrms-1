@@ -50,7 +50,7 @@ export default function FinanceLayout({ children }: { children: React.ReactNode 
         body: JSON.stringify({ email: user.email }),
       });
       if (res.ok) {
-        toast.success("Security OTP sent to company email.");
+        toast.success("Security OTP sent to finance admin email.");
       } else {
         const data = await res.json();
         toast.error(data.detail || "Failed to send OTP.");
@@ -111,7 +111,7 @@ export default function FinanceLayout({ children }: { children: React.ReactNode 
         <div className="space-y-2">
           <h2 className="text-2xl font-bold tracking-tight text-slate-800">Security Verification</h2>
           <p className="text-sm text-slate-500">
-            Access to the Finance module requires an OTP. A code has been sent to the registered company email.
+            Access to the Finance module requires an OTP. A code has been sent to the registered finance admin email.
           </p>
         </div>
         
