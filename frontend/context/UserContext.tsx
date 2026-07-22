@@ -29,14 +29,24 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     window.fetch = function (...args) {
       const [resource, config] = args;
       
-      if (typeof resource === 'string' && resource.startsWith(API_URL)) {
+      let url = '';
+      if (typeof resource === 'string') {
+        url = resource;
+      } else if (resource && typeof resource === 'object' && 'url' in resource) {
+        url = (resource as any).url;
+      } else if (resource instanceof URL) {
+        url = resource.href;
+      }
+
+      if (url && (url.startsWith(API_URL) || url.includes('/api/'))) {
         const token = localStorage.getItem('token');
         if (token) {
           const newConfig = { ...config } as RequestInit;
-          newConfig.headers = {
-            ...newConfig.headers,
-            'Authorization': `Bearer ${token}`
-          };
+          const headers = new Headers(newConfig.headers || {});
+          if (!headers.has('Authorization')) {
+            headers.set('Authorization', `Bearer ${token}`);
+          }
+          newConfig.headers = headers;
           args[1] = newConfig;
         }
       }

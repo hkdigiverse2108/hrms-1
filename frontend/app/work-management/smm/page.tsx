@@ -180,6 +180,20 @@ export default function CreativeClientsPage() {
   const isRealAdmin = user?.role?.toLowerCase() === "admin";
   const isAdmin = isRealAdmin || hasFullSmmAccess;
   const isEmployeeOrIntern = (user?.role === "Employee" || user?.role === "Intern") && !hasFullSmmAccess;
+
+  const canViewAllClients = React.useMemo(() => {
+    if (!user) return false;
+    const r = (user.role || "").toLowerCase();
+    const d = (user.designation || "").toLowerCase();
+    const allAccessRoles = ["admin", "super admin", "manager", "director", "head", "team leader", "sub admin", "sub-admin"];
+    
+    if (allAccessRoles.includes(r) || allAccessRoles.includes(d) || d.includes("head") || d.includes("manager") || d.includes("leader") || r.includes("admin")) {
+      return true;
+    }
+    
+    return false;
+  }, [user]);
+
   const [clients, setClients] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -817,7 +831,7 @@ export default function CreativeClientsPage() {
 
   const filteredRows = useMemo(() => {
     return clientProjectRows.filter(({ client: c, project: p }: { client: any; project: any }) => {
-      if (isEmployeeOrIntern && user?.id) {
+      if (!canViewAllClients && user?.id) {
         const proj = p || {};
         const isAssigned = (proj.assignedScriptwriterId || c.assignedScriptwriterId) === user.id || 
                            (proj.assignedReelEditorId || c.assignedReelEditorId) === user.id ||
