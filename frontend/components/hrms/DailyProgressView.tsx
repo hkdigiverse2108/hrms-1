@@ -651,9 +651,23 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
   ]
 
   const actions = (record: any) => {
-    const isSelf = user?.id === record.employeeId
-    const isHighLevelRole = ['Team Leader', 'Manager', 'Social Media Manager'].includes(record.role);
-    const canManage = (canEditDailyProgress || (isTeamLeader && user?.department === record.department && !isHighLevelRole) || (isHRUser && isHighLevelRole)) && !isSelf
+    const isSelf = user?.id === record.employeeId;
+    const recordRole = record.role?.toLowerCase() || '';
+    const recordDesig = record.designation?.toLowerCase() || '';
+    const isHighLevelRole = ['team leader', 'manager', 'social media manager', 'head'].some(r => recordRole.includes(r) || recordDesig.includes(r));
+    
+    let hasAccess = false;
+    if (isAdmin) {
+      hasAccess = true;
+    } else if (isHRUser) {
+      hasAccess = isHighLevelRole || record.department?.toLowerCase() === 'hr';
+    } else if (isTeamLeader) {
+      hasAccess = user?.department === record.department && !isHighLevelRole;
+    } else if (checkPermission('daily-progress', 'canEdit')) {
+      hasAccess = true;
+    }
+    
+    const canManage = hasAccess && !isSelf;
     
     if (record.status === 'On Leave') {
         return <span className="text-[10px] text-slate-400 italic font-medium tracking-tighter">On Leave</span>
