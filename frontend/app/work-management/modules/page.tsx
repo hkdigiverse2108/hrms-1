@@ -93,7 +93,7 @@ export default function ModulesPage() {
 
   const selectedProject = projects.find(p => p.id === selectedProjectId);
   const canManageModule = Boolean(user && (
-    ['admin', 'super admin', 'superadmin', 'team leader'].includes(user.role?.toLowerCase() || '') ||
+    (['admin', 'super admin', 'superadmin'].includes(user.role?.toLowerCase() || '')  || user.designation?.toLowerCase() === 'head') ||
     user.designation?.toLowerCase() === 'team leader' ||
     selectedProject?.teamLeaderId === user.id ||
     projects.some((p: any) => p.teamLeaderId === user.id)

@@ -18,14 +18,15 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
+import isSameOrAfter from "dayjs/plugin/isSameOrAfter";
+import isSameOrBefore from "dayjs/plugin/isSameOrBefore";
 import { Check, Eye, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
-
 dayjs.extend(relativeTime);
-
- 
+dayjs.extend(isSameOrAfter);
+dayjs.extend(isSameOrBefore);
 const { Header: AntHeader } = Layout;
  
 export function Header() {
@@ -49,6 +50,30 @@ export function Header() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [isNotificationsModalOpen, setIsNotificationsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"all" | "unread">("all");
+  const [hasTargetedBanner, setHasTargetedBanner] = useState(false);
+  
+  useEffect(() => {
+    if (user?.id) {
+      fetch(`${API_URL}/system-settings`)
+        .then(res => res.json())
+        .then(data => {
+          const banners = data.dashboardBanners || [];
+          const todayStr = dayjs().format('YYYY-MM-DD');
+          const active = banners.filter((b: any) => {
+            if (!b.isActive) return false;
+            if (b.employeeId && b.employeeId !== "all" && b.employeeId !== user.id) return false;
+            const hasStartDate = !!b.startDate;
+            const hasEndDate = !!b.endDate;
+            if (!hasStartDate && !hasEndDate) return true;
+            if (hasStartDate && !hasEndDate) return dayjs(todayStr).isSameOrAfter(b.startDate);
+            if (!hasStartDate && hasEndDate) return dayjs(todayStr).isSameOrBefore(b.endDate);
+            return dayjs(todayStr).isSameOrAfter(b.startDate) && dayjs(todayStr).isSameOrBefore(b.endDate);
+          });
+          setHasTargetedBanner(active.some((b: any) => b.employeeId === user.id));
+        })
+        .catch(err => console.error("Error fetching settings for banners:", err));
+    }
+  }, [user?.id]);
  
   const getFromNow = (dateStr: any) => {
     if (!dateStr) return "";
@@ -193,7 +218,12 @@ export function Header() {
 
  
   const userName = user?.name || "Guest";
-  const designation = user?.designation || user?.role || "Employee";
+  let designation = user?.designation || user?.role || "Employee";
+  if (user?.sub_department && user?.designation && !user?.role?.toLowerCase().includes('admin')) {
+    designation = `${user.sub_department} - ${user.designation}`;
+  } else if (user?.department && user?.designation && !user?.role?.toLowerCase().includes('admin')) {
+    designation = `${user.department} - ${user.designation}`;
+  }
   const initials = userName.split(' ').map(n => n[0]).join('').toUpperCase();
   const showUserInfo = mounted && !isLoading;
  
@@ -344,13 +374,18 @@ export function Header() {
           
           <Link href="/profile" className="flex items-center gap-3 ml-2 border-l border-border pl-6 px-2 py-1 h-10 my-auto hover:bg-muted rounded-md transition-colors">
             <div className="flex items-center gap-3">
-              <Avatar className="w-8 h-8">
-                <AvatarImage 
-                  src={getAvatarUrl(user?.profilePhoto, userName)} 
-                  alt={userName} 
-                />
-                <AvatarFallback>{showUserInfo ? initials : ""}</AvatarFallback>
-              </Avatar>
+              <div className="relative flex items-center justify-center">
+                {hasTargetedBanner && (
+                  <div className="absolute -inset-[2.5px] rounded-full bg-gradient-to-tr from-yellow-400 via-amber-300 to-yellow-600 shadow-sm animate-pulse"></div>
+                )}
+                <Avatar className={`relative z-10 w-8 h-8 ${hasTargetedBanner ? 'border-2 border-white' : ''}`}>
+                  <AvatarImage 
+                    src={getAvatarUrl(user?.profilePhoto, userName)} 
+                    alt={userName} 
+                  />
+                  <AvatarFallback>{showUserInfo ? initials : ""}</AvatarFallback>
+                </Avatar>
+              </div>
    
               <div className="hidden md:flex flex-col text-sm leading-tight min-w-[100px]">
                 {showUserInfo ? (

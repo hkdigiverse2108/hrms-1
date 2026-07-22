@@ -222,6 +222,8 @@ class EmployeeBase(BaseModel):
     password: Optional[str] = None
     dob: Optional[RobustDate] = None
     department: Optional[str] = None
+    sub_department: Optional[str] = ''
+
     designation: Optional[str] = None
     joinDate: Optional[RobustDate] = None
     status: Optional[str] = "active"
@@ -544,6 +546,20 @@ class DepartmentBase(BaseModel):
 class DepartmentCreate(DepartmentBase):
     pass
 
+class SubDepartmentBase(BaseModel):
+    name: str
+    department: Optional[str] = ''
+
+class SubDepartmentCreate(SubDepartmentBase):
+    pass
+
+class SubDepartmentUpdate(BaseModel):
+    name: Optional[str] = None
+    department: Optional[str] = None
+
+class SubDepartment(SubDepartmentBase):
+    id: str
+
 class DepartmentUpdate(BaseModel):
     name: Optional[str] = None
     head: Optional[str] = None
@@ -554,6 +570,7 @@ class Department(DepartmentBase):
 class DesignationBase(BaseModel):
     title: str
     department: str
+    sub_department: Optional[str] = ''
 
 class DesignationCreate(DesignationBase):
     pass
@@ -561,6 +578,7 @@ class DesignationCreate(DesignationBase):
 class DesignationUpdate(BaseModel):
     title: Optional[str] = None
     department: Optional[str] = None
+    sub_department: Optional[str] = None
 
 class Designation(DesignationBase):
     id: str
@@ -804,6 +822,8 @@ class ReviewBase(BaseModel):
     updatedBy: Optional[str] = None
     query: Optional[str] = None
     adminReply: Optional[str] = None
+    replies: Optional[List[dict]] = None
+    isApproved: Optional[bool] = False
 
 class ReviewCreate(ReviewBase):
     pass
@@ -814,6 +834,8 @@ class ReviewUpdate(BaseModel):
     updatedBy: Optional[str] = None
     query: Optional[str] = None
     adminReply: Optional[str] = None
+    replies: Optional[List[dict]] = None
+    isApproved: Optional[bool] = False
 
 class Review(ReviewBase):
     id: str
@@ -1657,6 +1679,17 @@ class SystemSettingsBase(BaseModel):
     financeDecimalScaling: Optional[int] = 0
     leadCategories: Optional[List[str]] = Field(default_factory=list)
     dashboardBanners: Optional[List[Dict[str, Any]]] = Field(default_factory=list)
+    enabledModules: Optional[List[str]] = Field(default_factory=lambda: [
+        "dashboard", "employee-list", "org-structure", "employee-attendance", 
+        "leave-requests", "employee-documents", "document-generator",
+        "salary-structure", "payroll-processing", "payslips", "bonuses-deductions",
+        "interviews", "hirings", "attendance", "leave", "schedule",
+        "projects", "tasks", "personal-tasks", "daily-progress", "work-logs", 
+        "sales", "clients", "marketing", "creative", "research",
+        "seating-arrangement", "resource-management", "gallery",
+        "remarks", "review", "invoice", "chat", "activity-tracker", 
+        "activity-logs", "training", "admin-courses"
+    ])
 
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
@@ -1701,6 +1734,7 @@ class SystemSettingsUpdate(BaseModel):
     financeDecimalScaling: Optional[int] = None
     leadCategories: Optional[List[str]] = None
     dashboardBanners: Optional[List[Dict[str, Any]]] = None
+    enabledModules: Optional[List[str]] = None
 
 class SystemSettings(SystemSettingsBase):
     id: str
@@ -2114,12 +2148,29 @@ class UserPermissionUpdate(BaseModel):
     permissions: List[ModulePermission]
     presetId: Optional[str] = None
 
+class ModuleBulkUpdateItem(BaseModel):
+    employeeId: str
+    canAdd: bool = False
+    canEdit: bool = False
+    canDelete: bool = False
+    canView: bool = False
+
+class ModuleBulkUpdateRequest(BaseModel):
+    moduleName: str
+    displayName: str
+    tabUrl: str
+    updates: List[ModuleBulkUpdateItem]
+
 class UserPermission(UserPermissionBase):
     id: Optional[str] = None
 
 class PermissionPresetBase(BaseModel):
     name: str
     description: Optional[str] = ""
+    presetType: Optional[str] = "role"
+    targetModule: Optional[str] = None
+    department: Optional[str] = None
+    designation: Optional[str] = None
     permissions: List[ModulePermission]
 
 class PermissionPresetCreate(PermissionPresetBase):
@@ -2128,6 +2179,10 @@ class PermissionPresetCreate(PermissionPresetBase):
 class PermissionPresetUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    presetType: Optional[str] = None
+    targetModule: Optional[str] = None
+    department: Optional[str] = None
+    designation: Optional[str] = None
     permissions: Optional[List[ModulePermission]] = None
 
 class PermissionPreset(PermissionPresetBase):
@@ -2486,6 +2541,7 @@ class ContentCalendarEntryBase(BaseModel):
     actualPostingDate: Optional[str] = None
     updatedBy: Optional[str] = None
     logs: Optional[List[dict]] = None
+    queries: Optional[List[dict]] = None
     remark: Optional[str] = None
     remarkStage: Optional[str] = None
     assignedBrandPersonIds: Optional[List[str]] = None
@@ -2521,6 +2577,7 @@ class ContentCalendarEntryUpdate(BaseModel):
     postingLinkOfIg: Optional[str] = None
     actualPostingDate: Optional[str] = None
     updatedBy: Optional[str] = None
+    queries: Optional[List[dict]] = None
     remark: Optional[str] = None
     remarkStage: Optional[str] = None
     assignedScriptwriterId: Optional[str] = None
@@ -2598,6 +2655,7 @@ class OtherWorkBase(BaseModel):
     taskType: Optional[str] = "other-work"
     remark: Optional[str] = None
     remarkStage: Optional[str] = None
+    queries: Optional[List[dict]] = None
     logs: Optional[List[dict]] = None
 
 class OtherWorkCreate(OtherWorkBase):
@@ -2612,6 +2670,7 @@ class OtherWorkUpdate(BaseModel):
     status: Optional[str] = None
     remark: Optional[str] = None
     remarkStage: Optional[str] = None
+    queries: Optional[List[dict]] = None
     updatedBy: Optional[str] = None
     logs: Optional[List[dict]] = None
 

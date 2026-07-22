@@ -126,6 +126,7 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
   const [saving, setSaving] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [moduleSearch, setModuleSearch] = useState('')
+  const [activeModules, setActiveModules] = useState<string[]>([])
 
   useEffect(() => {
     if (employeeId) {
@@ -140,6 +141,17 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
       const listRes = await fetch(`${API_URL}/employees`)
       if (listRes.ok) {
         setEmployees(await listRes.json())
+      }
+
+      // Fetch System Settings
+      const settingsRes = await fetch(`${API_URL}/system-settings`)
+      if (settingsRes.ok) {
+        const settingsData = await settingsRes.json()
+        if (settingsData.enabledModules) {
+          setActiveModules(settingsData.enabledModules)
+        } else {
+          setActiveModules(DEFAULT_MODULES.map(m => m.moduleName))
+        }
       }
 
       // Fetch Presets
@@ -292,6 +304,30 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
     emp.status?.toLowerCase() !== 'inactive'
   )
 
+  const sortedPresets = React.useMemo(() => {
+    const deptAndDesigPresets = presets.filter(p => p.presetType === 'department' || p.presetType === 'designation')
+    return [...deptAndDesigPresets].sort((a, b) => {
+      const aDesigMatch = a.presetType === 'designation' && a.department === employee?.department && a.designation === employee?.designation
+      const bDesigMatch = b.presetType === 'designation' && b.department === employee?.department && b.designation === employee?.designation
+      if (aDesigMatch && !bDesigMatch) return -1
+      if (!aDesigMatch && bDesigMatch) return 1
+
+      const aDeptMatch = a.presetType === 'department' && (a.department === employee?.department || a.name === employee?.department)
+      const bDeptMatch = b.presetType === 'department' && (b.department === employee?.department || b.name === employee?.department)
+      if (aDeptMatch && !bDeptMatch) return -1
+      if (!aDeptMatch && bDeptMatch) return 1
+
+      return a.name.localeCompare(b.name)
+    })
+  }, [presets, employee])
+
+  const isSuggested = (preset: any) => {
+    if (!employee) return false
+    if (preset.presetType === 'designation' && preset.department === employee.department && preset.designation === employee.designation) return true
+    if (preset.presetType === 'department' && (preset.department === employee.department || preset.name === employee.department)) return true
+    return false
+  }
+
   return (
     <div className="flex flex-col h-full -mt-6">
       <div className="grid grid-cols-1 xl:grid-cols-4 min-h-[calc(100vh-100px)]">
@@ -369,21 +405,27 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
           <div className="flex-1 p-8 flex flex-col overflow-hidden">
             <div className="mb-4 flex items-center gap-2 overflow-x-auto custom-scrollbar pb-2">
                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mr-2 shrink-0">Quick Presets:</span>
-               {presets.map(preset => (
-                 <Button 
-                   key={preset.id} 
-                   variant={activePresetId === preset.id ? "default" : "outline"} 
-                   size="sm" 
-                   className={`h-8 text-xs shrink-0 ${
-                     activePresetId === preset.id 
-                       ? 'bg-brand-teal hover:bg-brand-teal/90 text-white font-bold border-brand-teal' 
-                       : ''
-                   }`} 
-                   onClick={() => applyPreset(preset.id)}
-                 >
-                   {preset.name}
-                 </Button>
-               ))}
+               {sortedPresets.map(preset => {
+                 const suggested = isSuggested(preset)
+                 return (
+                   <Button 
+                     key={preset.id} 
+                     variant={activePresetId === preset.id ? "default" : (suggested ? "outline" : "ghost")} 
+                     size="sm" 
+                     className={`h-8 text-xs shrink-0 ${
+                       activePresetId === preset.id 
+                         ? 'bg-brand-teal hover:bg-brand-teal/90 text-white font-bold border-brand-teal' 
+                         : suggested
+                           ? 'border-brand-teal text-brand-teal bg-brand-teal/5 font-bold shadow-sm'
+                           : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                     }`} 
+                     onClick={() => applyPreset(preset.id)}
+                   >
+                     {suggested && <Star className="w-3.5 h-3.5 mr-1 fill-brand-teal text-brand-teal" />}
+                     {preset.name}
+                   </Button>
+                 )
+               })}
                <Button variant="outline" size="sm" className="h-8 text-xs shrink-0 bg-brand-orange/10 text-brand-orange border-brand-orange/20 hover:bg-brand-orange/20" onClick={() => applyPreset('full')}>Full Access</Button>
                <Button variant="outline" size="sm" className="h-8 text-xs shrink-0 text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => applyPreset('none')}>Clear All</Button>
             </div>
@@ -424,8 +466,9 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
                 <tbody className="divide-y divide-slate-100">
                   {PERMISSION_GROUPS.map((group) => {
                     const filteredModules = group.modules.filter(m => 
-                      m.displayName.toLowerCase().includes(moduleSearch.toLowerCase()) ||
-                      m.moduleName.toLowerCase().includes(moduleSearch.toLowerCase())
+                      activeModules.includes(m.moduleName) &&
+                      (m.displayName.toLowerCase().includes(moduleSearch.toLowerCase()) ||
+                      m.moduleName.toLowerCase().includes(moduleSearch.toLowerCase()))
                     )
                     
                     if (filteredModules.length === 0) return null
