@@ -374,8 +374,11 @@ export function Header() {
           
           <Link href="/profile" className="flex items-center gap-3 ml-2 border-l border-border pl-6 px-2 py-1 h-10 my-auto hover:bg-muted rounded-md transition-colors">
             <div className="flex items-center gap-3">
-              <div className={`rounded-full ${hasTargetedBanner ? 'p-[2px] bg-gradient-to-tr from-yellow-400 via-amber-300 to-yellow-600 shadow-sm animate-glitter' : ''}`}>
-                <Avatar className={`w-8 h-8 ${hasTargetedBanner ? 'border-2 border-white' : ''}`}>
+              <div className="relative flex items-center justify-center">
+                {hasTargetedBanner && (
+                  <div className="absolute -inset-[2.5px] rounded-full bg-gradient-to-tr from-yellow-400 via-amber-300 to-yellow-600 shadow-sm animate-pulse"></div>
+                )}
+                <Avatar className={`relative z-10 w-8 h-8 ${hasTargetedBanner ? 'border-2 border-white' : ''}`}>
                   <AvatarImage 
                     src={getAvatarUrl(user?.profilePhoto, userName)} 
                     alt={userName} 

@@ -128,8 +128,11 @@ export default function EmployeeListPage() {
         const isTargeted = targetedEmployeeIds.has(emp.id);
         return (
           <div className="flex items-center gap-3">
-            <div className={`rounded-full ${isTargeted ? 'p-[2px] bg-gradient-to-tr from-yellow-400 via-amber-300 to-yellow-600 shadow-sm animate-glitter' : ''}`}>
-              <Avatar className={`w-9 h-9 ${isTargeted ? 'border-2 border-white' : ''}`}>
+            <div className="relative flex items-center justify-center">
+              {isTargeted && (
+                <div className="absolute -inset-[2.5px] rounded-full bg-gradient-to-tr from-yellow-400 via-amber-300 to-yellow-600 shadow-sm animate-pulse"></div>
+              )}
+              <Avatar className={`relative z-10 w-9 h-9 ${isTargeted ? 'border-2 border-white' : ''}`}>
                 <AvatarImage src={getAvatarUrl(emp.profilePhoto, emp.name)} alt={emp.name} />
                 <AvatarFallback>{emp.name?.charAt(0) || "U"}</AvatarFallback>
               </Avatar>
