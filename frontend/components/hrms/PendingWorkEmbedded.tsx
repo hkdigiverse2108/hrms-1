@@ -1498,7 +1498,7 @@ export function PendingWorkEmbedded({
                                 <History className="w-4 h-4" />
                               </Button>
                               <Button
-                                onClick={() => router.push(`/work-management/smm/${item.clientId}?highlightTask=${item.id}`)}
+                                onClick={() => router.push(`/work-management/smm/${item.clientId}?projectId=${item.projectId}&highlightTask=${item.id}&highlightDate=${item.postingDate || ''}`)}
                                 variant="ghost"
                                 size="icon"
                                 title="Show in Calendar"

@@ -35,6 +35,13 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
   const [employees, setEmployees] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(() => {
+    const highlightDate = searchParams.get('highlightDate');
+    if (highlightDate) {
+      const d = new Date(highlightDate);
+      if (!isNaN(d.getTime())) {
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      }
+    }
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   });
@@ -297,10 +304,10 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
         const el = document.getElementById(`task-${highlightTask}`);
         if (el) {
           el.scrollIntoView({ behavior: "smooth", block: "center" });
-          el.classList.add("ring-2", "ring-brand-teal", "!bg-brand-teal/10");
+          el.classList.add("!bg-amber-200");
           setTimeout(() => {
-            el.classList.remove("ring-2", "ring-brand-teal", "!bg-brand-teal/10");
-          }, 3000);
+            el.classList.remove("!bg-amber-200");
+          }, 4000);
         }
       }, 500);
     }
