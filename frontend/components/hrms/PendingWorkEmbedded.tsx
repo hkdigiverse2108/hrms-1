@@ -488,7 +488,13 @@ export function PendingWorkEmbedded({
 
     entries.forEach(entry => {
       const client = clients.find(c => c.id === entry.clientId);
-      const project = clientProjects[entry.clientId];
+      let project = null;
+      if (entry.projectId) {
+        project = projects.find(p => p.id === entry.projectId);
+      }
+      if (!project) {
+        project = clientProjects[entry.clientId];
+      }
       if (!project) return; // Only show if active creative project
       if (project.status === "on-hold" || project.status === "onhold" || project.status?.toLowerCase() === "on-hold") return;
       
@@ -522,6 +528,7 @@ export function PendingWorkEmbedded({
           ...entry,
           clientDisplayName: displayName,
           clientId: entry.clientId,
+          projectId: entry.projectId || project.id,
           stage: finalStage,
           deadline,
           type,
@@ -577,6 +584,7 @@ export function PendingWorkEmbedded({
                ...entry,
                clientDisplayName: displayName,
                clientId: entry.clientId,
+               projectId: entry.projectId || project.id,
                stage: 'Brand Person',
                deadline: taskDeadline,
                type: 'brand-person',
@@ -696,6 +704,7 @@ export function PendingWorkEmbedded({
           id: `${project.id}-followup`,
           clientDisplayName: displayName,
           clientId: project.clientId,
+          projectId: project.id,
           stage: 'Follow-up',
           deadline: deadlineStr,
           type: 'follow-up',
@@ -730,6 +739,7 @@ export function PendingWorkEmbedded({
             id: `${project.id}-whatsapp`,
             clientDisplayName: displayName,
             clientId: project.clientId || project.id,
+            projectId: project.id,
             stage: 'WhatsApp Group',
             deadline: deadlineStr,
             type: 'whatsapp-group',
@@ -752,6 +762,7 @@ export function PendingWorkEmbedded({
             id: `${project.id}-greetings`,
             clientDisplayName: displayName,
             clientId: project.clientId || project.id,
+            projectId: project.id,
             stage: 'Greetings Msg',
             deadline: deadlineStr,
             type: 'greetings-msg',
@@ -774,6 +785,7 @@ export function PendingWorkEmbedded({
             id: `${project.id}-meetings`,
             clientDisplayName: displayName,
             clientId: project.clientId || project.id,
+            projectId: project.id,
             stage: 'Meeting',
             deadline: deadlineStr,
             type: 'meetings',
@@ -797,6 +809,7 @@ export function PendingWorkEmbedded({
             id: `${project.id}-cc-create`,
             clientDisplayName: displayName,
             clientId: project.clientId || project.id,
+            projectId: project.id,
             stage: 'Content Calendar',
             deadline: deadlineStr,
             type: 'content-calendar-create',
@@ -820,7 +833,7 @@ export function PendingWorkEmbedded({
 
     // Apply Project Filter
     if (filterProject !== 'all') {
-      filteredTasks = filteredTasks.filter(t => t.clientId === filterProject);
+      filteredTasks = filteredTasks.filter(t => t.projectId === filterProject || t.clientId === filterProject);
     }
 
     // Apply Task Type Filter
@@ -1266,11 +1279,11 @@ export function PendingWorkEmbedded({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Projects</SelectItem>
-                  {Object.entries(clientProjects).map(([cId, project]) => {
-                    const client = clients.find(c => c.id === cId);
+                  {projects.filter((p: any) => p.department === 'Creative' && p.status !== 'on-hold' && p.status !== 'onhold').map((project: any) => {
+                    const client = clients.find(c => c.id === project.clientId);
                     const cName = client ? (client.companyName || client.clientName) : '';
                     return (
-                      <SelectItem key={cId} value={cId}>{project.title} ({cName})</SelectItem>
+                      <SelectItem key={project.id} value={project.id}>{project.title} ({cName})</SelectItem>
                     );
                   })}
                 </SelectContent>
