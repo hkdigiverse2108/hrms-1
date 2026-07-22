@@ -229,6 +229,69 @@ export default function MarketingReportsPage() {
   const canDeleteMarketing =
     isAdmin || isHR || checkPermission("marketing", "canDelete");
 
+  const isUserAdminOrTLOrHead = React.useCallback((u: any) => {
+    if (!u) return false;
+    const r = (u.role || "").toLowerCase().trim();
+    const d = (u.designation || "").toLowerCase().trim();
+    const n = (u.name || "").toLowerCase().trim();
+
+    if (n === "admin admin") return true;
+
+    const fullRoles = [
+      "admin", "super admin", "superadmin", "hr", "manager", "director",
+      "sub admin", "sub-admin", "head", "team leader", "tl"
+    ];
+
+    if (fullRoles.includes(r) || fullRoles.includes(d)) return true;
+    if (r.includes("head") || d.includes("head") || r.includes("team leader") || d.includes("team leader") || r.includes("tl") || d.includes("tl")) return true;
+
+    return false;
+  }, []);
+
+  const isProjectAssignedToUser = React.useCallback((project: any, userId?: string, acceptedTransfersList: any[] = []) => {
+    if (!project || !userId) return false;
+    const uId = String(userId);
+
+    if (String(project.assignedEmployeeId) === uId) return true;
+    if (String(project.assignedToId) === uId) return true;
+    if (String(project.teamLeaderId) === uId) return true;
+
+    if (Array.isArray(project.assignedEmployeeIds) && project.assignedEmployeeIds.map(String).includes(uId)) return true;
+    if (Array.isArray(project.assignedToIds) && project.assignedToIds.map(String).includes(uId)) return true;
+
+    if (String(project.assignedScriptwriterId) === uId) return true;
+    if (String(project.assignedShooterId) === uId) return true;
+    if (String(project.assignedPostDesignerId) === uId) return true;
+    if (String(project.assignedReelEditorId) === uId) return true;
+    if (String(project.assignedCaptionWriterId) === uId) return true;
+    if (String(project.assignedThumbnailDesignerId) === uId) return true;
+    if (String(project.assignedPosterId) === uId) return true;
+    if (String(project.assignedApproverId) === uId) return true;
+    if (String(project.revenueAssigneeId) === uId) return true;
+    if (String(project.followerAssigneeId) === uId) return true;
+
+    const isTransferredToMe = acceptedTransfersList.some(t => 
+      String(t.taskId) === String(project.id) && String(t.receiverId) === uId
+    );
+    if (isTransferredToMe) return true;
+
+    return false;
+  }, []);
+
+  const isClientAssignedToUser = React.useCallback((client: any, allProjects: any[], userId?: string, userName?: string, acceptedTransfersList: any[] = []) => {
+    if (!client || !userId) return false;
+    const uId = String(userId);
+
+    if (String(client.assignedEmployeeId) === uId) return true;
+    if (String(client.assignedToId) === uId) return true;
+    if (userName && client.assignedTo && client.assignedTo.toLowerCase() === userName.toLowerCase()) return true;
+
+    const clientProjects = allProjects.filter(p => String(p.clientId) === String(client.id || client._id));
+    const hasAssignedProj = clientProjects.some(p => isProjectAssignedToUser(p, userId, acceptedTransfersList));
+
+    return hasAssignedProj;
+  }, [isProjectAssignedToUser]);
+
   const [activeTab, setActiveTab] = useState("daily");
   const [workTimeFilter, setWorkTimeFilter] = useState("today");
   const [showTransfers, setShowTransfers] = useState(false);
@@ -1989,23 +2052,16 @@ export default function MarketingReportsPage() {
       ? projects.some(p => p.id === r.projectId) 
       : true;
 
-    // Filter by User's assigned projects if "My Tasks" is selected
+    // Filter by User's assigned projects for non-TL/Head regular employees or if "My Tasks" is selected
     let matchesTaskType = true;
-    if ((taskFilterType === "my") && user?.id) {
+    const isFullAuthority = isUserAdminOrTLOrHead(user);
+    if ((!isFullAuthority || taskFilterType === "my") && user?.id) {
       const assocProj = projects.find(p => String(p.id) === String(r.projectId));
       if (assocProj) {
-        const isOriginalAssignee = assocProj.assignedEmployeeId === user.id;
-        const isTransferredToMe = acceptedTransfers.some(t => 
-          String(t.taskId) === String(r.projectId) && 
-          normalizeDate(t.stage) === normalizeDate(r.date) && 
-          t.receiverId === user.id
-        );
-        const isTransferredToSomeoneElse = acceptedTransfers.some(t => 
-          String(t.taskId) === String(r.projectId) && 
-          normalizeDate(t.stage) === normalizeDate(r.date) && 
-          t.receiverId !== user.id
-        );
-        matchesTaskType = (isOriginalAssignee && !isTransferredToSomeoneElse) || isTransferredToMe;
+        matchesTaskType = isProjectAssignedToUser(assocProj, user.id, acceptedTransfers);
+      } else if (r.clientId) {
+        const assocClient = clients.find(c => String(c.id) === String(r.clientId));
+        matchesTaskType = isClientAssignedToUser(assocClient, projects, user.id, user.name, acceptedTransfers);
       } else {
         matchesTaskType = false;
       }
@@ -2025,10 +2081,14 @@ export default function MarketingReportsPage() {
       monthFilter.includes("all") || monthFilter.includes(r.month);
 
     let matchesTaskType = true;
-    if ((taskFilterType === "my") && user?.id) {
+    const isFullAuthorityMonthly = isUserAdminOrTLOrHead(user);
+    if ((!isFullAuthorityMonthly || taskFilterType === "my") && user?.id) {
       const assocProj = projects.find(p => String(p.id) === String(r.projectId));
       if (assocProj) {
-        matchesTaskType = assocProj.assignedEmployeeId === user.id;
+        matchesTaskType = isProjectAssignedToUser(assocProj, user.id, acceptedTransfers);
+      } else if (r.clientId) {
+        const assocClient = clients.find(c => String(c.id) === String(r.clientId));
+        matchesTaskType = isClientAssignedToUser(assocClient, projects, user.id, user.name, acceptedTransfers);
       } else {
         matchesTaskType = false;
       }
@@ -3123,19 +3183,23 @@ export default function MarketingReportsPage() {
                 {(() => {
                   const filteredClients = clients.filter((c) => {
                     const matchesSearch = c.companyName?.toLowerCase().includes(searchQuery.toLowerCase()) || false;
-                    if (taskFilterType === "all") {
+                    const isFullAuthority = isUserAdminOrTLOrHead(user);
+
+                    if (!isFullAuthority) {
+                      const isAssigned = isClientAssignedToUser(c, projects, user?.id, user?.name, acceptedTransfers);
+                      if (!isAssigned) return false;
+                    }
+
+                    if (taskFilterType === "all" && isFullAuthority) {
                       return matchesSearch;
                     }
                     const clientProjs = projects.filter((p) => String(p.clientId) === String(c.id || (c as any)._id) && p.department?.toLowerCase() === "digital marketing");
                     const filteredProjs = clientProjs.filter((p) => {
                       if (p.status === "on-hold") return false;
-                      if (taskFilterType === "my" && user?.id) {
-                        const isOriginalAssignee = p.assignedEmployeeId === user.id;
-                        const isTransferredToMe = acceptedTransfers.some(t => 
-                          String(t.taskId) === String(p.id) && 
-                          t.receiverId === user.id
-                        );
-                        return isOriginalAssignee || isTransferredToMe;
+                      if (!isFullAuthority || taskFilterType === "my") {
+                        if (user?.id) {
+                          return isProjectAssignedToUser(p, user.id, acceptedTransfers);
+                        }
                       }
                       return true;
                     });
@@ -3151,7 +3215,13 @@ export default function MarketingReportsPage() {
                         filteredClients.map((client) => {
                           const isSelected = selectedClientFilter === client.id;
 
-                          const clientProjects = projects.filter((p: any) => p.clientId === client.id);
+                          const clientProjects = projects.filter((p: any) => {
+                            if (p.clientId !== client.id) return false;
+                            if (!isUserAdminOrTLOrHead(user)) {
+                              return isProjectAssignedToUser(p, user?.id, acceptedTransfers);
+                            }
+                            return true;
+                          });
 
                           return (
                             <div

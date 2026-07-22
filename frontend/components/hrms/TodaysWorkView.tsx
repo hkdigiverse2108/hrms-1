@@ -132,13 +132,30 @@ export function TodaysWorkView({
     return [...acc, ...tasksWithClient];
   }, []);
 
+  const isFullAuthority = (() => {
+    if (!currentUser) return false;
+    const r = (currentUser.role || "").toLowerCase().trim();
+    const d = (currentUser.designation || "").toLowerCase().trim();
+    const n = (currentUser.name || "").toLowerCase().trim();
+    if (n === "admin admin") return true;
+
+    const fullRoles = ["admin", "super admin", "superadmin", "hr", "manager", "director", "sub admin", "sub-admin", "head", "team leader", "tl"];
+    if (fullRoles.includes(r) || fullRoles.includes(d)) return true;
+    if (r.includes("head") || d.includes("head") || r.includes("team leader") || d.includes("team leader") || r.includes("tl") || d.includes("tl")) return true;
+    return false;
+  })();
+
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = yesterday.toISOString().split("T")[0];
 
   const filteredTasks = allTasks.filter(task => {
-    if (taskFilterType === "my") {
-      const isMyTask = task.assigneeId === (currentUser?.id || currentUser?._id);
+    if (!isFullAuthority || taskFilterType === "my") {
+      const uId = String(currentUser?.id || currentUser?._id || "");
+      const isMyTask = String(task.assigneeId) === uId || 
+                       String(task.project?.assignedEmployeeId) === uId ||
+                       String(task.project?.assignedToId) === uId ||
+                       (Array.isArray(task.project?.assignedEmployeeIds) && task.project.assignedEmployeeIds.map(String).includes(uId));
       if (!isMyTask) return false;
     }
     
@@ -175,6 +192,16 @@ export function TodaysWorkView({
   const uniqueClients = Array.from(new Set(allTasks.map(t => t.clientId))).map(id => {
     const task = allTasks.find(t => t.clientId === id);
     return { id, name: task.clientName };
+  }).filter(c => {
+    if (isFullAuthority) return true;
+    const clientTasks = allTasks.filter(t => t.clientId === c.id);
+    const uId = String(currentUser?.id || currentUser?._id || "");
+    return clientTasks.some(t => 
+      String(t.assigneeId) === uId || 
+      String(t.project?.assignedEmployeeId) === uId ||
+      String(t.project?.assignedToId) === uId ||
+      (Array.isArray(t.project?.assignedEmployeeIds) && t.project.assignedEmployeeIds.map(String).includes(uId))
+    );
   });
 
   return (
