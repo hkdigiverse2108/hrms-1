@@ -364,12 +364,27 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
 
         if (isAdmin || isHRUser) {
           if (activeRoleTab === 'Team Leaders') {
-            filteredEmployees = filteredEmployees.filter((e: any) => ['Team Leader', 'Manager', 'Social Media Manager'].includes(e.role || '') || e.department?.toLowerCase() === 'hr')
+            filteredEmployees = filteredEmployees.filter((e: any) => {
+               const rStr = (e.role || '').toLowerCase();
+               const dStr = (e.designation || '').toLowerCase();
+               const isHighLevel = ['team leader', 'manager', 'social media manager', 'head'].some(r => rStr.includes(r) || dStr.includes(r));
+               return isHighLevel || e.department?.toLowerCase() === 'hr';
+            });
           } else {
-            filteredEmployees = filteredEmployees.filter((e: any) => !['Team Leader', 'Manager', 'Social Media Manager'].includes(e.role || '') && e.department?.toLowerCase() !== 'hr' && e.role?.toLowerCase() !== 'admin')
+            filteredEmployees = filteredEmployees.filter((e: any) => {
+               const rStr = (e.role || '').toLowerCase();
+               const dStr = (e.designation || '').toLowerCase();
+               const isHighLevel = ['team leader', 'manager', 'social media manager', 'head'].some(r => rStr.includes(r) || dStr.includes(r));
+               return !isHighLevel && e.department?.toLowerCase() !== 'hr' && rStr !== 'admin';
+            });
           }
         } else if (isTeamLeader) {
-         filteredEmployees = filteredEmployees.filter((e: any) => e.id === user?.id || (!['Team Leader', 'Manager', 'Social Media Manager'].includes(e.role || '') && e.role?.toLowerCase() !== 'admin'))
+         filteredEmployees = filteredEmployees.filter((e: any) => {
+           const rStr = (e.role || '').toLowerCase();
+           const dStr = (e.designation || '').toLowerCase();
+           const isHighLevel = ['team leader', 'manager', 'social media manager', 'head'].some(r => rStr.includes(r) || dStr.includes(r));
+           return e.id === user?.id || (!isHighLevel && rStr !== 'admin');
+         });
        }
     }
 
@@ -414,7 +429,10 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
         }
 
         let responsiblePerson = ''
-        if (['Team Leader', 'Manager', 'Social Media Manager'].includes(emp.role || '') || emp.role?.toLowerCase() === 'admin') {
+        const eRoleStr = (emp.role || '').toLowerCase();
+        const eDesigStr = (emp.designation || '').toLowerCase();
+        const isHighLevel = ['team leader', 'manager', 'social media manager', 'head'].some(r => eRoleStr.includes(r) || eDesigStr.includes(r));
+        if (isHighLevel || eRoleStr === 'admin') {
            responsiblePerson = 'HR / Admin'
         } else {
            const tls = employees.filter((e: any) => e.department?.toLowerCase() === emp.department?.toLowerCase() && e.role === 'Team Leader')
@@ -431,6 +449,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
           employeeName: emp.name || `${emp.firstName} ${emp.lastName}`,
           department: emp.department,
           role: emp.role,
+          designation: emp.designation,
           date: dateStr,
           status: isFullDayLeave ? 'On Leave' : (report?.status || 'Pending Verification'),
           reportId: report?.id,
