@@ -1177,7 +1177,7 @@ export default function CreativeClientsPage() {
       ) : ['pending-work', 'todays-work', 'upcoming-work', 'completed-work', 'digital-marketing'].includes(masterFilter) ? (
         <PendingWorkEmbedded 
           type={masterFilter === 'digital-marketing' ? 'pending-work' : masterFilter as any} 
-          defaultTaskType={masterFilter === 'digital-marketing' ? 'digital-marketing' : 'all'}
+          defaultTaskType={masterFilter === 'digital-marketing' ? 'digital-marketing' : 'smm-all'}
         />
       ) : masterFilter === 'reviews' ? (
         <FeedbackReviewsEmbedded />

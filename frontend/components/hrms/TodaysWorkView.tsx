@@ -155,7 +155,13 @@ export function TodaysWorkView({
       const isMyTask = String(task.assigneeId) === uId || 
                        String(task.project?.assignedEmployeeId) === uId ||
                        String(task.project?.assignedToId) === uId ||
-                       (Array.isArray(task.project?.assignedEmployeeIds) && task.project.assignedEmployeeIds.map(String).includes(uId));
+                       String(task.project?.teamLeaderId) === uId ||
+                       String(task.project?.createdBy) === uId ||
+                       String(task.project?.createdById) === uId ||
+                       String(task.project?.assignedById) === uId ||
+                       String(task.project?.assignedBy) === uId ||
+                       (Array.isArray(task.project?.assignedEmployeeIds) && task.project.assignedEmployeeIds.map(String).includes(uId)) ||
+                       (Array.isArray(task.project?.assignedToIds) && task.project.assignedToIds.map(String).includes(uId));
       if (!isMyTask) return false;
     }
     

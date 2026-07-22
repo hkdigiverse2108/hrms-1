@@ -200,8 +200,27 @@ export default function MarketingReportsPage() {
     return perms.some((p: any) => dmPerms.includes(p.moduleName) && (p.canView || p.canEdit || p.canAdd));
   }, [user]);
 
+  const isUserAdminOrTLOrHead = React.useCallback((u: any) => {
+    if (!u) return false;
+    const r = (u.role || "").toLowerCase().trim();
+    const d = (u.designation || "").toLowerCase().trim();
+    const n = (u.name || "").toLowerCase().trim();
+
+    if (n === "admin admin") return true;
+
+    const fullRoles = [
+      "admin", "super admin", "superadmin", "hr", "manager", "director",
+      "sub admin", "sub-admin", "head", "team leader", "tl"
+    ];
+
+    if (fullRoles.includes(r) || fullRoles.includes(d)) return true;
+    if (r.includes("head") || d.includes("head") || r.includes("team leader") || d.includes("team leader") || r.includes("tl") || d.includes("tl")) return true;
+
+    return false;
+  }, []);
+
   const isEmployee = user && !["Admin", "Manager", "HR"].includes(user.role) && !hasFullDMAccess;
-  const isRegularEmployee = !user || !((['admin', 'super admin', 'superadmin'].includes(user.role?.toLowerCase() || '')  || user.designation?.toLowerCase() === 'head' || user.designation?.toLowerCase() === 'hr') );
+  const isRegularEmployee = !user || (!isUserAdminOrTLOrHead(user) && user.designation?.toLowerCase() !== 'hr' && user.role?.toLowerCase() !== 'hr');
 
   const getLocalDateString = () => {
     const d = new Date();
@@ -229,25 +248,6 @@ export default function MarketingReportsPage() {
   const canDeleteMarketing =
     isAdmin || isHR || checkPermission("marketing", "canDelete");
 
-  const isUserAdminOrTLOrHead = React.useCallback((u: any) => {
-    if (!u) return false;
-    const r = (u.role || "").toLowerCase().trim();
-    const d = (u.designation || "").toLowerCase().trim();
-    const n = (u.name || "").toLowerCase().trim();
-
-    if (n === "admin admin") return true;
-
-    const fullRoles = [
-      "admin", "super admin", "superadmin", "hr", "manager", "director",
-      "sub admin", "sub-admin", "head", "team leader", "tl"
-    ];
-
-    if (fullRoles.includes(r) || fullRoles.includes(d)) return true;
-    if (r.includes("head") || d.includes("head") || r.includes("team leader") || d.includes("team leader") || r.includes("tl") || d.includes("tl")) return true;
-
-    return false;
-  }, []);
-
   const isProjectAssignedToUser = React.useCallback((project: any, userId?: string, acceptedTransfersList: any[] = []) => {
     if (!project || !userId) return false;
     const uId = String(userId);
@@ -255,6 +255,7 @@ export default function MarketingReportsPage() {
     if (String(project.assignedEmployeeId) === uId) return true;
     if (String(project.assignedToId) === uId) return true;
     if (String(project.teamLeaderId) === uId) return true;
+    if (String(project.createdBy) === uId || String(project.createdById) === uId || String(project.assignedById) === uId || String(project.assignedBy) === uId) return true;
 
     if (Array.isArray(project.assignedEmployeeIds) && project.assignedEmployeeIds.map(String).includes(uId)) return true;
     if (Array.isArray(project.assignedToIds) && project.assignedToIds.map(String).includes(uId)) return true;
@@ -2720,7 +2721,7 @@ export default function MarketingReportsPage() {
                 />
               </div>
             </div>
-            {user && ((['admin', 'super admin', 'superadmin'].includes(user.role?.toLowerCase() || '')  || user.designation?.toLowerCase() === 'head') ) && (
+            {user && isUserAdminOrTLOrHead(user) && (
               <div className="space-y-1.5">
                 <Label className="text-xs text-slate-500">Task Scope</Label>
                 <div className="flex bg-slate-100 p-0.5 rounded-lg border h-9">
@@ -3092,7 +3093,7 @@ export default function MarketingReportsPage() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                 </div>
-                {user && ((['admin', 'super admin', 'superadmin'].includes(user.role?.toLowerCase() || '')  || user.designation?.toLowerCase() === 'head') ) && (
+                {user && isUserAdminOrTLOrHead(user) && (
                   <div className="flex bg-slate-100 p-0.5 rounded-lg border h-9">
                     <button
                       type="button"
