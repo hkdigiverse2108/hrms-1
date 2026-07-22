@@ -1589,30 +1589,33 @@ async def create_designation(db, designation: schemas.DesignationCreate):
     if "_id" in designation_dict:
         designation_dict.pop("_id")
 
-    dept_name = designation_dict.get("department")
     title = designation_dict.get("title")
-    if dept_name and title:
-        dept_preset = await db.permission_presets.find_one({
-            "presetType": "department",
-            "name": dept_name
-        })
-        permissions = dept_preset.get("permissions", []) if dept_preset else []
-        
-        preset_name = f"{dept_name} - {title}"
-        existing_preset = await db.permission_presets.find_one({
-            "presetType": "designation",
-            "department": dept_name,
-            "designation": title
-        })
-        if not existing_preset:
-            await db.permission_presets.insert_one({
-                "name": preset_name,
-                "description": f"Designation preset for {title} in {dept_name}",
+    if title:
+        # Automatically generate this new designation's preset across ALL existing department presets
+        dept_presets = await db.permission_presets.find({"presetType": "department"}).to_list(length=1000)
+        for dept_preset in dept_presets:
+            dept_name = dept_preset.get("department") or dept_preset.get("name")
+            if not dept_name:
+                continue
+                
+            permissions = dept_preset.get("permissions", [])
+            preset_name = f"{dept_name} - {title}"
+            
+            existing_preset = await db.permission_presets.find_one({
                 "presetType": "designation",
                 "department": dept_name,
-                "designation": title,
-                "permissions": permissions
+                "designation": title
             })
+            
+            if not existing_preset:
+                await db.permission_presets.insert_one({
+                    "name": preset_name,
+                    "description": f"Designation preset for {title} in {dept_name}",
+                    "presetType": "designation",
+                    "department": dept_name,
+                    "designation": title,
+                    "permissions": permissions
+                })
 
     return designation_dict
 
@@ -7291,7 +7294,8 @@ async def get_permission_preset(db, preset_id: str):
 async def sync_designation_presets_for_department(db, department_name: str, permissions: list):
     if not department_name:
         return
-    cursor = db.designations.find({"department": department_name})
+    # Fetch all designations globally so presets are created for all titles under this department
+    cursor = db.designations.find({})
     designations = await cursor.to_list(length=1000)
     
     clean_perms = [p.dict() if hasattr(p, 'dict') else p for p in permissions]
