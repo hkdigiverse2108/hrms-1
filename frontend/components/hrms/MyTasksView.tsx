@@ -448,30 +448,30 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
       return { totalLeadsToday, hotLeads, convertedLeads, followupsToday };
     }, [leads, effectiveUserId, currentEmp, activeDateRange, isSalesDept]);
   
-    const filteredByDateTasks = useMemo(() => {
+  const filteredByDateTasks = useMemo(() => {
     if (!activeDateRange?.from) return allConsolidatedTasks
     
     const from = new Date(activeDateRange.from)
     from.setHours(0, 0, 0, 0)
     
     const to = activeDateRange.to ? new Date(activeDateRange.to) : null
-    if (to) to.setHours(0, 0, 0, 0)
     
-    return allConsolidatedTasks.filter(t => {
-      if (!t.dueDate) return false
-      const taskDateObj = parseLocalDate(t.dueDate)
-      
-      if (to) {
+    if (to) {
+      to.setHours(0, 0, 0, 0)
+      return allConsolidatedTasks.filter(t => {
+        if (!t.dueDate) return false
+        const taskDateObj = parseLocalDate(t.dueDate)
         return taskDateObj >= from && taskDateObj <= to
-      } else {
-        return taskDateObj.getTime() === from.getTime()
-      }
-    })
+      })
+    }
+    
+    // For a single date (like targetDate), return all tasks and let categorizedTasks filter relative to this date.
+    return allConsolidatedTasks
   }, [allConsolidatedTasks, activeDateRange])
 
   // Filter tasks into Today, Pending, Upcoming using SMM rules for SMM, and standard rules for others
   const categorizedTasks = useMemo(() => {
-    const today = targetDate ? parseLocalDate(targetDate) : new Date()
+    const today = activeDateRange?.from ? new Date(activeDateRange.from) : new Date()
     today.setHours(0, 0, 0, 0)
     
     const todayList: any[] = []
@@ -486,7 +486,10 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
       const deadlineDate = t.dueDate ? parseLocalDate(t.dueDate) : new Date(0)
 
       if (isCompleted) {
-        completedList.push(t)
+        // Since we don't have completion date, we approximate by showing tasks due on the selected date
+        if (deadlineDate.getTime() === today.getTime()) {
+          completedList.push(t)
+        }
         return
       }
 
