@@ -321,19 +321,22 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
           const userStr = localStorage.getItem("user");
           const userObj = userStr ? JSON.parse(userStr) : {};
           const userName = userObj.name || (userObj.firstName ? `${userObj.firstName} ${userObj.lastName || ''}`.trim() : "Unknown User");
+          const deptStr = (userObj.department || "").toLowerCase();
+          const desigStr = (userObj.designation || "").toLowerCase();
+          const isDM = deptStr.includes('marketing') || deptStr.includes('dm') || desigStr.includes('marketing');
           
-          const titleToUse = selectedTab === "dm_other_work" ? activityValue : customTaskName;
+          const titleToUse = selectedTab === "dm_other_work" ? activityValue : (customTaskName || activityValue);
           
           const payload = {
             title: titleToUse,
             description: "Custom task created from Punch-In",
-            assigneeId: userId,
+            assigneeId: String(userId),
             assigneeName: userName,
-            assignerId: userId,
+            assignerId: String(userId),
             assignerName: userName,
             deadline: new Date().toISOString().split('T')[0],
             status: "Pending",
-            taskType: selectedTab === "dm_other_work" ? "dm-other-work" : "other-work"
+            taskType: (isDM || selectedTab === "dm_other_work") ? "dm-other-work" : "other-work"
           };
           
           const isDev = userDept === 'development';

@@ -12,7 +12,8 @@ import {
   Trash2,
   History,
   ChevronDown,
-  ClipboardCheck
+  ClipboardCheck,
+  Check
 } from "lucide-react";
 import { exportToCSV } from "@/lib/export-utils";
 import { toast } from "sonner";

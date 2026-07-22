@@ -563,11 +563,11 @@ export function PendingWorkEmbedded({
     }
 
     otherWorkEntries.forEach(ow => {
-      const uId = user?.id;
+      const uId = user?.id || user?._id;
       const transfer = incomingRequests.find(r => r.taskId === (ow.id || ow._id) && (r.taskType === 'other-work' || r.taskType === 'dm-other-work' || r.taskType === 'creative') && r.status === 'Accepted');
       const currentAssigneeId = transfer ? transfer.receiverId : ow.assigneeId;
-      const isAssignee = String(currentAssigneeId) === String(uId);
-      const isAssigner = String(ow.assignerId) === String(uId);
+      const isAssignee = String(currentAssigneeId) === String(uId) || (user?.name && ow.assigneeName && ow.assigneeName.toLowerCase().includes(user.name.toLowerCase()));
+      const isAssigner = String(ow.assignerId) === String(uId) || (user?.name && ow.assignerName && ow.assignerName.toLowerCase().includes(user.name.toLowerCase()));
       
       // Assignee sees it in their today/upcoming/pending until they submit for review
       // Assigner sees it in their pending when it's Ready for Review
@@ -576,12 +576,15 @@ export function PendingWorkEmbedded({
       else if (ow.status === 'Ready for Review') canSee = isAssigner || isAssignee;
       else if (ow.status === 'Approved') canSee = isAssignee || isAssigner;
 
-      const isManagerOrAdmin = ['Team Leader', 'Admin', 'HR', 'Manager', 'Social Media Manager'].includes(user?.role) || user?.role?.toLowerCase() === 'admin';
+      const userDeptName = (user?.department || "").toLowerCase();
+      const userDesigName = (user?.designation || "").toLowerCase();
+      const userRoleName = (user?.role || "").toLowerCase();
+      const isManagerOrAdmin = ['Team Leader', 'Admin', 'HR', 'Manager', 'Social Media Manager'].includes(user?.role) || userRoleName === 'admin' || userDesigName === 'team leader' || userDesigName === 'head' || userRoleName === 'team leader' || userRoleName === 'head' || userDeptName.includes('marketing') || userDeptName.includes('dm');
       if ((isManagerOrAdmin && (type === 'all' || workScope === 'all')) || isAssignee || isAssigner) {
         if (type === 'all' || (type === 'completed-work' ? ow.status === 'Approved' : ow.status !== 'Approved')) {
           
-          const assignee = employees.find((e: any) => e.id === ow.assigneeId);
-          const assigner = employees.find((e: any) => e.id === ow.assignerId);
+          const assignee = employees.find((e: any) => String(e.id) === String(ow.assigneeId));
+          const assigner = employees.find((e: any) => String(e.id) === String(ow.assignerId));
 
           tasks.push({
             ...ow,
@@ -748,7 +751,7 @@ export function PendingWorkEmbedded({
     let filteredTasks = tasks;
     if (workScope === 'my') {
       const uId = user?.id || user?._id;
-      filteredTasks = filteredTasks.filter(t => t.assigneeId === uId || t.assignerId === uId);
+      filteredTasks = filteredTasks.filter(t => String(t.assigneeId) === String(uId) || String(t.assignerId) === String(uId) || (user?.name && t.assigneeName && t.assigneeName.toLowerCase().includes(user.name.toLowerCase())));
     }
 
     // Apply Project Filter
@@ -762,10 +765,28 @@ export function PendingWorkEmbedded({
         filteredTasks = filteredTasks.filter(t => t.isOtherWork && t.type !== 'digital-marketing' && t.type !== 'dm-other-work');
       } else if (filterTaskType === 'content-calendar') {
         filteredTasks = filteredTasks.filter(t => !t.isOtherWork && t.type !== 'digital-marketing' && t.type !== 'dm-other-work' && !t.isFollowup);
+      } else if (filterTaskType === 'smm-all') {
+        filteredTasks = filteredTasks.filter(t => {
+          if (t.type === 'digital-marketing' || t.type === 'dm-other-work' || t.taskType === 'dm-other-work' || t.taskType === 'digital-marketing') return false;
+          const assigneeEmp = employees.find((e: any) => String(e.id) === String(t.assigneeId));
+          if (assigneeEmp?.department?.toLowerCase().includes('marketing') || assigneeEmp?.department?.toLowerCase().includes('dm')) return false;
+          return true;
+        });
       } else if (filterTaskType === 'digital-marketing') {
         filteredTasks = filteredTasks.filter(t => t.type === 'digital-marketing');
       } else if (filterTaskType === 'dm-other-work') {
-        filteredTasks = filteredTasks.filter(t => t.type === 'dm-other-work');
+        filteredTasks = filteredTasks.filter(t => {
+          if (!t.isOtherWork) return false;
+          if (t.type === 'dm-other-work' || t.taskType === 'dm-other-work' || t.type === 'digital-marketing' || t.taskType === 'digital-marketing') {
+            return true;
+          }
+          const assigneeEmp = employees.find((e: any) => String(e.id) === String(t.assigneeId));
+          const assignerEmp = employees.find((e: any) => String(e.id) === String(t.assignerId));
+          const isAssigneeDM = assigneeEmp?.department?.toLowerCase().includes('marketing') || assigneeEmp?.department?.toLowerCase().includes('dm');
+          const isAssignerDM = assignerEmp?.department?.toLowerCase().includes('marketing') || assignerEmp?.department?.toLowerCase().includes('dm');
+          const isCurrentDM = (user?.department || "").toLowerCase().includes('marketing') || (user?.department || "").toLowerCase().includes('dm');
+          return isAssigneeDM || isAssignerDM || isCurrentDM;
+        });
       } else if (filterTaskType === 'dev-creative-work') {
         filteredTasks = filteredTasks.filter(t => t.type === 'dev-creative-work');
       } else if (filterTaskType === 'follow-up') {
@@ -1449,16 +1470,29 @@ export function PendingWorkEmbedded({
                             </>
                           ) : item.isOtherWork ? (
                             <>
-                              {item.status === 'Pending' && item.description !== 'Custom task created from Punch-In' && isAssignee && (
-                                <Button 
-                                  size="sm" 
-                                  className="bg-brand-teal hover:bg-brand-teal/90 text-white text-xs h-7"
-                                  onClick={() => handleUpdateOtherWorkStatus(item.id, 'Ready for Review')}
-                                >
-                                  Submit for Review
-                                </Button>
+                              {item.status === 'Pending' && isAssignee && (
+                                <>
+                                  {(isAssigner || isAdminOrTL || !item.assignerId || item.assignerId === item.assigneeId) ? (
+                                    <Button 
+                                      size="sm" 
+                                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-7 rounded-lg flex items-center gap-1 shadow-sm"
+                                      onClick={() => handleUpdateOtherWorkStatus(item.id, 'Approved')}
+                                    >
+                                      <Check className="w-3.5 h-3.5" />
+                                      Completed
+                                    </Button>
+                                  ) : (
+                                    <Button 
+                                      size="sm" 
+                                      className="bg-brand-teal hover:bg-brand-teal/90 text-white text-xs h-7"
+                                      onClick={() => handleUpdateOtherWorkStatus(item.id, 'Ready for Review')}
+                                    >
+                                      Submit for Review
+                                    </Button>
+                                  )}
+                                </>
                               )}
-                              {item.status === 'Ready for Review' && item.description !== 'Custom task created from Punch-In' && (isAssigner || isAdminOrTL) && (
+                              {item.status === 'Ready for Review' && (isAssigner || isAdminOrTL) && (
                                 <>
                                   <Button 
                                     size="sm" 
