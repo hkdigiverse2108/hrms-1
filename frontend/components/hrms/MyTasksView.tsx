@@ -51,9 +51,10 @@ const parseLocalDate = (dateStr: string) => {
 export interface MyTasksViewProps {
   targetUserId?: string;
   isEmbedded?: boolean;
+  targetDate?: string;
 }
 
-export function MyTasksView({ targetUserId, isEmbedded = false }: MyTasksViewProps) {
+export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: MyTasksViewProps) {
   const router = useRouter()
   const [currentUser, setCurrentUser] = useState<any>(null)
   
@@ -69,7 +70,9 @@ export function MyTasksView({ targetUserId, isEmbedded = false }: MyTasksViewPro
   
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('today')
-  const [activeDateRange, setActiveDateRange] = useState<{from: Date | undefined, to?: Date | undefined} | undefined>()
+  const [activeDateRange, setActiveDateRange] = useState<{from: Date | undefined, to?: Date | undefined} | undefined>(
+    targetDate ? { from: parseLocalDate(targetDate) } : undefined
+  )
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('all')
 
   useEffect(() => {
@@ -183,8 +186,9 @@ export function MyTasksView({ targetUserId, isEmbedded = false }: MyTasksViewPro
         }
       }
 
-      const userDept = currentUser?.department?.toLowerCase() || ''
-      const userRole = currentUser?.role?.toLowerCase() || ''
+      const targetEmployee = employees.find(e => e.id === uId) || currentUser
+      const userDept = targetEmployee?.department?.toLowerCase() || ''
+      const userRole = targetEmployee?.role?.toLowerCase() || ''
       const isHRUser = userDept === 'hr' || userDept === 'human resources' || userRole === 'hr'
 
       const taskDept = t.department?.toLowerCase() || ''
@@ -467,18 +471,24 @@ export function MyTasksView({ targetUserId, isEmbedded = false }: MyTasksViewPro
 
   // Filter tasks into Today, Pending, Upcoming using SMM rules for SMM, and standard rules for others
   const categorizedTasks = useMemo(() => {
-    const today = new Date()
+    const today = targetDate ? parseLocalDate(targetDate) : new Date()
     today.setHours(0, 0, 0, 0)
     
     const todayList: any[] = []
     const pendingList: any[] = []
     const upcomingList: any[] = []
 
+    const completedList: any[] = []
+
     filteredByDateTasks.forEach(t => {
       const isCompleted = t.status === 'completed' || t.status === 'Approved' || t.status?.toLowerCase() === 'completed'
-      if (isCompleted) return
-
+      
       const deadlineDate = t.dueDate ? parseLocalDate(t.dueDate) : new Date(0)
+
+      if (isCompleted) {
+        completedList.push(t)
+        return
+      }
 
       if (t.sourceType.startsWith('smm-')) {
         // SMM Task Categorization
@@ -536,8 +546,8 @@ export function MyTasksView({ targetUserId, isEmbedded = false }: MyTasksViewPro
       }
     })
 
-    return { today: todayList, pending: pendingList, upcoming: upcomingList }
-  }, [allConsolidatedTasks, filteredByDateTasks])
+    return { today: todayList, pending: pendingList, upcoming: upcomingList, completed: completedList }
+  }, [filteredByDateTasks, targetDate])
 
   // Group task lists by Department for nice UI sectioning
   const groupTasksByDepartment = (taskList: any[]) => {
@@ -682,13 +692,16 @@ export function MyTasksView({ targetUserId, isEmbedded = false }: MyTasksViewPro
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
                 <TabsList className="inline-flex items-center gap-1 w-max bg-slate-100/70 p-1 rounded-xl shadow-inner border border-slate-200/60 h-auto justify-start shrink-0 mb-0">
                 <TabsTrigger value="today" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto">
-                  Today's Tasks ({categorizedTasks.today.length})
+                  {targetDate ? 'Assigned Tasks' : "Today's Tasks"} ({categorizedTasks.today.length})
                 </TabsTrigger>
                 <TabsTrigger value="pending" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto">
                   Pending Tasks ({categorizedTasks.pending.length})
                 </TabsTrigger>
                 <TabsTrigger value="upcoming" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto">
                   Upcoming Tasks ({categorizedTasks.upcoming.length})
+                </TabsTrigger>
+                <TabsTrigger value="completed" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto">
+                  Completed Tasks ({categorizedTasks.completed.length})
                 </TabsTrigger>
                 </TabsList>
                 
@@ -762,8 +775,8 @@ export function MyTasksView({ targetUserId, isEmbedded = false }: MyTasksViewPro
                 </div>
               </div>
 
-              {['today', 'pending', 'upcoming'].map(tabKey => {
-                const currentList = categorizedTasks[tabKey as 'today' | 'pending' | 'upcoming']
+              {['today', 'pending', 'upcoming', 'completed'].map(tabKey => {
+                const currentList = categorizedTasks[tabKey as 'today' | 'pending' | 'upcoming' | 'completed']
                 const grouped = groupTasksByDepartment(currentList)
                 
                 return (

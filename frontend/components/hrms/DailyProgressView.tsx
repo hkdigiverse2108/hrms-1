@@ -911,7 +911,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
               return (
                 <>
                   <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50 max-h-[500px] overflow-y-auto">
-                    {verifyRecord && <MyTasksView targetUserId={verifyRecord?.employeeId} isEmbedded={true} />}
+                    {verifyRecord && <MyTasksView targetUserId={verifyRecord?.employeeId} isEmbedded={true} targetDate={verifyRecord?.date} />}
                   </div>
                 </>
               );
