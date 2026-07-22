@@ -6,7 +6,8 @@ import {
   MonitorPlay, 
   MessagesSquare, 
   Settings,
-  Layers
+  Layers,
+  Landmark
 } from 'lucide-react';
 
 export const MODULES_CONFIG = [
@@ -30,6 +31,17 @@ export const MODULES_CONFIG = [
       { moduleName: 'payroll-processing', displayName: 'Payroll Processing', tabUrl: '/payroll' },
       { moduleName: 'payslips', displayName: 'Payslips', tabUrl: '/payroll/payslips' },
       { moduleName: 'bonuses-deductions', displayName: 'Bonuses & Deductions', tabUrl: '/payroll/bonuses' },
+    ]
+  },
+  {
+    name: 'Company Finance',
+    icon: Landmark,
+    modules: [
+      { moduleName: 'company-finance-transactions', displayName: 'Transactions', tabUrl: '/company-finance' },
+      { moduleName: 'company-finance-plan', displayName: 'Plan', tabUrl: '/company-finance/plan' },
+      { moduleName: 'company-finance-summary', displayName: 'Summary', tabUrl: '/company-finance/summary' },
+      { moduleName: 'company-finance-client-transactions', displayName: 'Client Transactions', tabUrl: '/company-finance/client-transactions' },
+      { moduleName: 'company-finance-audit-logs', displayName: 'Audit Logs', tabUrl: '/company-finance/logs' },
     ]
   },
   {
