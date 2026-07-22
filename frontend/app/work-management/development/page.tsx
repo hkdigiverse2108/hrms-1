@@ -143,7 +143,7 @@ export default function TasksPage() {
   }, [user]);
 
   const isAdmin = user?.role?.toLowerCase() === "admin" || user?.name === "Admin Admin" || hasFullTasksAccess;
-  const isHR = user?.role === 'HR' || user?.role?.toLowerCase() === 'hr' || user?.department?.toLowerCase() === 'hr';
+  const isHR = user?.designation?.toLowerCase() === 'hr' || user?.role?.toLowerCase() === 'hr' || user?.department?.toLowerCase() === 'hr';
   // Strict role check for board access — NOT permission-based (to avoid employees with view perms getting board)
   const isBoardUser = user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin' || isTeamLeader || isHR;
   // Only Team Leaders, HR, and Admins can see the Board view; regular employees see table only
@@ -165,7 +165,7 @@ export default function TasksPage() {
   const fetchTransferRequests = async () => {
     if (!user?.id) return;
     try {
-      const isUserAdminOrTL = isUserAdmin || isTeamLeader || user.role === 'Team Leader' || user.role === 'HR' || user.role?.toLowerCase() === 'admin' || user.name === 'Admin Admin';
+      const isUserAdminOrTL = isUserAdmin || isTeamLeader || (user.designation?.toLowerCase() === 'team leader' || user.designation?.toLowerCase() === 'head') || user.designation?.toLowerCase() === 'hr' || user.role?.toLowerCase() === 'admin' || user.name === 'Admin Admin';
       if (isUserAdminOrTL) {
         const [allRes, outgoingRes] = await Promise.all([
           fetch(`${API_URL}/work-transfer-requests?taskType=wm-task`),
@@ -207,7 +207,7 @@ export default function TasksPage() {
   };
 
   const canTransferTask = (task: any) => {
-    const isGlobalAdminOrHR = user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin' || user?.role === 'HR';
+    const isGlobalAdminOrHR = user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin' || user?.designation?.toLowerCase() === 'hr';
     if (isGlobalAdminOrHR) return true;
 
     const userDept = user?.department?.trim();
@@ -215,7 +215,7 @@ export default function TasksPage() {
       return false;
     }
 
-    const isTeamLeaderOfDept = user?.role === 'Team Leader' || user?.designation?.toLowerCase() === 'team leader' || isTeamLeader;
+    const isTeamLeaderOfDept = (user?.designation?.toLowerCase() === 'team leader' || user?.designation?.toLowerCase() === 'head') || user?.designation?.toLowerCase() === 'team leader' || isTeamLeader;
     if (isTeamLeaderOfDept) return true;
 
     const isAssignedToUser = task.assignedToId === user?.id || task.assignedToId === user?._id;
@@ -747,7 +747,7 @@ export default function TasksPage() {
     }
 
     let isVisible = false;
-    const isHR = user?.role === 'HR' || user?.role?.toLowerCase() === 'hr';
+    const isHR = user?.designation?.toLowerCase() === 'hr' || user?.role?.toLowerCase() === 'hr';
     if (isAdmin || isHR || isTeamLeader) {
       isVisible = true;
     } else {
@@ -1066,7 +1066,7 @@ export default function TasksPage() {
                     : 'border-transparent text-slate-500 hover:text-slate-800'
                 }`}
               >
-                {(isUserAdmin || isTeamLeader || user?.role === 'Team Leader' || user?.role === 'HR' || user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin') ? 'All Requests' : 'Received Requests'} ({incomingRequests.length})
+                {(isUserAdmin || isTeamLeader || (user?.designation?.toLowerCase() === 'team leader' || user?.designation?.toLowerCase() === 'head') || user?.designation?.toLowerCase() === 'hr' || user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin') ? 'All Requests' : 'Received Requests'} ({incomingRequests.length})
               </button>
               <button
                 onClick={() => setRequestsTab('outgoing')}
@@ -1076,7 +1076,7 @@ export default function TasksPage() {
                     : 'border-transparent text-slate-500 hover:text-slate-800'
                 }`}
               >
-                {(isUserAdmin || isTeamLeader || user?.role === 'Team Leader' || user?.role === 'HR' || user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin') ? 'My Sent Requests' : 'Sent Requests'} ({outgoingRequests.length})
+                {(isUserAdmin || isTeamLeader || (user?.designation?.toLowerCase() === 'team leader' || user?.designation?.toLowerCase() === 'head') || user?.designation?.toLowerCase() === 'hr' || user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin') ? 'My Sent Requests' : 'Sent Requests'} ({outgoingRequests.length})
               </button>
             </div>
 
@@ -1096,7 +1096,7 @@ export default function TasksPage() {
                         <th className="px-6 py-4 whitespace-nowrap">Task Name</th>
                         <th className="px-6 py-4 whitespace-nowrap">Stage</th>
                         <th className="px-6 py-4 whitespace-nowrap">From</th>
-                        {(isUserAdmin || isTeamLeader || user?.role === 'Team Leader' || user?.role === 'HR' || user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin') && <th className="px-6 py-4 whitespace-nowrap">To</th>}
+                        {(isUserAdmin || isTeamLeader || (user?.designation?.toLowerCase() === 'team leader' || user?.designation?.toLowerCase() === 'head') || user?.designation?.toLowerCase() === 'hr' || user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin') && <th className="px-6 py-4 whitespace-nowrap">To</th>}
                         <th className="px-6 py-4 whitespace-nowrap">Status</th>
                         <th className="px-6 py-4 text-right whitespace-nowrap">Action</th>
                       </tr>
@@ -1118,7 +1118,7 @@ export default function TasksPage() {
                           <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-700">
                             {req.senderName}
                           </td>
-                          {(isUserAdmin || isTeamLeader || user?.role === 'Team Leader' || user?.role === 'HR' || user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin') && (
+                          {(isUserAdmin || isTeamLeader || (user?.designation?.toLowerCase() === 'team leader' || user?.designation?.toLowerCase() === 'head') || user?.designation?.toLowerCase() === 'hr' || user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin') && (
                             <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-700">
                               {req.receiverName}
                             </td>
@@ -1380,7 +1380,7 @@ export default function TasksPage() {
               </Popover>
             );
           })()}
-          {user && (['admin', 'super admin', 'superadmin', 'team leader', 'hr'].includes(user.role?.toLowerCase() || '') || user.designation?.toLowerCase() === 'team leader' || user.designation?.toLowerCase() === 'hr') && (
+          {user && ((['admin', 'super admin', 'superadmin'].includes(user.role?.toLowerCase() || '')  || user.designation?.toLowerCase() === 'head' || user.designation?.toLowerCase() === 'hr')  || user.designation?.toLowerCase() === 'hr') && (
             <div className="flex items-center bg-slate-100 border border-slate-200 rounded-lg p-1 gap-1">
               <button 
                 type="button"

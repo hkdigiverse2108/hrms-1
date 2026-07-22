@@ -27,6 +27,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { API_URL, getAvatarUrl } from '@/lib/config'
 import { toast } from "sonner";
 import { TIME_OPTIONS } from '@/lib/constants'
+import { useUser } from '@/hooks/useUser'
 
 export interface EmployeeFormData {
   employeeId: string
@@ -102,6 +103,7 @@ const defaultFormData: EmployeeFormData = {
   aadharCard: '',
   panCard: '',
   department: '',
+  sub_department: '',
   designation: '',
   startTime: '',
   endTime: '',
@@ -158,13 +160,21 @@ const calculateResignationDate = (startDateStr: string, daysCountStr: string, ho
 };
 
 export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: EmployeeFormProps) {
-  const { data, refresh } = useApi()
+  const { user } = useUser()
+  const { data, mutate, isLoading } = useApi<{ 
+    departments: any[], 
+    subDepartments: any[],
+    designations: any[], 
+    roles: any[] 
+  }>('/api/company-settings')
+  
   const departments = data?.departments || []
+  const subDepartments = (data as any)?.subDepartments || []
   const designations = data?.designations || []
-  const roles = data?.roles || []
   const relations = data?.relations || []
   const documentTypes = (data as any)?.documentTypes || []
   const holidays = (data as any)?.holidays || []
+  const roles = data?.roles || []
   
   const [formData, setFormData] = useState<EmployeeFormData>(defaultFormData)
   const [showPassword, setShowPassword] = useState(false)
@@ -252,7 +262,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
   const isRoleAdmin = (r?: string) => {
     if (!r) return false;
     const clean = r.toLowerCase().trim();
-    return clean === 'admin' || clean === 'super admin' || clean === 'superadmin' || clean === 'administrator' || clean === 'founder' || clean === 'super_admin';
+    return clean === 'admin' || clean === 'super admin' || clean === 'superadmin' || clean === 'administrator' || clean === 'founder' || clean === 'super_admin' || clean === 'sub-admin' || clean === 'sub admin';
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -267,6 +277,13 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
   const handleChange = (field: keyof EmployeeFormData, value: any) => {
     setFormData((prev) => {
       const next = { ...prev, [field]: value }
+      if (field === 'department') {
+        next.sub_department = ''
+        next.designation = ''
+      }
+      if (field === 'sub_department') {
+        next.designation = ''
+      }
       if (field === 'noticePeriodDays' || field === 'noticePeriodStartDate' || field === 'hasNoticePeriod') {
         if (next.hasNoticePeriod && next.noticePeriodStartDate && next.noticePeriodDays) {
           const calculatedDate = calculateResignationDate(next.noticePeriodStartDate, next.noticePeriodDays, holidays)
@@ -389,11 +406,57 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
           value={formData.role}
           onValueChange={(v: string) => handleChange('role', v)}
           options={[
-            ...roles.map((r: any) => ({ label: r.name, value: r.name })),
-            ...(roles.some((r: any) => r.name?.toLowerCase() === 'intern') ? [] : [{ label: 'Intern', value: 'Intern' }])
-          ]}
+            { label: 'Admin', value: 'Admin' },
+            { label: 'Sub-Admin', value: 'Sub-Admin' },
+            { label: 'Employee', value: 'Employee' }
+          ].filter(roleOption => {
+            const rName = roleOption.value.toLowerCase().trim();
+            const uRole = user?.role?.toLowerCase().trim() || '';
+            
+            const ROLE_HIERARCHY: Record<string, number> = {
+              'admin': 0, 'super admin': 0, 'superadmin': 0, 'administrator': 0, 'founder': 0, 'super_admin': 0,
+              'sub-admin': 1,
+              'employee': 5
+            };
+            const getRoleLevel = (r: string) => ROLE_HIERARCHY[r] ?? 5;
+            
+            const actorLevel = getRoleLevel(uRole);
+            const targetLevel = getRoleLevel(rName);
+            
+            return actorLevel === 0 || targetLevel >= actorLevel;
+          })}
           placeholder="Select role"
         />
+
+        {isRoleAdmin(formData.role) && (
+          <FormField label="Designation" id="designation" required value={formData.designation} onChange={(v: string) => handleChange('designation', v)} />
+        )}
+        
+        {!isRoleAdmin(formData.role) && (
+          <>
+            <FormSelect 
+              key={`dept-${departments.length}`} 
+              label="Department" 
+              id="department" 
+              required 
+              value={formData.department} 
+              onValueChange={(v: string) => handleChange('department', v)} 
+              options={departments.map((d: any) => ({ label: d.name, value: d.name }))} 
+              placeholder="Select department" 
+            />
+            <FormSelect 
+              key={`subdept-${subDepartments.length}-${formData.department}`} 
+              label="Sub Department" 
+              id="sub_department" 
+              required
+              value={formData.sub_department || ''} 
+              onValueChange={(v: string) => handleChange('sub_department', v)} 
+              options={subDepartments.filter((d: any) => d.department === formData.department).map((d: any) => ({ label: d.name, value: d.name }))} 
+              placeholder="Select sub department" 
+            />
+            <FormSelect key={`des-${designations.length}-${formData.sub_department}`} label="Designation" id="designation" required value={formData.designation} onValueChange={(v: string) => handleChange('designation', v)} options={designations.filter((d: any) => d.sub_department === formData.sub_department).map((d: any) => ({ label: d.title, value: d.title }))} placeholder="Select designation" />
+          </>
+        )}
       </div>
  
       {/* Dynamic Conditional Sections */}
@@ -467,18 +530,6 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
         
         {!isRoleAdmin(formData.role) && (
           <>
-            <FormSelect 
-              key={`dept-${departments.length}`} 
-              label="Department" 
-              id="department" 
-              required 
-              value={formData.department} 
-              onValueChange={(v: string) => handleChange('department', v)} 
-              options={departments.map((d: any) => ({ label: d.name, value: d.name }))} 
-              placeholder="Select department" 
-            />
-            <FormSelect key={`des-${designations.length}-${formData.department}`} label="Designation" id="designation" required value={formData.designation} onValueChange={(v: string) => handleChange('designation', v)} options={designations.filter((d: any) => d.department === formData.department).map((d: any) => ({ label: d.title, value: d.title }))} placeholder="Select designation" />
-            
             <FormSelect 
               label="Status" 
               id="status" 
