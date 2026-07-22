@@ -454,7 +454,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
               options={subDepartments.filter((d: any) => d.department === formData.department).map((d: any) => ({ label: d.name, value: d.name }))} 
               placeholder="Select sub department" 
             />
-            <FormSelect key={`des-${designations.length}-${formData.sub_department}`} label="Designation" id="designation" required value={formData.designation} onValueChange={(v: string) => handleChange('designation', v)} options={designations.filter((d: any) => d.sub_department === formData.sub_department).map((d: any) => ({ label: d.title, value: d.title }))} placeholder="Select designation" />
+            <FormSelect key={`des-${designations.length}-${formData.sub_department}`} label="Designation" id="designation" required value={formData.designation} onValueChange={(v: string) => handleChange('designation', v)} options={designations.map((d: any) => ({ label: d.title, value: d.title }))} placeholder="Select designation" />
           </>
         )}
       </div>

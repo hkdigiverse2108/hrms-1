@@ -344,7 +344,7 @@ export function EmployeeModal({
                       <SelectValue placeholder="Select designation" />
                     </SelectTrigger>
                     <SelectContent>
-                      {designations.filter((d:any) => d.department === formData.department || !formData.department).map((d: any) => (
+                      {designations.map((d: any) => (
                         <SelectItem key={d.id} value={d.title}>{d.title}</SelectItem>
                       ))}
                     </SelectContent>

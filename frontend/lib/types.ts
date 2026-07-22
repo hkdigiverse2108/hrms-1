@@ -49,8 +49,8 @@ export interface SubDepartment {
 export interface Designation {
   id: string
   title: string
-  department: string
-  sub_department: string
+  department?: string
+  sub_department?: string
 }
 
 export interface Attendance {
