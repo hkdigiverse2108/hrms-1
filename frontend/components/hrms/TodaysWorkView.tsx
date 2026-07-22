@@ -68,7 +68,7 @@ export function TodaysWorkView({
 
   // Group projects by client
   const clientData = clients.map((client) => {
-    const clientProjects = projects.filter((p) => p.clientId === client.id && p.department?.toLowerCase() === "digital marketing");
+    const clientProjects = projects.filter((p) => p.clientId === client.id && p.department?.toLowerCase() === "digital marketing" && p.status !== "on-hold" && p.status !== "onhold" && p.status?.toLowerCase() !== "on-hold");
     const proj = clientProjects[0];
 
     const normalizeDate = (d: string) => d ? d.split(" ")[0].split("T")[0] : "";

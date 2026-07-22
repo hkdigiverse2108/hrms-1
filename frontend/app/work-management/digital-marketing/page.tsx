@@ -1986,7 +1986,7 @@ export default function MarketingReportsPage() {
 
     const assocProject = projects.find((p: any) => String(p.id) === String(r.projectId) || String(p.clientId) === String(r.clientId));
     if (assocProject && (assocProject.status === "on-hold" || assocProject.status === "onhold" || assocProject.status?.toLowerCase() === "on-hold")) {
-      isCurrentlyActive = false;
+      return false;
     }
 
     const reportDate = normalizeDate(r.date);
@@ -2080,6 +2080,11 @@ export default function MarketingReportsPage() {
       selectedClientFilter === "all" || r.clientId === selectedClientFilter;
     const matchesMonth =
       monthFilter.includes("all") || monthFilter.includes(r.month);
+
+    const assocProj = projects.find((p: any) => String(p.id) === String(r.projectId) || String(p.clientId) === String(r.clientId));
+    if (assocProj && (assocProj.status === "on-hold" || assocProj.status === "onhold" || assocProj.status?.toLowerCase() === "on-hold")) {
+      return false;
+    }
 
     let matchesTaskType = true;
     const isFullAuthorityMonthly = isUserAdminOrTLOrHead(user);
@@ -3191,12 +3196,9 @@ export default function MarketingReportsPage() {
                       if (!isAssigned) return false;
                     }
 
-                    if (taskFilterType === "all" && isFullAuthority) {
-                      return matchesSearch;
-                    }
                     const clientProjs = projects.filter((p) => String(p.clientId) === String(c.id || (c as any)._id) && p.department?.toLowerCase() === "digital marketing");
                     const filteredProjs = clientProjs.filter((p) => {
-                      if (p.status === "on-hold") return false;
+                      if (p.status === "on-hold" || p.status === "onhold" || p.status?.toLowerCase() === "on-hold") return false;
                       if (!isFullAuthority || taskFilterType === "my") {
                         if (user?.id) {
                           return isProjectAssignedToUser(p, user.id, acceptedTransfers);
