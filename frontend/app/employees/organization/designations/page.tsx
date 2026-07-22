@@ -63,7 +63,7 @@ export default function DesignationsPage() {
   }
 
   const handleSave = async () => {
-    if (!desigForm.title.trim() || !desigForm.department || !desigForm.sub_department) return
+    if (!desigForm.title.trim()) return
     setIsLoading(true)
     try {
       const url = editingDesig ? `${API_URL}/designations/${editingDesig.id}` : `${API_URL}/designations`
@@ -109,24 +109,6 @@ export default function DesignationsPage() {
           </div>
           <span className="font-bold text-slate-700">{desig.title}</span>
         </div>
-      )
-    },
-    { 
-      key: 'department' as const, 
-      header: 'Department',
-      render: (desig: Designation) => (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200 uppercase tracking-wider">
-          {desig.department}
-        </span>
-      )
-    },
-    { 
-      key: 'sub_department' as const, 
-      header: 'Sub Department',
-      render: (desig: Designation) => (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200 uppercase tracking-wider">
-          {desig.sub_department || 'N/A'}
-        </span>
       )
     },
   ]
@@ -175,7 +157,7 @@ export default function DesignationsPage() {
             <UserCircle2 className="w-6 h-6 text-brand-teal" />
           </div>
           <div>
-            <h3 className="text-lg font-extrabold text-slate-800 tracking-tight">Job Designations</h3>
+            <h3 className="text-lg font-extrabold text-slate-800 tracking-tight">Designations</h3>
             <p className="text-xs font-medium text-slate-500 uppercase tracking-widest">{designations.length} defined roles</p>
           </div>
         </div>
@@ -223,23 +205,7 @@ export default function DesignationsPage() {
                 onChange={e => setDesigForm({ ...desigForm, title: e.target.value })}
               />
             </div>
-            <div className="space-y-2">
-              <Label>Sub Department</Label>
-              <Select 
-                value={desigForm.sub_department} 
-                onValueChange={v => {
-                  const selectedSd = subDepartments.find((sd: any) => sd.name === v);
-                  setDesigForm({ ...desigForm, sub_department: v, department: selectedSd?.department || '' });
-                }}
-              >
-                <SelectTrigger><SelectValue placeholder="Select sub department" /></SelectTrigger>
-                <SelectContent>
-                  {subDepartments.map((sd: any) => (
-                    <SelectItem key={sd.id} value={sd.name}>{sd.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+
             <div className="flex justify-end gap-3 pt-4">
               <Button variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
               <Button onClick={handleSave} disabled={isLoading} className="bg-brand-teal text-white">

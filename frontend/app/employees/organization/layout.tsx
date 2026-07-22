@@ -34,7 +34,7 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
     <div className="space-y-6">
       <PageHeader 
         title="Organization Structure" 
-        description="Manage your company's departments and job designations in one place."
+        description="Manage your company's departments and designations in one place."
       />
 
       <Tabs value={currentTab} onValueChange={(v) => router.push(`/employees/organization/${v}`)} className="w-full">
