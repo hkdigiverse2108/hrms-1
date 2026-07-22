@@ -8207,8 +8207,27 @@ async def update_invoice(db, invoice_id: str, invoice_update: schemas.InvoiceUpd
     return fix_id(updated_doc) if updated_doc else None
 
 async def delete_invoice(db, invoice_id: str):
-    await db.invoices.delete_one({"_id": ObjectId(invoice_id)})
-    return True
+    invoice = await db.invoices.find_one({"_id": ObjectId(invoice_id)})
+    if invoice:
+        await db.deleted_invoices.insert_one(invoice)
+        await db.invoices.delete_one({"_id": ObjectId(invoice_id)})
+        return True
+    return False
+
+async def get_deleted_invoices(db):
+    cursor = db.deleted_invoices.find().sort("timestamp", -1)
+    invoices = []
+    async for doc in cursor:
+        invoices.append(fix_id(doc))
+    return invoices
+
+async def restore_invoice(db, invoice_id: str):
+    invoice = await db.deleted_invoices.find_one({"_id": ObjectId(invoice_id)})
+    if invoice:
+        await db.invoices.insert_one(invoice)
+        await db.deleted_invoices.delete_one({"_id": ObjectId(invoice_id)})
+        return True
+    return False
 
 async def get_next_invoice_number(db, invoice_type: str = "Tax Invoice", tax_type: str = "CGST+SGST"):
     import re

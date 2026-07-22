@@ -2717,6 +2717,21 @@ async def create_invoice(invoice: schemas.InvoiceCreate, db=Depends(get_db)):
 async def read_invoices(skip: int = 0, limit: int = 10000, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
     return await crud.get_invoices(db, current_user, skip=skip, limit=limit)
 
+@app.get("/invoices/deleted", response_model=List[schemas.Invoice])
+async def get_deleted_invoices(db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
+    if current_user.get("role") != "Admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+    return await crud.get_deleted_invoices(db)
+
+@app.post("/invoices/{invoice_id}/restore")
+async def restore_invoice(invoice_id: str, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
+    if current_user.get("role") != "Admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+    success = await crud.restore_invoice(db, invoice_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return {"message": "Invoice restored successfully"}
+
 @app.get("/invoices/next-number")
 async def get_next_number(type: str = "Tax Invoice", taxType: str = "CGST+SGST", db=Depends(get_db)):
     next_num = await crud.get_next_invoice_number(db, invoice_type=type, tax_type=taxType)

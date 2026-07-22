@@ -570,6 +570,13 @@ export default function AllInvoicesPage() {
             Export PDF Report
           </Button>
 
+          <Link href="/invoice/deleted">
+            <Button variant="outline" className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-300 font-medium h-10 px-4">
+              <Trash2 className="w-4 h-4 mr-2" />
+              Trash
+            </Button>
+          </Link>
+
           <Link href="/invoice/create">
             <Button className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium shadow-sm h-10 px-4">
               <Plus className="w-4 h-4 mr-2" />
