@@ -9626,8 +9626,8 @@ async def get_finance_transactions(db, payment_method: str = None, type_filter: 
         try:
             inv_cursor = db.invoices.find({})
             async for inv in inv_cursor:
-                # Skip Proforma invoices
-                if inv.get("invoiceType") == "Proforma Invoice":
+                # Skip Proforma invoices and hidden invoices
+                if inv.get("invoiceType") == "Proforma Invoice" or inv.get("hiddenFromFinance"):
                     continue
                     
                 inv_id = str(inv.get("_id") or inv.get("id", ""))
@@ -9838,11 +9838,11 @@ async def delete_finance_transaction(db, tx_id: str, current_user=None):
         inv_id = tx_id[4:]
         try:
             existing = await get_finance_transaction_by_id(db, tx_id)
-            res = await db.invoices.delete_one({"_id": ObjectId(inv_id)})
-            if res.deleted_count > 0 and existing:
-                details = f"Deleted synced invoice transaction: {existing.get('category')} - {existing.get('description')} (Amount: {existing.get('amount')})"
+            res = await db.invoices.update_one({"_id": ObjectId(inv_id)}, {"$set": {"hiddenFromFinance": True}})
+            if res.modified_count > 0 and existing:
+                details = f"Removed synced invoice transaction from finance: {existing.get('category')} - {existing.get('description')} (Amount: {existing.get('amount')})"
                 await log_activity(db, "Finance Transaction Deleted", performed_by_id, performed_by_name, details)
-            return res.deleted_count > 0
+            return res.modified_count > 0
         except Exception as e:
             print(f"Error deleting synced invoice: {e}")
             return False
