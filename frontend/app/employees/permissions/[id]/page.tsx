@@ -187,6 +187,9 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
           setPermissions(DEFAULT_MODULES.map(m => ({ ...m, canAdd: false, canEdit: false, canDelete: false, canView: false })))
           setActivePresetId(null)
         }
+      } else {
+        setPermissions(DEFAULT_MODULES.map(m => ({ ...m, canAdd: false, canEdit: false, canDelete: false, canView: false })))
+        setActivePresetId(null)
       }
     } catch (error) {
       console.error('Error fetching data:', error)
@@ -289,16 +292,8 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="w-10 h-10 animate-spin text-brand-teal" />
-      </div>
-    )
-  }
-
   const filteredEmployees = employees.filter(emp => 
-    (emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (emp.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     emp.employeeId?.toLowerCase().includes(searchTerm.toLowerCase())) &&
     emp.role?.toLowerCase() !== 'admin' &&
     emp.status?.toLowerCase() !== 'inactive'
@@ -317,9 +312,17 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
       if (aDeptMatch && !bDeptMatch) return -1
       if (!aDeptMatch && bDeptMatch) return 1
 
-      return a.name.localeCompare(b.name)
+      return (a.name || '').localeCompare(b.name || '')
     })
   }, [presets, employee])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-10 h-10 animate-spin text-brand-teal" />
+      </div>
+    )
+  }
 
   const isSuggested = (preset: any) => {
     if (!employee) return false
@@ -466,7 +469,6 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
                 <tbody className="divide-y divide-slate-100">
                   {PERMISSION_GROUPS.map((group) => {
                     const filteredModules = group.modules.filter(m => 
-                      activeModules.includes(m.moduleName) &&
                       (m.displayName.toLowerCase().includes(moduleSearch.toLowerCase()) ||
                       m.moduleName.toLowerCase().includes(moduleSearch.toLowerCase()))
                     )
