@@ -44,7 +44,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 import { INDIAN_STATES, TIME_OPTIONS } from "@/lib/constants";
-
+import { FLAT_MODULES } from "@/lib/modules";
 
 export default function SettingsPage() {
   const { user, updateUser } = useUserContext();
@@ -810,53 +810,15 @@ export default function SettingsPage() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {[
-                  { key: 'dashboard', label: 'Dashboard' },
-                  { key: 'employee-list', label: 'Employee List' },
-                  { key: 'org-structure', label: 'Org Structure' },
-                  { key: 'employee-attendance', label: 'Employee Attendance List' },
-                  { key: 'leave-requests', label: 'Leave Requests' },
-                  { key: 'employee-documents', label: 'Employee Documents' },
-                  { key: 'document-generator', label: 'Document Generator' },
-                  { key: 'salary-structure', label: 'Salary Structure' },
-                  { key: 'payroll-processing', label: 'Payroll Processing' },
-                  { key: 'payslips', label: 'Payslips' },
-                  { key: 'bonuses-deductions', label: 'Bonuses & Deductions' },
-                  { key: 'interviews', label: 'Interviews' },
-                  { key: 'hirings', label: 'Hirings' },
-                  { key: 'attendance', label: 'Attendance' },
-                  { key: 'leave', label: 'Leave' },
-                  { key: 'schedule', label: 'Schedule' },
-                  { key: 'projects', label: 'Projects' },
-                  { key: 'tasks', label: 'Development' },
-                  { key: 'personal-tasks', label: 'Tasks' },
-                  { key: 'daily-progress', label: 'Daily Progress' },
-                  { key: 'work-logs', label: 'Work Logs' },
-                  { key: 'sales', label: 'Sales' },
-                  { key: 'clients', label: 'Clients' },
-                  { key: 'marketing', label: 'Digital Marketing' },
-                  { key: 'creative', label: 'Social Media Management' },
-                  { key: 'research', label: 'Research' },
-                  { key: 'seating-arrangement', label: 'Seating Arrangement' },
-                  { key: 'resource-management', label: 'Resource Management' },
-                  { key: 'gallery', label: 'Gallery' },
-                  { key: 'remarks', label: 'Penalty' },
-                  { key: 'review', label: 'Remarks' },
-                  { key: 'invoice', label: 'Invoice' },
-                  { key: 'chat', label: 'Chat' },
-                  { key: 'activity-tracker', label: 'Activity Tracker' },
-                  { key: 'activity-logs', label: 'Activity Logs' },
-                  { key: 'training', label: 'Course Library' },
-                  { key: 'admin-courses', label: 'Manage Courses' },
-                ].map(module => (
-                  <div key={module.key} className="flex items-center justify-between p-3 rounded-lg border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors">
-                    <Label className="text-sm font-medium cursor-pointer flex-1" htmlFor={`module-${module.key}`}>
-                      {module.label}
+                {FLAT_MODULES.filter(m => m.moduleName !== 'access-control' && m.moduleName !== 'settings' && m.moduleName !== 'dashboard').map(module => (
+                  <div key={module.moduleName} className="flex items-center justify-between p-3 rounded-lg border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                    <Label className="text-sm font-medium cursor-pointer flex-1" htmlFor={`module-${module.moduleName}`}>
+                      {module.displayName}
                     </Label>
                     <Switch
-                      id={`module-${module.key}`}
-                      checked={settings?.enabledModules?.includes(module.key) ?? true}
-                      onCheckedChange={(c) => handleToggleModule(module.key, c)}
+                      id={`module-${module.moduleName}`}
+                      checked={settings?.enabledModules?.includes(module.moduleName) ?? true}
+                      onCheckedChange={(c) => handleToggleModule(module.moduleName, c)}
                       disabled={isUpdating}
                     />
                   </div>

@@ -317,6 +317,40 @@ export function EmployeeModal({
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Department *</Label>
+                <Select value={formData.department} onValueChange={(v) => setFormData({ ...formData, department: v })}>
+                  <SelectTrigger className="bg-slate-50/50 border-slate-200">
+                    <SelectValue placeholder="Select department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {departments.map((d: any) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Designation *</Label>
+                {(formData.role === 'Admin' || formData.role === 'Sub-Admin' || formData.role === 'Sub Admin' || formData.role === 'Super Admin' || formData.role === 'SuperAdmin') ? (
+                  <Input
+                    value={formData.designation}
+                    onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
+                    placeholder="Enter custom designation (e.g. Founder, CEO)"
+                    className="bg-slate-50/50 border-slate-200 focus:bg-white transition-all"
+                    required
+                  />
+                ) : (
+                  <Select value={formData.designation} onValueChange={(v) => setFormData({ ...formData, designation: v })}>
+                    <SelectTrigger className="bg-slate-50/50 border-slate-200">
+                      <SelectValue placeholder="Select designation" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {designations.filter((d:any) => d.department === formData.department || !formData.department).map((d: any) => (
+                        <SelectItem key={d.id} value={d.title}>{d.title}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
             </div>
           </div>
 
@@ -447,30 +481,6 @@ export function EmployeeModal({
                   placeholder="ABCDE1234F"
                   className="bg-slate-50/50 border-slate-200 focus:bg-white transition-all"
                 />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Department *</Label>
-                <Select value={formData.department} onValueChange={(v) => setFormData({ ...formData, department: v })}>
-                  <SelectTrigger className="bg-slate-50/50 border-slate-200">
-                    <SelectValue placeholder="Select department" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {departments.map((d: any) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Designation *</Label>
-                <Select value={formData.designation} onValueChange={(v) => setFormData({ ...formData, designation: v })}>
-                  <SelectTrigger className="bg-slate-50/50 border-slate-200">
-                    <SelectValue placeholder="Select designation" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {designations.filter((d:any) => d.department === formData.department || !formData.department).map((d: any) => (
-                      <SelectItem key={d.id} value={d.title}>{d.title}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
               <div className="space-y-2">
                 <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Status *</Label>

@@ -1408,7 +1408,7 @@ function EmployeeView({
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="relative">
-                    <Avatar className={`w-16 h-16 border-2 shadow-sm transition-all duration-500 ${hasTargetedBanner ? 'border-transparent ring-4 ring-brand-teal ring-offset-2' : 'border-border'}`}>
+                    <Avatar className={`w-16 h-16 border-2 border-border shadow-sm transition-all duration-500`}>
                       <AvatarImage src={getAvatarUrl(user?.profilePhoto, userName)} />
                       <AvatarFallback className="bg-brand-light text-brand-teal font-bold">{initials}</AvatarFallback>
                     </Avatar>

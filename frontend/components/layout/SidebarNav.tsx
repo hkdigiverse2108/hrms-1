@@ -244,19 +244,6 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       menuItems.push(getItem("Company Finance", "company-finance-sub", <Landmark className="w-5 h-5" />, companyFinanceChildren));
     }
 
-    const companyFinanceChildren: MenuItem[] = [];
-    if (isAdmin || checkPermission('company-finance', 'canView')) {
-      companyFinanceChildren.push(getItem(<Link href="/company-finance">Transactions</Link>, "/company-finance"));
-      companyFinanceChildren.push(getItem(<Link href="/company-finance/plan">Plan</Link>, "/company-finance/plan"));
-      companyFinanceChildren.push(getItem(<Link href="/company-finance/summary">Summary</Link>, "/company-finance/summary"));
-      companyFinanceChildren.push(getItem(<Link href="/company-finance/client-transactions">Client Transactions</Link>, "/company-finance/client-transactions"));
-      companyFinanceChildren.push(getItem(<Link href="/company-finance/logs">Audit Logs</Link>, "/company-finance/logs"));
-    }
-
-    if (isAdmin || companyFinanceChildren.length > 0) {
-      menuItems.push(getItem("Company Finance", "company-finance-sub", <Landmark className="w-5 h-5" />, companyFinanceChildren));
-    }
-
     if (isModuleEnabled('attendance') && (isAdmin || checkPermission('attendance', 'canView'))) {
       menuItems.push(getItem(<Link href="/attendance">Attendance</Link>, "/attendance", <Clock className="w-5 h-5" />));
     }

@@ -2160,6 +2160,8 @@ class PermissionPresetBase(BaseModel):
     description: Optional[str] = ""
     presetType: Optional[str] = "role"
     targetModule: Optional[str] = None
+    department: Optional[str] = None
+    designation: Optional[str] = None
     permissions: List[ModulePermission]
 
 class PermissionPresetCreate(PermissionPresetBase):
@@ -2168,6 +2170,10 @@ class PermissionPresetCreate(PermissionPresetBase):
 class PermissionPresetUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    presetType: Optional[str] = None
+    targetModule: Optional[str] = None
+    department: Optional[str] = None
+    designation: Optional[str] = None
     permissions: Optional[List[ModulePermission]] = None
 
 class PermissionPreset(PermissionPresetBase):

@@ -262,7 +262,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
   const isRoleAdmin = (r?: string) => {
     if (!r) return false;
     const clean = r.toLowerCase().trim();
-    return clean === 'admin' || clean === 'super admin' || clean === 'superadmin' || clean === 'administrator' || clean === 'founder' || clean === 'super_admin' || clean === 'sub-admin';
+    return clean === 'admin' || clean === 'super admin' || clean === 'superadmin' || clean === 'administrator' || clean === 'founder' || clean === 'super_admin' || clean === 'sub-admin' || clean === 'sub admin';
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -427,6 +427,36 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
           })}
           placeholder="Select role"
         />
+
+        {isRoleAdmin(formData.role) && (
+          <FormField label="Designation" id="designation" required value={formData.designation} onChange={(v: string) => handleChange('designation', v)} />
+        )}
+        
+        {!isRoleAdmin(formData.role) && (
+          <>
+            <FormSelect 
+              key={`dept-${departments.length}`} 
+              label="Department" 
+              id="department" 
+              required 
+              value={formData.department} 
+              onValueChange={(v: string) => handleChange('department', v)} 
+              options={departments.map((d: any) => ({ label: d.name, value: d.name }))} 
+              placeholder="Select department" 
+            />
+            <FormSelect 
+              key={`subdept-${subDepartments.length}-${formData.department}`} 
+              label="Sub Department" 
+              id="sub_department" 
+              required
+              value={formData.sub_department || ''} 
+              onValueChange={(v: string) => handleChange('sub_department', v)} 
+              options={subDepartments.filter((d: any) => d.department === formData.department).map((d: any) => ({ label: d.name, value: d.name }))} 
+              placeholder="Select sub department" 
+            />
+            <FormSelect key={`des-${designations.length}-${formData.sub_department}`} label="Designation" id="designation" required value={formData.designation} onValueChange={(v: string) => handleChange('designation', v)} options={designations.filter((d: any) => d.sub_department === formData.sub_department).map((d: any) => ({ label: d.title, value: d.title }))} placeholder="Select designation" />
+          </>
+        )}
       </div>
  
       {/* Dynamic Conditional Sections */}
@@ -500,28 +530,6 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
         
         {!isRoleAdmin(formData.role) && (
           <>
-            <FormSelect 
-              key={`dept-${departments.length}`} 
-              label="Department" 
-              id="department" 
-              required 
-              value={formData.department} 
-              onValueChange={(v: string) => handleChange('department', v)} 
-              options={departments.map((d: any) => ({ label: d.name, value: d.name }))} 
-              placeholder="Select department" 
-            />
-            <FormSelect 
-              key={`subdept-${subDepartments.length}-${formData.department}`} 
-              label="Sub Department" 
-              id="sub_department" 
-              required
-              value={formData.sub_department || ''} 
-              onValueChange={(v: string) => handleChange('sub_department', v)} 
-              options={subDepartments.filter((d: any) => d.department === formData.department).map((d: any) => ({ label: d.name, value: d.name }))} 
-              placeholder="Select sub department" 
-            />
-            <FormSelect key={`des-${designations.length}-${formData.sub_department}`} label="Designation" id="designation" required value={formData.designation} onValueChange={(v: string) => handleChange('designation', v)} options={designations.filter((d: any) => d.sub_department === formData.sub_department).map((d: any) => ({ label: d.title, value: d.title }))} placeholder="Select designation" />
-            
             <FormSelect 
               label="Status" 
               id="status" 
