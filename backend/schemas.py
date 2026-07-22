@@ -822,6 +822,8 @@ class ReviewBase(BaseModel):
     updatedBy: Optional[str] = None
     query: Optional[str] = None
     adminReply: Optional[str] = None
+    replies: Optional[List[dict]] = None
+    isApproved: Optional[bool] = False
 
 class ReviewCreate(ReviewBase):
     pass
@@ -832,6 +834,8 @@ class ReviewUpdate(BaseModel):
     updatedBy: Optional[str] = None
     query: Optional[str] = None
     adminReply: Optional[str] = None
+    replies: Optional[List[dict]] = None
+    isApproved: Optional[bool] = False
 
 class Review(ReviewBase):
     id: str
@@ -2537,6 +2541,7 @@ class ContentCalendarEntryBase(BaseModel):
     actualPostingDate: Optional[str] = None
     updatedBy: Optional[str] = None
     logs: Optional[List[dict]] = None
+    queries: Optional[List[dict]] = None
     remark: Optional[str] = None
     remarkStage: Optional[str] = None
     assignedBrandPersonIds: Optional[List[str]] = None
@@ -2572,6 +2577,7 @@ class ContentCalendarEntryUpdate(BaseModel):
     postingLinkOfIg: Optional[str] = None
     actualPostingDate: Optional[str] = None
     updatedBy: Optional[str] = None
+    queries: Optional[List[dict]] = None
     remark: Optional[str] = None
     remarkStage: Optional[str] = None
     assignedScriptwriterId: Optional[str] = None
@@ -2649,6 +2655,7 @@ class OtherWorkBase(BaseModel):
     taskType: Optional[str] = "other-work"
     remark: Optional[str] = None
     remarkStage: Optional[str] = None
+    queries: Optional[List[dict]] = None
     logs: Optional[List[dict]] = None
 
 class OtherWorkCreate(OtherWorkBase):
@@ -2663,6 +2670,7 @@ class OtherWorkUpdate(BaseModel):
     status: Optional[str] = None
     remark: Optional[str] = None
     remarkStage: Optional[str] = None
+    queries: Optional[List[dict]] = None
     updatedBy: Optional[str] = None
     logs: Optional[List[dict]] = None
 
