@@ -254,8 +254,7 @@ export default function MarketingReportsPage() {
 
     if (String(project.assignedEmployeeId) === uId) return true;
     if (String(project.assignedToId) === uId) return true;
-    if (String(project.teamLeaderId) === uId) return true;
-    if (String(project.createdBy) === uId || String(project.createdById) === uId || String(project.assignedById) === uId || String(project.assignedBy) === uId) return true;
+    if (project.assignedEmployee && String(project.assignedEmployee) === uId) return true;
 
     if (Array.isArray(project.assignedEmployeeIds) && project.assignedEmployeeIds.map(String).includes(uId)) return true;
     if (Array.isArray(project.assignedToIds) && project.assignedToIds.map(String).includes(uId)) return true;
