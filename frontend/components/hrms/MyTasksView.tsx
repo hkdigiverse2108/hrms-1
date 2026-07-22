@@ -384,7 +384,7 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
     })
 
       return consolidated
-    }, [tasks, wmTasks, entries, otherWork, projects, clients, effectiveUserId])
+    }, [tasks, wmTasks, entries, otherWork, projects, clients, effectiveUserId, employees, currentUser])
 
     const kpiData = useMemo(() => {
       let total = 0;
