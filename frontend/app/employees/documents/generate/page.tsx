@@ -677,10 +677,12 @@ export default function DocumentGeneratorPage() {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            status: 'Sent',
+            status: requireSignature ? 'Pending Signature' : 'Sent',
             fileName: filename,
             fileUrl: absoluteUrl,
-            sentDate: new Date().toISOString().split('T')[0]
+            htmlContent: requireSignature ? node.innerHTML : undefined,
+            requireSignature: requireSignature,
+            sentDate: requireSignature ? undefined : new Date().toISOString().split('T')[0]
           })
         })
         
