@@ -848,7 +848,24 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                                           {task.originalTask?.remark || '-'}
                                         </td>
                                         <td className="p-4 text-right">
-                                           <span className="text-slate-400 font-medium text-xs">-</span>
+                                          {task.status !== 'completed' && task.status !== 'Approved' && task.status?.toLowerCase() !== 'completed' ? (
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              className="h-8 w-8 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleMarkComplete(task);
+                                              }}
+                                              title="Mark Complete"
+                                            >
+                                              <CheckCircle2 className="w-4 h-4" />
+                                            </Button>
+                                          ) : (
+                                            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                                              Completed
+                                            </Badge>
+                                          )}
                                         </td>
                                       </tr>
                                     )
@@ -888,7 +905,24 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                                         </Badge>
                                       </td>
                                       <td className="p-4 text-right">
-                                        <span className="text-slate-400 font-medium text-xs">-</span>
+                                          {task.status !== 'completed' && task.status !== 'Approved' && task.status?.toLowerCase() !== 'completed' ? (
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              className="h-8 w-8 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleMarkComplete(task);
+                                              }}
+                                              title="Mark Complete"
+                                            >
+                                              <CheckCircle2 className="w-4 h-4" />
+                                            </Button>
+                                          ) : (
+                                            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                                              Completed
+                                            </Badge>
+                                          )}
                                       </td>
                                     </tr>
                                   ))}
