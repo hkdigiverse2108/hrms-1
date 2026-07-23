@@ -715,7 +715,19 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
     const columnsToRender = [...selectedColumnsForPdf].sort((a, b) => tableHeaders.indexOf(a) - tableHeaders.indexOf(b));
     const indicesToRender = columnsToRender.map(col => tableHeaders.indexOf(col));
 
-    const filteredEntries = entries.filter(entry => {
+    let entriesToProcess = entries;
+    if (downloadStartDate || downloadEndDate) {
+      try {
+        const res = await fetch(`${API_URL}/content-calendar?clientId=${clientId}${projectId ? `&projectId=${projectId}` : ''}`);
+        if (res.ok) {
+          entriesToProcess = await res.json();
+        }
+      } catch (e) {
+        console.error("Failed to fetch all entries for date range download", e);
+      }
+    }
+
+    const filteredEntries = entriesToProcess.filter((entry: any) => {
       const matchesType = typeFilter === "all" || entry.postReel === typeFilter;
       let matchesDate = true;
       if (entry.postingDate) {
