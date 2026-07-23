@@ -589,14 +589,13 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
       {!isEmbedded && (
         <PageHeader 
           title="My Tasks"
-          subtitle="View and manage all your assigned tasks across departments"
-          actions={
-            <Button className="bg-brand-teal hover:bg-brand-teal/90 text-white font-bold h-9">
-              <Plus className="w-4 h-4 mr-2" />
-              New Task
-            </Button>
-          }
-        />
+          description="View and manage all your assigned tasks across departments"
+        >
+          <Button className="bg-brand-teal hover:bg-brand-teal/90 text-white font-bold h-9">
+            <Plus className="w-4 h-4 mr-2" />
+            New Task
+          </Button>
+        </PageHeader>
       )}
 
         <div className={isEmbedded ? "flex-1" : "flex-1 p-6"}>
