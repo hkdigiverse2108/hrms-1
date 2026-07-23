@@ -2198,7 +2198,7 @@ export default function SalesPage() {
                           <Popover>
                             <PopoverTrigger asChild>
                               <Button variant="outline" className="w-full justify-between h-10 text-sm border-slate-200 font-medium">
-                                {targetForm.employeeId === "all" ? "All Employees" : (employees.find((e: any) => e.id === targetForm.employeeId) ? (employees.find((e: any) => e.id === targetForm.employeeId)?.name || employees.find((e: any) => e.id === targetForm.employeeId)?.firstName) : "Select Employee")}
+                                {employees.find((e: any) => e.id === targetForm.employeeId) ? (employees.find((e: any) => e.id === targetForm.employeeId)?.name || employees.find((e: any) => e.id === targetForm.employeeId)?.firstName) : "Select Employee"}
                                 <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                               </Button>
                             </PopoverTrigger>
@@ -2208,10 +2208,6 @@ export default function SalesPage() {
                                 <CommandList>
                                   <CommandEmpty>No employee found.</CommandEmpty>
                                   <CommandGroup>
-                                    <CommandItem value="all" onSelect={() => setTargetForm({...targetForm, employeeId: "all"})}>
-                                      <Check className={`mr-2 h-4 w-4 ${targetForm.employeeId === "all" ? "opacity-100" : "opacity-0"}`} />
-                                      All Employees
-                                    </CommandItem>
                                     {employees.map(emp => {
                                       const empName = emp.name || emp.firstName || "";
                                       return (
