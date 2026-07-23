@@ -168,10 +168,14 @@ export default function CreativeClientsPage() {
     if (!user) return false;
     const r = (user.role || "").toLowerCase();
     const d = (user.designation || "").toLowerCase();
-    const fullRoles = ["admin", "manager", "social media manager", "smm", "director", "head", "super admin", "digital marketer", "digital marketing", "team leader", "sub admin", "sub-admin", "hr"];
+    const fullRoles = ["admin", "manager", "social media manager", "smm", "director", "head", "super admin", "digital marketer", "digital marketing", "sub admin", "sub-admin", "hr"];
     if (fullRoles.includes(r) || fullRoles.includes(d) || r.includes("social media") || d.includes("social media") || r.includes("digital marketing") || d.includes("digital marketing")) {
       return true;
     }
+    const isTL = d === 'team leader' || r === 'team leader';
+    const dept = (user.department || "").toLowerCase();
+    if (isTL && dept.includes('creative')) return true;
+
     const perms = (user as any).permissions || [];
     const smmPerms = ["projects", "smm", "clients", "digital-marketing", "work-management"];
     return perms.some((p: any) => smmPerms.includes(p.moduleName) && (p.canView || p.canEdit || p.canAdd));
@@ -185,11 +189,14 @@ export default function CreativeClientsPage() {
     if (!user) return false;
     const r = (user.role || "").toLowerCase();
     const d = (user.designation || "").toLowerCase();
-    const allAccessRoles = ["admin", "super admin", "manager", "director", "head", "team leader", "sub admin", "sub-admin", "hr"];
+    const allAccessRoles = ["admin", "super admin", "manager", "director", "head", "sub admin", "sub-admin", "hr"];
     
-    if (allAccessRoles.includes(r) || allAccessRoles.includes(d) || d.includes("head") || d.includes("manager") || d.includes("leader") || r.includes("admin")) {
+    if (allAccessRoles.includes(r) || allAccessRoles.includes(d) || d.includes("head") || d.includes("manager") || r.includes("admin")) {
       return true;
     }
+    const isTL = d === 'team leader' || r === 'team leader';
+    const dept = (user.department || "").toLowerCase();
+    if (isTL && dept.includes('creative')) return true;
     
     return false;
   }, [user]);

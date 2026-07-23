@@ -992,7 +992,11 @@ export default function SalesPage() {
     });
   });
 
-  const visibleLeads = (isAdmin || (user?.role?.toLowerCase() === 'hr' || user?.designation?.toLowerCase()?.includes('hr') || user?.department?.toLowerCase()?.includes('hr')) || (user?.designation?.toLowerCase() === 'team leader' || user?.role?.toLowerCase() === 'team leader'))
+  const isHR = user?.role?.toLowerCase() === 'hr' || user?.designation?.toLowerCase()?.includes('hr') || user?.department?.toLowerCase()?.includes('hr');
+  const isTL = (user?.designation?.toLowerCase() === 'team leader' || user?.role?.toLowerCase() === 'team leader');
+  const isSalesTL = isTL && user?.department?.toLowerCase()?.includes('sales');
+
+  const visibleLeads = (isAdmin || isHR || isSalesTL)
     ? filteredByEmployeeLeads 
     : filteredByEmployeeLeads.filter((l: any) => {
         const assignedList = Array.isArray(l.assignedTo) ? l.assignedTo : (l.assignedTo ? [l.assignedTo] : []);

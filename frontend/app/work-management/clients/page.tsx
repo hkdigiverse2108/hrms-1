@@ -199,8 +199,7 @@ export default function ClientsPage() {
 
   const allowedClients = clients.filter(c => {
     const isHR = user?.role?.toLowerCase() === 'hr' || user?.designation?.toLowerCase()?.includes('hr') || user?.department?.toLowerCase()?.includes('hr');
-    const isTL = user?.designation?.toLowerCase() === 'team leader' || user?.role?.toLowerCase() === 'team leader';
-    if (isAdmin || isHR || isTL) return true;
+    if (isAdmin || isHR) return true;
     if (!user?.department) return true;
     const uDept = user.department.toLowerCase().trim();
     return c.department && c.department.toLowerCase().includes(uDept);
