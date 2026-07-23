@@ -142,8 +142,8 @@ export default function EmployeeListPage() {
               <div className="text-xs text-muted-foreground">
                 {emp.role?.toLowerCase().includes('admin')
                   ? emp.designation || emp.role
-                  : (emp.sub_department && emp.designation)
-                    ? `${emp.sub_department} - ${emp.designation}`
+                  : ((emp.sub_department || emp.subDepartment) && emp.designation)
+                    ? `${emp.sub_department || emp.subDepartment} - ${emp.designation}`
                     : (emp.department && emp.designation)
                       ? `${emp.department} - ${emp.designation}`
                       : emp.email}
