@@ -1208,7 +1208,7 @@ export default function SalesPage() {
                       onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'date' })}
                       className="cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
                     >
-                      Created: {lead.date}
+                      Created: {dayjs(lead.date).format('DD/MM/YYYY')}
                     </span>
                   )}
                 </div>
@@ -1580,7 +1580,7 @@ export default function SalesPage() {
                 </span>
               )}
               {type === 'converted' && (
-                <span className="text-[10px] text-emerald-600 font-bold uppercase mt-0.5">Won on {lead.closedDate}</span>
+                <span className="text-[10px] text-emerald-600 font-bold uppercase mt-0.5">Won on {dayjs(lead.closedDate).format('DD/MM/YYYY')}</span>
               )}
             </div>
           </td>
@@ -2922,7 +2922,7 @@ export default function SalesPage() {
                               <td className="px-6 py-4 text-xs text-slate-500 font-medium">
                                 <div className="flex items-center gap-1.5">
                                   <Calendar className="w-3 h-3 text-emerald-500" />
-                                  {lead.closedDate || lead.date}
+                                  {dayjs(lead.closedDate || lead.date).format('DD/MM/YYYY')}
                                 </div>
                               </td>
                               <td className="px-6 py-4">
