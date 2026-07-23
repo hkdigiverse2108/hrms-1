@@ -388,14 +388,29 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       <div className={`h-20 flex items-center ${collapsed ? 'justify-center px-2' : 'justify-between px-6'} py-6 border-b border-sidebar-border shrink-0 mb-6`}>
         {collapsed ? (
           <div className="flex items-center justify-center gap-1 w-full">
-            <img src="/logo.png" alt="HK Icon" className="h-8 w-8 object-cover object-left shrink-0 rounded-lg" />
+            {(user as any)?.company_logo ? (
+              <img src={(user as any).company_logo} alt="Company Logo" className="h-8 w-8 object-contain shrink-0 rounded-lg" />
+            ) : (
+              <img src="/logo.png" alt="HK Icon" className="h-8 w-8 object-cover object-left shrink-0 rounded-lg" />
+            )}
             <button onClick={toggleCollapse} className="text-slate-600 hover:text-brand-teal p-0.5 hover:bg-slate-100 rounded transition-all shrink-0">
               <MenuIcon className="w-4 h-4" />
             </button>
           </div>
         ) : (
           <div className="flex items-center justify-between w-full gap-2">
-            <img src="/logo.png" alt="HariKrushn DigiVerse Logo" className="h-12 w-auto object-contain max-w-[160px]" />
+            {(user as any)?.company_logo ? (
+              <div className="flex items-center gap-2">
+                <img src={(user as any).company_logo} alt="Company Logo" className="h-10 w-auto object-contain max-w-[140px]" />
+              </div>
+            ) : (user as any)?.company_name ? (
+              <div className="flex flex-col">
+                <span className="font-extrabold text-base text-foreground truncate max-w-[150px]">{(user as any).company_name}</span>
+                <span className="text-[10px] text-brand-teal font-semibold uppercase tracking-wider">HRMS Portal</span>
+              </div>
+            ) : (
+              <img src="/logo.png" alt="HariKrushn DigiVerse Logo" className="h-12 w-auto object-contain max-w-[160px]" />
+            )}
             <button onClick={toggleCollapse} className="text-slate-600 hover:text-brand-teal p-1 hover:bg-slate-100/50 rounded-md transition-all shrink-0">
               <MenuIcon className="w-5 h-5" />
             </button>

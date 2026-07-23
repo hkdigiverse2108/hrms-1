@@ -114,7 +114,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           setIsLoading(false); // Disable loading spinner immediately for instant UI boot
           
           const userId = parsedUser.id || parsedUser._id;
-          if (userId) {
+          if (userId && !parsedUser.is_superadmin && userId !== 'superadmin') {
             const fetchUrl = `${API_URL}/employees/${userId}`;
             console.log("Syncing user data from:", fetchUrl);
             const token = storedToken || localStorage.getItem('token');
@@ -221,7 +221,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   // Periodic check to automatically log out inactive users
   useEffect(() => {
-    if (!user) return;
+    if (!user || user.is_superadmin || (user.id || user._id) === 'superadmin') return;
     const userId = user.id || user._id;
     if (!userId) return;
 
@@ -245,12 +245,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     // Run status check every 60 seconds (1 minute)
     const intervalId = setInterval(checkUserStatus, 60000);
     return () => clearInterval(intervalId);
-  }, [user?.id, user?._id]);
+  }, [user?.id, user?._id, user?.is_superadmin]);
 
   // Native OS input tracking session management
   useEffect(() => {
-    if (!user) {
-      // Clear active session on logout
+    if (!user || user.is_superadmin || (user.id || user._id) === 'superadmin') {
+      // Clear active session on logout or for superadmin
       fetch(`${API_URL}/activity/session-inactive`, { method: 'POST' }).catch(() => {});
       return;
     }

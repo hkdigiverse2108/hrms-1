@@ -48,6 +48,9 @@ async def get_current_user_token(authorization: Optional[str] = Header(None)):
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
+        if payload.get("is_superadmin") or user_id == "superadmin":
+            return payload
+
         # Check if user is turned inactive in database
         from database import db
         from bson import ObjectId
@@ -125,3 +128,13 @@ async def require_admin_or_activity_logs(token_payload: dict = Depends(get_curre
         status_code=status.HTTP_403_FORBIDDEN,
         detail="You do not have permission to view activity logs.",
     )
+
+async def require_superadmin(token_payload: dict = Depends(get_current_user_token)):
+    """Dependency requiring Super Admin role"""
+    if token_payload.get("is_superadmin") or token_payload.get("role") == "superadmin" or token_payload.get("sub") == "superadmin":
+        return token_payload
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Super Admin access required for this action.",
+    )
+

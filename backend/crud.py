@@ -226,6 +226,16 @@ async def delete_employee(db, employee_id: str, performed_by: str = "System", us
     return True
 
 async def get_employee(db, employee_id: str):
+    if employee_id == "superadmin":
+        import os
+        return {
+            "id": "superadmin",
+            "name": "Super Admin",
+            "email": os.getenv("SUPERADMIN_EMAIL", "superadmin@hkdigiverse.com"),
+            "role": "superadmin",
+            "is_superadmin": True,
+            "status": "active"
+        }
     try:
         doc = await db.employees.find_one({"_id": ObjectId(employee_id)})
         return fix_id(doc)
@@ -2309,11 +2319,20 @@ async def authenticate_user(db, login_data: schemas.LoginRequest):
             user_fixed["permissions"] = []
             
         # Generate JWT token
-        token = auth.create_access_token(data={"sub": user_id, "role": user.get("role", "")})
+        token = auth.create_access_token(data={"sub": user_id, "role": user.get("role", ""), "company_id": user.get("company_id") or user.get("company_code") or "hk_digiverse_default"})
         
-        # The frontend expects {user: ...} right now, we'll wrap it in main.py
-        # Actually main.py returns {"message": "...", "user": user}
-        # Let's add token to the returned object
+        # Look up company info for tenant branding
+        c_code = user.get("company_id") or user.get("company_code") or "hk_digiverse_default"
+        company = await db.companies.find_one({"$or": [{"company_code": c_code}, {"_id": c_code}]})
+        if company:
+            user_fixed["company_id"] = c_code
+            user_fixed["company_name"] = company.get("company_name", user.get("company_name", "HK DigiVerse"))
+            user_fixed["company_logo"] = company.get("logo_url", "")
+        else:
+            user_fixed["company_id"] = c_code
+            user_fixed["company_name"] = user.get("company_name", "HK DigiVerse")
+            user_fixed["company_logo"] = ""
+
         user_fixed["token"] = token
             
         return user_fixed

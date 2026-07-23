@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 from contextlib import asynccontextmanager
-import crud, schemas, database, auth
+import crud, schemas, database, auth, super_admin, purchase
 import uvicorn
 import os
 import uuid
@@ -675,6 +675,8 @@ async def lifespan(app):
     # Reload trigger: 1
 
 app = FastAPI(title="HRMS API", lifespan=lifespan)
+app.include_router(super_admin.router)
+app.include_router(purchase.router)
 
 from fastapi.exceptions import RequestValidationError
 @app.exception_handler(RequestValidationError)
@@ -758,7 +760,11 @@ app.mount("/uploads", SafeStaticFiles(directory=UPLOAD_DIR), name="uploads")
 from fastapi import Request
 from jose import jwt
 
-EXEMPT_PATHS = ["/login", "/time", "/", "/docs", "/openapi.json", "/redoc"]
+EXEMPT_PATHS = [
+    "/login", "/time", "/", "/docs", "/openapi.json", "/redoc",
+    "/super-admin/login", "/super-admin/verify-otp", "/super-admin/public-purchase",
+    "/purchase/options", "/purchase/calculate", "/purchase/checkout"
+]
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
@@ -990,7 +996,18 @@ async def verify_otp(otp_data: schemas.VerifyOTPRequest, db=Depends(get_db)):
     else:
         user_fixed["permissions"] = []
         
-    token = auth.create_access_token(data={"sub": user_id, "role": user.get("role", "")})
+    c_code = user.get("company_id") or user.get("company_code") or "hk_digiverse_default"
+    company = await db.companies.find_one({"$or": [{"company_code": c_code}, {"_id": c_code}]})
+    if company:
+        user_fixed["company_id"] = c_code
+        user_fixed["company_name"] = company.get("company_name", user.get("company_name", "HK DigiVerse"))
+        user_fixed["company_logo"] = company.get("logo_url", "")
+    else:
+        user_fixed["company_id"] = c_code
+        user_fixed["company_name"] = user.get("company_name", "HK DigiVerse")
+        user_fixed["company_logo"] = ""
+
+    token = auth.create_access_token(data={"sub": user_id, "role": user.get("role", ""), "company_id": c_code})
     user_fixed["token"] = token
     
     return {"message": "Login successful", "user": user_fixed, "token": token, "require_otp": False}

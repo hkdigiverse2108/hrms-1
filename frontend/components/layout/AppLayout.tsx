@@ -77,7 +77,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { user, isLoading, logout } = useUserContext();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
-  const isPublicPage = pathname.startsWith("/login") || pathname.startsWith("/register") || pathname.startsWith("/feedback/") || pathname.startsWith("/f/");
+  const isPublicPage = pathname.startsWith("/login") || pathname.startsWith("/register") || pathname.startsWith("/feedback/") || pathname.startsWith("/f/") || pathname.startsWith("/super-admin");
 
   // Inactivity auto-punch-out and recovery states
   const [showRecoveryModal, setShowRecoveryModal] = useState(false);
@@ -718,7 +718,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
   }, [user, isLoading, isPublicPage, router]);
  
   if (isPublicPage) {
-    return <main className="flex-1 w-full h-screen bg-white">{children}</main>;
+    const isSuperAdminRoute = pathname.startsWith("/super-admin");
+    return <main className={`flex-1 w-full min-h-screen overflow-y-auto ${isSuperAdminRoute ? "bg-[#F8FAFC]" : "bg-white"}`}>{children}</main>;
   }
  
   if (isLoading || (!user && !isPublicPage) || (user && permissionsLoading)) {
