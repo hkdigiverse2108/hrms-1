@@ -721,11 +721,11 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                             {activeDateRange?.from ? (
                               activeDateRange.to ? (
                                 <>
-                                  {format(activeDateRange.from, "LLL dd, y")} -{" "}
-                                  {format(activeDateRange.to, "LLL dd, y")}
+                                  {format(activeDateRange.from, "dd/MM/yyyy")} -{" "}
+                                  {format(activeDateRange.to, "dd/MM/yyyy")}
                                 </>
                               ) : (
-                                format(activeDateRange.from, "LLL dd, y")
+                                format(activeDateRange.from, "dd/MM/yyyy")
                               )
                             ) : (
                               <span>Pick a date range</span>
@@ -822,7 +822,7 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                                       <tr key={task.id} className="hover:bg-slate-50/50 transition-colors group">
                                         <td className="p-4">
                                           <span className={`font-bold text-[10px] rounded px-2.5 py-1 ${isOverdue ? 'bg-red-800 text-white' : 'bg-slate-100 text-slate-700'}`}>
-                                            {task.dueDate || '-'}
+                                            {task.dueDate ? format(new Date(task.dueDate), 'dd/MM/yyyy') : '-'}
                                           </span>
                                         </td>
                                         <td className="p-4 font-bold text-slate-800">
@@ -872,7 +872,7 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                                       <td className="p-4 font-semibold text-slate-700">
                                         <div className="flex items-center gap-1.5">
                                           <CalendarIcon className="w-3.5 h-3.5 text-slate-400" />
-                                          <span>{task.dueDate || 'No Date'}</span>
+                                          <span>{task.dueDate ? format(new Date(task.dueDate), 'dd/MM/yyyy') : 'No Date'}</span>
                                         </div>
                                       </td>
                                       <td className="p-4 font-bold text-slate-800">

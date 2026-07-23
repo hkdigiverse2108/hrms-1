@@ -139,7 +139,7 @@ export function FollowUpDialog({ lead, onUpdate, userId, userName }: FollowUpDia
                           {f.nextFollowUpDate && (
                             <div className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-100 rounded px-1.5 py-0.5 text-[9.5px] font-bold">
                               <Calendar className="w-2.5 h-2.5 text-amber-600" />
-                              Next Follow-up: {dayjs(f.nextFollowUpDate).format("DD MMM YYYY, hh:mm A")}
+                              Next Follow-up: {dayjs(f.nextFollowUpDate).format("DD/MM/YYYY, hh:mm A")}
                             </div>
                           )}
                         </div>

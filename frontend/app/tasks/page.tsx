@@ -1439,11 +1439,11 @@ export default function TaskManagementPage() {
                         {activeDateRange?.from ? (
                           activeDateRange.to ? (
                             <>
-                              {format(activeDateRange.from, "LLL dd")} -{" "}
-                              {format(activeDateRange.to, "LLL dd")}
+                              {format(activeDateRange.from, "dd/MM/yyyy")} -{" "}
+                              {format(activeDateRange.to, "dd/MM/yyyy")}
                             </>
                           ) : (
-                            format(activeDateRange.from, "LLL dd, y")
+                            format(activeDateRange.from, "dd/MM/yyyy")
                           )
                         ) : (
                           <span>Pick a date range</span>
@@ -1886,7 +1886,7 @@ export default function TaskManagementPage() {
                           <PopoverTrigger asChild>
                             <div className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-2 py-1 rounded-md text-sm font-medium w-[130px] border border-transparent hover:border-border transition-colors">
                               <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-                              {task.dueDate ? format(new Date(task.dueDate), "MMM d, yyyy") : <span className="text-muted-foreground font-normal">Set date</span>}
+                              {task.dueDate ? format(new Date(task.dueDate), "dd/MM/yyyy") : <span className="text-muted-foreground font-normal">Set date</span>}
                             </div>
                           </PopoverTrigger>
                           <PopoverContent className="w-auto p-0" align="start">
@@ -1915,7 +1915,7 @@ export default function TaskManagementPage() {
                       ) : (
                         <div className="flex items-center gap-2 px-2 py-1 rounded-md text-sm font-medium w-[130px] border border-transparent">
                           <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-                          {task.dueDate ? format(new Date(task.dueDate), "MMM d, yyyy") : <span className="text-muted-foreground font-normal">Set date</span>}
+                          {task.dueDate ? format(new Date(task.dueDate), "dd/MM/yyyy") : <span className="text-muted-foreground font-normal">Set date</span>}
                         </div>
                       )}
                     </td>

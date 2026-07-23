@@ -1006,7 +1006,7 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
                           <div key={i} className="text-sm p-2 rounded bg-slate-50 border border-slate-100">
                             <div className="flex justify-between items-start mb-1">
                               <span className="font-medium text-slate-700">{log.status}</span>
-                              <span className="text-[10px] text-slate-400">{dayjs(log.timestamp).format('MMM D, h:mm A')}</span>
+                              <span className="text-[10px] text-slate-400">{dayjs(log.timestamp).format('DD/MM/YYYY, hh:mm A')}</span>
                             </div>
                             <div className="text-xs text-slate-500">by {log.user}</div>
                             {log.reason && (
