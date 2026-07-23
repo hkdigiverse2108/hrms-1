@@ -838,8 +838,8 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                                             {task.stage || '-'}
                                           </Badge>
                                         </td>
-                                        <td className="p-4">
-                                          <div className="font-bold text-slate-800">{task.title}</div>
+                                        <td className="p-4" title={task.title}>
+                                          <div className="font-bold text-slate-800 truncate max-w-[400px]">{task.title}</div>
                                           <div className="text-[10px] text-slate-400 mt-0.5">
                                             Assigned by: {task.originalTask?.assignerName || 'TL Graphics'} {task.originalTask?.assigneeName ? `Assigned to: ${task.originalTask.assigneeName}` : `Assigned to: ${currentUser?.name || 'User'}`}
                                           </div>
@@ -878,8 +878,8 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                                       <td className="p-4 font-bold text-slate-800">
                                         {task.projectName || '-'}
                                       </td>
-                                      <td className="p-4">
-                                        <div className="font-semibold text-slate-700">{task.title}</div>
+                                      <td className="p-4" title={`${task.title}${task.description ? '\n' + task.description : ''}`}>
+                                        <div className="font-semibold text-slate-700 truncate max-w-[400px]">{task.title}</div>
                                         {task.description && <div className="text-[10px] text-slate-400 mt-0.5 truncate max-w-[400px]">{task.description}</div>}
                                       </td>
                                       <td className="p-4">
