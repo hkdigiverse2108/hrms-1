@@ -3539,6 +3539,37 @@ async def calculate_next_followup_date(db, start_date_str: str, config: dict) ->
             
     return None
 
+async def bulk_assign_leads(db, lead_ids: List[str], assigned_to, performed_by: str = None, user_name: str = None):
+    obj_ids = [ObjectId(lid) if ObjectId.is_valid(lid) else lid for lid in lead_ids]
+    log_entry = {
+        "action": "Assigned (Bulk)",
+        "performedBy": performed_by,
+        "userName": user_name,
+        "timestamp": datetime.now(),
+        "details": f"Bulk assigned to {assigned_to}"
+    }
+
+    # Extract plain data if assigned_to is a pydantic model (it might be RobustAssignedTo, which is a Union, so it could be str or dict)
+    assigned_val = assigned_to
+    if hasattr(assigned_to, 'model_dump'):
+        assigned_val = assigned_to.model_dump()
+    elif isinstance(assigned_to, list):
+        assigned_val = [v.model_dump() if hasattr(v, 'model_dump') else v for v in assigned_to]
+
+    result = await db.leads.update_many(
+        {"_id": {"$in": obj_ids}},
+        {
+            "$set": {"assignedTo": assigned_val, "updated_at": datetime.now()},
+            "$push": {"logs": log_entry}
+        }
+    )
+    return result.modified_count
+
+async def bulk_delete_leads(db, lead_ids: List[str]):
+    obj_ids = [ObjectId(lid) if ObjectId.is_valid(lid) else lid for lid in lead_ids]
+    result = await db.leads.delete_many({"_id": {"$in": obj_ids}})
+    return result.deleted_count
+
 async def create_client(db, client: schemas.ClientCreate):
     client_dict = client.dict()
     performedBy = client_dict.pop("performedBy", "Unknown")

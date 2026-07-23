@@ -1631,6 +1631,15 @@ class LeadUpdate(BaseModel):
     reason: Optional[str] = None
     category: Optional[str] = None
 
+class BulkAssignLeads(BaseModel):
+    leadIds: List[str]
+    assignedTo: RobustAssignedTo
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
+
+class BulkDeleteLeads(BaseModel):
+    leadIds: List[str]
+
 class Lead(LeadBase):
     id: str
     class Config:
