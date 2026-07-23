@@ -168,7 +168,7 @@ export default function CreativeClientsPage() {
     if (!user) return false;
     const r = (user.role || "").toLowerCase();
     const d = (user.designation || "").toLowerCase();
-    const fullRoles = ["admin", "manager", "social media manager", "smm", "director", "head", "super admin", "digital marketer", "digital marketing", "team leader", "sub admin", "sub-admin"];
+    const fullRoles = ["admin", "manager", "social media manager", "smm", "director", "head", "super admin", "digital marketer", "digital marketing", "team leader", "sub admin", "sub-admin", "hr"];
     if (fullRoles.includes(r) || fullRoles.includes(d) || r.includes("social media") || d.includes("social media") || r.includes("digital marketing") || d.includes("digital marketing")) {
       return true;
     }
@@ -185,7 +185,7 @@ export default function CreativeClientsPage() {
     if (!user) return false;
     const r = (user.role || "").toLowerCase();
     const d = (user.designation || "").toLowerCase();
-    const allAccessRoles = ["admin", "super admin", "manager", "director", "head", "team leader", "sub admin", "sub-admin"];
+    const allAccessRoles = ["admin", "super admin", "manager", "director", "head", "team leader", "sub admin", "sub-admin", "hr"];
     
     if (allAccessRoles.includes(r) || allAccessRoles.includes(d) || d.includes("head") || d.includes("manager") || d.includes("leader") || r.includes("admin")) {
       return true;
