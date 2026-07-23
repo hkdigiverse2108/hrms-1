@@ -1502,7 +1502,7 @@ export default function SalesPage() {
                 <PopoverContent className="w-52 p-3 bg-white shadow-md border border-slate-100 rounded-lg z-50">
                   <Label className="text-[10px] uppercase font-black text-slate-400 mb-2 block">Assign Employees</Label>
                   <div className="max-h-40 overflow-y-auto space-y-1.5 bg-slate-50/50 p-2 rounded border border-slate-100">
-                    {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'admin').map(emp => {
+                    {employees.map(emp => {
                       const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
                       return (
                         <label key={emp.id} className="flex items-center gap-2 text-xs font-semibold text-slate-600 cursor-pointer">
@@ -2090,7 +2090,7 @@ export default function SalesPage() {
                           <Check className={`mr-2 h-4 w-4 ${salesEmployeeFilter === "all" ? "opacity-100" : "opacity-0"}`} />
                           All Employees
                         </CommandItem>
-                        {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'admin').map(emp => {
+                        {employees.map(emp => {
                           const empName = emp.name || emp.firstName || "";
                           const empVal = `${empName}|${emp.id}`;
                           return (
@@ -2212,7 +2212,7 @@ export default function SalesPage() {
                                       <Check className={`mr-2 h-4 w-4 ${targetForm.employeeId === "all" ? "opacity-100" : "opacity-0"}`} />
                                       All Employees
                                     </CommandItem>
-                                    {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'admin').map(emp => {
+                                    {employees.map(emp => {
                                       const empName = emp.name || emp.firstName || "";
                                       return (
                                         <CommandItem key={emp.id} value={empName} onSelect={() => setTargetForm({...targetForm, employeeId: emp.id})}>
@@ -2545,7 +2545,7 @@ export default function SalesPage() {
                                       <CommandList>
                                         <CommandEmpty>No employee found.</CommandEmpty>
                                         <CommandGroup>
-                                          {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'admin').map(emp => {
+                                          {employees.map(emp => {
                                             const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
                                             const empVal = `${empName}|${emp.id}`;
                                             return (
@@ -2857,7 +2857,7 @@ export default function SalesPage() {
                                 <Check className={`mr-2 h-4 w-4 ${reportEmployeeFilter === "all" ? "opacity-100" : "opacity-0"}`} />
                                 All Employees
                               </CommandItem>
-                              {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'admin').map(emp => {
+                              {employees.map(emp => {
                                 const empName = emp.name || emp.firstName || "";
                                 const empVal = `${empName}|${emp.id}`;
                                 return (

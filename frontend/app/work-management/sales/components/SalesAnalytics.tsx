@@ -21,9 +21,10 @@ interface Lead {
   status: string;
   date: string;
   closedDate?: string;
-  assignedTo: string | string[];
+  assignedTo: any;
   expectedIncome?: string | number;
   category?: string;
+  source?: string;
 }
 
 interface Employee {
@@ -42,6 +43,7 @@ interface SalesTarget {
   targetAmount?: number;
   month?: string;
   year?: number | string;
+  employeeName?: string;
   // ... other fields
 }
 
@@ -498,12 +500,7 @@ export function SalesAnalytics() {
                       <Check className={`mr-2 h-4 w-4 ${selectedEmployee === "all" ? "opacity-100" : "opacity-0"}`} />
                       All Employees
                     </CommandItem>
-                    {Array.from(new Set(employees.filter(e => {
-                      const dept = (e.department || '').toLowerCase();
-                      const role = ((e as any).role || '').toLowerCase();
-                      const name = (e.name || '').toLowerCase();
-                      return dept === 'sales' || role === 'admin' || dept === 'admin' || name.includes('admin');
-                    }).map(emp => emp.name || `${emp.firstName} ${emp.lastName}`))).filter(Boolean).map((name, idx) => (
+                    {Array.from(new Set(employees.map(emp => emp.name || `${emp.firstName} ${emp.lastName}`))).filter(Boolean).map((name, idx) => (
                       <CommandItem key={idx} value={name} onSelect={(val) => {
                          // Shadcn command lowercase values, but we need exact match. Find the original case.
                          const originalName = Array.from(new Set(employees.map(e => e.name || `${e.firstName} ${e.lastName}`))).find(n => n?.toLowerCase() === val) || val;
