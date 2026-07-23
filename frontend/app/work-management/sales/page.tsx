@@ -63,6 +63,8 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Check } from "lucide-react";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { useConfirm } from "@/context/ConfirmContext";
 import { DailyProgressView } from "@/components/hrms/DailyProgressView";
@@ -2071,18 +2073,38 @@ export default function SalesPage() {
 
           <div className="flex flex-wrap items-center gap-2 self-start xl:self-auto w-full xl:w-auto justify-start xl:justify-end shrink-0">
             {isAdmin && (
-              <Select value={salesEmployeeFilter} onValueChange={setSalesEmployeeFilter}>
-                <SelectTrigger className="w-[150px] h-9 border-slate-200">
-                  <SelectValue placeholder="Employee" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Employees</SelectItem>
-                  {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'admin').map(emp => {
-                    const empName = emp.name || emp.firstName || "";
-                    return <SelectItem key={emp.id} value={`${empName}|${emp.id}`}>{empName}</SelectItem>;
-                  })}
-                </SelectContent>
-              </Select>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-[150px] justify-between h-9 text-xs border-slate-200 shadow-none font-medium">
+                    {salesEmployeeFilter === "all" ? "All Employees" : (employees.find((e: any) => `${e.name || e.firstName || ""}|${e.id}` === salesEmployeeFilter) ? (employees.find((e: any) => `${e.name || e.firstName || ""}|${e.id}` === salesEmployeeFilter)?.name || employees.find((e: any) => `${e.name || e.firstName || ""}|${e.id}` === salesEmployeeFilter)?.firstName) : "Employee")}
+                    <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[200px] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search employee..." className="h-9" />
+                    <CommandList>
+                      <CommandEmpty>No employee found.</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem value="all" onSelect={() => setSalesEmployeeFilter("all")}>
+                          <Check className={`mr-2 h-4 w-4 ${salesEmployeeFilter === "all" ? "opacity-100" : "opacity-0"}`} />
+                          All Employees
+                        </CommandItem>
+                        {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'admin').map(emp => {
+                          const empName = emp.name || emp.firstName || "";
+                          const empVal = `${empName}|${emp.id}`;
+                          return (
+                            <CommandItem key={emp.id} value={empName} onSelect={() => setSalesEmployeeFilter(empVal)}>
+                              <Check className={`mr-2 h-4 w-4 ${salesEmployeeFilter === empVal ? "opacity-100" : "opacity-0"}`} />
+                              {empName}
+                            </CommandItem>
+                          );
+                        })}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             )}
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
               <SelectTrigger className="w-[150px] h-9 border-slate-200">
@@ -2173,16 +2195,37 @@ export default function SalesPage() {
 
                         <div className="space-y-1.5">
                           <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Select Employee</label>
-                          <Select value={targetForm.employeeId} onValueChange={(val) => setTargetForm({...targetForm, employeeId: val})}>
-                            <SelectTrigger className="h-10 text-sm">
-                              <SelectValue placeholder="Select Employee" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'admin').map(emp => (
-                                <SelectItem key={emp.id} value={emp.id}>{emp.name || emp.firstName}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button variant="outline" className="w-full justify-between h-10 text-sm border-slate-200 font-medium">
+                                {targetForm.employeeId === "all" ? "All Employees" : (employees.find((e: any) => e.id === targetForm.employeeId) ? (employees.find((e: any) => e.id === targetForm.employeeId)?.name || employees.find((e: any) => e.id === targetForm.employeeId)?.firstName) : "Select Employee")}
+                                <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[300px] p-0" align="start">
+                              <Command>
+                                <CommandInput placeholder="Search employee..." className="h-9" />
+                                <CommandList>
+                                  <CommandEmpty>No employee found.</CommandEmpty>
+                                  <CommandGroup>
+                                    <CommandItem value="all" onSelect={() => setTargetForm({...targetForm, employeeId: "all"})}>
+                                      <Check className={`mr-2 h-4 w-4 ${targetForm.employeeId === "all" ? "opacity-100" : "opacity-0"}`} />
+                                      All Employees
+                                    </CommandItem>
+                                    {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'admin').map(emp => {
+                                      const empName = emp.name || emp.firstName || "";
+                                      return (
+                                        <CommandItem key={emp.id} value={empName} onSelect={() => setTargetForm({...targetForm, employeeId: emp.id})}>
+                                          <Check className={`mr-2 h-4 w-4 ${targetForm.employeeId === emp.id ? "opacity-100" : "opacity-0"}`} />
+                                          {empName}
+                                        </CommandItem>
+                                      );
+                                    })}
+                                  </CommandGroup>
+                                </CommandList>
+                              </Command>
+                            </PopoverContent>
+                          </Popover>
                         </div>
 
                         {targetForm.type === "Custom" ? (
@@ -2489,17 +2532,34 @@ export default function SalesPage() {
                             <div className="p-3">
                               <div className="space-y-1.5 mb-3">
                                 <Label className="text-[10px] uppercase font-black text-slate-400">Select Salesperson</Label>
-                                <Select value={selectedSlabEmployee} onValueChange={setSelectedSlabEmployee}>
-                                  <SelectTrigger className="h-9">
-                                    <SelectValue placeholder="Choose an employee..." />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'admin').map(emp => {
-                                      const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
-                                      return <SelectItem key={emp.id} value={`${empName}|${emp.id}`}>{empName}</SelectItem>
-                                    })}
-                                  </SelectContent>
-                                </Select>
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <Button variant="outline" className="w-full justify-between h-9 text-xs border-slate-200 font-medium">
+                                      {selectedSlabEmployee ? (employees.find((e: any) => `${e.name || `${e.firstName} ${e.lastName}`}|${e.id}` === selectedSlabEmployee) ? (employees.find((e: any) => `${e.name || `${e.firstName} ${e.lastName}`}|${e.id}` === selectedSlabEmployee)?.name || `${employees.find((e: any) => `${e.name || `${e.firstName} ${e.lastName}`}|${e.id}` === selectedSlabEmployee)?.firstName} ${employees.find((e: any) => `${e.name || `${e.firstName} ${e.lastName}`}|${e.id}` === selectedSlabEmployee)?.lastName}`) : "Employee") : "Choose an employee..."}
+                                      <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-[300px] p-0" align="start">
+                                    <Command>
+                                      <CommandInput placeholder="Search employee..." className="h-9" />
+                                      <CommandList>
+                                        <CommandEmpty>No employee found.</CommandEmpty>
+                                        <CommandGroup>
+                                          {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'admin').map(emp => {
+                                            const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
+                                            const empVal = `${empName}|${emp.id}`;
+                                            return (
+                                              <CommandItem key={emp.id} value={empName} onSelect={() => setSelectedSlabEmployee(empVal)}>
+                                                <Check className={`mr-2 h-4 w-4 ${selectedSlabEmployee === empVal ? "opacity-100" : "opacity-0"}`} />
+                                                {empName}
+                                              </CommandItem>
+                                            );
+                                          })}
+                                        </CommandGroup>
+                                      </CommandList>
+                                    </Command>
+                                  </PopoverContent>
+                                </Popover>
                               </div>
                               
                               {selectedSlabEmployee ? (
@@ -2780,18 +2840,38 @@ export default function SalesPage() {
                 <CardHeader className="px-6 py-4 border-b border-slate-100 flex flex-row items-center justify-between space-y-0">
                   <CardTitle className="text-sm font-bold text-slate-700">Sales Performance Report</CardTitle>
                   <div className="flex items-center gap-3">
-                    <Select value={reportEmployeeFilter} onValueChange={setReportEmployeeFilter}>
-                      <SelectTrigger className="h-8 w-[150px] text-xs">
-                        <SelectValue placeholder="Filter Employee" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Employees</SelectItem>
-                        {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'admin').map(emp => {
-                            const empName = emp.name || emp.firstName || "";
-                            return <SelectItem key={emp.id} value={`${empName}|${emp.id}`}>{empName}</SelectItem>;
-                          })}
-                      </SelectContent>
-                    </Select>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-[150px] justify-between h-8 text-xs border-slate-200 shadow-none font-medium">
+                          {reportEmployeeFilter === "all" ? "All Employees" : (employees.find((e: any) => `${e.name || e.firstName || ""}|${e.id}` === reportEmployeeFilter) ? (employees.find((e: any) => `${e.name || e.firstName || ""}|${e.id}` === reportEmployeeFilter)?.name || employees.find((e: any) => `${e.name || e.firstName || ""}|${e.id}` === reportEmployeeFilter)?.firstName) : "Employee")}
+                          <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[200px] p-0" align="start">
+                        <Command>
+                          <CommandInput placeholder="Search employee..." className="h-9" />
+                          <CommandList>
+                            <CommandEmpty>No employee found.</CommandEmpty>
+                            <CommandGroup>
+                              <CommandItem value="all" onSelect={() => setReportEmployeeFilter("all")}>
+                                <Check className={`mr-2 h-4 w-4 ${reportEmployeeFilter === "all" ? "opacity-100" : "opacity-0"}`} />
+                                All Employees
+                              </CommandItem>
+                              {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'admin').map(emp => {
+                                const empName = emp.name || emp.firstName || "";
+                                const empVal = `${empName}|${emp.id}`;
+                                return (
+                                  <CommandItem key={emp.id} value={empName} onSelect={() => setReportEmployeeFilter(empVal)}>
+                                    <Check className={`mr-2 h-4 w-4 ${reportEmployeeFilter === empVal ? "opacity-100" : "opacity-0"}`} />
+                                    {empName}
+                                  </CommandItem>
+                                );
+                              })}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                     <div className="relative">
                       <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
                       <Input 
