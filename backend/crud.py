@@ -279,6 +279,13 @@ async def update_employee(db, employee_id: str, employee_update: schemas.Employe
         return None
     
     update_data = employee_update.dict(exclude_unset=True)
+
+    # Ensure sub_department is synced in both naming styles
+    if "sub_department" in update_data or "subDepartment" in update_data:
+        sub_dept_val = update_data.get("sub_department") or update_data.get("subDepartment") or ""
+        update_data["sub_department"] = sub_dept_val
+        update_data["subDepartment"] = sub_dept_val
+
     sync_active_bond(update_data)
     
     # If a new profile photo is uploaded/edited, delete the old one from the uploads folder
@@ -1453,6 +1460,12 @@ async def create_employee(db, employee: schemas.EmployeeCreate, performed_by: st
     
     employee_dict = employee.dict()
     employee_dict["name"] = name
+
+    # Ensure sub_department is synced in both naming styles
+    sub_dept_val = employee_dict.get("sub_department") or employee_dict.get("subDepartment") or ""
+    employee_dict["sub_department"] = sub_dept_val
+    employee_dict["subDepartment"] = sub_dept_val
+
     sync_active_bond(employee_dict)
     
     if next_id:

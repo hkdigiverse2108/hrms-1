@@ -195,10 +195,14 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
         // Try exact match
         let value = initialData[k]
         
-        // Try case-insensitive match if not found
+        if (k === 'sub_department' && (value === undefined || value === null)) {
+          value = (initialData as any).subDepartment ?? (initialData as any).sub_dept ?? (initialData as any).subDept
+        }
+
+        // Try case-insensitive and underscore-insensitive match if not found
         if (value === undefined || value === null) {
-          const lowerKey = k.toLowerCase()
-          const foundKey = dataKeys.find(dk => dk.toLowerCase() === lowerKey)
+          const cleanKey = k.toLowerCase().replace(/_/g, '')
+          const foundKey = dataKeys.find(dk => dk.toLowerCase().replace(/_/g, '') === cleanKey)
           if (foundKey) {
             value = (initialData as any)[foundKey]
           }
@@ -451,7 +455,12 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
               required
               value={formData.sub_department || ''} 
               onValueChange={(v: string) => handleChange('sub_department', v)} 
-              options={subDepartments.filter((d: any) => d.department === formData.department).map((d: any) => ({ label: d.name, value: d.name }))} 
+              options={subDepartments.filter((d: any) => {
+                if (!formData.department) return true;
+                const dDept = (d.department || d.department_name || '').trim().toLowerCase();
+                const formDept = (formData.department || '').trim().toLowerCase();
+                return !dDept || !formDept || dDept === formDept;
+              }).map((d: any) => ({ label: d.name || d.title, value: d.name || d.title }))} 
               placeholder="Select sub department" 
             />
             <FormSelect key={`des-${designations.length}-${formData.sub_department}`} label="Designation" id="designation" required value={formData.designation} onValueChange={(v: string) => handleChange('designation', v)} options={designations.map((d: any) => ({ label: d.title, value: d.title }))} placeholder="Select designation" />

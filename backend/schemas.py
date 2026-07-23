@@ -223,6 +223,7 @@ class EmployeeBase(BaseModel):
     dob: Optional[RobustDate] = None
     department: Optional[str] = None
     sub_department: Optional[str] = ''
+    subDepartment: Optional[str] = ''
 
     designation: Optional[str] = None
     joinDate: Optional[RobustDate] = None
@@ -277,6 +278,8 @@ class EmployeeUpdate(BaseModel):
     password: Optional[str] = None
     dob: Optional[RobustDate] = None
     department: Optional[str] = None
+    sub_department: Optional[str] = None
+    subDepartment: Optional[str] = None
     designation: Optional[str] = None
     position: Optional[str] = None
     joinDate: Optional[RobustDate] = None

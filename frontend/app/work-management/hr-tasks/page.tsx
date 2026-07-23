@@ -18,6 +18,7 @@ import { API_URL } from "@/lib/config";
 import { useUser } from "@/hooks/useUser";
 import { toast } from "sonner";
 import { useConfirm } from "@/context/ConfirmContext";
+import { formatDisplayDate } from "@/lib/utils";
 
 export default function HRTasksPage() {
   const { user } = useUser();
@@ -488,7 +489,7 @@ export default function HRTasksPage() {
                             </div>
                             <div className="flex items-center gap-1 font-semibold text-slate-700">
                               <Calendar className="w-3 h-3 text-slate-400" />
-                              <span>Due: {task.dueDate || "-"}</span>
+                              <span>Due: {formatDisplayDate(task.dueDate)}</span>
                             </div>
                           </div>
                         </CardContent>
