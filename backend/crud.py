@@ -8948,6 +8948,13 @@ async def calculate_public_slots(db, employee_id: str, date_str: str, config_id:
         all_member_ids.extend([str(x) for x in config.get("employeeIds")])
     all_member_ids = list(set(all_member_ids))
 
+    # Sync Google Calendar events for all members before calculating available slots
+    sync_tasks = []
+    for member_id in all_member_ids:
+        sync_tasks.append(sync_google_events(db, member_id, date_str, date_str))
+    if sync_tasks:
+        await asyncio.gather(*sync_tasks, return_exceptions=True)
+
     query = {
         "$or": [
             {"employeeId": {"$in": all_member_ids}},
@@ -8971,7 +8978,12 @@ async def calculate_public_slots(db, employee_id: str, date_str: str, config_id:
         s_start = s.get("startTime")
         s_end = s.get("endTime")
         if s_start and s_end:
-            existing_ranges.append((time_str_to_mins(s_start), time_str_to_mins(s_end)))
+            start_mins = time_str_to_mins(s_start)
+            end_mins = time_str_to_mins(s_end)
+            # Full day event (00:00 to 00:00) blocks the entire day
+            if start_mins == 0 and end_mins == 0:
+                end_mins = 1440
+            existing_ranges.append((start_mins, end_mins))
             
     candidate_slots = []
     for window in day_slots:
