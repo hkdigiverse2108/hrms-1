@@ -2010,10 +2010,12 @@ class DocumentRequestBase(BaseModel):
     employeeName: str
     documentType: str
     reason: Optional[str] = None
-    status: str = "Pending" # Pending, Approved, Rejected, Generated, Sent
+    status: str = "Pending" # Pending, Approved, Rejected, Generated, Sent, Pending Signature, Signed
     requestDate: RobustDate
     fileName: Optional[str] = None
     fileUrl: Optional[str] = None
+    htmlContent: Optional[str] = None
+    requireSignature: Optional[bool] = False
     generatedDate: Optional[RobustDate] = None
     sentDate: Optional[RobustDate] = None
     neededByDate: Optional[RobustDate] = None
@@ -2025,6 +2027,8 @@ class DocumentRequestUpdate(BaseModel):
     status: Optional[str] = None
     fileName: Optional[str] = None
     fileUrl: Optional[str] = None
+    htmlContent: Optional[str] = None
+    requireSignature: Optional[bool] = None
     generatedDate: Optional[RobustDate] = None
     sentDate: Optional[RobustDate] = None
     neededByDate: Optional[RobustDate] = None

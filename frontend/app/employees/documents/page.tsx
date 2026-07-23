@@ -55,6 +55,12 @@ export default function EmployeeDocumentsPage() {
   const [signatureEmployeeFilter, setSignatureEmployeeFilter] = useState('all')
   const [signatureStatusFilter, setSignatureStatusFilter] = useState('all')
   
+  // Sign Document Modal States
+  const [isSignModalOpen, setIsSignModalOpen] = useState(false)
+  const [selectedSignRequest, setSelectedSignRequest] = useState<any>(null)
+  const [signConsent, setSignConsent] = useState(false)
+  const [isSigning, setIsSigning] = useState(false)
+  
   // Deposit Ledger States
   const [isLedgerModalOpen, setIsLedgerModalOpen] = useState(false)
   const [ledgerLoading, setLedgerLoading] = useState(false)
@@ -437,6 +443,118 @@ export default function EmployeeDocumentsPage() {
     } catch (error) {
       console.error('Update request error:', error)
       toast.error('Error updating request')
+    }
+  }
+
+  const handleSignDocument = async () => {
+    if (!selectedSignRequest || !signConsent) return
+    setIsSigning(true)
+    try {
+      // 1. Fetch system settings for company signature
+      const sysRes = await fetch(`${API_URL}/system-settings`)
+      let systemSettings = null
+      if (sysRes.ok) systemSettings = await sysRes.json()
+
+      // 2. Prepare HTML
+      let html = selectedSignRequest.htmlContent || ''
+      const empSignUrl = user?.signatureUrl ? (user.signatureUrl.startsWith('http') ? user.signatureUrl : `${API_URL}${user.signatureUrl}`) : ''
+      const compSignUrl = systemSettings?.companySignatureUrl ? (systemSettings.companySignatureUrl.startsWith('http') ? systemSettings.companySignatureUrl : `${API_URL}${systemSettings.companySignatureUrl}`) : ''
+      
+      const empSignHtml = empSignUrl ? `<span style="display: inline-block; text-align: center; border-bottom: 1px solid black; margin: 0 5px; min-width: 100px; vertical-align: baseline;"><img src="${empSignUrl}" alt="Employee Signature" style="display: inline-block; max-height: 25px; max-width: 100px; object-fit: contain; vertical-align: bottom;" /></span>` : '<span style="display: inline-block; border-bottom: 1px solid black; color: #999; font-style: italic; min-width: 100px; text-align: center; margin: 0 5px; vertical-align: baseline;">[Signature Not Uploaded]</span>'
+      const compSignHtml = compSignUrl ? `<span style="display: inline-block; text-align: center; border-bottom: 1px solid black; margin: 0 5px; min-width: 100px; vertical-align: baseline;"><img src="${compSignUrl}" alt="Authorized Signature" style="display: inline-block; max-height: 25px; max-width: 100px; object-fit: contain; vertical-align: bottom;" /></span>` : '<span style="display: inline-block; border-bottom: 1px solid black; color: #999; font-style: italic; min-width: 100px; text-align: center; margin: 0 5px; vertical-align: baseline;">[Signature Not Uploaded]</span>'
+
+      html = html.replace(/<div id="employee-signature-placeholder"[^>]*>.*?<\/div>/g, empSignHtml)
+      html = html.replace(/<div id="company-signature-placeholder"[^>]*>.*?<\/div>/g, compSignHtml)
+
+      // 3. Render HTML in hidden container
+      const container = document.createElement('div')
+      container.style.position = 'fixed'
+      container.style.left = '-10000px'
+      container.style.top = '0'
+      const a4WidthPx = 794
+      container.style.width = `${a4WidthPx}px`
+      container.style.background = 'white'
+      container.innerHTML = `<div class="ql-container ql-snow border-none !font-sans"><div class="ql-editor">${html}</div></div>`
+      document.body.appendChild(container)
+      
+      const node = container.firstChild?.firstChild as HTMLElement
+      if (!node) throw new Error("Failed to parse HTML")
+
+      const domtoimage = (window as any).domtoimage
+      const { jsPDF } = (window as any).jspdf
+      if (!domtoimage || !jsPDF) throw new Error("PDF libraries not loaded")
+      
+      // small delay to let images load
+      await new Promise(res => setTimeout(res, 500))
+
+      const rect = node.getBoundingClientRect()
+      const nodeHeight = Math.max(1123, rect.height)
+      container.style.height = `${nodeHeight}px`
+      node.style.height = `${nodeHeight}px`
+
+      const scale = 4
+      const dataUrl = await domtoimage.toPng(node, {
+        bgcolor: '#ffffff',
+        width: a4WidthPx * scale,
+        height: nodeHeight * scale,
+        cacheBust: true,
+        style: {
+          transform: `scale(${scale})`,
+          transformOrigin: 'top left',
+          width: `${a4WidthPx}px`,
+          height: `${nodeHeight}px`,
+        }
+      })
+
+      document.body.removeChild(container)
+
+      const pdf = new jsPDF('p', 'mm', 'a4')
+      const pdfWidth = pdf.internal.pageSize.getWidth()
+      const pdfHeight = (nodeHeight * pdfWidth) / a4WidthPx
+      let heightLeft = pdfHeight
+      let position = 0
+      pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, pdfHeight)
+      heightLeft -= pdf.internal.pageSize.getHeight()
+      while (heightLeft > 1) {
+        position -= pdf.internal.pageSize.getHeight()
+        pdf.addPage()
+        pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, pdfHeight)
+        heightLeft -= pdf.internal.pageSize.getHeight()
+      }
+
+      const filename = `${selectedSignRequest.documentType.replace(/\s+/g, '_')}_Signed.pdf`
+      const pdfBlob = pdf.output('blob')
+      const pdfFile = new File([pdfBlob], filename, { type: 'application/pdf' })
+      const formDataUpload = new FormData()
+      formDataUpload.append('file', pdfFile)
+
+      const uploadRes = await fetch(`${API_URL}/upload`, { method: 'POST', body: formDataUpload })
+      if (!uploadRes.ok) throw new Error('Upload failed')
+      const uploadData = await uploadRes.json()
+      const absoluteUrl = uploadData.url.startsWith('http') ? uploadData.url : `${API_URL}${uploadData.url}`
+
+      const updateRes = await fetch(`${API_URL}/document-requests/${selectedSignRequest.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'Signed',
+          fileName: filename,
+          fileUrl: absoluteUrl,
+          htmlContent: null,
+          requireSignature: false,
+          sentDate: new Date().toISOString().split('T')[0]
+        })
+      })
+      if (!updateRes.ok) throw new Error('Failed to update request')
+      
+      toast.success('Document successfully signed!')
+      setIsSignModalOpen(false)
+      fetchRequests()
+    } catch (error: any) {
+      console.error(error)
+      toast.error(error.message || 'Error signing document')
+    } finally {
+      setIsSigning(false)
     }
   }
 
@@ -1151,6 +1269,16 @@ export default function EmployeeDocumentsPage() {
               <Download className="h-4 w-4" />
             </Button>
           </>
+        ) : record.status === 'Pending Signature' ? (
+          <Button 
+            className="bg-brand-teal hover:bg-brand-teal/90 text-white font-bold h-8 px-3 text-xs" 
+            onClick={() => {
+              setSelectedSignRequest(record);
+              setIsSignModalOpen(true);
+            }}
+          >
+            Review & Sign
+          </Button>
         ) : record.status === 'Rejected' ? (
           <span className="text-xs text-rose-600 font-bold uppercase">Rejected</span>
         ) : (
@@ -2179,6 +2307,39 @@ export default function EmployeeDocumentsPage() {
             <Button className="bg-brand-teal hover:bg-brand-teal/90 font-bold" onClick={handleSaveType} disabled={isSubmitting}>
               {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               {editingType ? 'Save Changes' : 'Create Type'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Sign Document Modal */}
+      <Dialog open={isSignModalOpen} onOpenChange={(open) => { setIsSignModalOpen(open); if(!open) setSignConsent(false); }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Review and Sign Document</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto p-4 bg-slate-50 border rounded-xl" dangerouslySetInnerHTML={{ __html: selectedSignRequest?.htmlContent || '' }} />
+          <div className="flex items-center gap-3 p-4 rounded-xl border border-slate-200 bg-white shadow-sm mt-4">
+            <input 
+              type="checkbox" 
+              id="sign-consent" 
+              className="w-5 h-5 text-brand-teal rounded border-slate-300 focus:ring-brand-teal cursor-pointer"
+              checked={signConsent}
+              onChange={(e) => setSignConsent(e.target.checked)}
+            />
+            <Label htmlFor="sign-consent" className="text-sm font-semibold text-slate-700 cursor-pointer">
+              I have reviewed this document and consent to applying my digital signature along with the company's authorized stamp/signature.
+            </Label>
+          </div>
+          <DialogFooter className="mt-2">
+            <Button variant="ghost" onClick={() => setIsSignModalOpen(false)}>Cancel</Button>
+            <Button 
+              className="bg-brand-teal hover:bg-brand-teal/90 font-bold" 
+              disabled={!signConsent || isSigning} 
+              onClick={handleSignDocument}
+            >
+              {isSigning ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              {isSigning ? 'Signing...' : 'Sign & Submit'}
             </Button>
           </DialogFooter>
         </DialogContent>
