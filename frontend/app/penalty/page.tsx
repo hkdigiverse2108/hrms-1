@@ -263,16 +263,45 @@ export default function RemarksPage() {
     }
   };
 
+  const getEmployeeRoleSubtitle = (employeeIdOrName: string, defaultRole?: string) => {
+    const emp = employees.find(e => 
+      e.id === employeeIdOrName || 
+      e.employeeId === employeeIdOrName || 
+      e.name === employeeIdOrName ||
+      e.name?.toLowerCase() === employeeIdOrName?.toLowerCase()
+    );
+
+    if (emp) {
+      const roleClean = (emp.role || "").toLowerCase().trim();
+      const isAdminOrSubAdmin = roleClean.includes('admin') || roleClean.includes('administrator') || roleClean.includes('founder');
+      if (isAdminOrSubAdmin) {
+        return emp.designation || emp.role || defaultRole || "Admin";
+      }
+      const subDept = emp.sub_department || emp.subDepartment;
+      const dept = emp.department;
+      if (emp.designation && subDept) {
+        return `${emp.designation} ${subDept}`;
+      } else if (emp.designation && dept) {
+        return `${emp.designation} ${dept}`;
+      } else if (emp.designation) {
+        return emp.designation;
+      }
+    }
+
+    return defaultRole || "Staff";
+  };
+
   const handleCreateRemark = async () => {
     if (!newRemark.employeeId || !newRemark.details) return;
     
     setIsSubmitting(true);
     try {
       const emp = employees.find(e => e.id === newRemark.employeeId || e.employeeId === newRemark.employeeId);
+      const empRole = getEmployeeRoleSubtitle(newRemark.employeeId, emp?.designation || "Staff");
       const payload = {
         ...newRemark,
         employeeName: emp?.name || "Unknown",
-        role: emp?.designation || "Staff",
+        role: empRole,
         avatar: emp?.profilePhoto || "",
         addedBy: user?.name || "Admin",
         date: new Date(newRemark.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -715,7 +744,7 @@ export default function RemarksPage() {
                   </div>
                   
                   <div className="font-extrabold text-slate-800 text-[14px] mt-3 leading-snug truncate w-full group-hover:text-brand-teal transition-colors duration-200">{item.name}</div>
-                  <div className="text-[11px] text-muted-foreground font-bold uppercase tracking-wider mt-0.5 truncate w-full">{item.role}</div>
+                  <div className="text-[11px] text-muted-foreground font-bold uppercase tracking-wider mt-0.5 truncate w-full">{getEmployeeRoleSubtitle(item.employeeId || item.name, item.role)}</div>
                   
                   <div className="mt-4 flex items-center justify-between w-full pt-3 border-t border-slate-100 text-xs">
                     <div className="text-left">
@@ -959,7 +988,7 @@ export default function RemarksPage() {
                         </Avatar>
                         <div>
                           <div className="font-bold text-foreground text-[14px] leading-tight">{remark.employeeName}</div>
-                          <div className="text-[12px] text-muted-foreground font-medium mt-0.5">{remark.role}</div>
+                          <div className="text-[12px] text-muted-foreground font-medium mt-0.5">{getEmployeeRoleSubtitle(remark.employeeId || remark.employeeName, remark.role)}</div>
                         </div>
                       </div>
                     </td>
