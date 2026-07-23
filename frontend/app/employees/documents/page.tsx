@@ -40,6 +40,21 @@ export default function EmployeeDocumentsPage() {
   const [payrolls, setPayrolls] = useState<any[]>([])
 
   useEffect(() => {
+    const scripts = [
+      'https://cdnjs.cloudflare.com/ajax/libs/dom-to-image/2.6.0/dom-to-image.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
+    ]
+    scripts.forEach(src => {
+      if (!document.querySelector(`script[src="${src}"]`)) {
+        const script = document.createElement('script')
+        script.src = src
+        script.async = true
+        document.body.appendChild(script)
+      }
+    })
+  }, [])
+
+  useEffect(() => {
     if (!permissionsLoading) {
       if (!isAdmin && !checkPermission('employee-documents', 'canView')) {
         router.push('/')
