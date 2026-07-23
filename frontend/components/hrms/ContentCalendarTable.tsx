@@ -112,6 +112,7 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
   const [overallMaxDate, setOverallMaxDate] = useState<Date | null>(null);
   const [downloadStartDate, setDownloadStartDate] = useState("");
   const [downloadEndDate, setDownloadEndDate] = useState("");
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
   const fetchOverallMaxDate = async () => {
     try {
@@ -651,7 +652,7 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
 
 
 
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
     if (entries.length === 0) {
       toast.error("No entries to download");
       return;
@@ -661,11 +662,35 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
       toast.error("Please select at least one column");
       return;
     }
-    exportPdf();
+    await exportPdf();
   };
 
-  const exportPdf = () => {
-    const doc = new jsPDF("landscape");
+  const exportPdf = async () => {
+    setIsDownloadingPdf(true);
+    try {
+      const doc = new jsPDF("landscape");
+
+      try {
+        const fontRes = await fetch("/fonts/ArialUnicode.ttf");
+        const blob = await fontRes.blob();
+        
+        const fontBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result as string;
+            const base64 = result.split(',')[1];
+            resolve(base64);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+        
+        doc.addFileToVFS("ArialUnicode.ttf", fontBase64);
+        doc.addFont("ArialUnicode.ttf", "ArialUnicode", "normal");
+        doc.setFont("ArialUnicode");
+      } catch (err) {
+        console.error("Failed to load Unicode font", err);
+      }
     
     const formatDateToDDMMYY = (dateStr: string) => {
       if (!dateStr) return "";
@@ -799,7 +824,7 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
       body: tableData,
       startY: 38,
       theme: 'grid',
-      styles: { fontSize: 8, cellPadding: 2, overflow: "linebreak", font: "helvetica" },
+      styles: { fontSize: 8, cellPadding: 2, overflow: "linebreak", font: "ArialUnicode" },
       headStyles: { fillColor: [13, 148, 136], textColor: 255, fontStyle: 'bold', halign: 'center' },
       alternateRowStyles: { fillColor: [248, 250, 252] },
       margin: { top: 44, right: 14, bottom: 20, left: 14 },
@@ -872,6 +897,9 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
     const safeCompanyName = companyName.replace(/[\\/:*?"<>|]/g, "");
     doc.save(`${safeCompanyName} ${monthLabel} Content Calendar.pdf`);
     setIsPdfDialogOpen(false);
+    } finally {
+      setIsDownloadingPdf(false);
+    }
   };
 
   const formatDateDisplay = (dateString: any) => {
@@ -1318,7 +1346,16 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsPdfDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleDownloadPdf} className="bg-brand-teal text-white">Download</Button>
+            <Button onClick={handleDownloadPdf} disabled={isDownloadingPdf} className="bg-brand-teal text-white">
+              {isDownloadingPdf ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Generating PDF...
+                </>
+              ) : (
+                "Download"
+              )}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
