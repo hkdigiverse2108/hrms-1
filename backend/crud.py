@@ -4409,7 +4409,8 @@ async def get_wm_tasks(db, userId: Optional[str] = None, role: Optional[str] = N
                 query["$or"] = [
                     {"assignedToId": {"$in": dept_emp_ids}},
                     {"department": dept},
-                    {"performedBy": userId}
+                    {"performedBy": userId},
+                    {"assignedToId": userId}
                 ]
             else:
                 # Employee sees their own tasks or tasks they created
