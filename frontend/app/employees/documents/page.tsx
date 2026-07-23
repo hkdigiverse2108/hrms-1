@@ -507,7 +507,7 @@ export default function EmployeeDocumentsPage() {
       container.style.height = `${nodeHeight}px`
       node.style.height = `${nodeHeight}px`
 
-      const scale = 4
+      const scale = 2
       const dataUrl = await domtoimage.toPng(node, {
         bgcolor: '#ffffff',
         width: a4WidthPx * scale,
@@ -1267,7 +1267,7 @@ export default function EmployeeDocumentsPage() {
   const employeeRequestActions = (record: any) => {
     return (
       <div className="flex items-center gap-2 justify-end">
-        {record.status === 'Sent' && record.fileUrl ? (
+        {(record.status === 'Sent' || record.status === 'Signed') && record.fileUrl ? (
           <>
             <Button variant="ghost" size="icon" className="text-brand-teal" onClick={() => window.open(record.fileUrl, '_blank')} title="View Letter">
               <ExternalLink className="h-4 w-4" />

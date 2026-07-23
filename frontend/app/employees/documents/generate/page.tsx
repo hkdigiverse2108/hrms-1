@@ -576,7 +576,7 @@ export default function DocumentGeneratorPage() {
         el.classList.remove('opacity-30')
       })
 
-      const scale = 4
+      const scale = 2
       const dataUrl = await domtoimage.toPng(clone, {
         bgcolor: '#ffffff',
         width: a4WidthPx * scale,
