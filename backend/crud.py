@@ -9414,6 +9414,8 @@ async def get_all_transfer_requests(db, task_id: str = None, task_type: str = No
     if task_type:
         if task_type in ["smm", "all"]:
             query["taskType"] = {"$in": ["content-calendar", "creative", "other-work"]}
+        elif task_type in ["wm-task", "wm-tasks"]:
+            query["taskType"] = {"$in": ["wm-task", "wm-tasks"]}
         else:
             query["taskType"] = task_type
     cursor = db.work_transfer_requests.find(query).sort("createdDate", -1)
@@ -9455,6 +9457,8 @@ async def get_incoming_transfer_requests(db, receiver_id: str, task_type: str = 
     if task_type:
         if task_type in ["smm", "all"]:
             query["taskType"] = {"$in": ["content-calendar", "creative", "other-work"]}
+        elif task_type in ["wm-task", "wm-tasks"]:
+            query["taskType"] = {"$in": ["wm-task", "wm-tasks"]}
         else:
             query["taskType"] = task_type
     cursor = db.work_transfer_requests.find(query).sort("createdDate", -1)
@@ -9466,6 +9470,8 @@ async def get_outgoing_transfer_requests(db, sender_id: str, task_type: str = No
     if task_type:
         if task_type in ["smm", "all"]:
             query["taskType"] = {"$in": ["content-calendar", "creative", "other-work"]}
+        elif task_type in ["wm-task", "wm-tasks"]:
+            query["taskType"] = {"$in": ["wm-task", "wm-tasks"]}
         else:
             query["taskType"] = task_type
     cursor = db.work_transfer_requests.find(query).sort("createdDate", -1)
