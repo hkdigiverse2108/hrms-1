@@ -507,7 +507,7 @@ export default function EmployeeDocumentsPage() {
       container.style.height = `${nodeHeight}px`
       node.style.height = `${nodeHeight}px`
 
-      const scale = 2
+      const scale = 1.5
       const dataUrl = await domtoimage.toPng(node, {
         bgcolor: '#ffffff',
         width: a4WidthPx * scale,
@@ -528,12 +528,12 @@ export default function EmployeeDocumentsPage() {
       const pdfHeight = (nodeHeight * pdfWidth) / a4WidthPx
       let heightLeft = pdfHeight
       let position = 0
-      pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, pdfHeight)
+      pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, pdfHeight, undefined, 'FAST')
       heightLeft -= pdf.internal.pageSize.getHeight()
       while (heightLeft > 1) {
         position -= pdf.internal.pageSize.getHeight()
         pdf.addPage()
-        pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, pdfHeight)
+        pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, pdfHeight, undefined, 'FAST')
         heightLeft -= pdf.internal.pageSize.getHeight()
       }
 

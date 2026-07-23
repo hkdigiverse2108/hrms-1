@@ -465,13 +465,13 @@ export default function DocumentGeneratorPage() {
       let heightLeft = pdfHeight
       let position = 0
       
-      pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, pdfHeight)
+      pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, pdfHeight, undefined, 'FAST')
       heightLeft -= pageHeight
       
       while (heightLeft > 1) {
         position -= pageHeight
         pdf.addPage()
-        pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, pdfHeight)
+        pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, pdfHeight, undefined, 'FAST')
         heightLeft -= pageHeight
       }
       
@@ -576,7 +576,7 @@ export default function DocumentGeneratorPage() {
         el.classList.remove('opacity-30')
       })
 
-      const scale = 2
+      const scale = 1.5
       const dataUrl = await domtoimage.toPng(clone, {
         bgcolor: '#ffffff',
         width: a4WidthPx * scale,
@@ -601,13 +601,13 @@ export default function DocumentGeneratorPage() {
       let heightLeft = pdfHeight
       let position = 0
       
-      pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, pdfHeight)
+      pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, pdfHeight, undefined, 'FAST')
       heightLeft -= pageHeight
       
       while (heightLeft > 1) {
         position -= pageHeight
         pdf.addPage()
-        pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, pdfHeight)
+        pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, pdfHeight, undefined, 'FAST')
         heightLeft -= pageHeight
       }
       
