@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
-import { Building2, Plus, Pencil, Trash2, Calendar, Shield, Loader2, Search, AlertTriangle, History, ClipboardList, Filter, CalendarClock, Key, Link2, ExternalLink } from "lucide-react";
+import { Building2, Plus, Pencil, Trash2, Calendar, Shield, Loader2, Search, AlertTriangle, History, ClipboardList, Filter, CalendarClock, Key, Link2, ExternalLink, Banknote } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ProjectForm, ProjectFormData } from "@/components/hrms/ProjectForm";
@@ -1482,6 +1482,34 @@ export default function ProjectsPage() {
                         )}
                       </div>
                     ) : null)}
+
+                    {/* Finance & Feedback Details */}
+                    {(isAdmin || project.teamLeaderId === user?.id || project.assignedFinanceManagerId === user?.id) && (project.amountReceived !== undefined || project.projectFeedback) && (
+                      <div className="pt-3 border-t border-dashed border-emerald-200/60 bg-emerald-50/30 p-3 rounded-lg space-y-2 mt-2 mb-2">
+                        <div className="flex items-center gap-1.5 mb-1 text-emerald-700">
+                          <Banknote className="w-3.5 h-3.5" />
+                          <span className="text-[10px] font-bold uppercase tracking-wider">Finance & Feedback</span>
+                        </div>
+                        {project.assignedFinanceManagerName && (
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-slate-500 font-medium">Finance Manager:</span>
+                            <span className="font-bold text-slate-700">{project.assignedFinanceManagerName}</span>
+                          </div>
+                        )}
+                        {project.amountReceived !== undefined && project.amountReceived > 0 && (
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-slate-500 font-medium">Amount Received:</span>
+                            <span className="font-bold text-emerald-600">₹{project.amountReceived}</span>
+                          </div>
+                        )}
+                        {project.projectFeedback && (
+                          <div className="flex flex-col gap-0.5 text-xs mt-1">
+                            <span className="text-slate-500 font-medium">Feedback / Notes:</span>
+                            <span className="text-slate-700 italic bg-white p-1.5 rounded border border-emerald-100">{project.projectFeedback}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     <div className="flex items-start justify-between pt-2 border-t border-border/50 text-[12px] text-muted-foreground">
                       {isAdmin ? (

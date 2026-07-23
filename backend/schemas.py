@@ -1257,6 +1257,12 @@ class ProjectBase(BaseModel):
     thirdPartyIntegrations: Optional[List[dict]] = []
     testingLinks: Optional[List[dict]] = []
     testingBugs: Optional[List[dict]] = []
+    
+    # Finance and Feedback Fields
+    assignedFinanceManagerId: Optional[str] = None
+    assignedFinanceManagerName: Optional[str] = None
+    amountReceived: Optional[float] = 0.0
+    projectFeedback: Optional[str] = None
 
 class ProjectCreate(ProjectBase):
     performedBy: Optional[str] = None
@@ -1352,6 +1358,12 @@ class ProjectUpdate(BaseModel):
     thirdPartyIntegrations: Optional[List[dict]] = None
     testingLinks: Optional[List[dict]] = None
     testingBugs: Optional[List[dict]] = None
+    
+    # Finance and Feedback Fields
+    assignedFinanceManagerId: Optional[str] = None
+    assignedFinanceManagerName: Optional[str] = None
+    amountReceived: Optional[float] = None
+    projectFeedback: Optional[str] = None
 
 class Project(ProjectBase):
     id: str
