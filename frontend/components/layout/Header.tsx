@@ -246,7 +246,7 @@ export function Header() {
   return (
     <>
       <AntHeader 
-        className={`bg-white border-b border-border flex items-center justify-between px-6 sticky top-0 z-10 w-full ${
+        className={`bg-white border-b border-border flex items-center justify-between px-6 sticky top-0 z-40 w-full shadow-2xs ${
           (isSalesSection && todayFollowUpCount > 0) ? "mb-0" : "mb-6"
         }`}
         style={{ height: '64px', padding: '0 24px', lineHeight: '64px', background: '#fff' }}
