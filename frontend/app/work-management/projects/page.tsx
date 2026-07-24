@@ -10,6 +10,7 @@ import { API_URL } from "@/lib/config";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 
 import { useUser } from "@/hooks/useUser";
 import { useRouter } from "next/navigation";
@@ -41,6 +42,7 @@ export default function ProjectsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [showFinanceDetails, setShowFinanceDetails] = useState(false);
   const [selectedDept, setSelectedDept] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [selectedPriority, setSelectedPriority] = useState("all");
@@ -821,6 +823,12 @@ export default function ProjectsPage() {
               Clear Filters
             </Button>
           )}
+          {isAdmin && (
+            <div className="flex items-center space-x-2 pl-4 border-l border-slate-200">
+              <Switch id="show-finance" checked={showFinanceDetails} onCheckedChange={setShowFinanceDetails} />
+              <Label htmlFor="show-finance" className="text-xs font-bold text-emerald-700 cursor-pointer uppercase tracking-wider">Finance Details</Label>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1091,7 +1099,7 @@ export default function ProjectsPage() {
 
 
                     {/* Finance & Feedback Details */}
-                    {(isAdmin || project.assignedFinanceManagerId === user?.id) && (project.amountReceived !== undefined || project.projectFeedback || project.nextPaymentDate || project.isPaymentReceived !== undefined) && (
+                    {(isAdmin || project.assignedFinanceManagerId === user?.id) && showFinanceDetails && (project.amountReceived !== undefined || project.projectFeedback || project.nextPaymentDate || project.isPaymentReceived !== undefined) && (
                       <div className="pt-3 border-t border-dashed border-emerald-200/60 bg-emerald-50/30 p-3 rounded-lg space-y-2 mt-2 mb-2">
                         <div className="flex items-center gap-1.5 mb-1 text-emerald-700">
                           <Banknote className="w-3.5 h-3.5" />
@@ -1145,10 +1153,12 @@ export default function ProjectsPage() {
                               Team Deadline: {project.teamDeadline}
                             </div>
                           )}
-                          <div className="flex items-center gap-1.5 text-emerald-600 font-bold text-[11px]">
-                            <Banknote className="w-3.5 h-3.5 shrink-0" />
-                            Next Payment: {project.nextPaymentDate || "Not Set"}
-                          </div>
+                          {showFinanceDetails && (
+                            <div className="flex items-center gap-1.5 text-emerald-600 font-bold text-[11px]">
+                              <Banknote className="w-3.5 h-3.5 shrink-0" />
+                              Next Payment: {project.nextPaymentDate || "Not Set"}
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div className="flex flex-col gap-1">
@@ -1160,7 +1170,7 @@ export default function ProjectsPage() {
                             <CalendarClock className="w-3.5 h-3.5 shrink-0" />
                             Team Deadline: {project.teamDeadline || project.endDate || project.startDate || "-"}
                           </div>
-                          {project.assignedFinanceManagerId === user?.id && (
+                          {project.assignedFinanceManagerId === user?.id && showFinanceDetails && (
                             <div className="flex items-center gap-1.5 text-emerald-600 font-bold text-[11px]">
                               <Banknote className="w-3.5 h-3.5 shrink-0" />
                               Next Payment: {project.nextPaymentDate || "Not Set"}
