@@ -223,6 +223,7 @@ class EmployeeBase(BaseModel):
     dob: Optional[RobustDate] = None
     department: Optional[str] = None
     sub_department: Optional[str] = ''
+    subDepartment: Optional[str] = ''
 
     designation: Optional[str] = None
     joinDate: Optional[RobustDate] = None
@@ -277,6 +278,8 @@ class EmployeeUpdate(BaseModel):
     password: Optional[str] = None
     dob: Optional[RobustDate] = None
     department: Optional[str] = None
+    sub_department: Optional[str] = None
+    subDepartment: Optional[str] = None
     designation: Optional[str] = None
     position: Optional[str] = None
     joinDate: Optional[RobustDate] = None
@@ -1640,6 +1643,15 @@ class LeadUpdate(BaseModel):
     reason: Optional[str] = None
     category: Optional[str] = None
 
+class BulkAssignLeads(BaseModel):
+    leadIds: List[str]
+    assignedTo: RobustAssignedTo
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
+
+class BulkDeleteLeads(BaseModel):
+    leadIds: List[str]
+
 class Lead(LeadBase):
     id: str
     class Config:
@@ -2019,10 +2031,12 @@ class DocumentRequestBase(BaseModel):
     employeeName: str
     documentType: str
     reason: Optional[str] = None
-    status: str = "Pending" # Pending, Approved, Rejected, Generated, Sent
+    status: str = "Pending" # Pending, Approved, Rejected, Generated, Sent, Pending Signature, Signed
     requestDate: RobustDate
     fileName: Optional[str] = None
     fileUrl: Optional[str] = None
+    htmlContent: Optional[str] = None
+    requireSignature: Optional[bool] = False
     generatedDate: Optional[RobustDate] = None
     sentDate: Optional[RobustDate] = None
     neededByDate: Optional[RobustDate] = None
@@ -2034,6 +2048,8 @@ class DocumentRequestUpdate(BaseModel):
     status: Optional[str] = None
     fileName: Optional[str] = None
     fileUrl: Optional[str] = None
+    htmlContent: Optional[str] = None
+    requireSignature: Optional[bool] = None
     generatedDate: Optional[RobustDate] = None
     sentDate: Optional[RobustDate] = None
     neededByDate: Optional[RobustDate] = None

@@ -335,7 +335,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
             assignerId: String(userId),
             assignerName: userName,
             deadline: new Date().toISOString().split('T')[0],
-            status: "Pending",
+            status: "In Progress",
             taskType: (isDM || selectedTab === "dm_other_work") ? "dm-other-work" : "other-work"
           };
           
@@ -350,7 +350,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
             assignedToName: userName,
             department: "Development",
             dueDate: new Date().toISOString().split('T')[0],
-            status: "todo",
+            status: "in-progress",
             priority: "medium",
             performedBy: userId,
             userName: userName

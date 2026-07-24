@@ -101,11 +101,11 @@ export function DateRangePicker({
             {value?.from ? (
               value.to ? (
                 <>
-                  {format(value.from, "MMM dd, yyyy")} -{" "}
-                  {format(value.to, "MMM dd, yyyy")}
+                  {format(value.from, "dd/MM/yyyy")} -{" "}
+                  {format(value.to, "dd/MM/yyyy")}
                 </>
               ) : (
-                format(value.from, "MMM dd, yyyy")
+                format(value.from, "dd/MM/yyyy")
               )
             ) : (
               <span>Pick a date range</span>
@@ -148,12 +148,12 @@ export function DateRangePicker({
               {/* Footer */}
               <div className="p-4 border-t flex items-center justify-between bg-slate-50/50">
                 <div className="flex items-center gap-2 text-sm text-slate-600">
-                  <div className="border bg-white px-3 py-1.5 rounded-md min-w-[120px] text-center">
-                    {tempRange?.from ? format(tempRange.from, "MMM dd, yyyy") : "Start date"}
+                  <div className="flex-1 py-1 px-3 bg-muted/50 rounded-md text-center text-sm font-medium border border-border/50">
+                    {tempRange?.from ? format(tempRange.from, "dd/MM/yyyy") : "Start date"}
                   </div>
-                  <span>-</span>
-                  <div className="border bg-white px-3 py-1.5 rounded-md min-w-[120px] text-center">
-                    {tempRange?.to ? format(tempRange.to, "MMM dd, yyyy") : "End date"}
+                  <div className="text-muted-foreground">-</div>
+                  <div className="flex-1 py-1 px-3 bg-muted/50 rounded-md text-center text-sm font-medium border border-border/50">
+                    {tempRange?.to ? format(tempRange.to, "dd/MM/yyyy") : "End date"}
                   </div>
                 </div>
 
