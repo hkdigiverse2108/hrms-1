@@ -9,7 +9,7 @@ from database import db, get_current_time
 from auth import create_access_token, get_password_hash, require_superadmin
 import crud
 
-router = APIRouter(prefix="/purchase", tags=["purchase"])
+router = APIRouter(tags=["purchase"])
 
 # --- Default Seed Data ---
 DEFAULT_MODULES = [
@@ -75,19 +75,7 @@ class CheckoutRequest(BaseModel):
 
 # --- Helper Seeding ---
 async def seed_pricing_if_empty():
-    count_mods = await db.system_module_prices.count_documents({})
-    if count_mods == 0:
-        now = get_current_time()
-        for m in DEFAULT_MODULES:
-            doc = {**m, "created_at": now, "updated_at": now}
-            await db.system_module_prices.insert_one(doc)
-
-    count_plans = await db.system_duration_plans.count_documents({})
-    if count_plans == 0:
-        now = get_current_time()
-        for p in DEFAULT_PLANS:
-            doc = {**p, "created_at": now, "updated_at": now}
-            await db.system_duration_plans.insert_one(doc)
+    pass
 
 # --- Endpoints ---
 
@@ -299,12 +287,59 @@ async def checkout_purchase(payload: CheckoutRequest):
         }
     }
 
+class ModuleCreate(BaseModel):
+    module_key: str
+    display_name: str
+    category: Optional[str] = "General"
+    price_per_month: float
+    description: Optional[str] = ""
+    is_enabled: Optional[bool] = True
+
+class ModulePriceUpdate(BaseModel):
+    display_name: Optional[str] = None
+    category: Optional[str] = None
+    price_per_month: float
+    description: Optional[str] = None
+    is_enabled: Optional[bool] = True
+
+class PlanCreate(BaseModel):
+    plan_key: str
+    display_name: str
+    months: int
+    discount_percent: float
+    badge: Optional[str] = ""
+    is_active: Optional[bool] = True
+
+class PlanUpdate(BaseModel):
+    display_name: Optional[str] = None
+    months: Optional[int] = None
+    discount_percent: float
+    badge: Optional[str] = None
+    is_active: Optional[bool] = True
+
+class CalculateOrderRequest(BaseModel):
+    selected_modules: List[str]
+    plan_key: str  # 3_months, 6_months, 1_year
+
+class CheckoutRequest(BaseModel):
+    company_name: str
+    company_code: str
+    logo_url: Optional[str] = ""
+    contact_email: EmailStr
+    contact_phone: Optional[str] = ""
+    address: Optional[str] = ""
+    admin_name: str
+    admin_email: EmailStr
+    admin_password: str
+    selected_modules: List[str]
+    plan_key: str
+
 # --- Super Admin Pricing CRUD Endpoints ---
 
 @router.get("/super-admin/pricing/modules")
 async def get_all_module_prices(token: dict = Depends(require_superadmin)):
     await seed_pricing_if_empty()
-    modules = await db.system_module_prices.find({}).to_list(length=100)
+    modules = await db.system_module_prices.find({}).to_list(length=200)
     result = []
     for m in modules:
         result.append({
@@ -318,25 +353,188 @@ async def get_all_module_prices(token: dict = Depends(require_superadmin)):
         })
     return result
 
+@router.post("/super-admin/pricing/modules")
+async def create_module_price(payload: ModuleCreate, token: dict = Depends(require_superadmin)):
+    await seed_pricing_if_empty()
+    key = payload.module_key.strip().lower().replace(" ", "-")
+    existing = await db.system_module_prices.find_one({"module_key": key})
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Module with key '{key}' already exists.")
+    
+    doc = {
+        "module_key": key,
+        "display_name": payload.display_name.strip(),
+        "category": payload.category.strip() if payload.category else "General",
+        "price_per_month": payload.price_per_month,
+        "description": payload.description.strip() if payload.description else "",
+        "is_enabled": payload.is_enabled if payload.is_enabled is not None else True,
+        "created_at": get_current_time(),
+        "updated_at": get_current_time()
+    }
+    res = await db.system_module_prices.insert_one(doc)
+    doc["id"] = str(res.inserted_id)
+    doc.pop("_id", None)
+    return doc
+
 @router.put("/super-admin/pricing/modules/{module_key}")
 async def update_module_price(module_key: str, payload: ModulePriceUpdate, token: dict = Depends(require_superadmin)):
     await seed_pricing_if_empty()
+    update_data = {
+        "price_per_month": payload.price_per_month,
+        "is_enabled": payload.is_enabled if payload.is_enabled is not None else True,
+        "updated_at": get_current_time()
+    }
+    if payload.display_name:
+        update_data["display_name"] = payload.display_name.strip()
+    if payload.category:
+        update_data["category"] = payload.category.strip()
+    if payload.description is not None:
+        update_data["description"] = payload.description.strip()
+
     res = await db.system_module_prices.update_one(
         {"module_key": module_key},
-        {"$set": {
-            "price_per_month": payload.price_per_month,
-            "is_enabled": payload.is_enabled if payload.is_enabled is not None else True,
-            "updated_at": get_current_time()
-        }}
+        {"$set": update_data}
     )
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Module not found")
     return {"success": True, "message": f"Pricing for module '{module_key}' updated"}
 
+class ModuleCreate(BaseModel):
+    module_key: str
+    display_name: str
+    category: Optional[str] = "General"
+    price_per_month: float
+    description: Optional[str] = ""
+    is_enabled: Optional[bool] = True
+
+class ModulePriceUpdate(BaseModel):
+    display_name: Optional[str] = None
+    category: Optional[str] = None
+    price_per_month: float
+    description: Optional[str] = None
+    is_enabled: Optional[bool] = True
+
+class PlanCreate(BaseModel):
+    plan_key: str
+    display_name: str
+    months: int
+    discount_percent: float
+    badge: Optional[str] = ""
+    is_active: Optional[bool] = True
+
+class PlanUpdate(BaseModel):
+    display_name: Optional[str] = None
+    months: Optional[int] = None
+    discount_percent: float
+    badge: Optional[str] = None
+    is_active: Optional[bool] = True
+
+class CalculateOrderRequest(BaseModel):
+    selected_modules: List[str]
+    plan_key: str  # 3_months, 6_months, 1_year
+
+class CheckoutRequest(BaseModel):
+    company_name: str
+    company_code: str
+    logo_url: Optional[str] = ""
+    contact_email: EmailStr
+    contact_phone: Optional[str] = ""
+    address: Optional[str] = ""
+    admin_name: str
+    admin_email: EmailStr
+    admin_password: str
+    selected_modules: List[str]
+    plan_key: str
+
+# --- Super Admin Pricing CRUD Endpoints ---
+
+@router.get("/super-admin/pricing/modules")
+async def get_all_module_prices(token: dict = Depends(require_superadmin)):
+    await seed_pricing_if_empty()
+    modules = await db.system_module_prices.find({}).to_list(length=200)
+    result = []
+    for m in modules:
+        result.append({
+            "id": str(m.get("_id")),
+            "module_key": m.get("module_key"),
+            "display_name": m.get("display_name"),
+            "category": m.get("category", "General"),
+            "price_per_month": m.get("price_per_month", 0),
+            "is_enabled": m.get("is_enabled", True),
+            "description": m.get("description", "")
+        })
+    return result
+
+@router.post("/super-admin/pricing/modules")
+async def create_module_price(payload: ModuleCreate, token: dict = Depends(require_superadmin)):
+    await seed_pricing_if_empty()
+    key = payload.module_key.strip().lower().replace(" ", "-")
+    existing = await db.system_module_prices.find_one({"module_key": key})
+    if existing:
+        update_data = {
+            "display_name": payload.display_name.strip(),
+            "category": payload.category.strip() if payload.category else "General",
+            "price_per_month": payload.price_per_month,
+            "description": payload.description.strip() if payload.description else "",
+            "is_enabled": payload.is_enabled if payload.is_enabled is not None else True,
+            "updated_at": get_current_time()
+        }
+        await db.system_module_prices.update_one({"module_key": key}, {"$set": update_data})
+        updated = await db.system_module_prices.find_one({"module_key": key})
+        updated["id"] = str(updated.get("_id"))
+        updated.pop("_id", None)
+        return updated
+    
+    doc = {
+        "module_key": key,
+        "display_name": payload.display_name.strip(),
+        "category": payload.category.strip() if payload.category else "General",
+        "price_per_month": payload.price_per_month,
+        "description": payload.description.strip() if payload.description else "",
+        "is_enabled": payload.is_enabled if payload.is_enabled is not None else True,
+        "created_at": get_current_time(),
+        "updated_at": get_current_time()
+    }
+    res = await db.system_module_prices.insert_one(doc)
+    doc["id"] = str(res.inserted_id)
+    doc.pop("_id", None)
+    return doc
+
+@router.put("/super-admin/pricing/modules/{module_key}")
+async def update_module_price(module_key: str, payload: ModulePriceUpdate, token: dict = Depends(require_superadmin)):
+    await seed_pricing_if_empty()
+    update_data = {
+        "price_per_month": payload.price_per_month,
+        "is_enabled": payload.is_enabled if payload.is_enabled is not None else True,
+        "updated_at": get_current_time()
+    }
+    if payload.display_name:
+        update_data["display_name"] = payload.display_name.strip()
+    if payload.category:
+        update_data["category"] = payload.category.strip()
+    if payload.description is not None:
+        update_data["description"] = payload.description.strip()
+
+    res = await db.system_module_prices.update_one(
+        {"module_key": module_key},
+        {"$set": update_data}
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Module not found")
+    return {"success": True, "message": f"Pricing for module '{module_key}' updated"}
+
+@router.delete("/super-admin/pricing/modules/{module_key}")
+async def delete_module_price(module_key: str, token: dict = Depends(require_superadmin)):
+    res = await db.system_module_prices.delete_one({"module_key": module_key})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Module not found")
+    return {"success": True, "message": f"Module '{module_key}' deleted successfully"}
+
+
 @router.get("/super-admin/pricing/plans")
 async def get_all_duration_plans(token: dict = Depends(require_superadmin)):
     await seed_pricing_if_empty()
-    plans = await db.system_duration_plans.find({}).to_list(length=20)
+    plans = await db.system_duration_plans.find({}).to_list(length=50)
     result = []
     for p in plans:
         result.append({
@@ -350,17 +548,55 @@ async def get_all_duration_plans(token: dict = Depends(require_superadmin)):
         })
     return result
 
+@router.post("/super-admin/pricing/plans")
+async def create_duration_plan(payload: PlanCreate, token: dict = Depends(require_superadmin)):
+    await seed_pricing_if_empty()
+    key = payload.plan_key.strip().lower().replace(" ", "_")
+    existing = await db.system_duration_plans.find_one({"plan_key": key})
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Plan with key '{key}' already exists.")
+
+    doc = {
+        "plan_key": key,
+        "display_name": payload.display_name.strip(),
+        "months": payload.months,
+        "discount_percent": payload.discount_percent,
+        "badge": payload.badge.strip() if payload.badge else "",
+        "is_active": payload.is_active if payload.is_active is not None else True,
+        "created_at": get_current_time(),
+        "updated_at": get_current_time()
+    }
+    res = await db.system_duration_plans.insert_one(doc)
+    doc["id"] = str(res.inserted_id)
+    doc.pop("_id", None)
+    return doc
+
 @router.put("/super-admin/pricing/plans/{plan_key}")
 async def update_duration_plan(plan_key: str, payload: PlanUpdate, token: dict = Depends(require_superadmin)):
     await seed_pricing_if_empty()
+    update_data = {
+        "discount_percent": payload.discount_percent,
+        "is_active": payload.is_active if payload.is_active is not None else True,
+        "updated_at": get_current_time()
+    }
+    if payload.display_name:
+        update_data["display_name"] = payload.display_name.strip()
+    if payload.months:
+        update_data["months"] = payload.months
+    if payload.badge is not None:
+        update_data["badge"] = payload.badge.strip()
+
     res = await db.system_duration_plans.update_one(
         {"plan_key": plan_key},
-        {"$set": {
-            "discount_percent": payload.discount_percent,
-            "is_active": payload.is_active if payload.is_active is not None else True,
-            "updated_at": get_current_time()
-        }}
+        {"$set": update_data}
     )
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Plan not found")
     return {"success": True, "message": f"Plan '{plan_key}' updated"}
+
+@router.delete("/super-admin/pricing/plans/{plan_key}")
+async def delete_duration_plan(plan_key: str, token: dict = Depends(require_superadmin)):
+    res = await db.system_duration_plans.delete_one({"plan_key": plan_key})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    return {"success": True, "message": f"Plan '{plan_key}' deleted successfully"}

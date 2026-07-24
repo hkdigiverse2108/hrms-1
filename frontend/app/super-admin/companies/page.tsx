@@ -14,6 +14,7 @@ import {
   ExternalLink
 } from "lucide-react";
 import { API_URL } from "@/lib/config";
+import SuperAdminHeader from "@/components/layout/SuperAdminHeader";
 
 interface Company {
   id: string;
@@ -170,34 +171,37 @@ export default function SuperAdminCompaniesPage() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col">
-      {/* Header - Mint Theme */}
-      <header className="border-b border-[#09A08A]/15 bg-[#EAF7F6] px-8 py-4 flex items-center justify-between sticky top-0 z-30 shadow-sm">
-        <div className="flex items-center gap-4">
-          <Link
-            href="/super-admin/dashboard"
-            className="p-2 bg-white hover:bg-slate-100 text-slate-600 rounded-xl transition-colors shadow-sm border border-slate-200"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </Link>
-          <img src="/logo.png" alt="HariKrushn DigiVerse Logo" className="h-9 w-auto object-contain" />
-          <div className="h-7 w-px bg-[#09A08A]/20" />
-          <div>
-            <h1 className="font-extrabold text-base tracking-tight text-slate-900">Company Directory</h1>
-            <p className="text-[11px] text-slate-500 font-medium">Onboard and manage tenant subscriptions</p>
-          </div>
-        </div>
-
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="px-4 py-2 bg-[#09A08A] hover:bg-[#07806e] text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-md shadow-[#09A08A]/20 transition-all"
-        >
-          <Plus className="w-4 h-4" />
-          Onboard New Company
-        </button>
-      </header>
+      {/* Mint SuperAdminHeader */}
+      <SuperAdminHeader
+        onRefresh={fetchCompanies}
+        isLoading={isLoading}
+        onOpenOnboardModal={() => setIsModalOpen(true)}
+      />
 
       {/* Main Content - Spacious Full Layout */}
-      <main className="flex-1 max-w-[1600px] w-full mx-auto px-6 sm:px-12 py-8 space-y-6">
+      <main className="flex-1 max-w-[1600px] w-full mx-auto px-6 sm:px-12 pt-24 pb-8 space-y-6">
+        {/* Page Title & Back Button Row */}
+        <div className="flex items-center justify-between pb-2">
+          <div className="flex items-center gap-3">
+            <Link
+              href="/super-admin/dashboard"
+              className="p-2 bg-white hover:bg-slate-100 text-slate-600 rounded-xl transition-colors shadow-sm border border-slate-200"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </Link>
+            <div>
+              <h1 className="font-extrabold text-xl tracking-tight text-slate-900">Company Directory</h1>
+              <p className="text-xs text-slate-500 font-medium">Onboard and manage tenant subscriptions</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="px-4 py-2.5 bg-[#09A08A] hover:bg-[#07806e] text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-md shadow-[#09A08A]/20 transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            Onboard New Company
+          </button>
+        </div>
         {error && (
           <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs flex items-center justify-between font-medium">
             <span>⚠️ {error}</span>
@@ -285,8 +289,8 @@ export default function SuperAdminCompaniesPage() {
                       <span className="text-[#09A08A] font-bold">{company.subscription_plan}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span>Employee Roster:</span>
-                      <span className="text-slate-900 font-bold">{company.employee_count} / {company.max_employees}</span>
+                      <span>Active Employees:</span>
+                      <span className="text-slate-900 font-bold">{company.employee_count}</span>
                     </div>
                   </div>
                 </div>

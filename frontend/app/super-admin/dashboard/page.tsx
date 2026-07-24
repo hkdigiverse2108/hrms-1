@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { useUser } from "@/hooks/useUser";
 import { API_URL } from "@/lib/config";
+import SuperAdminHeader from "@/components/layout/SuperAdminHeader";
 
 interface Company {
   id: string;
@@ -115,63 +116,11 @@ export default function SuperAdminDashboard() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col font-sans">
-      {/* Mint Header */}
-      <header className="border-b border-[#09A08A]/15 bg-[#EAF7F6] px-6 sm:px-8 py-4 sticky top-0 z-30 shadow-sm">
-        <div className="max-w-7xl w-full mx-auto flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="HariKrushn DigiVerse Logo" className="h-10 w-auto object-contain" />
-          </div>
-
-          <div className="flex items-center gap-3 flex-wrap">
-            <button
-              onClick={fetchDashboardData}
-              className="p-2.5 bg-white hover:bg-slate-50 text-slate-600 rounded-xl border border-slate-200 transition-colors shadow-sm"
-              title="Refresh Data"
-            >
-              <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin text-[#09A08A]" : ""}`} />
-            </button>
-
-            <Link
-              href="/super-admin/pricing"
-              className="px-4 py-2.5 bg-white hover:bg-slate-50 text-[#09A08A] font-bold rounded-xl text-xs flex items-center gap-2 border border-[#09A08A]/30 shadow-sm transition-all"
-            >
-              <Layers className="w-4 h-4" />
-              Module Pricing & Plans
-            </Link>
-
-            <Link
-              href="/purchase"
-              target="_blank"
-              className="px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-xs flex items-center gap-2 border border-slate-200 shadow-sm transition-all"
-            >
-              <Sparkles className="w-4 h-4 text-amber-500" />
-              Purchase Wizard Preview
-            </Link>
-
-            <Link
-              href="/super-admin/companies"
-              className="px-4 py-2.5 bg-[#09A08A] hover:bg-[#07806e] text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-md shadow-[#09A08A]/20 transition-all"
-            >
-              <Plus className="w-4 h-4" />
-              Onboard New Company
-            </Link>
-
-            <button
-              onClick={() => {
-                logout();
-                router.push("/super-admin/login");
-              }}
-              className="p-2.5 bg-white hover:bg-rose-50 text-slate-600 hover:text-rose-600 rounded-xl border border-slate-200 transition-colors shadow-sm"
-              title="Log Out"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </header>
+      {/* Mint SuperAdminHeader */}
+      <SuperAdminHeader onRefresh={fetchDashboardData} isLoading={isLoading} />
 
       {/* Main Content - Centered Layout with Side Spacing */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-6 sm:px-8 py-8 space-y-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-6 sm:px-8 pt-24 pb-8 space-y-8">
         {error && (
           <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs flex items-center justify-between font-medium">
             <span>⚠️ {error}</span>
@@ -397,7 +346,7 @@ export default function SuperAdminDashboard() {
                       <td className="py-3.5 px-4 font-mono text-[#09A08A] font-semibold">{company.company_code}</td>
                       <td className="py-3.5 px-4 text-slate-600">{company.contact_email}</td>
                       <td className="py-3.5 px-4 font-bold text-[#09A08A]">{company.subscription_plan}</td>
-                      <td className="py-3.5 px-4 font-semibold text-slate-900">{company.employee_count} / {company.max_employees}</td>
+                      <td className="py-3.5 px-4 font-semibold text-slate-900">{company.employee_count}</td>
                       <td className="py-3.5 px-4">
                         <button
                           onClick={() => toggleCompanyStatus(company)}

@@ -155,8 +155,40 @@ async def get_superadmin_me(token: dict = Depends(require_superadmin)):
         "company_name": "HK DigiVerse Master"
     }
 
+async def ensure_default_company_exists():
+    count = await db.companies.count_documents({})
+    if count == 0:
+        now = get_current_time()
+        default_company = {
+            "company_name": "HariKrushn DigiVerse",
+            "company_code": "HK-DIGIVERSE",
+            "logo_url": "/logo.png",
+            "contact_email": "contact@hkdigiverse.com",
+            "contact_phone": "+91 98765 43210",
+            "address": "Surat, Gujarat, India",
+            "subscription_plan": "Enterprise",
+            "status": "active",
+            "max_employees": 100,
+            "total_paid": 15000,
+            "enabled_modules": [
+                "employee-list", "org-structure", "attendance", "leave", "employee-documents",
+                "payroll-processing", "company-finance-transactions", "invoice",
+                "projects", "tasks", "daily-progress", "sales", "clients", "marketing",
+                "chat", "activity-tracker", "hirings", "training", "remarks"
+            ],
+            "created_at": now,
+            "updated_at": now
+        }
+        await db.companies.insert_one(default_company)
+        
+        await db.employees.update_many(
+            {"$or": [{"company_code": {"$exists": False}}, {"company_code": ""}, {"company_code": None}]},
+            {"$set": {"company_code": "HK-DIGIVERSE", "company_id": "HK-DIGIVERSE", "company_name": "HariKrushn DigiVerse"}}
+        )
+
 @router.get("/companies")
 async def list_companies(token: dict = Depends(require_superadmin)):
+    await ensure_default_company_exists()
     companies = await db.companies.find({}).to_list(length=1000)
     
     # Calculate employee counts for each company
@@ -172,12 +204,20 @@ async def list_companies(token: dict = Depends(require_superadmin)):
         c_id = str(c_code or c.get("_id"))
         
         # Count employees in this company
-        emp_count = await db.employees.count_documents({
+        query = {
             "$or": [
                 {"company_id": c_id},
-                {"company_code": c_id}
+                {"company_code": c_id},
+                {"company_name": c_name}
             ]
-        })
+        }
+        if c_code == "HK-DIGIVERSE":
+            query["$or"].extend([
+                {"company_id": {"$exists": False}},
+                {"company_code": {"$exists": False}}
+            ])
+
+        emp_count = await db.employees.count_documents(query)
         
         c_data = {
             "id": str(c.get("_id")),
@@ -400,6 +440,7 @@ async def reset_company_admin_password(company_id: str, payload: AdminResetPassw
 
 @router.get("/stats")
 async def get_superadmin_dashboard_stats(token: dict = Depends(require_superadmin)):
+    await ensure_default_company_exists()
     companies = await db.companies.find({}).to_list(length=1000)
 
     # Filter out invalid empty docs
@@ -410,9 +451,9 @@ async def get_superadmin_dashboard_stats(token: dict = Depends(require_superadmi
     suspended_companies = total_companies - active_companies
 
     # Count total system employees across all tenant companies
-    total_employees = await db.employees.count_documents({"employee_id": {"$ne": "superadmin"}})
+    total_employees = await db.employees.count_documents({})
 
-    # Calculate total revenue
+    # Calculate total revenue dynamically from company payments & tenant purchases
     total_revenue = sum(c.get("total_paid", 0) for c in valid_companies)
 
     # Plan distribution
@@ -435,7 +476,7 @@ async def get_superadmin_dashboard_stats(token: dict = Depends(require_superadmi
         reverse=True
     )
 
-    # Activity logs count
+    # Activity logs count directly from db.activity_logs
     total_activity_logs = await db.activity_logs.count_documents({})
 
     return {
