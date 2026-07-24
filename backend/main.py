@@ -2639,6 +2639,16 @@ async def create_lead(lead: schemas.LeadCreate, db=Depends(get_db)):
 async def create_leads_bulk(leads: List[schemas.LeadCreate], db=Depends(get_db)):
     return await crud.create_leads_bulk(db, leads)
 
+@app.put("/leads/bulk-assign", response_model=dict)
+async def bulk_assign_leads(payload: schemas.BulkAssignLeads, db=Depends(get_db)):
+    result = await crud.bulk_assign_leads(db, payload.leadIds, payload.assignedTo, payload.performedBy, payload.userName)
+    return {"message": "Leads assigned successfully", "modified_count": result}
+
+@app.post("/leads/bulk-delete", response_model=dict)
+async def bulk_delete_leads(payload: schemas.BulkDeleteLeads, db=Depends(get_db)):
+    result = await crud.bulk_delete_leads(db, payload.leadIds)
+    return {"message": "Leads deleted successfully", "deleted_count": result}
+
 @app.put("/leads/{lead_id}", response_model=schemas.Lead)
 async def update_lead(lead_id: str, lead_update: schemas.LeadUpdate, db=Depends(get_db)):
     result = await crud.update_lead(db, lead_id, lead_update)

@@ -110,6 +110,9 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
   const [pendingStatusChange, setPendingStatusChange] = useState<string | null>(null);
   const [statusChangeReason, setStatusChangeReason] = useState("");
   const [overallMaxDate, setOverallMaxDate] = useState<Date | null>(null);
+  const [downloadStartDate, setDownloadStartDate] = useState("");
+  const [downloadEndDate, setDownloadEndDate] = useState("");
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
   const fetchOverallMaxDate = async () => {
     try {
@@ -630,7 +633,6 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
       title: "Delete Row",
       message: "Are you sure you want to delete this row? This action cannot be undone.",
       confirmText: "Delete",
-      type: "danger",
     });
     
     if (!isConfirmed) return;
@@ -650,7 +652,7 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
 
 
 
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
     if (entries.length === 0) {
       toast.error("No entries to download");
       return;
@@ -660,11 +662,35 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
       toast.error("Please select at least one column");
       return;
     }
-    exportPdf();
+    await exportPdf();
   };
 
-  const exportPdf = () => {
-    const doc = new jsPDF("landscape");
+  const exportPdf = async () => {
+    setIsDownloadingPdf(true);
+    try {
+      const doc = new jsPDF("landscape");
+
+      try {
+        const fontRes = await fetch("/fonts/ArialUnicode.ttf");
+        const blob = await fontRes.blob();
+        
+        const fontBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result as string;
+            const base64 = result.split(',')[1];
+            resolve(base64);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+        
+        doc.addFileToVFS("ArialUnicode.ttf", fontBase64);
+        doc.addFont("ArialUnicode.ttf", "ArialUnicode", "normal");
+        doc.setFont("ArialUnicode");
+      } catch (err) {
+        console.error("Failed to load Unicode font", err);
+      }
     
     const formatDateToDDMMYY = (dateStr: string) => {
       if (!dateStr) return "";
@@ -689,13 +715,33 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
     const columnsToRender = [...selectedColumnsForPdf].sort((a, b) => tableHeaders.indexOf(a) - tableHeaders.indexOf(b));
     const indicesToRender = columnsToRender.map(col => tableHeaders.indexOf(col));
 
-    const filteredEntries = entries.filter(entry => {
+    let entriesToProcess = entries;
+    if (downloadStartDate || downloadEndDate) {
+      try {
+        const res = await fetch(`${API_URL}/content-calendar?clientId=${clientId}${projectId ? `&projectId=${projectId}` : ''}`);
+        if (res.ok) {
+          entriesToProcess = await res.json();
+        }
+      } catch (e) {
+        console.error("Failed to fetch all entries for date range download", e);
+      }
+    }
+
+    const filteredEntries = entriesToProcess.filter((entry: any) => {
       const matchesType = typeFilter === "all" || entry.postReel === typeFilter;
-      return matchesType;
+      let matchesDate = true;
+      if (entry.postingDate) {
+        const postingDStr = entry.postingDate.substring(0, 10);
+        if (downloadStartDate && postingDStr < downloadStartDate) matchesDate = false;
+        if (downloadEndDate && postingDStr > downloadEndDate) matchesDate = false;
+      } else if (downloadStartDate || downloadEndDate) {
+        matchesDate = false;
+      }
+      return matchesType && matchesDate;
     });
 
     if (filteredEntries.length === 0) {
-      toast.error(`No entries with posting dates in ${monthYear} to download`);
+      toast.error("No entries found for the selected filters to download");
       return;
     }
 
@@ -790,13 +836,13 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
       body: tableData,
       startY: 38,
       theme: 'grid',
-      styles: { fontSize: 8, cellPadding: 2, overflow: "linebreak", font: "helvetica" },
+      styles: { fontSize: 8, cellPadding: 2, overflow: "linebreak", font: "ArialUnicode" },
       headStyles: { fillColor: [13, 148, 136], textColor: 255, fontStyle: 'bold', halign: 'center' },
       alternateRowStyles: { fillColor: [248, 250, 252] },
       margin: { top: 44, right: 14, bottom: 20, left: 14 },
       willDrawCell: (data) => {
         if (data.section === 'body') {
-          if (data.cell.raw && typeof data.cell.raw === 'object' && data.cell.raw.url) {
+          if (data.cell.raw && typeof data.cell.raw === 'object' && (data.cell.raw as any).url) {
             doc.setTextColor(0, 102, 204); // Blue color for links
           } else {
             const rawValue = String(data.cell.raw || "");
@@ -808,8 +854,8 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
       },
       didDrawCell: (data) => {
         if (data.section === 'body') {
-          if (data.cell.raw && typeof data.cell.raw === 'object' && data.cell.raw.isButton && data.cell.raw.url) {
-            const url = data.cell.raw.url;
+          if (data.cell.raw && typeof data.cell.raw === 'object' && (data.cell.raw as any).isButton && (data.cell.raw as any).url) {
+            const url = (data.cell.raw as any).url;
             
             const btnW = 11;
             const btnH = 5.5;
@@ -863,6 +909,9 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
     const safeCompanyName = companyName.replace(/[\\/:*?"<>|]/g, "");
     doc.save(`${safeCompanyName} ${monthLabel} Content Calendar.pdf`);
     setIsPdfDialogOpen(false);
+    } finally {
+      setIsDownloadingPdf(false);
+    }
   };
 
   const formatDateDisplay = (dateString: any) => {
@@ -1139,7 +1188,11 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
               <Settings2 className="w-4 h-4 text-slate-600" />
             </Button>
           )}
-          <Button onClick={() => setIsPdfDialogOpen(true)} size="sm" variant="outline" className="text-slate-700">
+          <Button onClick={() => {
+            setDownloadStartDate("");
+            setDownloadEndDate("");
+            setIsPdfDialogOpen(true);
+          }} size="sm" variant="outline" className="text-slate-700">
             <Download className="w-4 h-4 mr-1" />
             PDF
           </Button>
@@ -1242,6 +1295,28 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div>
+                <Label htmlFor="downloadStartDate" className="text-sm font-medium mb-1 block">Start Date (Posting)</Label>
+                <Input
+                  id="downloadStartDate"
+                  type="date"
+                  value={downloadStartDate}
+                  onChange={(e) => setDownloadStartDate(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <Label htmlFor="downloadEndDate" className="text-sm font-medium mb-1 block">End Date (Posting)</Label>
+                <Input
+                  id="downloadEndDate"
+                  type="date"
+                  value={downloadEndDate}
+                  onChange={(e) => setDownloadEndDate(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+            </div>
             <div className="flex justify-between items-center mb-4">
               <Button 
                 variant="ghost" 
@@ -1283,7 +1358,16 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsPdfDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleDownloadPdf} className="bg-brand-teal text-white">Download</Button>
+            <Button onClick={handleDownloadPdf} disabled={isDownloadingPdf} className="bg-brand-teal text-white">
+              {isDownloadingPdf ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Generating PDF...
+                </>
+              ) : (
+                "Download"
+              )}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

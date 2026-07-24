@@ -3558,6 +3558,37 @@ async def calculate_next_followup_date(db, start_date_str: str, config: dict) ->
             
     return None
 
+async def bulk_assign_leads(db, lead_ids: List[str], assigned_to, performed_by: str = None, user_name: str = None):
+    obj_ids = [ObjectId(lid) if ObjectId.is_valid(lid) else lid for lid in lead_ids]
+    log_entry = {
+        "action": "Assigned (Bulk)",
+        "performedBy": performed_by,
+        "userName": user_name,
+        "timestamp": datetime.now(),
+        "details": f"Bulk assigned to {assigned_to}"
+    }
+
+    # Extract plain data if assigned_to is a pydantic model (it might be RobustAssignedTo, which is a Union, so it could be str or dict)
+    assigned_val = assigned_to
+    if hasattr(assigned_to, 'model_dump'):
+        assigned_val = assigned_to.model_dump()
+    elif isinstance(assigned_to, list):
+        assigned_val = [v.model_dump() if hasattr(v, 'model_dump') else v for v in assigned_to]
+
+    result = await db.leads.update_many(
+        {"_id": {"$in": obj_ids}},
+        {
+            "$set": {"assignedTo": assigned_val, "updated_at": datetime.now()},
+            "$push": {"logs": log_entry}
+        }
+    )
+    return result.modified_count
+
+async def bulk_delete_leads(db, lead_ids: List[str]):
+    obj_ids = [ObjectId(lid) if ObjectId.is_valid(lid) else lid for lid in lead_ids]
+    result = await db.leads.delete_many({"_id": {"$in": obj_ids}})
+    return result.deleted_count
+
 async def create_client(db, client: schemas.ClientCreate):
     client_dict = client.dict()
     performedBy = client_dict.pop("performedBy", "Unknown")
@@ -4441,7 +4472,8 @@ async def get_wm_tasks(db, userId: Optional[str] = None, role: Optional[str] = N
                 query["$or"] = [
                     {"assignedToId": {"$in": dept_emp_ids}},
                     {"department": dept},
-                    {"performedBy": userId}
+                    {"performedBy": userId},
+                    {"assignedToId": userId}
                 ]
             else:
                 # Employee sees their own tasks or tasks they created
@@ -8966,6 +8998,13 @@ async def calculate_public_slots(db, employee_id: str, date_str: str, config_id:
         all_member_ids.extend([str(x) for x in config.get("employeeIds")])
     all_member_ids = list(set(all_member_ids))
 
+    # Sync Google Calendar events for all members before calculating available slots
+    sync_tasks = []
+    for member_id in all_member_ids:
+        sync_tasks.append(sync_google_events(db, member_id, date_str, date_str))
+    if sync_tasks:
+        await asyncio.gather(*sync_tasks, return_exceptions=True)
+
     query = {
         "$or": [
             {"employeeId": {"$in": all_member_ids}},
@@ -8989,7 +9028,12 @@ async def calculate_public_slots(db, employee_id: str, date_str: str, config_id:
         s_start = s.get("startTime")
         s_end = s.get("endTime")
         if s_start and s_end:
-            existing_ranges.append((time_str_to_mins(s_start), time_str_to_mins(s_end)))
+            start_mins = time_str_to_mins(s_start)
+            end_mins = time_str_to_mins(s_end)
+            # Full day event (00:00 to 00:00) blocks the entire day
+            if start_mins == 0 and end_mins == 0:
+                end_mins = 1440
+            existing_ranges.append((start_mins, end_mins))
             
     candidate_slots = []
     for window in day_slots:
@@ -9432,6 +9476,8 @@ async def get_all_transfer_requests(db, task_id: str = None, task_type: str = No
     if task_type:
         if task_type in ["smm", "all"]:
             query["taskType"] = {"$in": ["content-calendar", "creative", "other-work"]}
+        elif task_type in ["wm-task", "wm-tasks"]:
+            query["taskType"] = {"$in": ["wm-task", "wm-tasks"]}
         else:
             query["taskType"] = task_type
     cursor = db.work_transfer_requests.find(query).sort("createdDate", -1)
@@ -9473,6 +9519,8 @@ async def get_incoming_transfer_requests(db, receiver_id: str, task_type: str = 
     if task_type:
         if task_type in ["smm", "all"]:
             query["taskType"] = {"$in": ["content-calendar", "creative", "other-work"]}
+        elif task_type in ["wm-task", "wm-tasks"]:
+            query["taskType"] = {"$in": ["wm-task", "wm-tasks"]}
         else:
             query["taskType"] = task_type
     cursor = db.work_transfer_requests.find(query).sort("createdDate", -1)
@@ -9484,6 +9532,8 @@ async def get_outgoing_transfer_requests(db, sender_id: str, task_type: str = No
     if task_type:
         if task_type in ["smm", "all"]:
             query["taskType"] = {"$in": ["content-calendar", "creative", "other-work"]}
+        elif task_type in ["wm-task", "wm-tasks"]:
+            query["taskType"] = {"$in": ["wm-task", "wm-tasks"]}
         else:
             query["taskType"] = task_type
     cursor = db.work_transfer_requests.find(query).sort("createdDate", -1)

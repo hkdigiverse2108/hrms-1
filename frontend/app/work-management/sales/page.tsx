@@ -182,6 +182,72 @@ export default function SalesPage() {
     category: "Overall"
   });
 
+  const [isBulkAssignDialogOpen, setIsBulkAssignDialogOpen] = useState(false);
+  const [bulkAssignee, setBulkAssignee] = useState<string[]>([]);
+  const [isBulkAssignSubmitting, setIsBulkAssignSubmitting] = useState(false);
+  const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
+
+  const handleBulkAssign = async () => {
+    if (selectedLeads.length === 0 || bulkAssignee.length === 0) {
+      toast.error("Please select leads and at least one employee.");
+      return;
+    }
+    setIsBulkAssignSubmitting(true);
+    try {
+      const payload = {
+        leadIds: selectedLeads,
+        assignedTo: bulkAssignee,
+        performedBy: user?.id,
+        userName: currentUserName
+      };
+      const res = await fetch(`${API_URL}/leads/bulk-assign`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        toast.success("Leads assigned successfully");
+        setIsBulkAssignDialogOpen(false);
+        setSelectedLeads([]);
+        setBulkAssignee([]);
+        fetchLeads();
+      } else {
+        toast.error("Failed to assign leads");
+      }
+    } catch (err) {
+      toast.error("Error bulk assigning leads");
+    } finally {
+      setIsBulkAssignSubmitting(false);
+    }
+  };
+
+  const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
+  const [isBulkDeleteSubmitting, setIsBulkDeleteSubmitting] = useState(false);
+
+  const handleBulkDelete = async () => {
+    if (selectedLeads.length === 0) return;
+    setIsBulkDeleteSubmitting(true);
+    try {
+      const res = await fetch(`${API_URL}/leads/bulk-delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadIds: selectedLeads })
+      });
+      if (res.ok) {
+        toast.success("Leads deleted successfully");
+        setIsBulkDeleteDialogOpen(false);
+        setSelectedLeads([]);
+        fetchLeads();
+      } else {
+        toast.error("Failed to delete leads");
+      }
+    } catch (err) {
+      toast.error("Error bulk deleting leads");
+    } finally {
+      setIsBulkDeleteSubmitting(false);
+    }
+  };
+
   const [slabForm, setSlabForm] = useState<{ minAmount: number; maxAmount: number; percentage: number; employees: string[]; clientCategories: string[]; isRecurring: boolean }>({
     minAmount: 0,
     maxAmount: 0,
@@ -926,7 +992,11 @@ export default function SalesPage() {
     });
   });
 
-  const visibleLeads = isAdmin 
+  const isHR = user?.role?.toLowerCase() === 'hr' || user?.designation?.toLowerCase()?.includes('hr') || user?.department?.toLowerCase()?.includes('hr');
+  const isTL = (user?.designation?.toLowerCase() === 'team leader' || user?.role?.toLowerCase() === 'team leader');
+  const isSalesTL = isTL && user?.department?.toLowerCase()?.includes('sales');
+
+  const visibleLeads = (isAdmin || isHR || isSalesTL)
     ? filteredByEmployeeLeads 
     : filteredByEmployeeLeads.filter((l: any) => {
         const assignedList = Array.isArray(l.assignedTo) ? l.assignedTo : (l.assignedTo ? [l.assignedTo] : []);
@@ -1159,6 +1229,20 @@ export default function SalesPage() {
             cat === 1 ? 'border-l-4 border-l-rose-500 bg-rose-50/5' : ''
           }`}
         >
+          <td className="px-4 py-4 text-center">
+            <input 
+              type="checkbox"
+              checked={selectedLeads.includes(lead.id)}
+              onChange={(e) => {
+                if (e.target.checked) {
+                  setSelectedLeads([...selectedLeads, lead.id]);
+                } else {
+                  setSelectedLeads(selectedLeads.filter(id => id !== lead.id));
+                }
+              }}
+              className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-4 h-4 cursor-pointer"
+            />
+          </td>
           <td className="px-4 py-4 text-center">
             <input 
               type="checkbox"
@@ -1669,6 +1753,20 @@ export default function SalesPage() {
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-slate-50/50 border-b border-slate-100">
+              <th className="w-12 px-4 py-3.5 text-center text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <input 
+                  type="checkbox"
+                  checked={filteredAndSorted.length > 0 && selectedLeads.length === filteredAndSorted.length}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedLeads(filteredAndSorted.map(l => l.id));
+                    } else {
+                      setSelectedLeads([]);
+                    }
+                  }}
+                  className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-4 h-4 cursor-pointer"
+                />
+              </th>
               <th className="w-12 px-4 py-3.5 text-center text-[11px] font-bold text-slate-500 uppercase tracking-wider">Hot</th>
               <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Created By</th>
               <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Contact</th>
@@ -1694,15 +1792,33 @@ export default function SalesPage() {
                       className="bg-slate-100/50 font-bold border-y border-slate-200/50 cursor-pointer hover:bg-slate-100 transition-colors select-none"
                       onClick={() => toggleCategory(catName)}
                     >
-                      <td colSpan={11} className="px-6 py-2 text-xs uppercase tracking-wider text-slate-700 font-bold bg-slate-50">
-                        <span className="flex items-center gap-1.5">
-                          {isCollapsed ? (
-                            <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
-                          ) : (
-                            <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
-                          )}
-                          {catName} ({catLeads.length})
-                        </span>
+                      <td colSpan={12} className="px-6 py-2 text-xs uppercase tracking-wider text-slate-700 font-bold bg-slate-50">
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={catLeads.length > 0 && catLeads.every(l => selectedLeads.includes(l.id))}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              if (e.target.checked) {
+                                const newIds = catLeads.map(l => l.id).filter(id => !selectedLeads.includes(id));
+                                setSelectedLeads([...selectedLeads, ...newIds]);
+                              } else {
+                                const catIds = catLeads.map(l => l.id);
+                                setSelectedLeads(selectedLeads.filter(id => !catIds.includes(id)));
+                              }
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-4 h-4 cursor-pointer"
+                          />
+                          <span className="flex items-center gap-1.5">
+                            {isCollapsed ? (
+                              <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
+                            ) : (
+                              <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+                            )}
+                            {catName} ({catLeads.length})
+                          </span>
+                        </div>
                       </td>
                     </tr>
                     {!isCollapsed && catLeads.map((lead) => renderRow(lead))}
@@ -1763,6 +1879,7 @@ export default function SalesPage() {
 
                   {canAddSales && (
                     <div className="flex gap-2">
+
                       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                         <DialogTrigger asChild>
                           <Button className="bg-brand-teal hover:bg-brand-teal-light text-white shadow-sm transition-all active:scale-95">
@@ -3041,6 +3158,115 @@ export default function SalesPage() {
           <DailyProgressView defaultDepartment="Sales" />
         </TabsContent>
       </Tabs>
+
+      {/* Floating Bulk Actions Bar */}
+      {selectedLeads.length > 0 && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-white shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-slate-200 rounded-full px-4 py-3 flex items-center gap-4 z-[100] animate-in slide-in-from-bottom-5">
+          <div className="flex items-center gap-2 border-r border-slate-200 pr-4">
+            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-brand-teal/10 text-brand-teal text-xs font-bold">
+              {selectedLeads.length}
+            </span>
+            <span className="text-sm font-semibold text-slate-700">Leads selected</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => setSelectedLeads([])}
+              className="text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-full h-8"
+            >
+              Clear
+            </Button>
+            <Dialog open={isBulkDeleteDialogOpen} onOpenChange={setIsBulkDeleteDialogOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="destructive" className="shadow-sm rounded-full h-8 px-4 transition-all active:scale-95 bg-rose-500 hover:bg-rose-600">
+                  <Trash2 className="w-3.5 h-3.5 mr-2" />
+                  Delete
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Delete Leads?</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <p className="text-sm text-slate-600">
+                    Are you sure you want to permanently delete {selectedLeads.length} selected lead{selectedLeads.length > 1 ? 's' : ''}? This action cannot be undone.
+                  </p>
+                  <div className="flex gap-3 justify-end mt-4">
+                    <Button variant="outline" onClick={() => setIsBulkDeleteDialogOpen(false)}>Cancel</Button>
+                    <Button variant="destructive" onClick={handleBulkDelete} disabled={isBulkDeleteSubmitting} className="bg-rose-500 hover:bg-rose-600">
+                      {isBulkDeleteSubmitting ? (
+                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Deleting...</>
+                      ) : (
+                        "Yes, Delete"
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+            <Dialog open={isBulkAssignDialogOpen} onOpenChange={setIsBulkAssignDialogOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" className="bg-brand-teal hover:bg-brand-teal-light text-white shadow-sm rounded-full h-8 px-4 transition-all active:scale-95">
+                  <Users className="w-3.5 h-3.5 mr-2" />
+                  Assign
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Bulk Assign Leads</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="flex flex-col gap-2">
+                    <Label>Assign to</Label>
+                    <div className="max-h-60 overflow-y-auto space-y-2 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                      {employees.map(emp => {
+                        const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
+                        return (
+                          <label key={emp.id} className="flex items-center gap-3 cursor-pointer p-2 hover:bg-white rounded-md transition-colors border border-transparent hover:border-slate-100">
+                            <input 
+                              type="checkbox"
+                              className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-4 h-4"
+                              checked={bulkAssignee.includes(empName)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setBulkAssignee([...bulkAssignee, empName]);
+                                } else {
+                                  setBulkAssignee(bulkAssignee.filter(n => n !== empName));
+                                }
+                              }}
+                            />
+                            <div className="flex items-center gap-2">
+                              <Avatar className="w-6 h-6">
+                                <AvatarImage src={emp.profileImageUrl} />
+                                <AvatarFallback className="text-[10px] bg-brand-teal/10 text-brand-teal">
+                                  {empName.substring(0,2).toUpperCase()}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="text-sm font-medium text-slate-700">{empName}</span>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <Button 
+                    className="w-full bg-brand-teal hover:bg-brand-teal-light text-white" 
+                    onClick={handleBulkAssign}
+                    disabled={isBulkAssignSubmitting || bulkAssignee.length === 0}
+                  >
+                    {isBulkAssignSubmitting ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Assigning...</>
+                    ) : (
+                      "Assign Leads"
+                    )}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
