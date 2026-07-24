@@ -129,7 +129,7 @@ export function AddEventDialog({ open, onOpenChange, onAddEvent, initialData }: 
                     )}
                   >
                     <Calendar className="mr-2 h-4 w-4 text-gray-400" />
-                    {date ? format(date, "PPP") : <span>Select date</span>}
+                    {date ? format(date, "dd/MM/yyyy") : <span>Select date</span>}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0 rounded-xl" align="start">

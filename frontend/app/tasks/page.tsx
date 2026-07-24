@@ -459,7 +459,7 @@ export default function TaskManagementPage() {
           console.error(e);
         }
       } else {
-        const defaultSaved = [];
+        const defaultSaved: string[] = [];
         setSavedStatuses(defaultSaved);
         localStorage.setItem(`task_saved_status_filters_${user.id}`, JSON.stringify(defaultSaved));
       }
@@ -671,7 +671,7 @@ export default function TaskManagementPage() {
                   if (saved) {
                     setActiveStatuses(JSON.parse(saved));
                   } else {
-                    const defaultSaved = [];
+                    const defaultSaved: string[] = [];
                     setActiveStatuses(defaultSaved);
                     localStorage.setItem(`task_saved_status_filters_${user.id}`, JSON.stringify(defaultSaved));
                   }
@@ -1439,11 +1439,11 @@ export default function TaskManagementPage() {
                         {activeDateRange?.from ? (
                           activeDateRange.to ? (
                             <>
-                              {format(activeDateRange.from, "LLL dd")} -{" "}
-                              {format(activeDateRange.to, "LLL dd")}
+                              {format(activeDateRange.from, "dd/MM/yyyy")} -{" "}
+                              {format(activeDateRange.to, "dd/MM/yyyy")}
                             </>
                           ) : (
-                            format(activeDateRange.from, "LLL dd, y")
+                            format(activeDateRange.from, "dd/MM/yyyy")
                           )
                         ) : (
                           <span>Pick a date range</span>
@@ -1557,7 +1557,7 @@ export default function TaskManagementPage() {
                       ) : (
                         <div 
                           className={`font-semibold text-foreground mb-1 inline-block ${canEdit ? 'hover:text-brand-teal hover:underline cursor-pointer' : ''}`}
-                          title={canEdit ? "Click to edit task name" : ""}
+                          title={canEdit ? `Click to edit task name\n${task.title}` : task.title}
                           onClick={(e) => {
                             e.stopPropagation();
                             if (!canEdit) return;
@@ -1586,7 +1586,7 @@ export default function TaskManagementPage() {
                       ) : (
                         <div 
                           className={`text-xs text-muted-foreground line-clamp-1 ${canEdit ? 'hover:text-brand-teal hover:underline cursor-pointer' : ''}`}
-                          title={canEdit ? "Click to edit description" : ""}
+                          title={canEdit ? `Click to edit description\n${task.description || task.desc || ""}` : (task.description || task.desc || "")}
                           onClick={(e) => {
                             e.stopPropagation();
                             if (!canEdit) return;
@@ -1886,7 +1886,7 @@ export default function TaskManagementPage() {
                           <PopoverTrigger asChild>
                             <div className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-2 py-1 rounded-md text-sm font-medium w-[130px] border border-transparent hover:border-border transition-colors">
                               <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-                              {task.dueDate ? format(new Date(task.dueDate), "MMM d, yyyy") : <span className="text-muted-foreground font-normal">Set date</span>}
+                              {task.dueDate ? format(new Date(task.dueDate), "dd/MM/yyyy") : <span className="text-muted-foreground font-normal">Set date</span>}
                             </div>
                           </PopoverTrigger>
                           <PopoverContent className="w-auto p-0" align="start">
@@ -1915,7 +1915,7 @@ export default function TaskManagementPage() {
                       ) : (
                         <div className="flex items-center gap-2 px-2 py-1 rounded-md text-sm font-medium w-[130px] border border-transparent">
                           <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-                          {task.dueDate ? format(new Date(task.dueDate), "MMM d, yyyy") : <span className="text-muted-foreground font-normal">Set date</span>}
+                          {task.dueDate ? format(new Date(task.dueDate), "dd/MM/yyyy") : <span className="text-muted-foreground font-normal">Set date</span>}
                         </div>
                       )}
                     </td>

@@ -753,9 +753,9 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
                 <Calendar className="w-3.5 h-3.5 mr-2" />
                 {dateRange?.from ? (
                   dateRange.to ? (
-                    `${format(dateRange.from, "LLL dd, y")} - ${format(dateRange.to, "LLL dd, y")}`
+                    `${format(dateRange.from, "dd/MM/yyyy")} - ${format(dateRange.to, "dd/MM/yyyy")}`
                   ) : (
-                    format(dateRange.from, "LLL dd, y")
+                    format(dateRange.from, "dd/MM/yyyy")
                   )
                 ) : (
                   "Select Date Range"

@@ -218,11 +218,22 @@ export function Header() {
 
  
   const userName = user?.name || "Guest";
+  const roleClean = (user?.role || "").toLowerCase().trim();
+  const isAdminOrSubAdmin = roleClean.includes('admin') || roleClean.includes('administrator') || roleClean.includes('founder');
+  const subDept = user?.sub_department || (user as any)?.subDepartment;
+  const dept = user?.department;
+
   let designation = user?.designation || user?.role || "Employee";
-  if (user?.sub_department && user?.designation && !user?.role?.toLowerCase().includes('admin')) {
-    designation = `${user.sub_department} - ${user.designation}`;
-  } else if (user?.department && user?.designation && !user?.role?.toLowerCase().includes('admin')) {
-    designation = `${user.department} - ${user.designation}`;
+  if (!isAdminOrSubAdmin) {
+    if (user?.designation && subDept) {
+      designation = `${user.designation} ${subDept}`;
+    } else if (user?.designation && dept) {
+      designation = `${user.designation} ${dept}`;
+    } else if (user?.designation) {
+      designation = user.designation;
+    }
+  } else {
+    designation = user?.designation || user?.role || "Admin";
   }
   const initials = userName.split(' ').map(n => n[0]).join('').toUpperCase();
   const showUserInfo = mounted && !isLoading;
@@ -235,7 +246,7 @@ export function Header() {
   return (
     <>
       <AntHeader 
-        className={`bg-white border-b border-border flex items-center justify-between px-6 sticky top-0 z-10 w-full ${
+        className={`bg-white border-b border-border flex items-center justify-between px-6 sticky top-0 z-40 w-full shadow-2xs ${
           (isSalesSection && todayFollowUpCount > 0) ? "mb-0" : "mb-6"
         }`}
         style={{ height: '64px', padding: '0 24px', lineHeight: '64px', background: '#fff' }}
