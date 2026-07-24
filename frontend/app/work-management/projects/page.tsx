@@ -409,15 +409,27 @@ export default function ProjectsPage() {
 
   const allowedProjects = projects.filter(p => {
     if (isAdmin) return true;
+    // Check global access roles
+    const userRole = (user?.role || "").toLowerCase();
+    if (userRole.includes("hr") || userRole.includes("finance")) return true;
+    
+    // Check explicit assignments dynamically
+    const isAssigned = Object.keys(p).some(key => {
+      const val = p[key];
+      return (typeof val === 'string' && val === user?.id);
+    });
+    if (isAssigned) return true;
+    
+    // If not assigned, filter by department
     if (!user?.department) return true;
     const userDept = user.department.toLowerCase().trim();
     return p.department && p.department.toLowerCase().includes(userDept);
   });
 
   const filteredProjects = allowedProjects.filter(p => {
-    const matchesSearch = p.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          p.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          p.department?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = (p.title || "").toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          (p.clientName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (p.department || "").toLowerCase().includes(searchTerm.toLowerCase());
     
     const selectedDeptTrimmed = selectedDept.toLowerCase().trim();
     const matchesDept = selectedDept === "all" || (p.department && p.department.toLowerCase().includes(selectedDeptTrimmed));
@@ -1079,7 +1091,7 @@ export default function ProjectsPage() {
 
 
                     {/* Finance & Feedback Details */}
-                    {(isAdmin || project.teamLeaderId === user?.id || project.assignedFinanceManagerId === user?.id) && (project.amountReceived !== undefined || project.projectFeedback) && (
+                    {(isAdmin || project.assignedFinanceManagerId === user?.id) && (project.amountReceived !== undefined || project.projectFeedback || project.nextPaymentDate || project.isPaymentReceived !== undefined) && (
                       <div className="pt-3 border-t border-dashed border-emerald-200/60 bg-emerald-50/30 p-3 rounded-lg space-y-2 mt-2 mb-2">
                         <div className="flex items-center gap-1.5 mb-1 text-emerald-700">
                           <Banknote className="w-3.5 h-3.5" />
@@ -1095,6 +1107,18 @@ export default function ProjectsPage() {
                           <div className="flex justify-between items-center text-xs">
                             <span className="text-slate-500 font-medium">Amount Received:</span>
                             <span className="font-bold text-emerald-600">₹{project.amountReceived}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-slate-500 font-medium">Next Payment Date:</span>
+                          <span className="font-bold text-slate-700">{project.nextPaymentDate || "Not Set"}</span>
+                        </div>
+                        {project.isPaymentReceived !== undefined && (
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-slate-500 font-medium">Payment Received:</span>
+                            <Badge variant={project.isPaymentReceived ? "success" : "destructive"} className="text-[10px] h-5 uppercase">
+                              {project.isPaymentReceived ? "Yes" : "No"}
+                            </Badge>
                           </div>
                         )}
                         {project.projectFeedback && (
@@ -1121,6 +1145,10 @@ export default function ProjectsPage() {
                               Team Deadline: {project.teamDeadline}
                             </div>
                           )}
+                          <div className="flex items-center gap-1.5 text-emerald-600 font-bold text-[11px]">
+                            <Banknote className="w-3.5 h-3.5 shrink-0" />
+                            Next Payment: {project.nextPaymentDate || "Not Set"}
+                          </div>
                         </div>
                       ) : (
                         <div className="flex flex-col gap-1">
@@ -1132,6 +1160,12 @@ export default function ProjectsPage() {
                             <CalendarClock className="w-3.5 h-3.5 shrink-0" />
                             Team Deadline: {project.teamDeadline || project.endDate || project.startDate || "-"}
                           </div>
+                          {project.assignedFinanceManagerId === user?.id && (
+                            <div className="flex items-center gap-1.5 text-emerald-600 font-bold text-[11px]">
+                              <Banknote className="w-3.5 h-3.5 shrink-0" />
+                              Next Payment: {project.nextPaymentDate || "Not Set"}
+                            </div>
+                          )}
                         </div>
                       )}
                       <div className="flex flex-col items-end gap-1 mt-0.5">

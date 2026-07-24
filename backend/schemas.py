@@ -1206,6 +1206,7 @@ class ProjectBase(BaseModel):
     paymentEndDate: Optional[RobustDate] = None
     paymentReminderDays: Optional[int] = None
     isPaymentReceived: Optional[bool] = False
+    nextPaymentDate: Optional[RobustDate] = None
     
     # Feedback Collection Fields
     feedbackType: Optional[str] = "Interval" # 'Interval', 'Weekly', 'Monthly'
@@ -1306,6 +1307,7 @@ class ProjectUpdate(BaseModel):
     paymentEndDate: Optional[RobustDate] = None
     paymentReminderDays: Optional[int] = None
     isPaymentReceived: Optional[bool] = None
+    nextPaymentDate: Optional[RobustDate] = None
     
     feedbackType: Optional[str] = None
     feedbackIntervalDays: Optional[int] = None

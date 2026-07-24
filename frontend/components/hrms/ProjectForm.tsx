@@ -53,6 +53,8 @@ export interface ProjectFormData {
   assignedFinanceManagerName?: string;
   amountReceived?: number;
   projectFeedback?: string;
+  nextPaymentDate?: string;
+  isPaymentReceived?: boolean;
 }
 
 const defaultFormData: ProjectFormData = {
@@ -84,6 +86,8 @@ const defaultFormData: ProjectFormData = {
   assignedFinanceManagerName: "",
   amountReceived: 0,
   projectFeedback: "",
+  nextPaymentDate: "",
+  isPaymentReceived: false,
 };
 
 interface ProjectFormProps {
@@ -280,13 +284,14 @@ function SingleEmployeeSelectWithSearch({
 
 export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = true, currentUser }: ProjectFormProps) {
   const isTeamLeader = currentUser?.role === "Team Leader" || currentUser?.designation?.toLowerCase() === "team leader";
-  const isFinanceManager = initialData?.assignedFinanceManagerId === currentUser?.id || formData?.assignedFinanceManagerId === currentUser?.id;
-  const canSeeFinance = isAdmin || isTeamLeader || isFinanceManager;
   
   const [formData, setFormData] = useState<ProjectFormData>({
     ...defaultFormData,
     ...initialData,
   });
+
+  const isFinanceManager = initialData?.assignedFinanceManagerId === currentUser?.id || formData?.assignedFinanceManagerId === currentUser?.id;
+  const canSeeFinance = isAdmin || isFinanceManager;
 
   useEffect(() => {
     if (initialData) {
@@ -1017,6 +1022,23 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
                 value={formData.amountReceived || ""}
                 onChange={(e) => handleChange("amountReceived", parseFloat(e.target.value) || 0)}
               />
+            </div>
+            <div className="space-y-2">
+              <Label>Next Payment Date</Label>
+              <Input
+                type="date"
+                value={formData.nextPaymentDate || ""}
+                onChange={(e) => handleChange("nextPaymentDate", e.target.value)}
+              />
+            </div>
+            <div className="space-y-2 flex flex-col justify-center">
+              <div className="flex items-center gap-2 mt-4">
+                <Switch 
+                  checked={formData.isPaymentReceived || false}
+                  onCheckedChange={(checked) => handleChange("isPaymentReceived", checked)}
+                />
+                <Label>Payment Received</Label>
+              </div>
             </div>
             <div className="space-y-2 md:col-span-2">
               <Label>Project Feedback / Notes</Label>
