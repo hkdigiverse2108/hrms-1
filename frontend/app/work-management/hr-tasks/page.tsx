@@ -47,7 +47,8 @@ export default function HRTasksPage() {
     priority: "medium",
     status: "todo",
     department: "HR",
-    frequency: "one-time"
+    frequency: "one-time",
+    remarks: ""
   });
 
   // Leave approval state
@@ -180,7 +181,8 @@ export default function HRTasksPage() {
           priority: "medium",
           status: "todo",
           department: "HR",
-          frequency: "one-time"
+          frequency: "one-time",
+          remarks: ""
         });
         fetchTasks();
       } else {
@@ -315,7 +317,8 @@ export default function HRTasksPage() {
                 priority: "medium",
                 status: "todo",
                 department: "HR",
-                frequency: "one-time"
+                frequency: "one-time",
+                remarks: ""
               });
               setIsTaskModalOpen(true);
             }}
@@ -341,27 +344,171 @@ export default function HRTasksPage() {
         {/* --- GENERAL TASKS TAB --- */}
         <TabsContent value="tasks" className="mt-6 space-y-4">
           {(() => {
-            const todayStr = new Date().toISOString().split("T")[0];
-            
+            const formatLocalDate = (date: Date) => {
+              const yyyy = date.getFullYear();
+              const mm = String(date.getMonth() + 1).padStart(2, '0');
+              const dd = String(date.getDate()).padStart(2, '0');
+              return `${yyyy}-${mm}-${dd}`;
+            };
+
+            const todayStr = formatLocalDate(new Date());
             const freqTasks = frequencyFilter === "all" 
               ? hrTasks 
               : hrTasks.filter(t => t.frequency === frequencyFilter);
 
-            const countToday = freqTasks.filter(t => t.status !== "completed" && (t.dueDate === todayStr || (t.frequency === "daily" && !t.dueDate))).length;
-            const countPending = freqTasks.filter(t => t.status !== "completed" && t.dueDate && t.dueDate < todayStr).length;
-            const countUpcoming = freqTasks.filter(t => t.status !== "completed" && t.dueDate && t.dueDate > todayStr).length;
+            const getEffectiveDueDate = (task: any) => {
+              const today = new Date();
+              const todayStr = formatLocalDate(today);
+
+              if (task.frequency === "monthly") {
+                if (!task.remarks) return "";
+                const selectedDates = task.remarks.split(",").map(Number).filter(n => !isNaN(n));
+                if (selectedDates.length > 0) {
+                  const todayDom = today.getDate();
+                  if (selectedDates.includes(todayDom)) {
+                    return todayStr;
+                  }
+                  
+                  // Find next date in the current month
+                  const nextInCurrentMonth = selectedDates.find(d => d > todayDom);
+                  if (nextInCurrentMonth !== undefined) {
+                    const targetDate = new Date(today.getFullYear(), today.getMonth(), nextInCurrentMonth);
+                    return formatLocalDate(targetDate);
+                  } else {
+                    // Next date is in next month
+                    const firstDateOfNextMonth = selectedDates[0];
+                    const nextMonth = today.getMonth() + 1;
+                    const targetDate = new Date(today.getFullYear(), nextMonth, firstDateOfNextMonth);
+                    return formatLocalDate(targetDate);
+                  }
+                }
+                return "";
+              }
+
+              if (task.frequency === "weekly") {
+                if (!task.remarks) return "";
+                const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+                const selectedDays = task.remarks.split(",").map(d => d.trim().toLowerCase());
+                const targetDayIndices = selectedDays.map(d => days.findIndex(dayName => dayName.toLowerCase() === d)).filter(idx => idx !== -1);
+                
+                if (targetDayIndices.length > 0) {
+                  const currentDayIndex = today.getDay();
+                  if (targetDayIndices.includes(currentDayIndex)) {
+                    return todayStr;
+                  }
+                  const relativeDays = targetDayIndices.map(idx => (idx - currentDayIndex + 7) % 7);
+                  const minRelativeDays = Math.min(...relativeDays);
+                  const targetDate = new Date(today);
+                  targetDate.setDate(today.getDate() + minRelativeDays);
+                  return formatLocalDate(targetDate);
+                }
+                return "";
+              }
+              if (task.dueDate) {
+                return task.dueDate.includes("T") ? task.dueDate.split("T")[0] : task.dueDate;
+              }
+              if (task.frequency === "daily") {
+                return todayStr;
+              }
+              return task.createdDate || todayStr;
+            };
+
+            const getNextOccurrenceDate = (task: any) => {
+              const today = new Date();
+              
+              if (task.frequency === "monthly" && task.remarks) {
+                const selectedDates = task.remarks.split(",").map(Number).filter(n => !isNaN(n));
+                if (selectedDates.length > 0) {
+                  const todayDom = today.getDate();
+                  // Find next date in the current month that is strictly greater than today
+                  const nextInCurrentMonth = selectedDates.find(d => d > todayDom);
+                  if (nextInCurrentMonth !== undefined) {
+                    const targetDate = new Date(today.getFullYear(), today.getMonth(), nextInCurrentMonth);
+                    return formatLocalDate(targetDate);
+                  } else {
+                    // Next date is in next month
+                    const firstDateOfNextMonth = selectedDates[0];
+                    const nextMonth = today.getMonth() + 1;
+                    const targetDate = new Date(today.getFullYear(), nextMonth, firstDateOfNextMonth);
+                    return formatLocalDate(targetDate);
+                  }
+                }
+              }
+
+              if (task.frequency === "weekly" && task.remarks) {
+                const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+                const selectedDays = task.remarks.split(",").map(d => d.trim().toLowerCase());
+                const targetDayIndices = selectedDays.map(d => days.findIndex(dayName => dayName.toLowerCase() === d)).filter(idx => idx !== -1);
+                
+                if (targetDayIndices.length > 0) {
+                  const currentDayIndex = today.getDay();
+                  const relativeDays = targetDayIndices
+                    .map(idx => (idx - currentDayIndex + 7) % 7)
+                    .filter(r => r > 0);
+                  const minRelativeDays = relativeDays.length > 0 ? Math.min(...relativeDays) : 7;
+                  const targetDate = new Date(today);
+                  targetDate.setDate(today.getDate() + minRelativeDays);
+                  return formatLocalDate(targetDate);
+                }
+              }
+              
+              const baseDate = task.dueDate ? new Date(task.dueDate) : today;
+              const alignDate = baseDate < today ? today : baseDate;
+              
+              if (task.frequency === "daily") {
+                alignDate.setDate(alignDate.getDate() + 1);
+              } else if (task.frequency === "every-2-days") {
+                alignDate.setDate(alignDate.getDate() + 2);
+              } else if (task.frequency === "weekly") {
+                alignDate.setDate(alignDate.getDate() + 7);
+              } else if (task.frequency === "monthly") {
+                alignDate.setMonth(alignDate.getMonth() + 1);
+              }
+              return formatLocalDate(alignDate);
+            };
+
+            const isTaskUpcoming = (task: any) => {
+              if (task.status === "completed") return false;
+              const eff = getEffectiveDueDate(task);
+              if (!eff) return false;
+              if (eff > todayStr) return true;
+              if (task.frequency && task.frequency !== "one-time" && eff === todayStr) return true;
+              return false;
+            };
+
+            const displayDueDate = (task: any) => {
+              const eff = getEffectiveDueDate(task);
+              if (!eff) return "";
+              if (taskSubTab === "upcoming" && task.frequency && task.frequency !== "one-time" && eff === todayStr) {
+                return getNextOccurrenceDate(task);
+              }
+              if (taskSubTab === "today" || eff === todayStr) {
+                return todayStr;
+              }
+              return task.dueDate || task.createdDate || eff;
+            };
+
+            const countToday = freqTasks.filter(t => {
+              const eff = getEffectiveDueDate(t);
+              return t.status !== "completed" && eff && eff === todayStr;
+            }).length;
+            const countPending = freqTasks.filter(t => {
+              const eff = getEffectiveDueDate(t);
+              return t.status !== "completed" && eff && eff < todayStr;
+            }).length;
+            const countUpcoming = freqTasks.filter(t => isTaskUpcoming(t)).length;
             const countCompleted = freqTasks.filter(t => t.status === "completed").length;
 
             const filteredTasks = freqTasks.filter((task) => {
-              const taskDateStr = task.dueDate ? (task.dueDate.includes("T") ? task.dueDate.split("T")[0] : task.dueDate) : "";
+              const taskDateStr = getEffectiveDueDate(task);
               if (taskSubTab === "today") {
-                return task.status !== "completed" && (taskDateStr === todayStr || (task.frequency === "daily" && !taskDateStr));
+                return task.status !== "completed" && taskDateStr && taskDateStr === todayStr;
               }
               if (taskSubTab === "pending") {
-                return task.status !== "completed" && taskDateStr < todayStr && taskDateStr !== "";
+                return task.status !== "completed" && taskDateStr && taskDateStr < todayStr;
               }
               if (taskSubTab === "upcoming") {
-                return task.status !== "completed" && taskDateStr > todayStr;
+                return isTaskUpcoming(task);
               }
               if (taskSubTab === "completed") {
                 return task.status === "completed";
@@ -444,6 +591,7 @@ export default function HRTasksPage() {
                               {task.frequency && task.frequency !== "one-time" && (
                                 <Badge className="bg-indigo-50 text-indigo-600 border-indigo-200 border font-bold text-[9px] uppercase px-2 py-0.5">
                                   {task.frequency}
+                                  {task.remarks && (task.frequency === "weekly" || task.frequency === "monthly") ? ` (${task.remarks})` : ""}
                                 </Badge>
                               )}
                             </div>
@@ -451,7 +599,7 @@ export default function HRTasksPage() {
                           </div>
                           {isAdminOrHR && (
                             <div className="flex gap-1">
-                              {task.status !== "completed" && (
+                              {task.status !== "completed" && taskSubTab !== "upcoming" && (
                                 <Button 
                                   variant="ghost" 
                                   size="icon" 
@@ -472,7 +620,8 @@ export default function HRTasksPage() {
                                   priority: task.priority || "medium",
                                   status: task.status || "todo",
                                   department: task.department || "HR",
-                                  frequency: task.frequency || "one-time"
+                                  frequency: task.frequency || "one-time",
+                                  remarks: task.remarks || ""
                                 });
                                 setIsTaskModalOpen(true);
                               }}><Edit2 className="w-3.5 h-3.5" /></Button>
@@ -489,7 +638,7 @@ export default function HRTasksPage() {
                             </div>
                             <div className="flex items-center gap-1 font-semibold text-slate-700">
                               <Calendar className="w-3 h-3 text-slate-400" />
-                              <span>Due: {formatDisplayDate(task.dueDate)}</span>
+                              <span>Due: {formatDisplayDate(displayDueDate(task))}</span>
                             </div>
                           </div>
                         </CardContent>
@@ -688,6 +837,110 @@ export default function HRTasksPage() {
                 </Select>
               </div>
             </div>
+            {taskFormData.frequency === "weekly" && (
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-700">Select Days of Week (Multiple allowed)</Label>
+                <div className="flex flex-wrap gap-1.5 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((dayName) => {
+                    const selectedDays = taskFormData.remarks ? taskFormData.remarks.split(",").map(d => d.trim().toLowerCase()) : [];
+                    const isSelected = selectedDays.includes(dayName.toLowerCase());
+                    return (
+                      <button
+                        key={dayName}
+                        type="button"
+                        onClick={() => {
+                          let newSelected;
+                          if (isSelected) {
+                            newSelected = selectedDays.filter(d => d !== dayName.toLowerCase());
+                          } else {
+                            newSelected = [...selectedDays, dayName.toLowerCase()];
+                          }
+                          // Keep order matching the calendar week
+                          const orderedDays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+                          const sortedSelected = newSelected
+                            .sort((a, b) => orderedDays.indexOf(a) - orderedDays.indexOf(b))
+                            .map(d => d.charAt(0).toUpperCase() + d.slice(1));
+                          setTaskFormData({ ...taskFormData, remarks: sortedSelected.join(",") });
+                        }}
+                        className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all ${
+                          isSelected 
+                            ? "bg-brand-teal text-white border-brand-teal" 
+                            : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
+                        }`}
+                      >
+                        {dayName.substring(0, 3)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            {taskFormData.frequency === "monthly" && (
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-700">Select Dates of Month (Multiple allowed)</Label>
+                <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2">
+                  {(() => {
+                    const now = new Date();
+                    const year = now.getFullYear();
+                    const month = now.getMonth();
+                    
+                    const firstDay = new Date(year, month, 1);
+                    // Align with Monday as first column (0 = Monday, ..., 6 = Sunday)
+                    const startDayOfWeek = (firstDay.getDay() + 6) % 7; 
+                    
+                    const totalDays = new Date(year, month + 1, 0).getDate();
+                    const daysHeader = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+                    
+                    const cells = [];
+                    for (let i = 0; i < startDayOfWeek; i++) {
+                      cells.push(null);
+                    }
+                    for (let d = 1; d <= totalDays; d++) {
+                      cells.push(d);
+                    }
+                    
+                    return (
+                      <>
+                        <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                          {daysHeader.map(d => <div key={d}>{d}</div>)}
+                        </div>
+                        <div className="grid grid-cols-7 gap-1">
+                          {cells.map((dateNum, idx) => {
+                            if (dateNum === null) {
+                              return <div key={`empty-${idx}`} />;
+                            }
+                            const selectedDates = taskFormData.remarks ? taskFormData.remarks.split(",").map(Number).filter(n => !isNaN(n)) : [];
+                            const isSelected = selectedDates.includes(dateNum);
+                            return (
+                              <button
+                                key={dateNum}
+                                type="button"
+                                onClick={() => {
+                                  let newSelected;
+                                  if (isSelected) {
+                                    newSelected = selectedDates.filter(d => d !== dateNum);
+                                  } else {
+                                    newSelected = [...selectedDates, dateNum].sort((a, b) => a - b);
+                                  }
+                                  setTaskFormData({ ...taskFormData, remarks: newSelected.join(",") });
+                                }}
+                                className={`h-8 w-8 text-xs font-bold rounded flex items-center justify-center border transition-all ${
+                                  isSelected 
+                                    ? "bg-brand-teal text-white border-brand-teal" 
+                                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
+                                }`}
+                              >
+                                {dateNum}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Due Date</Label>

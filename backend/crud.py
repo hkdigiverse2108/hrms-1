@@ -3823,7 +3823,8 @@ async def get_projects(db, userId: str = None, role: str = None, skip: int = 0, 
                 {"assignedApproverId": userId},
                 {"assignedPosterId": userId},
                 {"assignedCaptionWriterId": userId},
-                {"assignedThumbnailDesignerId": userId}
+                {"assignedThumbnailDesignerId": userId},
+                {"assignedFinanceManagerId": userId}
             ]
             if project_ids:
                 project_ids_as_obj = []
@@ -3853,6 +3854,19 @@ async def get_projects(db, userId: str = None, role: str = None, skip: int = 0, 
 
     cursor = db.projects.find(query).sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
+    
+    today_date = get_now().date()
+    for row in rows:
+        if row.get("isPaymentReceived") and row.get("nextPaymentDate"):
+            try:
+                # nextPaymentDate is typically saved as "YYYY-MM-DD"
+                next_payment = datetime.strptime(row["nextPaymentDate"], "%Y-%m-%d").date()
+                if today_date > next_payment:
+                    row["isPaymentReceived"] = False
+                    await db.projects.update_one({"_id": row["_id"]}, {"$set": {"isPaymentReceived": False}})
+            except Exception:
+                pass
+                
     return [fix_id(row) for row in rows]
 
 async def create_project(db, project: schemas.ProjectCreate):
