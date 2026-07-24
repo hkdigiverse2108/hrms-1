@@ -587,7 +587,10 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
   return (
     <div className={isEmbedded ? "w-full" : "min-h-screen bg-slate-50 flex flex-col"}>
       {!isEmbedded && (
-        <PageHeader title="My Tasks">
+        <PageHeader 
+          title="My Tasks"
+          description="View and manage all your assigned tasks across departments"
+        >
           <Button className="bg-brand-teal hover:bg-brand-teal/90 text-white font-bold h-9">
             <Plus className="w-4 h-4 mr-2" />
             New Task
@@ -718,11 +721,11 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                             {activeDateRange?.from ? (
                               activeDateRange.to ? (
                                 <>
-                                  {format(activeDateRange.from, "LLL dd, y")} -{" "}
-                                  {format(activeDateRange.to, "LLL dd, y")}
+                                  {format(activeDateRange.from, "dd/MM/yyyy")} -{" "}
+                                  {format(activeDateRange.to, "dd/MM/yyyy")}
                                 </>
                               ) : (
-                                format(activeDateRange.from, "LLL dd, y")
+                                format(activeDateRange.from, "dd/MM/yyyy")
                               )
                             ) : (
                               <span>Pick a date range</span>
@@ -819,7 +822,7 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                                       <tr key={task.id} className="hover:bg-slate-50/50 transition-colors group">
                                         <td className="p-4">
                                           <span className={`font-bold text-[10px] rounded px-2.5 py-1 ${isOverdue ? 'bg-red-800 text-white' : 'bg-slate-100 text-slate-700'}`}>
-                                            {task.dueDate || '-'}
+                                            {task.dueDate ? format(new Date(task.dueDate), 'dd/MM/yyyy') : '-'}
                                           </span>
                                         </td>
                                         <td className="p-4 font-bold text-slate-800">
@@ -835,8 +838,8 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                                             {task.stage || '-'}
                                           </Badge>
                                         </td>
-                                        <td className="p-4">
-                                          <div className="font-bold text-slate-800">{task.title}</div>
+                                        <td className="p-4" title={task.title}>
+                                          <div className="font-bold text-slate-800 truncate max-w-[400px]">{task.title}</div>
                                           <div className="text-[10px] text-slate-400 mt-0.5">
                                             Assigned by: {task.originalTask?.assignerName || 'TL Graphics'} {task.originalTask?.assigneeName ? `Assigned to: ${task.originalTask.assigneeName}` : `Assigned to: ${currentUser?.name || 'User'}`}
                                           </div>
@@ -845,7 +848,24 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                                           {task.originalTask?.remark || '-'}
                                         </td>
                                         <td className="p-4 text-right">
-                                           <span className="text-slate-400 font-medium text-xs">-</span>
+                                          {task.status !== 'completed' && task.status !== 'Approved' && task.status?.toLowerCase() !== 'completed' ? (
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              className="h-8 w-8 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleMarkComplete(task);
+                                              }}
+                                              title="Mark Complete"
+                                            >
+                                              <CheckCircle2 className="w-4 h-4" />
+                                            </Button>
+                                          ) : (
+                                            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                                              Completed
+                                            </Badge>
+                                          )}
                                         </td>
                                       </tr>
                                     )
@@ -869,14 +889,14 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                                       <td className="p-4 font-semibold text-slate-700">
                                         <div className="flex items-center gap-1.5">
                                           <CalendarIcon className="w-3.5 h-3.5 text-slate-400" />
-                                          <span>{task.dueDate || 'No Date'}</span>
+                                          <span>{task.dueDate ? format(new Date(task.dueDate), 'dd/MM/yyyy') : 'No Date'}</span>
                                         </div>
                                       </td>
                                       <td className="p-4 font-bold text-slate-800">
                                         {task.projectName || '-'}
                                       </td>
-                                      <td className="p-4">
-                                        <div className="font-semibold text-slate-700">{task.title}</div>
+                                      <td className="p-4" title={`${task.title}${task.description ? '\n' + task.description : ''}`}>
+                                        <div className="font-semibold text-slate-700 truncate max-w-[400px]">{task.title}</div>
                                         {task.description && <div className="text-[10px] text-slate-400 mt-0.5 truncate max-w-[400px]">{task.description}</div>}
                                       </td>
                                       <td className="p-4">
@@ -885,7 +905,24 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                                         </Badge>
                                       </td>
                                       <td className="p-4 text-right">
-                                        <span className="text-slate-400 font-medium text-xs">-</span>
+                                          {task.status !== 'completed' && task.status !== 'Approved' && task.status?.toLowerCase() !== 'completed' ? (
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              className="h-8 w-8 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleMarkComplete(task);
+                                              }}
+                                              title="Mark Complete"
+                                            >
+                                              <CheckCircle2 className="w-4 h-4" />
+                                            </Button>
+                                          ) : (
+                                            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                                              Completed
+                                            </Badge>
+                                          )}
                                       </td>
                                     </tr>
                                   ))}

@@ -94,19 +94,11 @@ export function PendingWorkEmbedded({
   const [outgoingRequests, setOutgoingRequests] = useState<any[]>([]);
 
   const filteredIncoming = incomingRequests.filter((r: any) => {
-    if (defaultTaskType === 'digital-marketing') {
-      return r.taskType === 'digital-marketing';
-    } else {
-      return r.taskType === 'content-calendar' || r.taskType === 'other-work' || r.taskType === 'creative' || r.taskType === 'dev-creative-work';
-    }
+    return r.taskType === 'content-calendar' || r.taskType === 'other-work' || r.taskType === 'creative' || r.taskType === 'dev-creative-work';
   });
 
   const filteredOutgoing = outgoingRequests.filter((r: any) => {
-    if (defaultTaskType === 'digital-marketing') {
-      return r.taskType === 'digital-marketing';
-    } else {
-      return r.taskType === 'content-calendar' || r.taskType === 'other-work' || r.taskType === 'creative' || r.taskType === 'dev-creative-work';
-    }
+    return r.taskType === 'content-calendar' || r.taskType === 'other-work' || r.taskType === 'creative' || r.taskType === 'dev-creative-work';
   });
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [viewingTransferRequestsInternal, setViewingTransferRequestsInternal] = useState(false);
@@ -333,7 +325,7 @@ export function PendingWorkEmbedded({
 
       if (user?.id) {
         const isUserAdminOrTL = (user.designation?.toLowerCase() === 'team leader' || user.designation?.toLowerCase() === 'head') || user.designation?.toLowerCase() === 'hr' || user.role?.toLowerCase() === 'admin' || user.name === 'Admin Admin';
-        const taskTypeQuery = defaultTaskType ? `?taskType=${defaultTaskType}` : "";
+        const taskTypeQuery = `?taskType=smm`;
         if (isUserAdminOrTL) {
           const [allRes, outgoingRes] = await Promise.all([
             fetch(`${API_URL}/work-transfer-requests${taskTypeQuery}`),

@@ -5,7 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
-import { Calendar, Download, Loader2, TrendingUp, Users, Target, CheckCircle2, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { Calendar, Download, Loader2, TrendingUp, Users, Target, CheckCircle2, Search, ArrowUpDown, ArrowUp, ArrowDown, Check, ChevronDown } from 'lucide-react'
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { exportToPDF } from "@/lib/export-utils"
 import { API_URL } from '@/lib/config'
 import dayjs from 'dayjs'
@@ -19,9 +21,10 @@ interface Lead {
   status: string;
   date: string;
   closedDate?: string;
-  assignedTo: string | string[];
+  assignedTo: any;
   expectedIncome?: string | number;
   category?: string;
+  source?: string;
 }
 
 interface Employee {
@@ -40,6 +43,7 @@ interface SalesTarget {
   targetAmount?: number;
   month?: string;
   year?: number | string;
+  employeeName?: string;
   // ... other fields
 }
 
@@ -479,22 +483,38 @@ export function SalesAnalytics() {
 
         <div className="flex items-center gap-2 border-l pl-4 border-slate-200">
           <Users className="w-4 h-4 text-slate-400" />
-          <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-            <SelectTrigger className="h-9 w-[180px] text-xs">
-              <SelectValue placeholder="Filter Employee" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Employees</SelectItem>
-              {Array.from(new Set(employees.filter(e => {
-                const dept = (e.department || '').toLowerCase();
-                const role = ((e as any).role || '').toLowerCase();
-                const name = (e.name || '').toLowerCase();
-                return dept === 'sales' || role === 'admin' || dept === 'admin' || name.includes('admin');
-              }).map(emp => emp.name || `${emp.firstName} ${emp.lastName}`))).filter(Boolean).map((name, idx) => (
-                <SelectItem key={idx} value={name}>{name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="w-[180px] justify-between h-9 text-xs border-slate-200">
+                {selectedEmployee === "all" ? "All Employees" : selectedEmployee}
+                <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[200px] p-0" align="start">
+              <Command>
+                <CommandInput placeholder="Search employee..." className="h-9" />
+                <CommandList>
+                  <CommandEmpty>No employee found.</CommandEmpty>
+                  <CommandGroup>
+                    <CommandItem value="all" onSelect={() => setSelectedEmployee("all")}>
+                      <Check className={`mr-2 h-4 w-4 ${selectedEmployee === "all" ? "opacity-100" : "opacity-0"}`} />
+                      All Employees
+                    </CommandItem>
+                    {Array.from(new Set(employees.map(emp => emp.name || `${emp.firstName} ${emp.lastName}`))).filter(Boolean).map((name, idx) => (
+                      <CommandItem key={idx} value={name} onSelect={(val) => {
+                         // Shadcn command lowercase values, but we need exact match. Find the original case.
+                         const originalName = Array.from(new Set(employees.map(e => e.name || `${e.firstName} ${e.lastName}`))).find(n => n?.toLowerCase() === val) || val;
+                         setSelectedEmployee(originalName);
+                      }}>
+                        <Check className={`mr-2 h-4 w-4 ${selectedEmployee === name ? "opacity-100" : "opacity-0"}`} />
+                        {name}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
         </div>
 
         <div className="flex items-center gap-2 border-l pl-4 border-slate-200">
