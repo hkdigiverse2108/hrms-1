@@ -459,7 +459,7 @@ export default function TaskManagementPage() {
           console.error(e);
         }
       } else {
-        const defaultSaved = [];
+        const defaultSaved: string[] = [];
         setSavedStatuses(defaultSaved);
         localStorage.setItem(`task_saved_status_filters_${user.id}`, JSON.stringify(defaultSaved));
       }
@@ -671,7 +671,7 @@ export default function TaskManagementPage() {
                   if (saved) {
                     setActiveStatuses(JSON.parse(saved));
                   } else {
-                    const defaultSaved = [];
+                    const defaultSaved: string[] = [];
                     setActiveStatuses(defaultSaved);
                     localStorage.setItem(`task_saved_status_filters_${user.id}`, JSON.stringify(defaultSaved));
                   }

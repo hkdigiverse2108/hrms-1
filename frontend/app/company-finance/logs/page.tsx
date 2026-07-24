@@ -164,7 +164,6 @@ export default function FinanceLogsPage() {
     <div className="space-y-6 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
       <PageHeader
         title="Company Finance Audit Logs"
-        subtitle="In-depth logs showing all additions, modifications, and deletions in the company finance module."
       />
 
       {errorStatus && (

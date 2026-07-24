@@ -617,7 +617,7 @@ export default function MarketingReportsPage() {
 
   useEffect(() => {
     if (dateRange?.from) {
-      setDailyMetricsStandalone(prev => ({ ...prev, date: format(dateRange.from, 'yyyy-MM-dd') }));
+      setDailyMetricsStandalone(prev => ({ ...prev, date: format(dateRange.from as Date, 'yyyy-MM-dd') }));
     }
   }, [dateRange?.from]);
 
@@ -1305,7 +1305,8 @@ export default function MarketingReportsPage() {
 
       if (response.ok) {
         toast.success("Daily report added successfully");
-        setQuickAddData({
+        setQuickAddData(prev => ({
+          ...prev,
           date: quickAddData.date,
           projectId: quickAddData.projectId,
           projectName: quickAddData.projectName,
@@ -1317,7 +1318,7 @@ export default function MarketingReportsPage() {
           cpl: 0,
           remarks: "",
           leadsFileUrl: "",
-        });
+        }));
         
         fetchData();
         fetchClients();
@@ -3046,7 +3047,8 @@ export default function MarketingReportsPage() {
               
               if (["reach", "impression", "leads", "spend", "cpl"].includes(taskId)) {
                 setShowAddForm(true);
-                setQuickAddData({
+                setQuickAddData(prev => ({
+                  ...prev,
                   date: dateStr || new Date().toISOString().split("T")[0],
                   campaignName: "",
                   reach: 0,
@@ -3059,7 +3061,7 @@ export default function MarketingReportsPage() {
                   remarks: "",
                   projectId: project.id,
                   projectName: project.name,
-                });
+                }));
               } else {
                 // For other tasks, just redirect to the tab and scroll to metrics section if needed
                 // The metrics form is always visible on the page when client is selected

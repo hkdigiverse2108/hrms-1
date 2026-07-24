@@ -280,7 +280,7 @@ function SingleEmployeeSelectWithSearch({
 
 export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = true, currentUser }: ProjectFormProps) {
   const isTeamLeader = currentUser?.role === "Team Leader" || currentUser?.designation?.toLowerCase() === "team leader";
-  const isFinanceManager = initialData?.assignedFinanceManagerId === currentUser?.id || formData?.assignedFinanceManagerId === currentUser?.id;
+  const isFinanceManager = initialData?.assignedFinanceManagerId === currentUser?.id;
   const canSeeFinance = isAdmin || isTeamLeader || isFinanceManager;
   
   const [formData, setFormData] = useState<ProjectFormData>({

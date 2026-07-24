@@ -173,10 +173,10 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
             if (emp.department) {
               newData.department = emp.department;
             }
-            newData.assignedToName = `${emp.firstName} ${emp.lastName || ''}`.trim();
+            (newData as any).assignedToName = `${emp.firstName} ${emp.lastName || ''}`.trim();
           }
         } else {
-          newData.assignedToName = "Unassigned";
+          (newData as any).assignedToName = "Unassigned";
         }
       }
 
@@ -514,8 +514,8 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
           <Input
             id="rejectReason"
             placeholder="Required: Why is this task rejected?"
-            value={formData.rejectReason ?? ""}
-            onChange={(e) => handleChange("rejectReason", e.target.value)}
+            value={(formData as any).rejectReason ?? ""}
+            onChange={(e) => handleChange("rejectReason" as any, e.target.value)}
             required
           />
         </div>
