@@ -45,7 +45,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
   const router = useRouter()
   const { checkPermission, isAdmin: isUserAdmin, loading: permissionsLoading } = usePermissions()
 
-  const isHRRoleOrDept = user?.designation?.toLowerCase() === 'hr' || user?.department?.toLowerCase() === 'hr'
+  const isHRRoleOrDept = user?.role?.toLowerCase() === 'hr' || user?.designation?.toLowerCase()?.includes('hr') || user?.department?.toLowerCase()?.includes('hr')
   const canViewDailyProgress = isUserAdmin || isHRRoleOrDept || checkPermission('daily-progress', 'canView') || ['Employee', 'Team Leader', 'Manager', 'Social Media Manager'].includes(user?.role || '')
   const canEditDailyProgress = isUserAdmin || isHRRoleOrDept || checkPermission('daily-progress', 'canEdit')
 
@@ -86,7 +86,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
 
   const isAdmin = user?.role?.toLowerCase() === 'admin'
   const isTeamLeader = (user?.designation?.toLowerCase() === 'team leader' || user?.designation?.toLowerCase() === 'head')
-  const isHRUser = user?.designation?.toLowerCase() === 'hr' || user?.department?.toLowerCase() === 'hr'
+  const isHRUser = user?.role?.toLowerCase() === 'hr' || user?.designation?.toLowerCase()?.includes('hr') || user?.department?.toLowerCase()?.includes('hr')
 
   useEffect(() => {
     if (isTeamLeader && user?.department && !activeDeptTab) {
@@ -357,7 +357,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
     if (!isAdmin && !isTeamLeader && !isHRUser) {
        filteredEmployees = filteredEmployees.filter((e: any) => e.id === user?.id)
     } else {
-       const deptToFilter = isTeamLeader ? user?.department : activeDeptTab
+       const deptToFilter = (isTeamLeader && !isAdmin && !isHRUser) ? user?.department : activeDeptTab
        if (deptToFilter) {
          filteredEmployees = filteredEmployees.filter((e: any) => e.department?.toLowerCase() === deptToFilter.toLowerCase())
        }
@@ -856,7 +856,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         <DataTable
-          data={isTeamLeader && !isAdmin ? displayData.filter(d => tlViewMode === 'my' ? String(d.employeeId) === String(user?.id) : String(d.employeeId) !== String(user?.id)) : displayData}
+          data={isTeamLeader && !isAdmin && !isHRUser ? displayData.filter(d => tlViewMode === 'my' ? String(d.employeeId) === String(user?.id) : String(d.employeeId) !== String(user?.id)) : displayData}
           columns={columns}
           actions={actions}
           searchKey="employeeName"
