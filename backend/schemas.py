@@ -121,7 +121,12 @@ def serialize_robust_datetime_standard(v: Optional[datetime], info: Serializatio
     if v is None:
         return None
     if info.mode == 'json':
-        return v.isoformat()
+        # If the datetime is naive, it came from MongoDB, which stores as UTC.
+        # Append 'Z' so the frontend dayjs correctly interprets it as UTC and converts to local time.
+        iso_str = v.isoformat()
+        if v.tzinfo is None and not iso_str.endswith('Z') and '+' not in iso_str:
+            return iso_str + 'Z'
+        return iso_str
     return v
 
 def serialize_robust_datetime_dmy(v: Optional[datetime], info: SerializationInfo) -> Any:
