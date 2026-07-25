@@ -781,7 +781,7 @@ export default function TasksPage() {
 
     // Scope Filter
     if ((taskScope === "my" || isRegularEmployee) && user?.id) {
-      if (t.assignedToId !== user.id && t.performedBy !== user.id) return false;
+      if (t.assignedToId !== user.id) return false;
     }
 
     // Date/Time Filtering
