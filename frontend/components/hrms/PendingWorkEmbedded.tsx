@@ -1457,7 +1457,7 @@ export function PendingWorkEmbedded({
                             </>
                           ) : item.isOtherWork ? (
                             <>
-                              {item.status === 'Pending' && isAssignee && (
+                              {(item.status === 'Pending' || item.status === 'In Progress') && isAssignee && (
                                 <>
                                   {(isAssigner || isAdminOrTL || !item.assignerId || item.assignerId === item.assigneeId) ? (
                                     <Button 
