@@ -1720,13 +1720,23 @@ export default function SalesPage() {
                 return (
                   <div className="flex flex-col gap-0.5 shrink-0">
                     {isMissed ? (
-                      <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100 border-rose-200 animate-pulse text-[9px] font-bold px-1.5 py-0.5 whitespace-nowrap">
-                        Follow-up Missed
-                      </Badge>
+                      <div className="flex flex-col gap-1 items-start">
+                        <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100 border-rose-200 animate-pulse text-[9px] font-bold px-1.5 py-0.5 whitespace-nowrap">
+                          Follow-up Missed
+                        </Badge>
+                        <span className="text-[9px] font-bold text-rose-500 uppercase tracking-wider whitespace-nowrap">
+                          {dayjs(lead.nextFollowUpDate).format("DD MMM, hh:mm A")}
+                        </span>
+                      </div>
                     ) : isDueToday ? (
-                      <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100 border-orange-200 animate-pulse text-[9px] font-bold px-1.5 py-0.5 whitespace-nowrap">
-                        Follow-up Due
-                      </Badge>
+                      <div className="flex flex-col gap-1 items-start">
+                        <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100 border-orange-200 animate-pulse text-[9px] font-bold px-1.5 py-0.5 whitespace-nowrap">
+                          Follow-up Due
+                        </Badge>
+                        <span className="text-[9px] font-bold text-orange-500 uppercase tracking-wider whitespace-nowrap">
+                          {dayjs(lead.nextFollowUpDate).format("DD MMM, hh:mm A")}
+                        </span>
+                      </div>
                     ) : (
                       <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">
                         Next: {dayjs(lead.nextFollowUpDate).format("DD MMM, hh:mm A")}
