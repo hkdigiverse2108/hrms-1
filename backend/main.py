@@ -2193,6 +2193,33 @@ async def get_projects_page_data(
         "employees": employees,
     }
 
+@app.get("/my-tasks-page-data")
+async def get_my_tasks_page_data(
+    userId: Optional[str] = None,
+    role: Optional[str] = None,
+    db=Depends(get_db)
+):
+    """Clubbed endpoint for the My Tasks page. Replaces 3 separate calls."""
+    import asyncio
+    results = await asyncio.gather(
+        crud.get_tasks(db, userId, role, skip=0, limit=10000),
+        crud.get_employees(db, skip=0, limit=10000),
+        crud.get_departments(db, skip=0, limit=10000)
+    )
+    
+    employees = [
+        {"id": e.get("id"), "firstName": e.get("firstName"), "lastName": e.get("lastName"),
+         "name": e.get("name"), "email": e.get("email"), "department": e.get("department"), 
+         "designation": e.get("designation")}
+        for e in results[1]
+    ]
+    
+    return {
+        "tasks": results[0],
+        "employees": employees,
+        "departments": results[2]
+    }
+
 @app.get("/wm-tasks", response_model=List[schemas.WMTask])
 async def read_wm_tasks(userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_wm_tasks(db, userId=userId, role=role, skip=skip, limit=limit)
