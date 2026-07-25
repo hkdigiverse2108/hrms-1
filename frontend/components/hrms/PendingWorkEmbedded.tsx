@@ -1726,23 +1726,7 @@ export function PendingWorkEmbedded({
 
                     return employees
                       .filter((emp: any) => {
-                        if (emp.id === currentUser?.id) return false;
-                        if (!targetDept) return true;
-                        
-                        const empDept = emp.department?.trim().toLowerCase();
-                        if (!empDept) return false;
-                        
-                        if (isCreativeDept) {
-                          return empDept === 'creative' || empDept === 'smm' || empDept === 'social media marketing' || empDept === 'graphics';
-                        }
-                        if (isDMDept) {
-                          return empDept === 'digital-marketing' || empDept === 'digital marketing' || empDept === 'dm';
-                        }
-                        if (isDevDept) {
-                          return empDept === 'development' || empDept === 'dev';
-                        }
-                        
-                        return empDept === targetDept.trim().toLowerCase();
+                        return emp.id !== currentUser?.id;
                       })
                       .map((emp: any) => {
                         const name = `${emp.firstName} ${emp.lastName || ''}`.trim();
