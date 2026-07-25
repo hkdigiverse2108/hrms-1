@@ -1744,10 +1744,9 @@ function EventsSidebar({ user, leaves }: { user: any, leaves: any[] }) {
  
   const fetchEvents = async () => {
     try {
-      const [resEvents, resEmp, resSettings] = await Promise.all([
+      const [resEvents, allRes] = await Promise.all([
         fetch(`${API_URL}/events`),
-        fetch(`${API_URL}/employees`),
-        fetch(`${API_URL}/system-settings`)
+        fetch(`${API_URL}/all-attendance-data`)
       ]);
       
       let eventsData = [];
@@ -1756,14 +1755,14 @@ function EventsSidebar({ user, leaves }: { user: any, leaves: any[] }) {
       }
       
       let empData = [];
-      if (resEmp.ok) {
-        empData = await resEmp.json();
+      let sysData: any = {};
+      if (allRes.ok) {
+        const data = await allRes.json();
+        empData = data.employees || [];
+        sysData = data.systemSettings || {};
       }
-
-      if (resSettings.ok) {
-        const settingsData = await resSettings.json();
-        setDashboardBanners(settingsData.dashboardBanners || []);
-      }
+      
+      setDashboardBanners(sysData.dashboardBanners || []);
 
       const birthdayEvents = empData.filter((emp: any) => emp.dob).map((emp: any) => {
         return {

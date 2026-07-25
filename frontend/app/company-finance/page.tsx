@@ -275,31 +275,18 @@ export default function CompanyFinanceTransactionsPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [txRes, balRes, settingsRes] = await Promise.all([
-        fetch(`${API_URL}/company-finance/transactions`),
-        fetch(`${API_URL}/company-finance/balances`),
-        fetch(`${API_URL}/system-settings`),
-      ]);
-
+      const res = await fetch(`${API_URL}/all-finance-data`);
+      let txRes = { ok: false, json: async () => ({}) };
       let scale = 1;
-      if (settingsRes.ok) {
-        const settingsData = await settingsRes.json();
-        setSettings(settingsData);
-        const decimals = settingsData?.financeDecimalScaling !== undefined ? settingsData.financeDecimalScaling : 0;
-        scale = Math.pow(10, decimals);
-      }
-
-      if (txRes.ok) {
-        const txData = await txRes.json();
-        const rawTxs = txData.transactions || [];
-        const scaledTxs = rawTxs.map((t: any) => ({
-          ...t,
-          amount: (Number(t.amount) || 0) / scale
-        }));
-        setTransactions(scaledTxs);
-      }
-      if (balRes.ok) {
-        const balData = await balRes.json();
+      if (res.ok) {
+        const data = await res.json();
+        if (data.systemSettings) {
+          setSettings(data.systemSettings);
+          const decimals = data.systemSettings.financeDecimalScaling !== undefined ? data.systemSettings.financeDecimalScaling : 0;
+          scale = Math.pow(10, decimals);
+        }
+        
+        const balData = data.balances || {};
         const bankOpening = Number(balData.bankOpeningBalance) || 0;
         const cashOpening = Number(balData.cashOpeningBalance) || 0;
         setBalances({
@@ -310,6 +297,18 @@ export default function CompanyFinanceTransactionsPage() {
           bankOpeningBalance: String(bankOpening / scale),
           cashOpeningBalance: String(cashOpening / scale),
         });
+
+        txRes = { ok: true, json: async () => ({ transactions: data.transactions || [] }) };
+      }
+
+      if (txRes.ok) {
+        const txData = await txRes.json();
+        const rawTxs = txData.transactions || [];
+        const scaledTxs = rawTxs.map((t: any) => ({
+          ...t,
+          amount: (Number(t.amount) || 0) / scale
+        }));
+        setTransactions(scaledTxs);
       }
     } catch (err) {
       console.error("Error fetching finance data:", err);

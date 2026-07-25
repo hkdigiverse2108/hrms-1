@@ -158,21 +158,16 @@ export default function EmployeeAttendanceListPage() {
   async function fetchData() {
     setIsLoading(true);
     try {
-      const [attRes, empRes, deptRes, sysRes, recRes, leaveRes] = await Promise.all([
-        fetch(`${API_URL}/attendance`),
-        fetch(`${API_URL}/employees`),
-        fetch(`${API_URL}/departments`),
-        fetch(`${API_URL}/system-settings`),
-        fetch(`${API_URL}/time-recovery`),
-        fetch(`${API_URL}/leaves`)
-      ]);
-      
-      if (attRes.ok) setAttendance(await attRes.json());
-      if (empRes.ok) setEmployees(await empRes.json());
-      if (deptRes.ok) setDepartments(await deptRes.json());
-      if (sysRes.ok) setSysSettings(await sysRes.json());
-      if (recRes.ok) setRecoveryRequests(await recRes.json());
-      if (leaveRes.ok) setLeaveRequests(await leaveRes.json());
+      const res = await fetch(`${API_URL}/all-attendance-data`);
+      if (res.ok) {
+        const data = await res.json();
+        setAttendance(data.attendance || []);
+        setEmployees(data.employees || []);
+        setDepartments(data.departments || []);
+        setSysSettings(data.systemSettings || {});
+        setRecoveryRequests(data.timeRecoveries || []);
+        setLeaveRequests(data.leaves || []);
+      }
     } catch (err) {
       console.error("Error fetching data:", err);
     } finally {

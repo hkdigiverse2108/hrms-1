@@ -315,13 +315,25 @@ export function PendingWorkEmbedded({
       const storedUser = localStorage.getItem('user');
       const user = storedUser ? JSON.parse(storedUser) : null;
       
-      const [entriesRes, clientsRes, pRes, otherWorkRes, employeesRes] = await Promise.all([
-        fetch(`${API_URL}/content-calendar/all`),
-        fetch(`${API_URL}/clients`),
-        fetch(`${API_URL}/projects`),
-        fetch(`${API_URL}/other-work/all`),
-        fetch(`${API_URL}/employees`)
-      ]);
+      const res = await fetch(`${API_URL}/all-tasks-data`);
+      if (res.ok) {
+        const data = await res.json();
+        setEntries(data.contentCalendar || []);
+        setClients(data.clients || []);
+        
+        const fetchedProjects = data.projects || [];
+        setProjects(fetchedProjects);
+        const projectMap: Record<string, any> = {};
+        fetchedProjects.forEach((p: any) => {
+          if (p.clientId && p.department === 'Creative') {
+            projectMap[p.clientId] = p;
+          }
+        });
+        setClientProjects(projectMap);
+        
+        setOtherWorkEntries(data.otherWork || []);
+        setEmployees(data.employees || []);
+      }
 
       if (user?.id) {
         const isUserAdminOrTL = (user.designation?.toLowerCase() === 'team leader' || user.designation?.toLowerCase() === 'head') || user.designation?.toLowerCase() === 'hr' || user.role?.toLowerCase() === 'admin' || user.name === 'Admin Admin';
@@ -349,35 +361,6 @@ export function PendingWorkEmbedded({
             setOutgoingRequests(await outgoingRes.json());
           }
         }
-      }
-      
-      if (entriesRes.ok && clientsRes.ok) {
-        const fetchedEntries = await entriesRes.json();
-        const fetchedClients = await clientsRes.json();
-        setEntries(fetchedEntries);
-        setClients(fetchedClients);
-      }
-      
-      if (otherWorkRes.ok) {
-        const fetchedOtherWork = await otherWorkRes.json();
-        setOtherWorkEntries(fetchedOtherWork);
-      }
-      
-      if (employeesRes.ok) {
-        const fetchedEmployees = await employeesRes.json();
-        setEmployees(fetchedEmployees);
-      }
-      
-      if (pRes.ok) {
-        const fetchedProjects = await pRes.json();
-        setProjects(fetchedProjects);
-        const projectMap: Record<string, any> = {};
-        fetchedProjects.forEach((p: any) => {
-          if (p.clientId && p.department === 'Creative') {
-            projectMap[p.clientId] = p;
-          }
-        });
-        setClientProjects(projectMap);
       }
     } catch (error) {
       console.error('Failed to fetch dashboard data', error);
