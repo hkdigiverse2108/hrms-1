@@ -3284,6 +3284,54 @@ export default function SalesPage() {
           </div>
         </div>
       )}
+
+      {/* Status Update Dialog */}
+      <Dialog open={statusChangeData !== null} onOpenChange={(open) => !open && setStatusChangeData(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Update Lead Status</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label>Reason for changing to {statusChangeData?.newStatus}?</Label>
+              <Select value={selectedReason} onValueChange={setSelectedReason}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a reason" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Follow-up requested">Follow-up requested</SelectItem>
+                  <SelectItem value="Not interested currently">Not interested currently</SelectItem>
+                  <SelectItem value="Pricing issue">Pricing issue</SelectItem>
+                  <SelectItem value="Competitor chosen">Competitor chosen</SelectItem>
+                  <SelectItem value="Other">Other (Please specify)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {selectedReason === "Other" && (
+              <div className="space-y-2">
+                <Label>Custom Reason</Label>
+                <Input 
+                  placeholder="Enter reason..."
+                  value={customReason}
+                  onChange={e => setCustomReason(e.target.value)}
+                />
+              </div>
+            )}
+            
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setStatusChangeData(null)}>Cancel</Button>
+              <Button 
+                onClick={handleStatusChangeSubmit}
+                className="bg-brand-teal hover:bg-brand-teal-light text-white"
+                disabled={!selectedReason || (selectedReason === "Other" && !customReason.trim())}
+              >
+                Update Status
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
