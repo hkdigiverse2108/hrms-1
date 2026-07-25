@@ -1355,12 +1355,12 @@ export default function SalesPage() {
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-1">
-                  <Phone className="w-3 h-3 text-slate-400" />
+                <div className="flex items-center gap-1 mt-2">
+                  <Phone className="w-4 h-4 text-slate-500" />
                   {inlineEditing?.id === lead.id && inlineEditing?.field === 'phone' ? (
                     <Input 
                       autoFocus
-                      className="h-6 text-[10px] w-full py-0" 
+                      className="h-8 text-[13px] font-bold w-full py-0" 
                       defaultValue={lead.phone || ''} 
                       onBlur={(e) => handleInlineUpdate(lead.id, 'phone', e.target.value)} 
                       onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'phone', e.currentTarget.value)}
@@ -1369,7 +1369,7 @@ export default function SalesPage() {
                   ) : (
                     <span 
                       onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'phone' })}
-                      className="text-[10px] text-slate-500 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
+                      className="text-[13px] font-bold text-slate-700 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
                     >
                       {lead.phone || 'Add phone'}
                     </span>
