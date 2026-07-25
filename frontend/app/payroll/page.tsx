@@ -57,14 +57,13 @@ export default function PayrollPage() {
   const fetchPayroll = async () => {
     setIsLoading(true)
     try {
-      const [payRes, docRes, empRes] = await Promise.all([
-        fetch(`${API_URL}/payroll`),
-        fetch(`${API_URL}/employee-documents`),
-        fetch(`${API_URL}/employees`)
-      ])
-      if (payRes.ok) setPayroll(await payRes.json())
-      if (docRes.ok) setDocuments(await docRes.json())
-      if (empRes.ok) setEmployees(await empRes.json())
+      const res = await fetch(`${API_URL}/all-payroll-data`)
+      if (res.ok) {
+        const data = await res.json()
+        setPayroll(data.payroll || [])
+        setDocuments(data.documents || [])
+        setEmployees(data.employees || [])
+      }
     } catch (error) {
       console.error('Error fetching payroll data:', error)
     } finally {

@@ -476,13 +476,15 @@ export default function CreativeClientsPage() {
   const fetchClients = async () => {
     setIsLoading(true);
     try {
-      const [res, ccRes, pRes, settingsRes, empRes] = await Promise.all([
-        fetch(`${API_URL}/clients`),
-        fetch(`${API_URL}/content-calendar/all`),
-        fetch(`${API_URL}/projects${user ? `?userId=${user.id}&role=${user.role}` : ''}`),
-        fetch(`${API_URL}/content-calendar-settings/all?monthYear=${calendarFilterMonth}`),
-        fetch(`${API_URL}/employees`)
+      const [allTasksRes, settingsRes] = await Promise.all([
+        fetch(`${API_URL}/all-tasks-data${user ? `?userId=${user.id}&role=${user.role}` : ''}`),
+        fetch(`${API_URL}/content-calendar-settings/all?monthYear=${calendarFilterMonth}`)
       ]);
+      
+      let res = { ok: allTasksRes.ok, json: async () => ((await allTasksRes.clone().json()).clients || []) };
+      let ccRes = { ok: allTasksRes.ok, json: async () => ((await allTasksRes.clone().json()).contentCalendar || []) };
+      let pRes = { ok: allTasksRes.ok, json: async () => ((await allTasksRes.clone().json()).projects || []) };
+      let empRes = { ok: allTasksRes.ok, json: async () => ((await allTasksRes.clone().json()).employees || []) };
       
       let clientsData = [];
       if (res.ok) {

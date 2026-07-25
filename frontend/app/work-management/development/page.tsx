@@ -291,16 +291,12 @@ export default function TasksPage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [tRes, pRes, eRes] = await Promise.all([
-        fetch(`${API_URL}/wm-tasks`, { cache: 'no-store' }),
-        fetch(`${API_URL}/projects`, { cache: 'no-store' }),
-        fetch(`${API_URL}/employees`, { cache: 'no-store' })
-      ]);
-      
-      if (tRes.ok) setTasks(await tRes.json());
-      if (pRes.ok) setProjects(await pRes.json());
-      if (eRes.ok) {
-        let emps = await eRes.json();
+      const res = await fetch(`${API_URL}/all-tasks-data`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        setTasks(data.wmTasks || []);
+        setProjects(data.projects || []);
+        let emps = data.employees || [];
         if (user && !emps.some((e: any) => e.id === user.id)) {
           emps.unshift({
             id: user.id,
