@@ -87,7 +87,9 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
   const fetchData = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_URL}/my-tasks-view-data`, { cache: 'no-store' });
+      const uId = targetUserId || currentUser?.id || '';
+      const role = currentUser?.role || '';
+      const res = await fetch(`${API_URL}/my-tasks-view-data?userId=${uId}&role=${role}`, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setTasks(data.tasks || []);
@@ -108,8 +110,10 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
   }
 
   useEffect(() => {
-    fetchData()
-  }, [])
+    if (currentUser || targetUserId) {
+      fetchData();
+    }
+  }, [currentUser, targetUserId]);
 
   const handleMarkComplete = async (task: any) => {
     try {
