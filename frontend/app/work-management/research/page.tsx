@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { LiveTimer } from "@/components/common/LiveTimer";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -230,19 +231,19 @@ export default function ResearchPage() {
       >
         <div className="flex items-center gap-3 flex-wrap">
           {isAdmin && (
-            <Select value={filterEmployee} onValueChange={setFilterEmployee}>
-              <SelectTrigger className="w-[170px] bg-white border-slate-200 text-sm">
-                <SelectValue placeholder="All Employees" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Employees</SelectItem>
-                {employees.map(emp => (
-                  <SelectItem key={emp.id || emp._id} value={emp.id || emp._id}>
-                    {formatName(`${emp.firstName} ${emp.lastName}`)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              options={[
+                { value: "all", label: "All Employees" },
+                ...employees.map(emp => ({
+                  value: emp.id || emp._id,
+                  label: formatName(`${emp.firstName} ${emp.lastName}`)
+                }))
+              ]}
+              value={filterEmployee}
+              onValueChange={setFilterEmployee}
+              placeholder="All Employees"
+              triggerClassName="w-[170px] bg-white border-slate-200 text-sm"
+            />
           )}
           <Input
             type="date"

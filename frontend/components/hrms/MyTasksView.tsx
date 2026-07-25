@@ -21,6 +21,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { SearchableSelect } from '@/components/ui/searchable-select'
 import { Calendar as DayCalendar } from '@/components/ui/calendar'
 import { format } from 'date-fns'
 import { API_URL } from '@/lib/config'
@@ -759,19 +760,19 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                   {!isEmbedded && currentUser && ['admin', 'superadmin', 'head'].includes(currentUser.role?.toLowerCase()) && (
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold text-slate-500 hidden sm:inline-block">Employee:</span>
-                      <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId}>
-                        <SelectTrigger className="h-9 w-[200px] text-xs font-semibold bg-white border-slate-200 rounded-lg outline-none shadow-sm text-slate-700">
-                          <SelectValue placeholder="All Employees" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-[300px]">
-                          <SelectItem value="all">My Tasks Only</SelectItem>
-                          {employees.map(emp => (
-                            <SelectItem key={emp.id} value={emp.id}>
-                              {emp.name || `${emp.firstName} ${emp.lastName}`}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <SearchableSelect
+                        options={[
+                          { value: "all", label: "My Tasks Only" },
+                          ...employees.map(emp => ({
+                            value: emp.id,
+                            label: emp.name || `${emp.firstName} ${emp.lastName}`
+                          }))
+                        ]}
+                        value={selectedEmployeeId}
+                        onValueChange={setSelectedEmployeeId}
+                        placeholder="All Employees"
+                        triggerClassName="h-9 w-[200px]"
+                      />
                     </div>
                   )}
                 </div>

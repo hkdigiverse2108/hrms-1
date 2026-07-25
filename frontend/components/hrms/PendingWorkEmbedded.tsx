@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { API_URL } from '@/lib/config';
 import { toast } from 'sonner';
 import { useConfirm } from "@/context/ConfirmContext";
@@ -1255,41 +1256,35 @@ export function PendingWorkEmbedded({
 
             {(isAdminOrTL || defaultTaskType === 'dev-creative-work') && (
               <>
-                {isAdminOrTL && (
-                  <Select value={filterAssigner} onValueChange={setFilterAssigner}>
-                    <SelectTrigger className="w-[160px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal">
-                      <SelectValue placeholder="Assigned By" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Assigned By: All</SelectItem>
-                      {employees.map(emp => {
+                {isAdminOrTL && user?.role?.toLowerCase() === 'admin' && (
+                  <SearchableSelect
+                    options={[
+                      { value: "all", label: "Assigned By: All" },
+                      ...employees.map(emp => {
                         const empName = `${emp.firstName} ${emp.lastName}`;
-                        return (
-                          <SelectItem key={`assigner-${emp.id}`} value={`${empName}|${emp.id}`}>
-                            {empName}
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
+                        return { value: `${empName}|${emp.id}`, label: empName };
+                      })
+                    ]}
+                    value={filterAssigner}
+                    onValueChange={setFilterAssigner}
+                    placeholder="Assigned By"
+                    triggerClassName="w-[160px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal"
+                  />
                 )}
 
-                <Select value={filterAssignee} onValueChange={setFilterAssignee}>
-                  <SelectTrigger className="w-[160px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal">
-                    <SelectValue placeholder="Assigned To" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Assigned To: All</SelectItem>
-                    {employees.map(emp => {
+                <SearchableSelect
+                  options={[
+                    { value: "all", label: "Assigned To: All" },
+                    ...employees.map(emp => {
                       const empName = `${emp.firstName} ${emp.lastName}`;
-                      return (
-                        <SelectItem key={`assignee-${emp.id}`} value={`${empName}|${emp.id}`}>
-                          {empName}
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
+                      return { value: `${empName}|${emp.id}`, label: empName };
+                    })
+                  ]}
+                  value={filterAssignee}
+                  onValueChange={setFilterAssignee}
+                  placeholder="Assigned To"
+                  triggerClassName="w-[160px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal"
+                />
               </>
             )}
           </div>
