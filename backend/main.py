@@ -2250,6 +2250,39 @@ async def get_employee_attendance_page_data(db=Depends(get_db)):
         "leaves": results[5]
     }
 
+@app.get("/my-tasks-view-data")
+async def get_my_tasks_view_data(db=Depends(get_db)):
+    """Clubbed endpoint for the MyTasksView component. Replaces 8 separate calls."""
+    import asyncio
+    results = await asyncio.gather(
+        crud.get_tasks(db, skip=0, limit=10000),
+        crud.get_wm_tasks(db, skip=0, limit=10000),
+        crud.get_all_content_calendar_entries(db),
+        crud.get_all_other_work(db),
+        crud.get_projects(db, skip=0, limit=10000),
+        crud.get_clients(db, skip=0, limit=10000),
+        crud.get_employees(db, skip=0, limit=10000),
+        crud.get_leads(db, skip=0, limit=10000)
+    )
+    
+    employees = [
+        {"id": e.get("id"), "firstName": e.get("firstName"), "lastName": e.get("lastName"),
+         "name": e.get("name"), "department": e.get("department"), "designation": e.get("designation"),
+         "role": e.get("role"), "email": e.get("email")}
+        for e in results[6]
+    ]
+    
+    return {
+        "tasks": results[0],
+        "wmTasks": results[1],
+        "contentCalendar": results[2],
+        "otherWork": results[3],
+        "projects": results[4],
+        "clients": results[5],
+        "employees": employees,
+        "leads": results[7]
+    }
+
 @app.get("/wm-tasks", response_model=List[schemas.WMTask])
 async def read_wm_tasks(userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_wm_tasks(db, userId=userId, role=role, skip=skip, limit=limit)
