@@ -324,7 +324,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
       const newData = { ...prev, [field]: value };
       if (field === "department") {
         const isDev = typeof value === "string" && (value.toLowerCase() === "development" || value.toLowerCase().includes("dev"));
-        if (isDev && !["in-progress", "on-hold", "completed", "testing"].includes(newData.status as string)) {
+        if (isDev && !["in-progress", "on-hold", "completed"].includes(newData.status as string)) {
           newData.status = "in-progress";
         }
       }
@@ -645,7 +645,6 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
                 <>
                   <SelectItem value="in-progress">In Progress</SelectItem>
                   <SelectItem value="on-hold">On Hold</SelectItem>
-                  {(formData.status === "testing") && <SelectItem value="testing" disabled>Testing Phase</SelectItem>}
                   <SelectItem value="completed" disabled={!isAdmin && currentUser?.role?.toLowerCase() !== "cto"}>Completed</SelectItem>
                 </>
               ) : (
@@ -655,7 +654,6 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
                   <SelectItem value="in-progress">In Progress</SelectItem>
                   <SelectItem value="on-hold">On Hold</SelectItem>
                   <SelectItem value="rejected">Rejected</SelectItem>
-                  {formData.status === "testing" && <SelectItem value="testing" disabled>Testing Phase</SelectItem>}
                   <SelectItem value="completed" disabled={!isAdmin && currentUser?.role?.toLowerCase() !== "cto"}>Completed</SelectItem>
                 </>
               )}

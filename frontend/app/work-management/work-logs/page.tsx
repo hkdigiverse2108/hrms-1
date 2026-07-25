@@ -353,7 +353,7 @@ export default function WorkLogsPage() {
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
         <PageHeader
           title="Work Logs"
-          subtitle="Track and analyze employee activities with time breakdown"
+          description="Track and analyze employee activities with time breakdown"
         />
         <div className="flex flex-wrap items-center gap-3">
           {user?.role?.toLowerCase() === 'admin' && (
@@ -498,7 +498,7 @@ export default function WorkLogsPage() {
           ) : (
             <div className="grid grid-cols-1 gap-4">
             {singleDayData.length > 0 ? singleDayData.map((emp, idx) => {
-            const key = `${emp.employeeId}-${emp.date}-${idx}`
+            const key = `${(emp as any).employeeId}-${emp.date}-${idx}`
             const open = !!expandedCards[key]
             return (
               <Card key={key} className="overflow-hidden">

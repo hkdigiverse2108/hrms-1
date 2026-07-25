@@ -110,190 +110,7 @@ export default function ProjectsPage() {
     }
   };
 
-  // Shift to Testing State
-  const [shiftModalOpen, setShiftModalOpen] = useState(false);
-  const [shiftModalProject, setShiftModalProject] = useState<any>(null);
-  const [shiftTestingLinks, setShiftTestingLinks] = useState<any[]>([]);
-  const [isShifting, setIsShifting] = useState(false);
-
-  // Testing & Bug Tracker State
-  const [testingModalOpen, setTestingModalOpen] = useState(false);
-  const [testingModalProject, setTestingModalProject] = useState<any>(null);
-  const [newBugTitle, setNewBugTitle] = useState("");
-  const [newBugDesc, setNewBugDesc] = useState("");
-  const [newBugSeverity, setNewBugSeverity] = useState("Medium");
-  const [newBugAssignee, setNewBugAssignee] = useState("none");
   const [employees, setEmployees] = useState<any[]>([]);
-  const [isSubmittingBug, setIsSubmittingBug] = useState(false);
-  const [newTestLinkTitle, setNewTestLinkTitle] = useState("");
-  const [newTestLinkUrl, setNewTestLinkUrl] = useState("");
-
-  const handleConfirmShiftToTesting = async () => {
-    if (!shiftModalProject) return;
-    setIsShifting(true);
-    try {
-      const validLinks = shiftTestingLinks.filter(l => l.url?.trim());
-      const res = await fetch(`${API_URL}/projects/${shiftModalProject.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...shiftModalProject,
-          status: "testing",
-          testingLinks: validLinks,
-          performedBy: user?.id,
-          userName: `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Unknown"
-        })
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setProjects(prev => prev.map(p => p.id === updated.id ? updated : p));
-        toast.success("Project shifted to Testing Phase!");
-        setShiftModalOpen(false);
-      } else {
-        toast.error("Failed to update project status");
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error("Error shifting project");
-    } finally {
-      setIsShifting(false);
-    }
-  };
-
-  const handleAddBug = async () => {
-    if (!testingModalProject || !newBugTitle.trim()) {
-      toast.error("Please enter a bug title");
-      return;
-    }
-    setIsSubmittingBug(true);
-    try {
-      const emp = employees.find(e => String(e.id) === newBugAssignee);
-      const empName = emp ? `${emp.firstName || ""} ${emp.lastName || ""}`.trim() || emp.name : "";
-      const currentBugs = testingModalProject.testingBugs || [];
-      const newBug = {
-        id: "bug_" + Date.now(),
-        title: newBugTitle.trim(),
-        description: newBugDesc.trim(),
-        severity: newBugSeverity,
-        assignedToId: newBugAssignee === "none" ? "" : newBugAssignee,
-        assignedToName: newBugAssignee === "none" ? "" : empName,
-        reportedBy: user?.id || "anon",
-        reportedByName: `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Employee",
-        date: new Date().toISOString().split('T')[0],
-        status: "open"
-      };
-      const updatedBugs = [newBug, ...currentBugs];
-      const res = await fetch(`${API_URL}/projects/${testingModalProject.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...testingModalProject,
-          testingBugs: updatedBugs,
-          performedBy: user?.id,
-          userName: `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Unknown"
-        })
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setProjects(prev => prev.map(p => p.id === updated.id ? updated : p));
-        setTestingModalProject(updated);
-        setNewBugTitle("");
-        setNewBugDesc("");
-        setNewBugAssignee("none");
-        toast.success("Bug reported successfully!");
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to report bug");
-    } finally {
-      setIsSubmittingBug(false);
-    }
-  };
-
-  const handleAssignBug = async (bugId: string, empId: string) => {
-    if (!testingModalProject) return;
-    try {
-      const emp = employees.find(e => String(e.id) === empId);
-      const empName = emp ? `${emp.firstName || ""} ${emp.lastName || ""}`.trim() || emp.name : "";
-      const currentBugs = testingModalProject.testingBugs || [];
-      const updatedBugs = currentBugs.map((b: any) => 
-        b.id === bugId ? { ...b, assignedToId: empId === "none" ? "" : empId, assignedToName: empId === "none" ? "" : empName } : b
-      );
-      const res = await fetch(`${API_URL}/projects/${testingModalProject.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...testingModalProject,
-          testingBugs: updatedBugs,
-          performedBy: user?.id,
-          userName: `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Unknown"
-        })
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setProjects(prev => prev.map(p => p.id === updated.id ? updated : p));
-        setTestingModalProject(updated);
-        toast.success("Bug assignee updated!");
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleToggleBugStatus = async (bugId: string) => {
-    if (!testingModalProject) return;
-    try {
-      const currentBugs = testingModalProject.testingBugs || [];
-      const updatedBugs = currentBugs.map((b: any) => 
-        b.id === bugId ? { ...b, status: b.status === "open" ? "fixed" : "open" } : b
-      );
-      const res = await fetch(`${API_URL}/projects/${testingModalProject.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...testingModalProject,
-          testingBugs: updatedBugs,
-          performedBy: user?.id,
-          userName: `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Unknown"
-        })
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setProjects(prev => prev.map(p => p.id === updated.id ? updated : p));
-        setTestingModalProject(updated);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleAddTestingLink = async () => {
-    if (!testingModalProject || !newTestLinkUrl.trim()) return;
-    try {
-      const currentLinks = testingModalProject.testingLinks || [];
-      const updatedLinks = [...currentLinks, { title: newTestLinkTitle.trim() || "Testing Link", url: newTestLinkUrl.trim() }];
-      const res = await fetch(`${API_URL}/projects/${testingModalProject.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...testingModalProject,
-          testingLinks: updatedLinks,
-          performedBy: user?.id,
-          userName: `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Unknown"
-        })
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setProjects(prev => prev.map(p => p.id === updated.id ? updated : p));
-        setTestingModalProject(updated);
-        setNewTestLinkTitle("");
-        setNewTestLinkUrl("");
-        toast.success("Link added!");
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
 
   useEffect(() => {
     fetchData(true);
@@ -435,38 +252,119 @@ export default function ProjectsPage() {
   };
 
   const getProjectStats = (project: any) => {
-    if (project.modules && project.modules.length > 0) {
-      const completedModulesCount = project.modules.filter((m: any) => m.stage === "completed").length;
-      const inProgressModules = project.modules.filter((m: any) => m.stage === "in_progress" || m.stage === "in-progress" || m.stage === "testing" || m.stage === "bugs");
-      const percent = Math.round((completedModulesCount / project.modules.length) * 100);
-      
-      const assignedTeamIds = project.assignedTeamIds || [];
-      const teamMembersStats = assignedTeamIds.map((empId: string) => {
-        const emp = employees.find(e => String(e.id) === empId);
-        const empName = emp ? `${emp.firstName || ""} ${emp.lastName || ""}`.trim() || emp.name : "Unknown";
-        const memberModules = inProgressModules.filter((m: any) => m.assignedToId === empId).map((m: any) => m.name);
-        return { id: empId, name: empName, items: memberModules };
-      });
+    const teamIdSet = new Set<string>();
 
-      return { percent, inProgressNames: inProgressModules.map((m: any) => m.name), teamMembersStats, isTaskFallback: false };
+    if (Array.isArray(project.assignedTeamIds)) {
+      project.assignedTeamIds.forEach((id: any) => id && teamIdSet.add(String(id)));
+    }
+    if (project.assignedEmployeeId) teamIdSet.add(String(project.assignedEmployeeId));
+    if (Array.isArray(project.assignedEmployeeIds)) {
+      project.assignedEmployeeIds.forEach((id: any) => id && teamIdSet.add(String(id)));
     }
 
-    const projectTasks = tasks.filter(t => t.projectId === project.id);
-    if (projectTasks.length === 0) return { percent: 0, inProgressNames: [], teamMembersStats: [], isTaskFallback: false };
-    
-    const completedTasks = projectTasks.filter(t => t.status === "completed").length;
-    const inProgressTasks = projectTasks.filter(t => t.status === "in_progress" || t.status === "in-progress" || t.status === "testing" || t.status === "bugs");
-    const percent = Math.round((completedTasks / projectTasks.length) * 100);
-
-    const assignedTeamIds = project.assignedTeamIds || [];
-    const teamMembersStats = assignedTeamIds.map((empId: string) => {
-      const emp = employees.find(e => String(e.id) === empId);
-      const empName = emp ? `${emp.firstName || ""} ${emp.lastName || ""}`.trim() || emp.name : "Unknown";
-      const memberTasks = inProgressTasks.filter((t: any) => t.assignedToId === empId).map((t: any) => t.title);
-      return { id: empId, name: empName, items: memberTasks };
+    Object.keys(project).forEach(key => {
+      if (key.endsWith("Id") && key !== "id" && key !== "clientId" && key !== "leadId" && key !== "teamLeaderId" && key !== "performedBy" && key !== "projectId") {
+        const val = project[key];
+        if (val && typeof val === "string" && val !== "none" && val !== "unassigned") {
+          teamIdSet.add(String(val));
+        }
+      }
     });
 
-    return { percent, inProgressNames: inProgressTasks.map(t => t.title), teamMembersStats, isTaskFallback: true };
+    Object.keys(project).forEach(key => {
+      if (key.endsWith("Name") && key.startsWith("assigned") && key !== "clientName" && key !== "teamLeaderName" && key !== "userName") {
+        const nameVal = project[key];
+        if (nameVal && typeof nameVal === "string" && nameVal.trim()) {
+          const emp = employees.find(e => {
+            const fullName = `${e.firstName || ""} ${e.lastName || ""}`.trim() || e.name || "";
+            return fullName.toLowerCase() === nameVal.toLowerCase().trim() || (e.name && e.name.toLowerCase() === nameVal.toLowerCase().trim());
+          });
+          if (emp) teamIdSet.add(String(emp.id));
+        }
+      }
+    });
+
+    const projectModules = Array.isArray(project.modules) ? project.modules : [];
+    projectModules.forEach((m: any) => {
+      if (m.assignedToId) teamIdSet.add(String(m.assignedToId));
+      if (m.assignedEmployeeId) teamIdSet.add(String(m.assignedEmployeeId));
+      if (Array.isArray(m.assignedToIds)) m.assignedToIds.forEach((id: any) => id && teamIdSet.add(String(id)));
+      if (Array.isArray(m.assignedEmployeeIds)) m.assignedEmployeeIds.forEach((id: any) => id && teamIdSet.add(String(id)));
+    });
+
+    const projectPhases = Array.isArray(project.phases) ? project.phases : [];
+    projectPhases.forEach((p: any) => {
+      if (p.assignedToId) teamIdSet.add(String(p.assignedToId));
+      if (p.assignedEmployeeId) teamIdSet.add(String(p.assignedEmployeeId));
+      if (Array.isArray(p.assignedToIds)) p.assignedToIds.forEach((id: any) => id && teamIdSet.add(String(id)));
+    });
+
+    const projectTasks = tasks.filter(t => String(t.projectId) === String(project.id));
+    projectTasks.forEach((t: any) => {
+      if (t.assignedToId) teamIdSet.add(String(t.assignedToId));
+      if (t.assignedEmployeeId) teamIdSet.add(String(t.assignedEmployeeId));
+      if (Array.isArray(t.assignedToIds)) t.assignedToIds.forEach((id: any) => id && teamIdSet.add(String(id)));
+    });
+
+    const isModuleInProgress = (m: any) => {
+      const st = (m.stage || m.status || "").toLowerCase().trim().replace("_", "-");
+      return st === "in-progress" || st === "in progress" || st === "bugs";
+    };
+
+    const inProgressModules = projectModules.filter(isModuleInProgress);
+
+    const completedModulesCount = projectModules.filter((m: any) => {
+      const st = (m.stage || m.status || "").toLowerCase().trim();
+      return st === "completed";
+    }).length;
+
+    let percent = 0;
+    if (projectModules.length > 0) {
+      percent = Math.round((completedModulesCount / projectModules.length) * 100);
+    } else if (projectTasks.length > 0) {
+      const completedTasks = projectTasks.filter(t => (t.status || "").toLowerCase().trim() === "completed").length;
+      percent = Math.round((completedTasks / projectTasks.length) * 100);
+    }
+
+    const teamMembersStats = Array.from(teamIdSet).map((empId: string) => {
+      const emp = employees.find(e => String(e.id) === String(empId));
+      const empName = emp ? `${emp.firstName || ""} ${emp.lastName || ""}`.trim() || emp.name : "Unknown";
+
+      const memberModules = projectModules
+        .filter((m: any) => {
+          const isAssigned = String(m.assignedToId) === String(empId) ||
+            String(m.assignedEmployeeId) === String(empId) ||
+            (Array.isArray(m.assignedToIds) && m.assignedToIds.map(String).includes(String(empId))) ||
+            (Array.isArray(m.assignedEmployeeIds) && m.assignedEmployeeIds.map(String).includes(String(empId)));
+          return isAssigned && isModuleInProgress(m);
+        })
+        .map((m: any) => m.title || m.name || m.moduleName || "Module");
+
+      let memberItems = memberModules;
+      if (memberItems.length === 0 && projectModules.length === 0) {
+        const memberTasks = projectTasks
+          .filter((t: any) => {
+            const isAssigned = String(t.assignedToId) === String(empId) ||
+              String(t.assignedEmployeeId) === String(empId) ||
+              (Array.isArray(t.assignedToIds) && t.assignedToIds.map(String).includes(String(empId)));
+            const st = (t.status || "").toLowerCase().trim().replace("_", "-");
+            return isAssigned && (st === "in-progress" || st === "in progress" || st === "bugs");
+          })
+          .map((t: any) => t.title || t.name);
+        memberItems = memberTasks;
+      }
+
+      return { id: empId, name: empName, items: memberItems };
+    }).filter(m => m.name !== "Unknown" || m.items.length > 0);
+
+    const inProgressNames = projectModules.length > 0
+      ? inProgressModules.map((m: any) => m.title || m.name || m.moduleName)
+      : projectTasks.filter(t => {
+          const st = (t.status || "").toLowerCase().trim().replace("_", "-");
+          return st === "in-progress" || st === "in progress" || st === "bugs";
+        }).map(t => t.title || t.name);
+
+    return { percent, inProgressNames, teamMembersStats, isTaskFallback: projectModules.length === 0 };
   };
 
   const getStatusColor = (status: string, progress: number) => {
@@ -819,266 +717,7 @@ export default function ProjectsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Shift to Testing Dialog */}
-      <Dialog open={shiftModalOpen} onOpenChange={setShiftModalOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-lg font-black text-purple-700">
-              🧪 Shift to Testing Phase
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <p className="text-xs text-slate-600">
-              All tasks for <strong className="text-slate-900">{shiftModalProject?.title}</strong> are completed. Add testing / staging environment links below before shifting the project to Testing Phase.
-            </p>
-            <div className="space-y-3 max-h-60 overflow-y-auto custom-scrollbar">
-              {shiftTestingLinks.map((link, idx) => (
-                <div key={idx} className="p-2.5 bg-purple-50/50 border border-purple-100 rounded-xl space-y-2 relative">
-                  {shiftTestingLinks.length > 1 && (
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => setShiftTestingLinks(prev => prev.filter((_, i) => i !== idx))}
-                      className="h-6 w-6 absolute top-1.5 right-1.5 text-red-500 hover:bg-red-100"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
-                  )}
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase font-bold text-slate-500">Environment Name</Label>
-                    <Input
-                      placeholder="e.g. Staging App / Test Server"
-                      value={link.title || ""}
-                      onChange={(e) => {
-                        const arr = [...shiftTestingLinks];
-                        arr[idx] = { ...arr[idx], title: e.target.value };
-                        setShiftTestingLinks(arr);
-                      }}
-                      className="h-8 text-xs font-bold bg-white"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase font-bold text-slate-500">URL Link</Label>
-                    <Input
-                      placeholder="https://staging.company.com"
-                      value={link.url || ""}
-                      onChange={(e) => {
-                        const arr = [...shiftTestingLinks];
-                        arr[idx] = { ...arr[idx], url: e.target.value };
-                        setShiftTestingLinks(arr);
-                      }}
-                      className="h-8 text-xs font-mono bg-white"
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setShiftTestingLinks(prev => [...prev, { title: "Testing Link", url: "" }])}
-              className="w-full text-xs font-bold border-dashed border-purple-300 text-purple-700 hover:bg-purple-50"
-            >
-              <Plus className="w-3.5 h-3.5 mr-1" /> Add Another Link
-            </Button>
-          </div>
-          <div className="pt-2 border-t border-slate-100 flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={() => setShiftModalOpen(false)}>Cancel</Button>
-            <Button size="sm" onClick={handleConfirmShiftToTesting} disabled={isShifting} className="bg-purple-600 hover:bg-purple-700 text-white font-black">
-              {isShifting && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
-              Confirm & Start Testing
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
-      {/* Testing & Bug Tracker Dialog */}
-      <Dialog open={testingModalOpen} onOpenChange={setTestingModalOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
-          <DialogHeader>
-            <DialogTitle className="flex items-center justify-between text-lg font-black text-indigo-700 pr-8 sm:pr-10">
-              <span>🐞 Testing & Bug Board: {testingModalProject?.title}</span>
-              {(isAdmin || user?.role?.toLowerCase() === 'cto') ? (
-                <Button
-                  size="sm"
-                  onClick={async () => {
-                    const openCount = testingModalProject?.testingBugs?.filter((b:any)=>b.status==='open').length || 0;
-                    if (openCount > 0 && !window.confirm(`There are still ${openCount} open bugs. Mark project as completed anyway?`)) return;
-                    try {
-                      const res = await fetch(`${API_URL}/projects/${testingModalProject?.id}`, {
-                        method: "PUT",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ ...testingModalProject, status: "completed", performedBy: user?.id })
-                      });
-                      if (res.ok) {
-                        const updated = await res.json();
-                        setProjects(prev => prev.map(p => p.id === updated.id ? updated : p));
-                        setTestingModalOpen(false);
-                        toast.success("Project marked as Completed!");
-                      }
-                    } catch(e) { console.error(e); }
-                  }}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs h-8 px-3 shadow-sm animate-pulse"
-                >
-                  ✅ Approve & Mark Completed
-                </Button>
-              ) : (
-                <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs">
-                  🔒 Final Approval by CTO/Admin Only
-                </span>
-              )}
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="flex-1 overflow-y-auto space-y-6 py-3 px-1 custom-scrollbar">
-            {/* Section 1: Testing Links */}
-            <div className="space-y-2 bg-indigo-50/50 p-3.5 rounded-2xl border border-indigo-100">
-              <h4 className="text-xs font-black uppercase text-indigo-900 tracking-wider flex items-center gap-1.5">
-                🔗 Environment & Testing Links
-              </h4>
-              {testingModalProject?.testingLinks?.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {testingModalProject.testingLinks.map((l: any, idx: number) => (
-                    <a key={idx} href={l.url} target="_blank" rel="noopener noreferrer" className="p-2 bg-white border border-indigo-200/80 rounded-xl hover:shadow-sm transition-all flex items-center justify-between gap-2 group">
-                      <div className="truncate">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">{l.title || "Staging"}</p>
-                        <p className="text-xs font-semibold text-indigo-600 truncate group-hover:underline">{l.url}</p>
-                      </div>
-                      <ExternalLink className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                    </a>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-slate-500 italic">No testing links added yet.</p>
-              )}
-              
-              {(isAdmin || user?.role?.toLowerCase() === 'cto' || testingModalProject?.teamLeaderId === user?.id) && (
-                <div className="pt-2 flex items-center gap-2">
-                  <Input placeholder="Link Title (e.g. Test iOS App)" value={newTestLinkTitle} onChange={e=>setNewTestLinkTitle(e.target.value)} className="h-8 text-xs bg-white w-1/3 font-semibold" />
-                  <Input placeholder="https://..." value={newTestLinkUrl} onChange={e=>setNewTestLinkUrl(e.target.value)} className="h-8 text-xs font-mono bg-white flex-1" />
-                  <Button size="sm" type="button" onClick={handleAddTestingLink} className="h-8 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold">Add Link</Button>
-                </div>
-              )}
-            </div>
-
-            {/* Section 2: Report Bug */}
-            <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
-              <h4 className="text-xs font-black uppercase text-slate-800 tracking-wider flex items-center gap-1.5">
-                🐞 Report New Bug (Open to All Employees)
-              </h4>
-              <div className="space-y-2.5">
-                <div className="flex gap-2 flex-wrap">
-                  <Input placeholder="Bug Summary / Title..." value={newBugTitle} onChange={e=>setNewBugTitle(e.target.value)} className="h-9 text-xs font-bold bg-white flex-1 min-w-[200px]" />
-                  <Select value={newBugSeverity} onValueChange={setNewBugSeverity}>
-                    <SelectTrigger className="w-[110px] h-9 bg-white text-xs font-bold">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Low">Low</SelectItem>
-                      <SelectItem value="Medium">Medium</SelectItem>
-                      <SelectItem value="High">High</SelectItem>
-                      <SelectItem value="Critical">Critical</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {(isAdmin || user?.role?.toLowerCase() === 'cto' || testingModalProject?.teamLeaderId === user?.id) && (
-                    <Select value={newBugAssignee} onValueChange={setNewBugAssignee}>
-                      <SelectTrigger className="w-[150px] h-9 bg-white text-xs font-semibold text-slate-700">
-                        <SelectValue placeholder="Assign To..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">👤 Unassigned</SelectItem>
-                        {employees.map((emp: any) => (
-                          <SelectItem key={emp.id} value={String(emp.id)}>
-                            {emp.firstName ? `${emp.firstName} ${emp.lastName || ""}`.trim() : emp.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-                <Input placeholder="Steps to reproduce / description..." value={newBugDesc} onChange={e=>setNewBugDesc(e.target.value)} className="h-9 text-xs bg-white" />
-                <div className="flex justify-end">
-                  <Button size="sm" onClick={handleAddBug} disabled={isSubmittingBug} className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 h-8">
-                    {isSubmittingBug ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Plus className="w-3.5 h-3.5 mr-1" />}
-                    Submit Bug Report
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            {/* Section 3: Reported Bugs List */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-black uppercase text-slate-800 tracking-wider flex items-center justify-between">
-                <span>📋 Reported Bugs ({testingModalProject?.testingBugs?.length || 0})</span>
-                <span className="text-[10px] text-slate-500 font-normal">Click checkbox to toggle Fixed status</span>
-              </h4>
-              <div className="space-y-2">
-                {testingModalProject?.testingBugs?.length > 0 ? (
-                  testingModalProject.testingBugs.map((bug: any) => (
-                    <div key={bug.id} className={`p-3 rounded-xl border transition-all flex items-start justify-between gap-3 ${bug.status==='fixed' ? 'bg-emerald-50/40 border-emerald-200 opacity-75' : 'bg-white border-slate-200 shadow-2xs'}`}>
-                      <div className="flex items-start gap-3 min-w-0 flex-1">
-                        <input
-                          type="checkbox"
-                          checked={bug.status === 'fixed'}
-                          onChange={() => handleToggleBugStatus(bug.id)}
-                          className="mt-1 w-4 h-4 text-emerald-600 rounded cursor-pointer shrink-0"
-                        />
-                        <div className="space-y-1.5 min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded uppercase ${bug.severity==='Critical'||bug.severity==='High' ? 'bg-red-100 text-red-700' : bug.severity==='Medium' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700'}`}>{bug.severity}</span>
-                            <span className={`text-[10px] font-extrabold ${bug.status==='fixed' ? 'text-emerald-700 line-through' : 'text-slate-900'}`}>{bug.title}</span>
-                          </div>
-                          {bug.description && <p className="text-xs text-slate-600 break-words">{bug.description}</p>}
-                          <div className="flex items-center justify-between gap-2 flex-wrap text-[10px] text-slate-400 pt-0.5">
-                            <span>Reported by <strong className="text-slate-600">{bug.reportedByName}</strong> on {bug.date}</span>
-                            
-                            {/* Assignee Control / Badge */}
-                            {(isAdmin || user?.role?.toLowerCase() === 'cto' || testingModalProject?.teamLeaderId === user?.id) ? (
-                              <div className="flex items-center gap-1.5 bg-slate-100/80 px-2 py-0.5 rounded-md border border-slate-200">
-                                <span className="font-bold text-slate-500">Assignee:</span>
-                                <Select value={bug.assignedToId ? String(bug.assignedToId) : "none"} onValueChange={(val) => handleAssignBug(bug.id, val)}>
-                                  <SelectTrigger className="h-6 text-[10px] font-bold border-0 bg-transparent px-1 focus:ring-0 w-[130px] shadow-none text-indigo-700">
-                                    <SelectValue placeholder="Unassigned" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="none">👤 Unassigned</SelectItem>
-                                    {employees.map((emp: any) => (
-                                      <SelectItem key={emp.id} value={String(emp.id)}>
-                                        {emp.firstName ? `${emp.firstName} ${emp.lastName || ""}`.trim() : emp.name}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            ) : bug.assignedToName ? (
-                              <span className="bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded border border-indigo-100">
-                                👤 Assigned to: {bug.assignedToName}
-                              </span>
-                            ) : (
-                              <span className="italic text-slate-400">Unassigned</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <Badge variant={bug.status==='fixed' ? 'success' : 'destructive'} className="text-[10px] font-bold shrink-0 uppercase">{bug.status}</Badge>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-center py-8 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 text-slate-400 text-xs font-semibold">
-                    🎉 No bugs reported yet!
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="pt-3 border-t border-slate-100 flex justify-end shrink-0">
-            <Button variant="outline" size="sm" onClick={() => setTestingModalOpen(false)}>Close Bug Board</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
       
       <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-xl border border-border shadow-sm">
         <div className="relative flex-1 min-w-[240px]">
@@ -1124,7 +763,6 @@ export default function ProjectsPage() {
                   <SelectItem value="active">Active</SelectItem>
                   <SelectItem value="in-progress">In Progress</SelectItem>
                   <SelectItem value="on-hold">On Hold</SelectItem>
-                  <SelectItem value="testing">Testing Phase</SelectItem>
                   <SelectItem value="completed">Completed</SelectItem>
                   <SelectItem value="rejected">Rejected</SelectItem>
                 </>
@@ -1237,7 +875,7 @@ export default function ProjectsPage() {
                     <div className="flex flex-col">
                       <div className="flex gap-2 items-center mb-2">
                         <Badge variant={getStatusColor(project.status, progress)} className="capitalize">
-                          {project.status === 'testing' ? 'Testing Phase' : project.status.replace('-', ' ')}
+                          {project.status.replace('-', ' ')}
                         </Badge>
                         {overdue && (
                           <Badge variant="destructive" className="text-[10px] font-bold h-5 flex items-center gap-1">
@@ -1365,7 +1003,7 @@ export default function ProjectsPage() {
                       </div>
                     )}
 
-                    {/* Development Details & Progress */}
+                    {/* Overall Progress for Development Projects */}
                     {isDevProject && (
                       <div className="pt-3 border-t border-dashed border-border/60 space-y-2">
                         <div className="flex justify-between items-center text-xs">
@@ -1373,49 +1011,42 @@ export default function ProjectsPage() {
                           <span className="font-bold text-brand-teal">{progress}%</span>
                         </div>
                         <Progress value={progress} className="h-2 bg-slate-100" />
-                        {stats.inProgressNames.length > 0 && (
-                          <div className="pt-1">
-                            <p className="text-[10px] text-slate-500 italic mb-1">{stats.isTaskFallback ? "In-Progress Tasks:" : "In-Progress Modules:"}</p>
-                            <div className="flex flex-wrap gap-1">
-                              {stats.inProgressNames.map((name, i) => (
-                                <Badge key={i} variant="outline" className="text-[9px] bg-blue-50 text-blue-700 border-blue-200 shadow-none font-bold">
-                                  {name}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                      </div>
+                    )}
 
-                        {stats.teamMembersStats && stats.teamMembersStats.length > 0 && (
-                          <div className="pt-3 border-t border-slate-100 mt-2">
-                            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                              Assigned Team Members
-                            </p>
-                            <div className="flex flex-wrap gap-4">
-                              {stats.teamMembersStats.map((member: any, idx: number) => (
-                                <div key={idx} className="flex flex-col gap-1.5 min-w-[120px]">
-                                  <div className="flex items-center gap-1.5">
-                                    <div className="w-5 h-5 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-[9px] font-bold text-indigo-700 shadow-sm">
-                                      {member.name !== 'Unknown' ? member.name.charAt(0).toUpperCase() : '?'}
-                                    </div>
-                                    <span className="text-[11px] font-bold text-slate-700">
-                                      {member.name}
-                                    </span>
-                                  </div>
-                                  {member.items.length > 0 && (
-                                    <div className="flex flex-wrap gap-1 pl-6">
-                                      {member.items.map((itemName: string, i: number) => (
-                                        <Badge key={i} variant="outline" className="text-[9px] bg-blue-50 text-blue-700 border-blue-200 shadow-none font-bold py-0.5 px-1.5">
-                                          {itemName}
-                                        </Badge>
-                                      ))}
-                                    </div>
-                                  )}
+                    {/* Assigned Team Members for All Projects */}
+                    {stats.teamMembersStats && stats.teamMembersStats.length > 0 && (
+                      <div className="pt-3 border-t border-slate-100 mt-2">
+                        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                          Assigned Team Members
+                        </p>
+                        <div className="flex flex-wrap gap-4">
+                          {stats.teamMembersStats.map((member: any, idx: number) => (
+                            <div key={idx} className="flex flex-col gap-1.5 min-w-[120px]">
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-5 h-5 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-[9px] font-bold text-indigo-700 shadow-sm">
+                                  {member.name !== 'Unknown' ? member.name.charAt(0).toUpperCase() : '?'}
                                 </div>
-                              ))}
+                                <span className="text-[11px] font-bold text-slate-700">
+                                  {member.name}
+                                </span>
+                              </div>
+                              {member.items && member.items.length > 0 ? (
+                                <div className="flex flex-wrap gap-1 pl-6">
+                                  {member.items.map((itemName: string, i: number) => (
+                                    <Badge key={i} variant="outline" className="text-[9px] bg-blue-50 text-blue-700 border-blue-200 shadow-none font-bold py-0.5 px-1.5">
+                                      {itemName}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="pl-6 text-[10px] text-slate-400 font-medium italic">
+                                  No in-progress module
+                                </div>
+                              )}
                             </div>
-                          </div>
-                        )}
+                          ))}
+                        </div>
                       </div>
                     )}
 
@@ -1446,42 +1077,6 @@ export default function ProjectsPage() {
                       </div>
                     )}
 
-                    {/* Testing Phase / Shift to Testing Action - Only for Development Projects */}
-                    {isDevProject && (project.status === "testing" ? (
-                      <div className="pt-3 border-t border-dashed border-indigo-200">
-                        <Button 
-                          type="button"
-                          variant="outline"
-                          className="w-full bg-indigo-50/70 hover:bg-indigo-100 text-indigo-700 font-extrabold border-indigo-300 flex items-center justify-center gap-2 text-xs h-9 shadow-xs transition-all"
-                          onClick={() => {
-                            setTestingModalProject(project);
-                            setTestingModalOpen(true);
-                          }}
-                        >
-                          🐞 Testing Environment & Bug Tracker ({project.testingBugs?.filter((b:any)=>b.status==='open').length || 0} Open Bugs)
-                        </Button>
-                      </div>
-                    ) : progress === 100 && project.status !== "completed" ? (
-                      <div className="pt-3 border-t border-dashed border-purple-200">
-                        {(isAdmin || user?.role?.toLowerCase() === 'cto' || project.teamLeaderId === user?.id) ? (
-                          <Button 
-                            type="button"
-                            className="w-full bg-purple-600 hover:bg-purple-700 text-white font-black flex items-center justify-center gap-2 text-xs h-9 shadow-md transition-all animate-pulse"
-                            onClick={() => {
-                              setShiftModalProject(project);
-                              setShiftTestingLinks([{ title: "Staging URL", url: project.frontendLink || "" }]);
-                              setShiftModalOpen(true);
-                            }}
-                          >
-                            🚀 Shift Project to Testing Phase
-                          </Button>
-                        ) : (
-                          <div className="w-full text-center py-1.5 text-[11px] font-bold text-slate-500 bg-purple-50/50 rounded-lg border border-purple-100">
-                            ⏳ 100% Tasks Done · Awaiting TL/CTO to Shift to Testing
-                          </div>
-                        )}
-                      </div>
-                    ) : null)}
 
                     <div className="flex items-start justify-between pt-2 border-t border-border/50 text-[12px] text-muted-foreground">
                       {isAdmin ? (

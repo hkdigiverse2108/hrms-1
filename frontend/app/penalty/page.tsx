@@ -744,7 +744,7 @@ export default function RemarksPage() {
                   </div>
                   
                   <div className="font-extrabold text-slate-800 text-[14px] mt-3 leading-snug truncate w-full group-hover:text-brand-teal transition-colors duration-200">{item.name}</div>
-                  <div className="text-[11px] text-muted-foreground font-bold uppercase tracking-wider mt-0.5 truncate w-full">{getEmployeeRoleSubtitle(item.employeeId || item.name, item.role)}</div>
+                  <div className="text-[11px] text-muted-foreground font-bold uppercase tracking-wider mt-0.5 truncate w-full">{getEmployeeRoleSubtitle((item as any).employeeId || item.name, item.role)}</div>
                   
                   <div className="mt-4 flex items-center justify-between w-full pt-3 border-t border-slate-100 text-xs">
                     <div className="text-left">
