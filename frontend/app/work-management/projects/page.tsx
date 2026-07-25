@@ -120,19 +120,15 @@ export default function ProjectsPage() {
     if (!user) return;
     if (showLoading) setIsLoading(true);
     try {
-      const [pRes, tRes, lRes, cRes, eRes] = await Promise.all([
-        fetch(`${API_URL}/projects?userId=${user.id}&role=${user.role}`),
-        fetch(`${API_URL}/wm-tasks?userId=${user.id}&role=${user.role}`),
-        fetch(`${API_URL}/leads`),
-        fetch(`${API_URL}/clients`),
-        fetch(`${API_URL}/employees`)
-      ]);
-      
-      if (pRes.ok) setProjects(await pRes.json());
-      if (tRes.ok) setTasks(await tRes.json());
-      if (lRes.ok) setLeads(await lRes.json());
-      if (cRes.ok) setClients(await cRes.json());
-      if (eRes.ok) setEmployees(await eRes.json());
+      const res = await fetch(`${API_URL}/projects-page-data?userId=${user.id}&role=${user.role || ''}`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        setProjects(data.projects || []);
+        setTasks(data.wmTasks || []);
+        setLeads(data.leads || []);
+        setClients(data.clients || []);
+        setEmployees(data.employees || []);
+      }
     } catch (err) {
       console.error("Error fetching data:", err);
     } finally {

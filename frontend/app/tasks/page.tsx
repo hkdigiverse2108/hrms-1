@@ -149,16 +149,13 @@ export default function TaskManagementPage() {
     if (!user) return;
     setIsLoading(true);
     try {
-      const [tRes, eRes, dRes] = await Promise.all([
-        fetch(`${API_URL}/tasks?userId=${user.id}&role=${user.role}`),
-        fetch(`${API_URL}/employees`),
-        fetch(`${API_URL}/departments`)
-      ]);
-      
-      if (tRes.ok) setTasks(await tRes.json());
-      if (dRes.ok) setDepartments(await dRes.json());
-      if (eRes.ok) {
-        let emps = await eRes.json();
+      const res = await fetch(`${API_URL}/my-tasks-page-data?userId=${user.id}&role=${user.role || ''}`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        setTasks(data.tasks || []);
+        setDepartments(data.departments || []);
+        
+        let emps = data.employees || [];
         if (user && !emps.some((e: any) => e.id === user.id)) {
           emps.unshift({
             id: user.id,

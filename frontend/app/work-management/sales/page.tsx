@@ -353,12 +353,29 @@ export default function SalesPage() {
   }, [leadCategories]);
 
   useEffect(() => {
-    fetchLeads();
-    fetchEmployees();
-    fetchTargets();
-    fetchIncentiveSlabs();
-    fetchSettings();
+    fetchPageData();
   }, []);
+
+  const fetchPageData = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/sales-page-data`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        setLeads(data.leads || []);
+        setEmployees(data.employees || []);
+        setTargets(data.salesTargets || []);
+        setSlabs(data.incentiveSlabs || []);
+        if (data.systemSettings) {
+          setLeadCategories(data.systemSettings.leadCategories || ["Hot Lead", "Warm Lead", "Cold Lead"]);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching sales page data:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
     const existing = targets.find(t => {
