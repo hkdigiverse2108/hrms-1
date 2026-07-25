@@ -121,12 +121,22 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
           }
         } else {
           allTasks = await tasksRes.json();
+          try {
+            const genTasksRes = await fetch(`${API_URL}/tasks?userId=${userId}`);
+            if (genTasksRes.ok) {
+              const genTasks = await genTasksRes.json();
+              allTasks = [...allTasks, ...genTasks];
+            }
+          } catch (e) {
+            console.error("Error fetching general tasks:", e);
+          }
         }
         let myTasks = allTasks.filter((t: any) => {
           const isAssigned = String(t.assignedToId) === String(userId) || 
                              (t.assignedToIds && t.assignedToIds.map(String).includes(String(userId)));
           if (!isAssigned) return false;
-          if (t.status === "completed" || t.status === "onhold" || t.status === "Approved") return false;
+          const statusLower = (t.status || "").toLowerCase().trim();
+          if (statusLower === "completed" || statusLower === "onhold" || statusLower === "on hold" || statusLower === "approved") return false;
           return true;
         });
 
