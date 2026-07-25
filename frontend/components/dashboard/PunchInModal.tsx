@@ -85,11 +85,17 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [tasksRes, settingsRes, attRes] = await Promise.all([
+      const [tasksRes, settingsRes, attRes, globalProjRes] = await Promise.all([
         fetch(`${API_URL}/wm-tasks`),
         fetch(`${API_URL}/system-settings`),
-        fetch(`${API_URL}/attendance`)
+        fetch(`${API_URL}/attendance`),
+        fetch(`${API_URL}/projects`)
       ]);
+
+      let allProjects: any[] = [];
+      if (globalProjRes.ok) {
+        allProjects = await globalProjRes.json();
+      }
 
       if (settingsRes.ok) {
         setSettings(await settingsRes.json());
@@ -137,6 +143,14 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
           if (!isAssigned) return false;
           const statusLower = (t.status || "").toLowerCase().trim();
           if (statusLower === "completed" || statusLower === "onhold" || statusLower === "on hold" || statusLower === "approved") return false;
+          
+          if (t.projectId) {
+            const project = allProjects.find((p: any) => String(p.id || p._id) === String(t.projectId));
+            if (project) {
+              const pStatus = (project.status || "").toLowerCase().trim();
+              if (pStatus === "onhold" || pStatus === "on-hold" || pStatus === "on hold") return false;
+            }
+          }
           return true;
         });
 
@@ -149,16 +163,16 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
           const isDigitalMarketingUser = ['digital marketing', 'dm'].includes(userDept);
 
           if (isCreativeUser || isDigitalMarketingUser) {
-            const [ccRes, owRes, projRes, clientRes, transferRes] = await Promise.all([
+            const [ccRes, owRes, clientRes, transferRes] = await Promise.all([
               fetch(`${API_URL}/content-calendar/all`),
               fetch(`${API_URL}/other-work/all`),
-              fetch(`${API_URL}/projects`),
               fetch(`${API_URL}/clients`),
               fetch(`${API_URL}/work-transfer-requests`)
             ]);
             
-            if (ccRes.ok && owRes.ok && projRes.ok && clientRes.ok) {
-              const [ccList, owList, projList, clientList, transferListRaw] = await Promise.all([ccRes.json(), owRes.json(), projRes.json(), clientRes.json(), transferRes.ok ? transferRes.json() : []]);
+            if (ccRes.ok && owRes.ok && clientRes.ok) {
+              const [ccList, owList, clientList, transferListRaw] = await Promise.all([ccRes.json(), owRes.json(), clientRes.json(), transferRes.ok ? transferRes.json() : []]);
+              const projList = allProjects;
               const acceptedTransfers = (Array.isArray(transferListRaw) ? transferListRaw : []).filter((r: any) => r.status === 'Accepted');
               const smmTasks: any[] = [];
               if (isCreativeUser) {
