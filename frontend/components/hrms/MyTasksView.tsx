@@ -278,6 +278,10 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
           if (stageName === 'Posting') assigneeId = entry.assignedPosterId || assocProject.assignedPosterId || client?.assignedPosterId
 
           if (assigneeId === uId && !isDone && deadline) {
+            const creatorName = entry.logs?.[0]?.userName || 'Admin'
+            const empName = employees.find(e => e.id === assigneeId)?.name || currentUser?.name || 'User'
+            const enrichedEntry = { ...entry, assignerName: creatorName, assigneeName: empName }
+
             consolidated.push({
               id: `${entry.id}-${stageName}`,
               title: entry.concept || entry.topic || (entry.postReel ? `${entry.postReel} Content` : 'SMM Task'),
@@ -288,7 +292,7 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
               status: 'todo',
               department: 'Social Media Management',
               sourceType: 'smm-creative',
-              originalTask: entry
+              originalTask: enrichedEntry
             })
           }
         }
@@ -307,6 +311,11 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
           bpIds.forEach((bpId: string) => {
             if (bpId === uId) {
               const taskDeadline = entry.shootDate || entry.postingDate || (entry.monthYear ? `${entry.monthYear}-28` : new Date().toISOString().split('T')[0]);
+              
+              const creatorName = entry.logs?.[0]?.userName || 'Admin'
+              const empName = employees.find(e => e.id === bpId)?.name || currentUser?.name || 'User'
+              const enrichedEntry = { ...entry, assignerName: creatorName, assigneeName: empName }
+              
               consolidated.push({
                 id: `${entry.id}-BrandPerson`,
                 title: entry.concept || entry.topic || (entry.postReel ? `${entry.postReel} Content` : 'SMM Task'),
@@ -317,7 +326,7 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                 status: 'todo',
                 department: 'Social Media Management',
                 sourceType: 'smm-creative',
-                originalTask: entry
+                originalTask: enrichedEntry
               })
             }
           })
@@ -354,18 +363,22 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
         }
         
         if (!isProjectOnHold) {
+          const creatorName = ow.logs?.[0]?.userName || 'Manager';
+          const empName = employees.find(e => e.id === ow.assigneeId)?.name || currentUser?.name || 'User';
+          const enrichedOw = { ...ow, assignerName: creatorName, assigneeName: empName };
+
           consolidated.push({
             id: ow.id,
-          title: ow.title,
-          description: ow.description || 'SMM other work task',
-          dueDate: ow.deadline ? (ow.deadline.includes('T') ? ow.deadline.split('T')[0] : ow.deadline) : '',
-          priority: ow.priority || 'medium',
-          status: ow.status,
-          stage: ow.status,
-          department: ow.taskType === 'digital-marketing' ? 'Digital Marketing' : 'Social Media Management',
-          sourceType: 'smm-other',
-          originalTask: ow
-        })
+            title: ow.title,
+            description: ow.description || 'SMM other work task',
+            dueDate: ow.deadline ? (ow.deadline.includes('T') ? ow.deadline.split('T')[0] : ow.deadline) : '',
+            priority: ow.priority || 'medium',
+            status: ow.status,
+            stage: ow.status,
+            department: ow.taskType === 'digital-marketing' ? 'Digital Marketing' : 'Social Media Management',
+            sourceType: 'smm-other',
+            originalTask: enrichedOw
+          })
         }
       }
     })
@@ -380,6 +393,11 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
           const followUpAssigneeId = project.assignedFollowUpId || client?.assignedFollowUpId || project.teamLeaderId
           if (followUpAssigneeId === uId) {
             const nextDate = project.nextFollowupDate.split("T")[0].split(" ")[0]
+            
+            const empName = employees.find(e => e.id === followUpAssigneeId)?.name || currentUser?.name || 'User';
+            const tlName = employees.find(e => e.id === project.teamLeaderId)?.name || 'Manager';
+            const enrichedProject = { ...project, assignerName: tlName, assigneeName: empName };
+
             consolidated.push({
               id: `${project.id}-Followup`,
               title: `Follow-up: ${project.title || client?.companyName || 'Project'}`,
@@ -390,7 +408,7 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
               status: 'todo',
               department: 'Social Media Management',
               sourceType: 'smm-followup',
-              originalTask: project
+              originalTask: enrichedProject
             })
           }
         }
