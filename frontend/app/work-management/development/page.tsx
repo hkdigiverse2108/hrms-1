@@ -799,15 +799,25 @@ export default function TasksPage() {
 
     return true;
   }).sort((a, b) => {
-    const aInProgress = (a.status === "in_progress" || a.status === "in-progress") ? 1 : 0;
-    const bInProgress = (b.status === "in_progress" || b.status === "in-progress") ? 1 : 0;
-    if (aInProgress !== bInProgress) {
-      return bInProgress - aInProgress;
+    const getStatusPriority = (status: string) => {
+      const s = (status || "").toLowerCase().trim().replace(/[-_]/g, " ");
+      if (s === "in progress") return 1;
+      if (s === "todo" || s === "to do") return 2;
+      if (s === "bugs" || s === "bug") return 3;
+      if (s === "pending") return 4;
+      if (s === "on hold" || s === "onhold") return 5;
+      if (s === "completed") return 6;
+      return 99;
+    };
+    const pA = getStatusPriority(a.status);
+    const pB = getStatusPriority(b.status);
+    if (pA !== pB) {
+      return pA - pB;
     }
 
-    const pA = a.projectName || "";
-    const pB = b.projectName || "";
-    if (pA !== pB) return pA.localeCompare(pB);
+    const projA = a.projectName || "";
+    const projB = b.projectName || "";
+    if (projA !== projB) return projA.localeCompare(projB);
     const phA = a.phase || "";
     const phB = b.phase || "";
     if (phA !== phB) return phA.localeCompare(phB);
