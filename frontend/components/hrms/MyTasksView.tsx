@@ -507,6 +507,14 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
         return
       }
 
+      const isClientIssue = (t.status && t.status.toLowerCase() === 'client issue') || 
+                            (t.originalTask?.remark && typeof t.originalTask.remark === 'string' && t.originalTask.remark.startsWith('[CLIENT ISSUE]'));
+
+      if (isClientIssue) {
+        pendingList.push(t);
+        return; // Don't process further, it belongs exclusively in pending
+      }
+
       if (t.sourceType.startsWith('smm-')) {
         // SMM Task Categorization
         if (t.sourceType === 'smm-other') {
@@ -526,11 +534,6 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
             todayList.push(t)
           } else {
             upcomingList.push(t)
-          }
-          // Check Pending (Client Issues)
-          const isClientIssue = t.originalTask.remark && t.originalTask.remark.trim() !== '' && t.originalTask.remark.startsWith('[CLIENT ISSUE]')
-          if (isClientIssue) {
-            pendingList.push(t)
           }
         } else if (t.sourceType === 'smm-followup') {
           if (deadlineDate <= today) {
@@ -897,15 +900,20 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                                     <th className="p-4 w-[120px] text-right">Actions</th>
                                   </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-100 text-xs">
-                                  {grouped[deptName].map(task => (
-                                    <tr key={task.id} className="hover:bg-slate-50/50 transition-colors group">
-                                      <td className="p-4 font-semibold text-slate-700">
-                                        <div className="flex items-center gap-1.5">
-                                          <CalendarIcon className="w-3.5 h-3.5 text-slate-400" />
-                                          <span>{task.dueDate ? format(new Date(task.dueDate), 'dd/MM/yyyy') : 'No Date'}</span>
-                                        </div>
-                                      </td>
+                                  <tbody className="divide-y divide-slate-100 text-xs">
+                                    {grouped[deptName].map(task => {
+                                      const todayStr = new Date().toISOString().split('T')[0]
+                                      const isOverdue = task.dueDate && task.dueDate < todayStr
+                                      return (
+                                        <tr key={task.id} className="hover:bg-slate-50/50 transition-colors group">
+                                          <td className="p-4 font-semibold text-slate-700">
+                                            <div className={`flex items-center gap-1.5 ${isOverdue ? 'text-red-600 font-bold' : ''}`}>
+                                              {isOverdue ? <AlertCircle className="w-3.5 h-3.5 text-red-600" /> : <CalendarIcon className="w-3.5 h-3.5 text-slate-400" />}
+                                              <span className={isOverdue ? 'bg-red-100 px-2 py-0.5 rounded text-[10px]' : ''}>
+                                                {task.dueDate ? format(new Date(task.dueDate), 'dd/MM/yyyy') : 'No Date'}
+                                              </span>
+                                            </div>
+                                          </td>
                                       <td className="p-4 font-bold text-slate-800">
                                         {task.projectName || '-'}
                                       </td>
@@ -939,7 +947,8 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                                           )}
                                       </td>
                                     </tr>
-                                  ))}
+                                      )
+                                    })}
                                 </tbody>
                               </table>
                             )}
