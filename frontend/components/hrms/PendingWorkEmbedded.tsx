@@ -831,8 +831,8 @@ export function PendingWorkEmbedded({
           
           const deadlineDate = parseLocalDate(t.deadline);
           
-          if (type === 'todays-work') return (deadlineDate <= today || t.isTransferredToMe) && t.status !== 'Approved';
-          if (type === 'upcoming-work') return (deadlineDate > today && !t.isTransferredToMe) && t.status !== 'Approved';
+          if (type === 'todays-work') return deadlineDate <= today && t.status !== 'Approved';
+          if (type === 'upcoming-work') return deadlineDate > today && t.status !== 'Approved';
           return true;
         }
 
@@ -855,8 +855,8 @@ export function PendingWorkEmbedded({
         
         const deadlineDate = parseLocalDate(t.deadline);
         
-        if (type === 'todays-work') return deadlineDate <= today || t.isTransferredToMe;
-        if (type === 'upcoming-work') return deadlineDate > today && !t.isTransferredToMe;
+        if (type === 'todays-work') return deadlineDate <= today;
+        if (type === 'upcoming-work') return deadlineDate > today;
         return true;
       });
     }

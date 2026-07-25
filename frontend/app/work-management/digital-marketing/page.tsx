@@ -2388,15 +2388,7 @@ export default function MarketingReportsPage() {
                 <SelectContent>
                   {employees
                     .filter((emp: any) => {
-                      if (emp.id === user?.id) return false;
-                      const empDept = emp.department?.trim().toLowerCase();
-                      if (!empDept) return false;
-                      
-                      if (transferringProject?.department) {
-                        const projDepts = transferringProject.department.toLowerCase().split(',').map((d: string) => d.trim());
-                        return projDepts.includes(empDept);
-                      }
-                      return empDept === 'digital marketing';
+                      return emp.id !== user?.id;
                     })
                     .map((emp: any) => {
                       const name = `${emp.firstName} ${emp.lastName || ''}`.trim();
