@@ -125,28 +125,39 @@ export default function DashboardPage() {
   const [activeTaskTitle, setActiveTaskTitle] = useState<string | null>(null);
   const [hasTargetedBanner, setHasTargetedBanner] = useState(false);
 
-  useEffect(() => {
-    if (user?.id) {
-      fetch(`${API_URL}/system-settings`)
-        .then(res => res.json())
-        .then(data => {
-          const banners = data.dashboardBanners || [];
-          const todayStr = dayjs().format('YYYY-MM-DD');
-          const active = banners.filter((b: any) => {
-            if (!b.isActive) return false;
-            if (b.employeeId && b.employeeId !== "all" && b.employeeId !== user.id) return false;
-            const hasStartDate = !!b.startDate;
-            const hasEndDate = !!b.endDate;
-            if (!hasStartDate && !hasEndDate) return true;
-            if (hasStartDate && !hasEndDate) return dayjs(todayStr).isSameOrAfter(b.startDate);
-            if (!hasStartDate && hasEndDate) return dayjs(todayStr).isSameOrBefore(b.endDate);
-            return dayjs(todayStr).isSameOrAfter(b.startDate) && dayjs(todayStr).isSameOrBefore(b.endDate);
-          });
-          setHasTargetedBanner(active.some((b: any) => b.employeeId === user.id));
-        })
-        .catch(err => console.error("Error fetching settings for banners:", err));
+  const fetchDashboardData = async () => {
+    if (!user?.id) return;
+    try {
+      const res = await fetch(`${API_URL}/dashboard-data?userId=${user.id}&role=${user.role || ''}`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        // Process banner settings
+        const banners = data.systemSettings?.dashboardBanners || [];
+        const todayStr = dayjs().format('YYYY-MM-DD');
+        const active = banners.filter((b: any) => {
+          if (!b.isActive) return false;
+          if (b.employeeId && b.employeeId !== "all" && b.employeeId !== user.id) return false;
+          const hasStartDate = !!b.startDate;
+          const hasEndDate = !!b.endDate;
+          if (!hasStartDate && !hasEndDate) return true;
+          if (hasStartDate && !hasEndDate) return dayjs(todayStr).isSameOrAfter(b.startDate);
+          if (!hasStartDate && hasEndDate) return dayjs(todayStr).isSameOrBefore(b.endDate);
+          return dayjs(todayStr).isSameOrAfter(b.startDate) && dayjs(todayStr).isSameOrBefore(b.endDate);
+        });
+        setHasTargetedBanner(active.some((b: any) => b.employeeId === user.id));
+        
+        // Set data
+        setLeaveRequests(data.leaves || []);
+        if (data.employees) setEmployees(data.employees);
+        if (data.interns) setInterns(data.interns);
+        if (data.attendance) setAllAttendance(data.attendance);
+        if (data.applications) setApplications(data.applications);
+        if (data.assets) setAssets(data.assets);
+      }
+    } catch (err) {
+      console.error("Error fetching dashboard data:", err);
     }
-  }, [user?.id]);
+  };
 
   useEffect(() => {
     if (attendanceStatus?.isPunchedIn && attendanceStatus.record?.punchInActivityType === "Work" && attendanceStatus.record?.punchInTaskId) {
@@ -178,14 +189,7 @@ export default function DashboardPage() {
     if (user?.id) {
       fetchStatus();
       fetchHistory();
-      fetchLeaveRequests();
-      if (user.role === "Admin" || user.role === "HR") {
-        fetchEmployees();
-        fetchInterns();
-        fetchAllAttendance();
-        fetchApplications();
-        fetchAssets();
-      }
+      fetchDashboardData();
     }
 
     const handleUpdate = () => {

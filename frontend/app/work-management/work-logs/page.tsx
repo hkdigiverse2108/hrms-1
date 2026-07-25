@@ -59,14 +59,13 @@ export default function WorkLogsPage() {
   const fetchData = async () => {
     setLoading(true)
     try {
-      const [attRes, tasksRes, empRes] = await Promise.all([
-        fetch(`${API_URL}/attendance`),
-        fetch(`${API_URL}/wm-tasks`),
-        fetch(`${API_URL}/employees`),
-      ])
-      if (attRes.ok)   setAttendance(await attRes.json())
-      if (tasksRes.ok) setTasks(await tasksRes.json())
-      if (empRes.ok)   setEmployees(await empRes.json())
+      const res = await fetch(`${API_URL}/work-logs-data`, { cache: 'no-store' })
+      if (res.ok) {
+        const data = await res.json()
+        setAttendance(data.attendance || [])
+        setTasks(data.wmTasks || [])
+        setEmployees(data.employees || [])
+      }
     } catch {
       toast.error('Failed to fetch work log data')
     } finally {

@@ -63,20 +63,28 @@ export default function HRTasksPage() {
   const isAdminOrHR = user?.role === "Admin" || user?.role === "Super Admin" || user?.role === "HR" || user?.department?.toLowerCase() === "hr";
 
   useEffect(() => {
-    fetchEmployees();
-    fetchTasks();
-    fetchLeaves();
-    fetchDocRequests();
+    fetchPageData();
   }, [user]);
 
-  const fetchEmployees = async () => {
+  const fetchPageData = async () => {
+    setLoadingTasks(true);
+    setLoadingLeaves(true);
+    setLoadingDocs(true);
     try {
-      const res = await fetch(`${API_URL}/employees`);
+      const res = await fetch(`${API_URL}/hr-tasks-data`, { cache: 'no-store' });
       if (res.ok) {
-        setEmployees(await res.json());
+        const data = await res.json();
+        setEmployees(data.employees || []);
+        setTasks(data.tasks || []);
+        setLeaves(data.leaves || []);
+        setDocRequests(data.documentRequests || []);
       }
     } catch (err) {
-      console.error("Error fetching employees:", err);
+      console.error("Error fetching HR tasks data:", err);
+    } finally {
+      setLoadingTasks(false);
+      setLoadingLeaves(false);
+      setLoadingDocs(false);
     }
   };
 
@@ -97,45 +105,14 @@ export default function HRTasksPage() {
     });
   }, [tasks, employees, user]);
 
-  const fetchTasks = async () => {
-    setLoadingTasks(true);
+  const fetchEmployees = async () => {
     try {
-      const res = await fetch(`${API_URL}/tasks`);
+      const res = await fetch(`${API_URL}/employees`);
       if (res.ok) {
-        setTasks(await res.json());
+        setEmployees(await res.json());
       }
     } catch (err) {
-      console.error("Error fetching tasks:", err);
-    } finally {
-      setLoadingTasks(false);
-    }
-  };
-
-  const fetchLeaves = async () => {
-    setLoadingLeaves(true);
-    try {
-      const res = await fetch(`${API_URL}/leaves`);
-      if (res.ok) {
-        setLeaves(await res.json());
-      }
-    } catch (err) {
-      console.error("Error fetching leaves:", err);
-    } finally {
-      setLoadingLeaves(false);
-    }
-  };
-
-  const fetchDocRequests = async () => {
-    setLoadingDocs(true);
-    try {
-      const res = await fetch(`${API_URL}/document-requests`);
-      if (res.ok) {
-        setDocRequests(await res.json());
-      }
-    } catch (err) {
-      console.error("Error fetching doc requests:", err);
-    } finally {
-      setLoadingDocs(false);
+      console.error("Error fetching employees:", err);
     }
   };
 
