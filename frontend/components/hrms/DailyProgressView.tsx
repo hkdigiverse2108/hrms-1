@@ -357,7 +357,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
     if (!isAdmin && !isTeamLeader && !isHRUser) {
        filteredEmployees = filteredEmployees.filter((e: any) => e.id === user?.id)
     } else {
-       const deptToFilter = (isTeamLeader && !isAdmin && !isHRUser) ? user?.department : activeDeptTab
+       const deptToFilter = (isTeamLeader && !isAdmin && !isHRUser) ? user?.department : (isAdmin || isHRUser ? '' : activeDeptTab)
        if (deptToFilter) {
          filteredEmployees = filteredEmployees.filter((e: any) => e.department?.toLowerCase() === deptToFilter.toLowerCase())
        }
