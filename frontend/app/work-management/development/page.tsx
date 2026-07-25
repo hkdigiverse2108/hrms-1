@@ -1578,7 +1578,7 @@ export default function TasksPage() {
                         ))}
                   {filteredTasks.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="px-4 py-20 text-center text-slate-400 italic">No creative tasks found.</td>
+                      <td colSpan={7} className="px-4 py-20 text-center text-slate-400 italic">No tasks found.</td>
                     </tr>
                   )}
                 </tbody>
