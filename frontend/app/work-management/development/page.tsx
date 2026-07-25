@@ -1947,8 +1947,7 @@ export default function TasksPage() {
                 <SelectContent>
                   {employees
                     .filter((emp: any) => {
-                      if (emp.id === user?.id) return false;
-                      return emp.department?.trim().toLowerCase() === 'development';
+                      return emp.id !== user?.id;
                     })
                     .map((emp: any) => {
                       const name = `${emp.firstName} ${emp.lastName || ''}`.trim();
