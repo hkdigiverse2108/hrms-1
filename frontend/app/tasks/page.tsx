@@ -656,14 +656,22 @@ export default function TaskManagementPage() {
     
     let ownershipMatch = true;
     
-    // Non-admin users: always show only tasks assigned to them
-    if (!isAdmin) {
-      ownershipMatch = isAssignedToMe;
-    }
-
-    // Admin users: respect the "My Tasks" / "All Users" toggle
-    if (isAdmin && !adminViewAllUsers) {
-      ownershipMatch = isAssignedToMe;
+    const isTrueAdmin = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'super admin' || user?.role?.toLowerCase() === 'superadmin';
+    
+    if (isTrueAdmin) {
+      if (!adminViewAllUsers) {
+        ownershipMatch = isAssignedToMe || isCreatedByMe;
+      }
+    } else {
+      if (isAdmin) {
+        if (!adminViewAllUsers) {
+          ownershipMatch = isAssignedToMe || isCreatedByMe;
+        } else {
+          ownershipMatch = (task.department && user?.department && task.department.toLowerCase() === user.department.toLowerCase()) || isAssignedToMe || isCreatedByMe;
+        }
+      } else {
+        ownershipMatch = isAssignedToMe || isCreatedByMe;
+      }
     }
 
     // If double owned option is checked AND My Filter is active, restrict ownershipMatch to BOTH assigned to me AND created by me
