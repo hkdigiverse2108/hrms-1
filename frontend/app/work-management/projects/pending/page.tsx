@@ -51,13 +51,15 @@ export default function PendingProjectsPage() {
     if (!user) return;
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_URL}/all-tasks-data?userId=${user.id}&role=${user.role}`);
-      if (res.ok) {
-        const data = await res.json();
-        setProjects(data.projects || []);
-        setLeads(data.leads || []);
-        setClients(data.clients || []);
-      }
+      const [pRes, lRes, cRes] = await Promise.all([
+        fetch(`${API_URL}/projects?userId=${user.id}&role=${user.role}`),
+        fetch(`${API_URL}/leads`),
+        fetch(`${API_URL}/clients`)
+      ]);
+      
+      if (pRes.ok) setProjects(await pRes.json());
+      if (lRes.ok) setLeads(await lRes.json());
+      if (cRes.ok) setClients(await cRes.json());
     } catch (err) {
       console.error("Error fetching data:", err);
     } finally {

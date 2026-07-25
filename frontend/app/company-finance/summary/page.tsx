@@ -530,27 +530,20 @@ export default function CompanyFinanceSummaryPage() {
         console.error("Error fetching row definitions:", err);
       }
 
-      const res = await fetch(`${API_URL}/all-finance-data`);
-      
-      let txRes = { ok: false, json: async () => ({}) };
-      let empRes = { ok: false, json: async () => ({}) };
-      let astRes = { ok: false, json: async () => ({}) };
-      let jobsRes = { ok: false, json: async () => ({}) };
-      
+      const [txRes, empRes, astRes, jobsRes, settingsRes] = await Promise.all([
+        fetch(`${API_URL}/company-finance/transactions`),
+        fetch(`${API_URL}/employees`),
+        fetch(`${API_URL}/assets`),
+        fetch(`${API_URL}/job-openings`),
+        fetch(`${API_URL}/system-settings`),
+      ]);
+
       let scale = 1;
-      if (res.ok) {
-        const data = await res.json();
-        
-        if (data.systemSettings) {
-          setSettings(data.systemSettings);
-          const decimals = data.systemSettings.financeDecimalScaling !== undefined ? data.systemSettings.financeDecimalScaling : 0;
-          scale = Math.pow(10, decimals);
-        }
-        
-        txRes = { ok: true, json: async () => ({ transactions: data.transactions || [] }) };
-        empRes = { ok: true, json: async () => (data.employees || []) };
-        astRes = { ok: true, json: async () => (data.assets || []) };
-        jobsRes = { ok: true, json: async () => (data.jobOpenings || []) };
+      if (settingsRes.ok) {
+        const settingsData = await settingsRes.json();
+        setSettings(settingsData);
+        const decimals = settingsData?.financeDecimalScaling !== undefined ? settingsData.financeDecimalScaling : 0;
+        scale = Math.pow(10, decimals);
       }
 
       // Fetch monthly plans and overrides for each month in parallel and sum them up

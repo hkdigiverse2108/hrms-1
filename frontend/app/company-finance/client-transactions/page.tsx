@@ -105,28 +105,34 @@ export default function ClientTransactionsPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_URL}/all-finance-data`);
-      
-      if (res.ok) {
-        const data = await res.json();
-        
-        let scale = 1;
-        if (data.systemSettings) {
-          setSettings(data.systemSettings);
-          const decimals = data.systemSettings.financeDecimalScaling !== undefined ? data.systemSettings.financeDecimalScaling : 0;
-          scale = Math.pow(10, decimals);
-        }
-        
-        const txData = data.clientTransactions || [];
+      const [txRes, clientsRes, settingsRes] = await Promise.all([
+        fetch(`${API_URL}/client-transactions`),
+        fetch(`${API_URL}/clients`),
+        fetch(`${API_URL}/system-settings`),
+      ]);
+
+      let scale = 1;
+      if (settingsRes.ok) {
+        const settingsData = await settingsRes.json();
+        setSettings(settingsData);
+        const decimals = settingsData?.financeDecimalScaling !== undefined ? settingsData.financeDecimalScaling : 0;
+        scale = Math.pow(10, decimals);
+      }
+
+      if (txRes.ok) {
+        const txData = await txRes.json();
         const scaledTx = txData.map((t: any) => ({
           ...t,
           amount: (Number(t.amount) || 0) / scale
         }));
         setTransactions(scaledTx);
-        
-        setClients(data.clients || []);
       } else {
         toast.error("Failed to load client transactions");
+      }
+
+      if (clientsRes.ok) {
+        const clientsData = await clientsRes.json();
+        setClients(clientsData);
       }
     } catch (error) {
       console.error("Error loading data:", error);

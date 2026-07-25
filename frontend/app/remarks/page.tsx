@@ -188,17 +188,11 @@ export default function ReviewPage() {
     setIsLoading(true);
     try {
       const employeeIdParam = (!isAdmin && user) ? `?employeeId=${user.id || user._id || ''}` : '';
-      const res = await fetch(`${API_URL}/all-hr-review-data${employeeIdParam}`);
-      let revRes = { ok: false, json: async () => ({}) };
-      let empRes = { ok: false, json: async () => ({}) };
-      let settingsRes = { ok: false, json: async () => ({}) };
-      
-      if (res.ok) {
-        const data = await res.json();
-        revRes = { ok: true, json: async () => (data.reviews || []) };
-        empRes = { ok: true, json: async () => (data.employees || []) };
-        settingsRes = { ok: true, json: async () => (data.systemSettings || {}) };
-      }
+      const [revRes, empRes, settingsRes] = await Promise.all([
+        fetch(`${API_URL}/reviews${employeeIdParam}`),
+        fetch(`${API_URL}/employees`),
+        fetch(`${API_URL}/system-settings`)
+      ]);
       if (revRes.ok) setReviews(await revRes.json());
       if (empRes.ok) setEmployees(await empRes.json());
       if (settingsRes.ok) setSysSettings(await settingsRes.json());

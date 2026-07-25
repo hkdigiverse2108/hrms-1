@@ -275,30 +275,18 @@ export default function CompanyFinanceTransactionsPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_URL}/all-finance-data`);
-      let txRes = { ok: false, json: async () => ({}) };
-      let scale = 1;
-      if (res.ok) {
-        const data = await res.json();
-        if (data.systemSettings) {
-          setSettings(data.systemSettings);
-          const decimals = data.systemSettings.financeDecimalScaling !== undefined ? data.systemSettings.financeDecimalScaling : 0;
-          scale = Math.pow(10, decimals);
-        }
-        
-        const balData = data.balances || {};
-        const bankOpening = Number(balData.bankOpeningBalance) || 0;
-        const cashOpening = Number(balData.cashOpeningBalance) || 0;
-        setBalances({
-          bankOpeningBalance: bankOpening / scale,
-          cashOpeningBalance: cashOpening / scale,
-        });
-        setBalanceForm({
-          bankOpeningBalance: String(bankOpening / scale),
-          cashOpeningBalance: String(cashOpening / scale),
-        });
+      const [txRes, balRes, settingsRes] = await Promise.all([
+        fetch(`${API_URL}/company-finance/transactions`),
+        fetch(`${API_URL}/company-finance/balances`),
+        fetch(`${API_URL}/system-settings`),
+      ]);
 
-        txRes = { ok: true, json: async () => ({ transactions: data.transactions || [] }) };
+      let scale = 1;
+      if (settingsRes.ok) {
+        const settingsData = await settingsRes.json();
+        setSettings(settingsData);
+        const decimals = settingsData?.financeDecimalScaling !== undefined ? settingsData.financeDecimalScaling : 0;
+        scale = Math.pow(10, decimals);
       }
 
       if (txRes.ok) {
@@ -309,6 +297,19 @@ export default function CompanyFinanceTransactionsPage() {
           amount: (Number(t.amount) || 0) / scale
         }));
         setTransactions(scaledTxs);
+      }
+      if (balRes.ok) {
+        const balData = await balRes.json();
+        const bankOpening = Number(balData.bankOpeningBalance) || 0;
+        const cashOpening = Number(balData.cashOpeningBalance) || 0;
+        setBalances({
+          bankOpeningBalance: bankOpening / scale,
+          cashOpeningBalance: cashOpening / scale,
+        });
+        setBalanceForm({
+          bankOpeningBalance: String(bankOpening / scale),
+          cashOpeningBalance: String(cashOpening / scale),
+        });
       }
     } catch (err) {
       console.error("Error fetching finance data:", err);

@@ -35,14 +35,17 @@ export default function PendingWorkPage() {
       const storedUser = localStorage.getItem('user');
       const user = storedUser ? JSON.parse(storedUser) : null;
       
-      const res = await fetch(`${API_URL}/all-tasks-data${user ? `?userId=${user.id}&role=${user.role}` : ''}`);
-      let pRes = { ok: false, json: async () => ({}) };
+      const [entriesRes, clientsRes, pRes] = await Promise.all([
+        fetch(`${API_URL}/content-calendar/all`),
+        fetch(`${API_URL}/clients`),
+        fetch(`${API_URL}/projects${user ? `?userId=${user.id}&role=${user.role}` : ''}`)
+      ]);
       
-      if (res.ok) {
-        const data = await res.json();
-        setEntries(data.contentCalendar || []);
-        setClients(data.clients || []);
-        pRes = { ok: true, json: async () => (data.projects || []) };
+      if (entriesRes.ok && clientsRes.ok) {
+        const fetchedEntries = await entriesRes.json();
+        const fetchedClients = await clientsRes.json();
+        setEntries(fetchedEntries);
+        setClients(fetchedClients);
       }
       
       if (pRes.ok) {

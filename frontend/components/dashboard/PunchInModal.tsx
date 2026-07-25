@@ -139,18 +139,16 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
           const isDigitalMarketingUser = ['digital marketing', 'dm'].includes(userDept);
 
           if (isCreativeUser || isDigitalMarketingUser) {
-            const [allTasksRes, transferRes] = await Promise.all([
-              fetch(`${API_URL}/all-tasks-data`),
+            const [ccRes, owRes, projRes, clientRes, transferRes] = await Promise.all([
+              fetch(`${API_URL}/content-calendar/all`),
+              fetch(`${API_URL}/other-work/all`),
+              fetch(`${API_URL}/projects`),
+              fetch(`${API_URL}/clients`),
               fetch(`${API_URL}/work-transfer-requests`)
             ]);
             
-            if (allTasksRes.ok) {
-              const allData = await allTasksRes.json();
-              const transferListRaw = transferRes.ok ? await transferRes.json() : [];
-              const ccList = allData.contentCalendar || [];
-              const owList = allData.otherWork || [];
-              const projList = allData.projects || [];
-              const clientList = allData.clients || [];
+            if (ccRes.ok && owRes.ok && projRes.ok && clientRes.ok) {
+              const [ccList, owList, projList, clientList, transferListRaw] = await Promise.all([ccRes.json(), owRes.json(), projRes.json(), clientRes.json(), transferRes.ok ? transferRes.json() : []]);
               const acceptedTransfers = (Array.isArray(transferListRaw) ? transferListRaw : []).filter((r: any) => r.status === 'Accepted');
               const smmTasks: any[] = [];
               if (isCreativeUser) {

@@ -160,18 +160,11 @@ export default function RemarksPage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_URL}/all-hr-review-data`);
-      
-      let remRes = { ok: false, json: async () => ({}) };
-      let empRes = { ok: false, json: async () => ({}) };
-      let typeRes = { ok: false, json: async () => ({}) };
-      
-      if (res.ok) {
-        const data = await res.json();
-        remRes = { ok: true, json: async () => (data.remarks || []) };
-        empRes = { ok: true, json: async () => (data.employees || []) };
-        typeRes = { ok: true, json: async () => (data.penaltyTypes || []) };
-      }
+      const [remRes, empRes, typeRes] = await Promise.all([
+        fetch(`${API_URL}/remarks`),
+        fetch(`${API_URL}/employees`),
+        fetch(`${API_URL}/penalty-types`)
+      ]);
       if (remRes.ok) setRemarks(await remRes.json());
       if (empRes.ok) setEmployees(await empRes.json());
       if (typeRes.ok) {

@@ -875,42 +875,50 @@ function PayslipContent() {
   const fetchInitialData = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_URL}/all-payroll-data`)
-      let payrollData: any[] = []
-      if (res.ok) {
-        const data = await res.json()
-        payrollData = data.payroll || []
+      const [payrollRes, empRes, settingsRes] = await Promise.all([
+        fetch(`${API_URL}/payroll`),
+        fetch(`${API_URL}/employees`),
+        fetch(`${API_URL}/system-settings`)
+      ])
+      
+      if (payrollRes.ok && empRes.ok) {
+        const payrollData = await payrollRes.json()
+        const empData = await empRes.json()
         setAllPayrolls(payrollData)
-        setEmployees(data.employees || [])
-        setSettings(data.systemSettings || {})
-      }
+        setEmployees(empData)
 
-      // Read user details for initial authentication check
-      const currentUser = user || (typeof window !== 'undefined' && localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')!) : null)
-      const isUserAdminOrHR = currentUser?.role?.toLowerCase() === 'admin' || currentUser?.role?.toLowerCase() === 'hr' || currentUser?.name === 'Admin Admin'
-      const currentUserId = currentUser?.id || currentUser?._id
+        if (settingsRes && settingsRes.ok) {
+          const settingsData = await settingsRes.json()
+          setSettings(settingsData)
+        }
 
-      if (payrollId) {
-        const payrollRecord = payrollData.find((p: any) => p.id === payrollId)
-        if (payrollRecord) {
-          if (isUserAdminOrHR || payrollRecord.employeeId === currentUserId) {
-            setSelectedEmpId(payrollRecord.employeeId)
-            setSelectedMonth(payrollRecord.month)
-            setSelectedYear(String(payrollRecord.year))
-            setActivePayslipId(payrollRecord.id)
-          } else {
-            toast.error('You are not authorized to view this payslip.')
-            if (currentUserId) {
-              setSelectedEmpId(currentUserId)
+        // Read user details for initial authentication check
+        const currentUser = user || (typeof window !== 'undefined' && localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')!) : null)
+        const isUserAdminOrHR = currentUser?.role?.toLowerCase() === 'admin' || currentUser?.role?.toLowerCase() === 'hr' || currentUser?.name === 'Admin Admin'
+        const currentUserId = currentUser?.id || currentUser?._id
+
+        if (payrollId) {
+          const payrollRecord = payrollData.find((p: any) => p.id === payrollId)
+          if (payrollRecord) {
+            if (isUserAdminOrHR || payrollRecord.employeeId === currentUserId) {
+              setSelectedEmpId(payrollRecord.employeeId)
+              setSelectedMonth(payrollRecord.month)
+              setSelectedYear(String(payrollRecord.year))
+              setActivePayslipId(payrollRecord.id)
+            } else {
+              toast.error('You are not authorized to view this payslip.')
+              if (currentUserId) {
+                setSelectedEmpId(currentUserId)
+              }
             }
           }
+        } else if (employeeIdParam) {
+          if (isUserAdminOrHR || employeeIdParam === currentUserId) {
+            setSelectedEmpId(employeeIdParam)
+          }
+        } else if (!isUserAdminOrHR && currentUserId) {
+          setSelectedEmpId(currentUserId)
         }
-      } else if (employeeIdParam) {
-        if (isUserAdminOrHR || employeeIdParam === currentUserId) {
-          setSelectedEmpId(employeeIdParam)
-        }
-      } else if (!isUserAdminOrHR && currentUserId) {
-        setSelectedEmpId(currentUserId)
       }
     } catch (error) {
       console.error('Error fetching payslip details:', error)

@@ -74,13 +74,28 @@ export function SalesAnalytics() {
         const token = localStorage.getItem('token')
         const headers: HeadersInit = token ? { 'Authorization': `Bearer ${token}` } : {}
 
-        const res = await fetch(`${API_URL}/all-sales-data`, { headers });
-        if (res.ok) {
-          const data = await res.json();
-          setLeads(data.leads || []);
-          setEmployees(data.employees || []);
-          setTargets(data.targets || []);
-          setLeadCategories(data.systemSettings?.leadCategories || ["Hot Lead", "Warm Lead", "Cold Lead"])
+        const [leadsRes, empRes, targetsRes, settingsRes] = await Promise.all([
+          fetch(`${API_URL}/leads`, { headers }),
+          fetch(`${API_URL}/employees`, { headers }),
+          fetch(`${API_URL}/sales-targets`, { headers }),
+          fetch(`${API_URL}/system-settings`, { headers })
+        ])
+
+        if (leadsRes.ok) {
+          const leadsData = await leadsRes.json()
+          setLeads(leadsData)
+        }
+        if (empRes.ok) {
+          const empData = await empRes.json()
+          setEmployees(empData)
+        }
+        if (targetsRes.ok) {
+          const targetsData = await targetsRes.json()
+          setTargets(targetsData)
+        }
+        if (settingsRes && settingsRes.ok) {
+          const settingsData = await settingsRes.json()
+          setLeadCategories(settingsData.leadCategories || ["Hot Lead", "Warm Lead", "Cold Lead"])
         }
       } catch (err) {
         console.error("Failed to load sales data", err)

@@ -87,18 +87,25 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
   const fetchData = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_URL}/all-tasks-data${currentUser?.id ? `?userId=${currentUser.id}&role=${currentUser.role || ''}` : ''}`, { cache: 'no-store' })
-      if (res.ok) {
-        const data = await res.json()
-        setTasks(data.tasks || [])
-        setWmTasks(data.wmTasks || [])
-        setEntries(data.contentCalendar || [])
-        setOtherWork(data.otherWork || [])
-        setProjects(data.projects || [])
-        setClients(data.clients || [])
-        setEmployees(data.employees || [])
-        setLeads(data.leads || [])
-      }
+      const [tasksRes, wmTasksRes, entriesRes, otherWorkRes, projectsRes, clientsRes, employeesRes, leadsRes] = await Promise.all([
+        fetch(`${API_URL}/tasks`, { cache: 'no-store' }),
+        fetch(`${API_URL}/wm-tasks`, { cache: 'no-store' }),
+        fetch(`${API_URL}/content-calendar/all`, { cache: 'no-store' }),
+        fetch(`${API_URL}/other-work/all`, { cache: 'no-store' }),
+        fetch(`${API_URL}/projects`, { cache: 'no-store' }),
+        fetch(`${API_URL}/clients`, { cache: 'no-store' }),
+        fetch(`${API_URL}/employees`, { cache: 'no-store' }),
+        fetch(`${API_URL}/leads`, { cache: 'no-store' })
+      ])
+
+      if (tasksRes.ok) setTasks(await tasksRes.json())
+      if (wmTasksRes.ok) setWmTasks(await wmTasksRes.json())
+      if (entriesRes.ok) setEntries(await entriesRes.json())
+      if (otherWorkRes.ok) setOtherWork(await otherWorkRes.json())
+      if (projectsRes.ok) setProjects(await projectsRes.json())
+      if (clientsRes.ok) setClients(await clientsRes.json())
+      if (employeesRes.ok) setEmployees(await employeesRes.json())
+      if (leadsRes.ok) setLeads(await leadsRes.json())
     } catch (err) {
       console.error('Error fetching dashboard tasks:', err)
     } finally {
