@@ -2255,7 +2255,7 @@ async def get_my_tasks_view_data(db=Depends(get_db)):
     """Clubbed endpoint for the MyTasksView component. Replaces 8 separate calls."""
     import asyncio
     results = await asyncio.gather(
-        crud.get_tasks(db, skip=0, limit=10000),
+        crud.get_tasks(db, skip=0, limit=100),
         crud.get_wm_tasks(db, skip=0, limit=10000),
         crud.get_all_content_calendar_entries(db),
         crud.get_all_other_work(db),
