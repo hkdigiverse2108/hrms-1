@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { SearchableSelect } from '@/components/ui/searchable-select'
 import { MessageCircle, Download, Mail, Building2, User, Calendar, CreditCard, Loader2, Eye, Edit, Trash2, MoreHorizontal } from 'lucide-react'
 import { API_URL } from '@/lib/config'
 import { DataTable } from '@/components/hrms/data-table'
@@ -956,20 +957,22 @@ function PayslipContent() {
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 no-print bg-white p-5 rounded-2xl border border-slate-200 shadow-sm w-full">
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto">
           <div className="w-full sm:w-[220px]">
-            <Select value={selectedEmpId} onValueChange={(val) => { setSelectedEmpId(val); setActivePayslipId(null); }} disabled={!isAdminOrHR}>
-              <SelectTrigger className="bg-slate-50 border-slate-200 h-10 font-medium">
-                <SelectValue placeholder="Select Employee" />
-              </SelectTrigger>
-              <SelectContent>
-                {isAdminOrHR && <SelectItem value="all">All Employees</SelectItem>}
-                {employees
+            <SearchableSelect
+              options={[
+                ...(isAdminOrHR ? [{ value: "all", label: "All Employees" }] : []),
+                ...employees
                   .filter(emp => isAdminOrHR || emp.id === (user?.id || user?._id))
-                  .map(emp => (
-                    <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                  ))
-                }
-              </SelectContent>
-            </Select>
+                  .map(emp => ({
+                    value: emp.id,
+                    label: emp.name
+                  }))
+              ]}
+              value={selectedEmpId}
+              onValueChange={(val) => { setSelectedEmpId(val); setActivePayslipId(null); }}
+              placeholder="Select Employee"
+              disabled={!isAdminOrHR}
+              triggerClassName="bg-slate-50 border-slate-200 h-10 font-medium w-full"
+            />
           </div>
           <div className="w-full sm:w-[130px]">
             <Select value={selectedMonth} onValueChange={(val) => { setSelectedMonth(val); setActivePayslipId(null); }}>

@@ -415,7 +415,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
             end.setHours(0,0,0,0)
             const current = new Date(dateObj)
             current.setHours(0,0,0,0)
-            return current >= start && current <= end && l.day_type !== 'Half Day'
+            return current >= start && current <= end && l.day_type === 'Full Day'
           })
         }
 

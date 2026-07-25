@@ -37,6 +37,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
 import { PageHeader } from "@/components/common/PageHeader";
 import { useApi } from "@/hooks/useApi";
@@ -1059,22 +1060,19 @@ export default function ResourceManagementPage() {
                   </SelectContent>
                 </Select>
                 {!isEmployeeOnly && (
-                  <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
-                    <SelectTrigger className="w-full sm:w-[180px] bg-gray-50">
-                      <SelectValue placeholder="Select Employee" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Employees</SelectItem>
-                      {data?.employees?.map((emp: any) => {
+                  <SearchableSelect
+                    options={[
+                      { value: "all", label: "All Employees" },
+                      ...(data?.employees || []).map((emp: any) => {
                         const name = emp.name || `${emp.firstName} ${emp.lastName}`;
-                        return (
-                          <SelectItem key={emp.id} value={name}>
-                            {name}
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
+                        return { value: name, label: name };
+                      })
+                    ]}
+                    value={employeeFilter}
+                    onValueChange={setEmployeeFilter}
+                    placeholder="Select Employee"
+                    triggerClassName="w-full sm:w-[180px] bg-gray-50"
+                  />
                 )}
               </div>
             </div>
