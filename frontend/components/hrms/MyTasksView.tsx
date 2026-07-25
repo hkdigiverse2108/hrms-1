@@ -13,7 +13,8 @@ import {
   X,
   Plus,
   CheckCircle2,
-  Clock
+  Clock,
+  ExternalLink
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -885,18 +886,33 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                                         </td>
                                         <td className="p-4 text-right">
                                           {task.status !== 'completed' && task.status !== 'Approved' && task.status?.toLowerCase() !== 'completed' ? (
-                                            <Button
-                                              variant="ghost"
-                                              size="icon"
-                                              className="h-8 w-8 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleMarkComplete(task);
-                                              }}
-                                              title="Mark Complete"
-                                            >
-                                              <CheckCircle2 className="w-4 h-4" />
-                                            </Button>
+                                            task.description === "Custom task created from Punch-In" || task.originalTask?.description === "Custom task created from Punch-In" ? (
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleMarkComplete(task);
+                                                }}
+                                                title="Mark Complete"
+                                              >
+                                                <CheckCircle2 className="w-4 h-4" />
+                                              </Button>
+                                            ) : (
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  router.push('/tasks');
+                                                }}
+                                                title="Open Tasks Page"
+                                              >
+                                                <ExternalLink className="w-4 h-4" />
+                                              </Button>
+                                            )
                                           ) : (
                                             <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
                                               Completed
@@ -947,18 +963,33 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                                       </td>
                                       <td className="p-4 text-right">
                                           {task.status !== 'completed' && task.status !== 'Approved' && task.status?.toLowerCase() !== 'completed' ? (
-                                            <Button
-                                              variant="ghost"
-                                              size="icon"
-                                              className="h-8 w-8 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleMarkComplete(task);
-                                              }}
-                                              title="Mark Complete"
-                                            >
-                                              <CheckCircle2 className="w-4 h-4" />
-                                            </Button>
+                                            task.description === "Custom task created from Punch-In" || task.originalTask?.description === "Custom task created from Punch-In" ? (
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleMarkComplete(task);
+                                                }}
+                                                title="Mark Complete"
+                                              >
+                                                <CheckCircle2 className="w-4 h-4" />
+                                              </Button>
+                                            ) : (
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  router.push('/tasks');
+                                                }}
+                                                title="Open Tasks Page"
+                                              >
+                                                <ExternalLink className="w-4 h-4" />
+                                              </Button>
+                                            )
                                           ) : (
                                             <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
                                               Completed
