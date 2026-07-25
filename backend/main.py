@@ -1904,10 +1904,32 @@ async def get_dev_board_data(
         transfer_out_coro
     )
     
+    projects = [
+        {
+            "id": p.get("id"),
+            "title": p.get("title"),
+            "department": p.get("department"),
+            "status": p.get("status"),
+            "teamLeaderId": p.get("teamLeaderId"),
+            "isPhaseWise": p.get("isPhaseWise"),
+            "phases": p.get("phases")
+        } for p in results[1]
+    ]
+    
+    employees = [
+        {
+            "id": e.get("id"),
+            "firstName": e.get("firstName"),
+            "lastName": e.get("lastName"),
+            "name": e.get("name"),
+            "department": e.get("department")
+        } for e in results[2]
+    ]
+    
     return {
         "wmTasks": results[0],
-        "projects": results[1],
-        "employees": results[2],
+        "projects": projects,
+        "employees": employees,
         "transferRequestsAll": results[3],
         "transferRequestsOutgoing": results[4]
     }
