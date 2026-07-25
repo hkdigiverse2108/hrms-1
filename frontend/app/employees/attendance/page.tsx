@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { TablePagination } from "@/components/common/TablePagination";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -748,19 +749,19 @@ export default function EmployeeAttendanceListPage() {
             </button>
           </div>
 
-          <Select value={searchQuery || "all"} onValueChange={(v) => setSearchQuery(v === "all" ? "" : v)}>
-            <SelectTrigger className="w-full md:w-[240px] h-9 bg-white border-border shadow-sm text-xs">
-              <SelectValue placeholder="All Employees" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Employees</SelectItem>
-              {nonAdminEmployees.map(emp => (
-                <SelectItem key={emp.id} value={emp.id}>
-                  {emp.name} {emp.employeeId ? `(${emp.employeeId})` : ""}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SearchableSelect
+            options={[
+              { value: "all", label: "All Employees" },
+              ...nonAdminEmployees.map(emp => ({
+                value: emp.id,
+                label: `${emp.name} ${emp.employeeId ? `(${emp.employeeId})` : ""}`
+              }))
+            ]}
+            value={searchQuery || "all"}
+            onValueChange={(v) => setSearchQuery(v === "all" ? "" : v)}
+            placeholder="All Employees"
+            triggerClassName="w-full md:w-[240px] h-9 bg-white border-border shadow-sm text-xs"
+          />
         </div>
       </div>
 

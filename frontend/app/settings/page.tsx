@@ -41,6 +41,7 @@ import { API_URL } from "@/lib/config";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 import { INDIAN_STATES, TIME_OPTIONS } from "@/lib/constants";
@@ -1675,17 +1676,19 @@ export default function SettingsPage() {
                         </div>
                         <div className="space-y-2">
                           <Label>Employee</Label>
-                          <Select value={newBanner.employeeId || "all"} onValueChange={(val) => setNewBanner({...newBanner, employeeId: val === "all" ? "" : val})}>
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="All Employees" />
-                            </SelectTrigger>
-                            <SelectContent className="max-h-[200px]">
-                              <SelectItem value="all">All Employees</SelectItem>
-                              {employees.map(emp => (
-                                <SelectItem key={emp.id} value={emp.id}>{emp.name || `${emp.firstName} ${emp.lastName}`}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <SearchableSelect
+                            options={[
+                              { value: "all", label: "All Employees" },
+                              ...employees.map(emp => ({
+                                value: emp.id,
+                                label: emp.name || `${emp.firstName} ${emp.lastName}`
+                              }))
+                            ]}
+                            value={newBanner.employeeId || "all"}
+                            onValueChange={(val) => setNewBanner({...newBanner, employeeId: val === "all" ? "" : val})}
+                            placeholder="All Employees"
+                            triggerClassName="w-full"
+                          />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">

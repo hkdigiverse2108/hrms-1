@@ -121,12 +121,22 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
           }
         } else {
           allTasks = await tasksRes.json();
+          try {
+            const genTasksRes = await fetch(`${API_URL}/tasks?userId=${userId}`);
+            if (genTasksRes.ok) {
+              const genTasks = await genTasksRes.json();
+              allTasks = [...allTasks, ...genTasks];
+            }
+          } catch (e) {
+            console.error("Error fetching general tasks:", e);
+          }
         }
         let myTasks = allTasks.filter((t: any) => {
           const isAssigned = String(t.assignedToId) === String(userId) || 
                              (t.assignedToIds && t.assignedToIds.map(String).includes(String(userId)));
           if (!isAssigned) return false;
-          if (t.status === "completed" || t.status === "onhold" || t.status === "Approved") return false;
+          const statusLower = (t.status || "").toLowerCase().trim();
+          if (statusLower === "completed" || statusLower === "onhold" || statusLower === "on hold" || statusLower === "approved") return false;
           return true;
         });
 
@@ -304,7 +314,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
 
     const data: any = { type };
     if (type === "Work") {
-      if (selectedTab === "hr_sales_work") {
+      if (selectedTab === "hr_sales_work" && !isNewWorkTask) {
         data.taskId = undefined;
         data.value = activityValue;
       } else if (selectedTab === "dm_other_work" && !isNewWorkTask) {
@@ -315,7 +325,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
         } else {
           data.value = activityValue || "Other Work";
         }
-      } else if (taskId === "custom" || (selectedTab === "dm_other_work" && isNewWorkTask)) {
+      } else if (taskId === "custom" || (selectedTab === "dm_other_work" && isNewWorkTask) || (selectedTab === "hr_sales_work" && isNewWorkTask)) {
         setIsLoading(true);
         try {
           const userStr = localStorage.getItem("user");
@@ -325,7 +335,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
           const desigStr = (userObj.designation || "").toLowerCase();
           const isDM = deptStr.includes('marketing') || deptStr.includes('dm') || desigStr.includes('marketing');
           
-          const titleToUse = selectedTab === "dm_other_work" ? activityValue : (customTaskName || activityValue);
+          const titleToUse = selectedTab === "dm_other_work" ? activityValue : (selectedTab === "hr_sales_work" ? activityValue : (customTaskName || activityValue));
           
           const payload = {
             title: titleToUse,
@@ -340,21 +350,43 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
           };
           
           const isDev = userDept === 'development';
-          const url = isDev && selectedTab !== "dm_other_work" ? `${API_URL}/wm-tasks` : `${API_URL}/other-work`;
-          const bodyPayload = isDev && selectedTab !== "dm_other_work" ? {
-            title: titleToUse,
-            description: "Custom task created from Punch-In",
-            projectId: "custom",
-            projectName: "Custom Task",
-            assignedToId: userId,
-            assignedToName: userName,
-            department: "Development",
-            dueDate: new Date().toISOString().split('T')[0],
-            status: "in-progress",
-            priority: "medium",
-            performedBy: userId,
-            userName: userName
-          } : payload;
+          const isSales = userDept === 'sales';
+          let url = isDev && selectedTab !== "dm_other_work" ? `${API_URL}/wm-tasks` : `${API_URL}/other-work`;
+          if (isSales && selectedTab === "hr_sales_work") {
+            url = `${API_URL}/tasks`;
+          }
+
+          let bodyPayload;
+          if (isDev && selectedTab !== "dm_other_work") {
+            bodyPayload = {
+              title: titleToUse,
+              description: "Custom task created from Punch-In",
+              projectId: "custom",
+              projectName: "Custom Task",
+              assignedToId: userId,
+              assignedToName: userName,
+              department: "Development",
+              dueDate: new Date().toISOString().split('T')[0],
+              status: "in-progress",
+              priority: "medium",
+              performedBy: userId,
+              userName: userName
+            };
+          } else if (isSales && selectedTab === "hr_sales_work") {
+            bodyPayload = {
+              title: titleToUse,
+              description: "Custom task created from Punch-In",
+              dueDate: new Date().toISOString().split('T')[0],
+              status: "in-progress",
+              priority: "medium",
+              assignedToIds: [userId],
+              performedBy: userId,
+              userName: userName,
+              department: "Sales"
+            };
+          } else {
+            bodyPayload = payload;
+          }
           
           const res = await fetch(url, {
             method: 'POST',
@@ -374,7 +406,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
         } catch (err) {
           console.error("Error creating custom task:", err);
           data.taskId = selectedTab === "dm_other_work" ? undefined : "custom";
-          data.value = selectedTab === "dm_other_work" ? activityValue : customTaskName;
+          data.value = selectedTab === "dm_other_work" ? activityValue : (selectedTab === "hr_sales_work" ? activityValue : customTaskName);
         } finally {
           setIsLoading(false);
         }
