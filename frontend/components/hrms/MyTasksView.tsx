@@ -201,9 +201,16 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
       const isAssigned = t.assignedToId === uId || assIds.includes(uId) || isDeptMatched || isHRTask
 
       if (isAssigned) {
-        const isHR = t.department === 'HR' || t.assignedToName?.toLowerCase().includes('hr')
-        consolidated.push({
-          id: t.id,
+        let isProjectOnHold = false;
+        if (t.projectId) {
+          const assocProject = projects.find(p => p.id === t.projectId);
+          isProjectOnHold = assocProject && (assocProject.status === 'on-hold' || assocProject.status === 'onhold' || assocProject.status?.toLowerCase() === 'on-hold');
+        }
+        
+        if (!isProjectOnHold) {
+          const isHR = t.department === 'HR' || t.assignedToName?.toLowerCase().includes('hr')
+          consolidated.push({
+            id: t.id,
           title: t.title,
           description: t.description,
           dueDate: t.dueDate ? (t.dueDate.includes('T') ? t.dueDate.split('T')[0] : t.dueDate) : '',
@@ -214,6 +221,7 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
           sourceType: 'general-task',
           originalTask: t
         })
+        }
       }
     })
 
@@ -339,8 +347,15 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
     otherWork.forEach(ow => {
       const isAssignee = ow.assigneeId === uId
       if (isAssignee && ow.status !== 'Approved') {
-        consolidated.push({
-          id: ow.id,
+        let isProjectOnHold = false;
+        if (ow.projectId) {
+          const assocProject = projects.find(p => p.id === ow.projectId);
+          isProjectOnHold = assocProject && (assocProject.status === 'on-hold' || assocProject.status === 'onhold' || assocProject.status?.toLowerCase() === 'on-hold');
+        }
+        
+        if (!isProjectOnHold) {
+          consolidated.push({
+            id: ow.id,
           title: ow.title,
           description: ow.description || 'SMM other work task',
           dueDate: ow.deadline ? (ow.deadline.includes('T') ? ow.deadline.split('T')[0] : ow.deadline) : '',
@@ -351,6 +366,7 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
           sourceType: 'smm-other',
           originalTask: ow
         })
+        }
       }
     })
     
