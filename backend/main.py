@@ -1882,6 +1882,36 @@ async def delete_task_api(task_id: str, db=Depends(get_db)):
 async def read_task_activities(task_id: str, db=Depends(get_db)):
     return await crud.get_task_activities(db, task_id)
 
+@app.get("/dev-board-data")
+async def get_dev_board_data(
+    userId: Optional[str] = None, 
+    role: Optional[str] = None,
+    db=Depends(get_db)
+):
+    import asyncio
+    wm_tasks_coro = crud.get_wm_tasks(db, userId, role, skip=0, limit=10000)
+    projects_coro = crud.get_projects(db, userId, role, skip=0, limit=10000)
+    employees_coro = crud.get_employees(db, skip=0, limit=10000, include_inactive=False)
+    
+    transfer_all_coro = crud.get_all_transfer_requests(db, None, "wm-task")
+    transfer_out_coro = crud.get_outgoing_transfer_requests(db, userId or "", "wm-task")
+    
+    results = await asyncio.gather(
+        wm_tasks_coro,
+        projects_coro,
+        employees_coro,
+        transfer_all_coro,
+        transfer_out_coro
+    )
+    
+    return {
+        "wmTasks": results[0],
+        "projects": results[1],
+        "employees": results[2],
+        "transferRequestsAll": results[3],
+        "transferRequestsOutgoing": results[4]
+    }
+
 @app.get("/wm-tasks", response_model=List[schemas.WMTask])
 async def read_wm_tasks(userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_wm_tasks(db, userId=userId, role=role, skip=skip, limit=limit)

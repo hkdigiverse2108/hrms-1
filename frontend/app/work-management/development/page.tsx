@@ -291,16 +291,15 @@ export default function TasksPage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [tRes, pRes, eRes] = await Promise.all([
-        fetch(`${API_URL}/wm-tasks`, { cache: 'no-store' }),
-        fetch(`${API_URL}/projects`, { cache: 'no-store' }),
-        fetch(`${API_URL}/employees`, { cache: 'no-store' })
-      ]);
+      const endpoint = user?.id ? `${API_URL}/dev-board-data?userId=${user.id}&role=${user.role || ''}` : `${API_URL}/dev-board-data`;
+      const res = await fetch(endpoint, { cache: 'no-store' });
       
-      if (tRes.ok) setTasks(await tRes.json());
-      if (pRes.ok) setProjects(await pRes.json());
-      if (eRes.ok) {
-        let emps = await eRes.json();
+      if (res.ok) {
+        const data = await res.json();
+        setTasks(data.wmTasks || []);
+        setProjects(data.projects || []);
+        
+        let emps = data.employees || [];
         if (user && !emps.some((e: any) => e.id === user.id)) {
           emps.unshift({
             id: user.id,
@@ -313,9 +312,20 @@ export default function TasksPage() {
           });
         }
         setEmployees(emps);
-      }
-      if (user?.id) {
-        fetchTransferRequests();
+
+        if (user?.id) {
+          const isUserAdminOrTL = isUserAdmin || isTeamLeader || (user.designation?.toLowerCase() === 'team leader' || user.designation?.toLowerCase() === 'head') || user.designation?.toLowerCase() === 'hr' || user.role?.toLowerCase() === 'admin' || user.name === 'Admin Admin';
+          if (isUserAdminOrTL) {
+            setIncomingRequests((data.transferRequestsAll || []).filter((r: any) => r.taskType === 'wm-task' || r.taskType === 'wm-tasks'));
+            setOutgoingRequests((data.transferRequestsOutgoing || []).filter((r: any) => r.taskType === 'wm-task' || r.taskType === 'wm-tasks'));
+          } else {
+            const myIncoming = (data.transferRequestsAll || []).filter((r: any) => 
+              (r.taskType === 'wm-task' || r.taskType === 'wm-tasks') && r.receiverId === user.id
+            );
+            setIncomingRequests(myIncoming);
+            setOutgoingRequests((data.transferRequestsOutgoing || []).filter((r: any) => r.taskType === 'wm-task' || r.taskType === 'wm-tasks'));
+          }
+        }
       }
     } catch (err) {
       console.error("Error fetching tasks:", err);
