@@ -1256,7 +1256,7 @@ export function PendingWorkEmbedded({
 
             {(isAdminOrTL || defaultTaskType === 'dev-creative-work') && (
               <>
-                {isAdminOrTL && user?.role?.toLowerCase() === 'admin' && (
+                {isAdminOrTL && currentUser?.role?.toLowerCase() === 'admin' && (
                   <SearchableSelect
                     options={[
                       { value: "all", label: "Assigned By: All" },

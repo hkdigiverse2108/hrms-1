@@ -1390,7 +1390,7 @@ export default function TasksPage() {
               </Popover>
             );
           })()}
-          {user && ((['admin', 'super admin', 'superadmin'].includes(user.role?.toLowerCase() || '')  || user.designation?.toLowerCase() === 'head' || user.designation?.toLowerCase() === 'hr')  || user.designation?.toLowerCase() === 'hr') && (
+          {user && ((['admin', 'super admin', 'superadmin', 'team leader', 'tl'].includes(user.role?.toLowerCase() || '') || ['head', 'hr', 'team leader', 'tl'].includes(user.designation?.toLowerCase() || '')) || isTeamLeader) && (
             <div className="flex items-center bg-slate-100 border border-slate-200 rounded-lg p-1 gap-1">
               <button 
                 type="button"
