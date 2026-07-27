@@ -186,6 +186,10 @@ export default function TaskManagementPage() {
 
   const handleCreateTask = async () => {
     if (!newTask.title) return;
+    if (!newTask.dueDate) {
+      toast.error("Due Date is required.");
+      return;
+    }
     setIsSubmitting(true);
     try {
       const idsToAssign = newTask.assignedToIds.length > 0 ? newTask.assignedToIds : [user?.id].filter(Boolean);
@@ -719,6 +723,17 @@ export default function TaskManagementPage() {
     }
   });
 
+  const finalFilteredTasks = viewTab === 'today' 
+    ? [...tabFilteredTasks].sort((a, b) => {
+        const isAOverdue = a.dueDate && a.dueDate < todayStr;
+        const isBOverdue = b.dueDate && b.dueDate < todayStr;
+        if (isAOverdue && !isBOverdue) return -1;
+        if (!isAOverdue && isBOverdue) return 1;
+        const pOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
+        return (pOrder[a.priority as keyof typeof pOrder] ?? 99) - (pOrder[b.priority as keyof typeof pOrder] ?? 99);
+      })
+    : tabFilteredTasks;
+
   // Tab counts (computed from sortedTasks before tab filter)
   const tabCounts = {
     all: sortedTasks.length,
@@ -729,8 +744,8 @@ export default function TaskManagementPage() {
   };
   
   const [itemsPerPage, setItemsPerPage] = useState(10);
-  const totalPages = Math.max(1, Math.ceil(tabFilteredTasks.length / itemsPerPage));
-  const currentTasks = tabFilteredTasks.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const totalPages = Math.max(1, Math.ceil(finalFilteredTasks.length / itemsPerPage));
+  const currentTasks = finalFilteredTasks.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
     <div className="space-y-6 pb-10">
@@ -999,6 +1014,65 @@ export default function TaskManagementPage() {
                   />
                 </div>
 
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-foreground">Due date <span className="text-red-500">*</span></label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant={"outline"}
+                          className={cn(
+                            "w-full justify-start text-left font-normal bg-white h-10",
+                            !newTask.dueDate && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {newTask.dueDate ? format(new Date(newTask.dueDate), "PPP") : <span>Pick a date</span>}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={newTask.dueDate ? new Date(newTask.dueDate) : undefined}
+                          onSelect={(date) => setNewTask({...newTask, dueDate: date ? format(date, "yyyy-MM-dd") : ""})}
+                          initialFocus
+                          disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
+                        />
+                        {newTask.dueDate && (
+                          <div className="p-2 border-t border-border">
+                            <Button 
+                              variant="ghost" 
+                              className="w-full text-xs text-red-600 hover:text-red-700 hover:bg-red-50 h-8"
+                              onClick={() => setNewTask({...newTask, dueDate: ""})}
+                            >
+                              Clear date
+                            </Button>
+                          </div>
+                        )}
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-foreground">Department (optional)</label>
+                    <Select value={newTask.department || ""} onValueChange={(val) => setNewTask({...newTask, department: val})}>
+                      <SelectTrigger className="bg-white w-full">
+                        <SelectValue placeholder="Select department" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sortedDepartmentsList.map((dept: any) => {
+                          const deptName = typeof dept === 'string' ? dept : dept.name;
+                          return (
+                            <SelectItem key={deptName} value={deptName}>
+                              {deptName}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-foreground">Description</label>
                   <Textarea 
@@ -1130,44 +1204,6 @@ export default function TaskManagementPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-sm font-semibold text-foreground">Due date</label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant={"outline"}
-                            className={cn(
-                              "w-full justify-start text-left font-normal bg-white h-10",
-                              !newTask.dueDate && "text-muted-foreground"
-                            )}
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {newTask.dueDate ? format(new Date(newTask.dueDate), "PPP") : <span>Pick a date</span>}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={newTask.dueDate ? new Date(newTask.dueDate) : undefined}
-                            onSelect={(date) => setNewTask({...newTask, dueDate: date ? format(date, "yyyy-MM-dd") : ""})}
-                            initialFocus
-                            disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
-                          />
-                          {newTask.dueDate && (
-                            <div className="p-2 border-t border-border">
-                              <Button 
-                                variant="ghost" 
-                                className="w-full text-xs text-red-600 hover:text-red-700 hover:bg-red-50 h-8"
-                                onClick={() => setNewTask({...newTask, dueDate: ""})}
-                              >
-                                Clear date
-                              </Button>
-                            </div>
-                          )}
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                    
-                    <div className="space-y-2">
                       <label className="text-sm font-semibold text-foreground">Priority</label>
                       <Select value={newTask.priority} onValueChange={(val) => setNewTask({...newTask, priority: val})}>
                         <SelectTrigger className="bg-white w-full">
@@ -1201,25 +1237,6 @@ export default function TaskManagementPage() {
                         </SelectContent>
                       </Select>
                     </div>
-
-                    <div className="space-y-2">
-                      <label className="text-sm font-semibold text-foreground">Department (optional)</label>
-                      <Select value={newTask.department || ""} onValueChange={(val) => setNewTask({...newTask, department: val})}>
-                        <SelectTrigger className="bg-white w-full">
-                          <SelectValue placeholder="Select department" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {sortedDepartmentsList.map((dept: any) => {
-                            const deptName = typeof dept === 'string' ? dept : dept.name;
-                            return (
-                              <SelectItem key={deptName} value={deptName}>
-                                {deptName}
-                              </SelectItem>
-                            );
-                          })}
-                        </SelectContent>
-                      </Select>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -1229,7 +1246,7 @@ export default function TaskManagementPage() {
                 <Button 
                   className="bg-brand-teal hover:bg-brand-teal-light text-white" 
                   onClick={handleCreateTask}
-                  disabled={isSubmitting || !newTask.title}
+                  disabled={isSubmitting || !newTask.title || !newTask.dueDate}
                 >
                   {isSubmitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
                   Create task
@@ -1757,6 +1774,11 @@ export default function TaskManagementPage() {
                           }}
                         >
                           {task.title}
+                          {task.dueDate && task.dueDate < todayStr && task.status !== 'completed' && task.status !== 'rejected' && (
+                            <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700 uppercase tracking-wider">
+                              Overdue
+                            </span>
+                          )}
                         </div>
                       )}
                       
