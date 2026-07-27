@@ -161,7 +161,7 @@ export default function HRTasksPage() {
           frequency: "one-time",
           remarks: ""
         });
-        fetchTasks();
+        fetchPageData();
       } else {
         toast.error("Failed to save task");
       }
@@ -184,7 +184,7 @@ export default function HRTasksPage() {
       const res = await fetch(`${API_URL}/tasks/${id}`, { method: "DELETE" });
       if (res.ok) {
         toast.success("Task deleted");
-        fetchTasks();
+        fetchPageData();
       }
     } catch (err) {
       console.error(err);
@@ -231,7 +231,7 @@ export default function HRTasksPage() {
           ? `Task completed and scheduled for next occurrence on ${nextDueDate}` 
           : "Task marked as completed"
         );
-        fetchTasks();
+        fetchPageData();
       } else {
         toast.error("Failed to update task status");
       }
