@@ -1259,6 +1259,10 @@ export default function TasksPage() {
             const activeProjects = projects.filter(p => {
               const isNotCompleted = p.status?.toLowerCase() !== "completed" && p.status?.toLowerCase() !== "cancelled";
               if (!isNotCompleted) return false;
+              
+              const isDevDept = p.department?.toLowerCase().trim() === 'development';
+              if (!isDevDept) return false;
+
               if (selectedDepartment !== "all") {
                 return p.department?.toLowerCase() === selectedDepartment.toLowerCase();
               }
