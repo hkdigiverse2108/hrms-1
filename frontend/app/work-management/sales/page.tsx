@@ -365,7 +365,7 @@ export default function SalesPage() {
         setLeads(data.leads || []);
         setEmployees(data.employees || []);
         setTargets(data.salesTargets || []);
-        setSlabs(data.incentiveSlabs || []);
+        setIncentiveSlabs(data.incentiveSlabs || []);
         if (data.systemSettings) {
           setLeadCategories(data.systemSettings.leadCategories || ["Hot Lead", "Warm Lead", "Cold Lead"]);
         }
