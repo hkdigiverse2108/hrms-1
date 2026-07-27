@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, status, Request
 from pydantic import BaseModel, EmailStr
-from typing import Optional, List
+from typing import Optional, List, Union
 import os
 import random
 from datetime import datetime, timedelta
@@ -489,4 +489,274 @@ async def get_superadmin_dashboard_stats(token: dict = Depends(require_superadmi
         "plan_distribution": plan_distribution,
         "top_modules": sorted_modules[:6]
     }
+
+# --- Landing Page CRUD Models ---
+class LandingModuleCreate(BaseModel):
+    icon_name: str
+    name: str
+    description: str
+
+class LandingStatCreate(BaseModel):
+    value: str
+    label: str
+
+class LandingPlanCreate(BaseModel):
+    name: str
+    description: str
+    priceYearly: str
+    priceOnetime: str
+    limit: str
+    isPopular: bool
+    features: List[str]
+
+class LandingComparisonCreate(BaseModel):
+    category: str
+    featureName: str
+    lite: Union[str, bool]
+    starter: Union[str, bool]
+    pro: Union[str, bool]
+    elite: Union[str, bool]
+    hybrid: Union[str, bool]
+
+class LandingFAQCreate(BaseModel):
+    question: str
+    answer: str
+
+# --- Landing Page CRUD Endpoints ---
+
+# 1. Modules
+@router.get("/landing/modules")
+async def list_landing_modules(token: dict = Depends(require_superadmin)):
+    cursor = db.modules.find({})
+    modules = []
+    async for doc in cursor:
+        doc["id"] = str(doc["_id"])
+        del doc["_id"]
+        modules.append(doc)
+    return modules
+
+@router.post("/landing/modules")
+async def create_landing_module(payload: LandingModuleCreate, token: dict = Depends(require_superadmin)):
+    result = await db.modules.insert_one(payload.dict())
+    new_doc = await db.modules.find_one({"_id": result.inserted_id})
+    new_doc["id"] = str(new_doc["_id"])
+    del new_doc["_id"]
+    return new_doc
+
+@router.put("/landing/modules/{module_id}")
+async def update_landing_module(module_id: str, payload: LandingModuleCreate, token: dict = Depends(require_superadmin)):
+    try:
+        oid = ObjectId(module_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid ID format")
+    result = await db.modules.find_one_and_update(
+        {"_id": oid},
+        {"$set": payload.dict()},
+        return_document=True
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Module not found")
+    result["id"] = str(result["_id"])
+    del result["_id"]
+    return result
+
+@router.delete("/landing/modules/{module_id}")
+async def delete_landing_module(module_id: str, token: dict = Depends(require_superadmin)):
+    try:
+        oid = ObjectId(module_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid ID format")
+    result = await db.modules.delete_one({"_id": oid})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Module not found")
+    return {"success": True, "message": "Module deleted successfully"}
+
+# 2. Stats
+@router.get("/landing/stats")
+async def list_landing_stats(token: dict = Depends(require_superadmin)):
+    cursor = db.stats.find({})
+    stats = []
+    async for doc in cursor:
+        doc["id"] = str(doc["_id"])
+        del doc["_id"]
+        stats.append(doc)
+    return stats
+
+@router.post("/landing/stats")
+async def create_landing_stat(payload: LandingStatCreate, token: dict = Depends(require_superadmin)):
+    result = await db.stats.insert_one(payload.dict())
+    new_doc = await db.stats.find_one({"_id": result.inserted_id})
+    new_doc["id"] = str(new_doc["_id"])
+    del new_doc["_id"]
+    return new_doc
+
+@router.put("/landing/stats/{stat_id}")
+async def update_landing_stat(stat_id: str, payload: LandingStatCreate, token: dict = Depends(require_superadmin)):
+    try:
+        oid = ObjectId(stat_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid ID format")
+    result = await db.stats.find_one_and_update(
+        {"_id": oid},
+        {"$set": payload.dict()},
+        return_document=True
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Stat not found")
+    result["id"] = str(result["_id"])
+    del result["_id"]
+    return result
+
+@router.delete("/landing/stats/{stat_id}")
+async def delete_landing_stat(stat_id: str, token: dict = Depends(require_superadmin)):
+    try:
+        oid = ObjectId(stat_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid ID format")
+    result = await db.stats.delete_one({"_id": oid})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Stat not found")
+    return {"success": True, "message": "Stat deleted successfully"}
+
+# 3. Plans
+@router.get("/landing/plans")
+async def list_landing_plans(token: dict = Depends(require_superadmin)):
+    cursor = db.pricing_plans.find({})
+    plans = []
+    async for doc in cursor:
+        doc["id"] = str(doc["_id"])
+        del doc["_id"]
+        plans.append(doc)
+    return plans
+
+@router.post("/landing/plans")
+async def create_landing_plan(payload: LandingPlanCreate, token: dict = Depends(require_superadmin)):
+    result = await db.pricing_plans.insert_one(payload.dict())
+    new_doc = await db.pricing_plans.find_one({"_id": result.inserted_id})
+    new_doc["id"] = str(new_doc["_id"])
+    del new_doc["_id"]
+    return new_doc
+
+@router.put("/landing/plans/{plan_id}")
+async def update_landing_plan(plan_id: str, payload: LandingPlanCreate, token: dict = Depends(require_superadmin)):
+    try:
+        oid = ObjectId(plan_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid ID format")
+    result = await db.pricing_plans.find_one_and_update(
+        {"_id": oid},
+        {"$set": payload.dict()},
+        return_document=True
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    result["id"] = str(result["_id"])
+    del result["_id"]
+    return result
+
+@router.delete("/landing/plans/{plan_id}")
+async def delete_landing_plan(plan_id: str, token: dict = Depends(require_superadmin)):
+    try:
+        oid = ObjectId(plan_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid ID format")
+    result = await db.pricing_plans.delete_one({"_id": oid})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    return {"success": True, "message": "Plan deleted successfully"}
+
+# 4. Comparison Matrix
+@router.get("/landing/comparison")
+async def list_landing_comparison(token: dict = Depends(require_superadmin)):
+    cursor = db.comparison_matrix.find({})
+    comparison = []
+    async for doc in cursor:
+        doc["id"] = str(doc["_id"])
+        del doc["_id"]
+        comparison.append(doc)
+    return comparison
+
+@router.post("/landing/comparison")
+async def create_landing_comparison(payload: LandingComparisonCreate, token: dict = Depends(require_superadmin)):
+    result = await db.comparison_matrix.insert_one(payload.dict())
+    new_doc = await db.comparison_matrix.find_one({"_id": result.inserted_id})
+    new_doc["id"] = str(new_doc["_id"])
+    del new_doc["_id"]
+    return new_doc
+
+@router.put("/landing/comparison/{comp_id}")
+async def update_landing_comparison(comp_id: str, payload: LandingComparisonCreate, token: dict = Depends(require_superadmin)):
+    try:
+        oid = ObjectId(comp_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid ID format")
+    result = await db.comparison_matrix.find_one_and_update(
+        {"_id": oid},
+        {"$set": payload.dict()},
+        return_document=True
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Comparison row not found")
+    result["id"] = str(result["_id"])
+    del result["_id"]
+    return result
+
+@router.delete("/landing/comparison/{comp_id}")
+async def delete_landing_comparison(comp_id: str, token: dict = Depends(require_superadmin)):
+    try:
+        oid = ObjectId(comp_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid ID format")
+    result = await db.comparison_matrix.delete_one({"_id": oid})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Comparison row not found")
+    return {"success": True, "message": "Comparison row deleted successfully"}
+
+# 5. FAQs
+@router.get("/landing/faqs")
+async def list_landing_faqs(token: dict = Depends(require_superadmin)):
+    cursor = db.faqs.find({})
+    faqs = []
+    async for doc in cursor:
+        doc["id"] = str(doc["_id"])
+        del doc["_id"]
+        faqs.append(doc)
+    return faqs
+
+@router.post("/landing/faqs")
+async def create_landing_faq(payload: LandingFAQCreate, token: dict = Depends(require_superadmin)):
+    result = await db.faqs.insert_one(payload.dict())
+    new_doc = await db.faqs.find_one({"_id": result.inserted_id})
+    new_doc["id"] = str(new_doc["_id"])
+    del new_doc["_id"]
+    return new_doc
+
+@router.put("/landing/faqs/{faq_id}")
+async def update_landing_faq(faq_id: str, payload: LandingFAQCreate, token: dict = Depends(require_superadmin)):
+    try:
+        oid = ObjectId(faq_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid ID format")
+    result = await db.faqs.find_one_and_update(
+        {"_id": oid},
+        {"$set": payload.dict()},
+        return_document=True
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="FAQ not found")
+    result["id"] = str(result["_id"])
+    del result["_id"]
+    return result
+
+@router.delete("/landing/faqs/{faq_id}")
+async def delete_landing_faq(faq_id: str, token: dict = Depends(require_superadmin)):
+    try:
+        oid = ObjectId(faq_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid ID format")
+    result = await db.faqs.delete_one({"_id": oid})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="FAQ not found")
+    return {"success": True, "message": "FAQ deleted successfully"}
+
 

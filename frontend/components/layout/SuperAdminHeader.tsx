@@ -8,7 +8,8 @@ import {
   Layers, 
   Sparkles, 
   Plus, 
-  LogOut
+  LogOut,
+  Globe
 } from "lucide-react";
 
 interface SuperAdminHeaderProps {
@@ -64,6 +65,14 @@ export default function SuperAdminHeader({
           >
             <Layers className="w-4 h-4" />
             Module Pricing & Plans
+          </Link>
+
+          <Link
+            href="/super-admin/landing-page"
+            className="px-4 py-2.5 bg-white hover:bg-slate-50 text-[#09A08A] font-bold rounded-xl text-xs flex items-center gap-2 border border-[#09A08A]/30 shadow-sm transition-all"
+          >
+            <Globe className="w-4 h-4" />
+            Landing Page CRUD
           </Link>
 
           <Link
