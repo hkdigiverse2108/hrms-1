@@ -44,6 +44,16 @@ const STAGES = [
   { id: "completed", label: "Completed", color: "text-green-700 bg-transparent", lineColor: "bg-emerald-500" },
 ];
 
+const formatReqDate = (dateStr: string) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  return `${dd}-${mm}-${yyyy}`;
+};
+
 const formatDate = (dateStr?: string) => {
   if (!dateStr) return '-';
   const d = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
@@ -1112,7 +1122,7 @@ export default function TasksPage() {
                   <table className="w-full text-left text-sm text-slate-600">
                     <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider font-semibold">
                       <tr>
-                        <th className="px-6 py-4 whitespace-nowrap">Date</th>
+                        <th className="px-6 py-4 whitespace-nowrap">Transfer Date</th>
                         <th className="px-6 py-4 whitespace-nowrap">Task Name</th>
                         <th className="px-6 py-4 whitespace-nowrap">Stage</th>
                         <th className="px-6 py-4 whitespace-nowrap">From</th>
@@ -1125,7 +1135,7 @@ export default function TasksPage() {
                       {incomingRequests.map(req => (
                         <tr key={req.id} className="hover:bg-slate-50/50 transition-colors">
                           <td className="px-6 py-4 whitespace-nowrap text-slate-500">
-                            {new Date(req.createdDate).toLocaleDateString()}
+                            {formatReqDate(req.createdDate) || '-'}
                           </td>
                           <td className="px-6 py-4 font-semibold text-slate-800">
                             {req.taskName}
@@ -1195,7 +1205,7 @@ export default function TasksPage() {
                   <table className="w-full text-left text-sm text-slate-600">
                     <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider font-semibold">
                       <tr>
-                        <th className="px-6 py-4 whitespace-nowrap">Date</th>
+                        <th className="px-6 py-4 whitespace-nowrap">Transfer Date</th>
                         <th className="px-6 py-4 whitespace-nowrap">Task Name</th>
                         <th className="px-6 py-4 whitespace-nowrap">Stage</th>
                         <th className="px-6 py-4 whitespace-nowrap">To</th>
@@ -1206,7 +1216,7 @@ export default function TasksPage() {
                       {outgoingRequests.map(req => (
                         <tr key={req.id} className="hover:bg-slate-50/50 transition-colors">
                           <td className="px-6 py-4 whitespace-nowrap text-slate-500">
-                            {new Date(req.createdDate).toLocaleDateString()}
+                            {formatReqDate(req.createdDate) || '-'}
                           </td>
                           <td className="px-6 py-4 font-semibold text-slate-800">
                             {req.taskName}
