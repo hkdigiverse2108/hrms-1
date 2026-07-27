@@ -4396,6 +4396,11 @@ async def update_task(db, task_id: str, task: schemas.TaskUpdate):
                 next_due = base_date + timedelta(days=30)
             else:
                 next_due = base_date
+
+            # Ensure that HR tasks only generate on working days (skip Sunday)
+            if updated.get("department") == "HR" or (updated.get("department") and str(updated["department"]).upper() == "HR"):
+                while next_due.weekday() == 6:  # 6 is Sunday
+                    next_due = next_due + timedelta(days=1)
                 
             new_task_doc = {
                 "title": updated.get("title"),
