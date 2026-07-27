@@ -44,6 +44,16 @@ const STAGES = [
   { id: "completed", label: "Completed", color: "text-green-700 bg-transparent", lineColor: "bg-emerald-500" },
 ];
 
+const formatReqDate = (dateStr: string) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  return `${dd}-${mm}-${yyyy}`;
+};
+
 const formatDate = (dateStr?: string) => {
   if (!dateStr) return '-';
   const d = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
@@ -791,7 +801,7 @@ export default function TasksPage() {
 
     // Scope Filter
     if ((taskScope === "my" || isRegularEmployee) && user?.id) {
-      if (t.assignedToId !== user.id && t.performedBy !== user.id) return false;
+      if (t.assignedToId !== user.id) return false;
     }
 
     // Date/Time Filtering
@@ -809,15 +819,25 @@ export default function TasksPage() {
 
     return true;
   }).sort((a, b) => {
-    const aInProgress = (a.status === "in_progress" || a.status === "in-progress") ? 1 : 0;
-    const bInProgress = (b.status === "in_progress" || b.status === "in-progress") ? 1 : 0;
-    if (aInProgress !== bInProgress) {
-      return bInProgress - aInProgress;
+    const getStatusPriority = (status: string) => {
+      const s = (status || "").toLowerCase().trim().replace(/[-_]/g, " ");
+      if (s === "in progress") return 1;
+      if (s === "todo" || s === "to do") return 2;
+      if (s === "bugs" || s === "bug") return 3;
+      if (s === "pending") return 4;
+      if (s === "on hold" || s === "onhold") return 5;
+      if (s === "completed") return 6;
+      return 99;
+    };
+    const pA = getStatusPriority(a.status);
+    const pB = getStatusPriority(b.status);
+    if (pA !== pB) {
+      return pA - pB;
     }
 
-    const pA = a.projectName || "";
-    const pB = b.projectName || "";
-    if (pA !== pB) return pA.localeCompare(pB);
+    const projA = a.projectName || "";
+    const projB = b.projectName || "";
+    if (projA !== projB) return projA.localeCompare(projB);
     const phA = a.phase || "";
     const phB = b.phase || "";
     if (phA !== phB) return phA.localeCompare(phB);
@@ -1102,7 +1122,7 @@ export default function TasksPage() {
                   <table className="w-full text-left text-sm text-slate-600">
                     <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider font-semibold">
                       <tr>
-                        <th className="px-6 py-4 whitespace-nowrap">Date</th>
+                        <th className="px-6 py-4 whitespace-nowrap">Transfer Date</th>
                         <th className="px-6 py-4 whitespace-nowrap">Task Name</th>
                         <th className="px-6 py-4 whitespace-nowrap">Stage</th>
                         <th className="px-6 py-4 whitespace-nowrap">From</th>
@@ -1115,7 +1135,7 @@ export default function TasksPage() {
                       {incomingRequests.map(req => (
                         <tr key={req.id} className="hover:bg-slate-50/50 transition-colors">
                           <td className="px-6 py-4 whitespace-nowrap text-slate-500">
-                            {new Date(req.createdDate).toLocaleDateString()}
+                            {formatReqDate(req.createdDate) || '-'}
                           </td>
                           <td className="px-6 py-4 font-semibold text-slate-800">
                             {req.taskName}
@@ -1185,7 +1205,7 @@ export default function TasksPage() {
                   <table className="w-full text-left text-sm text-slate-600">
                     <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider font-semibold">
                       <tr>
-                        <th className="px-6 py-4 whitespace-nowrap">Date</th>
+                        <th className="px-6 py-4 whitespace-nowrap">Transfer Date</th>
                         <th className="px-6 py-4 whitespace-nowrap">Task Name</th>
                         <th className="px-6 py-4 whitespace-nowrap">Stage</th>
                         <th className="px-6 py-4 whitespace-nowrap">To</th>
@@ -1196,7 +1216,7 @@ export default function TasksPage() {
                       {outgoingRequests.map(req => (
                         <tr key={req.id} className="hover:bg-slate-50/50 transition-colors">
                           <td className="px-6 py-4 whitespace-nowrap text-slate-500">
-                            {new Date(req.createdDate).toLocaleDateString()}
+                            {formatReqDate(req.createdDate) || '-'}
                           </td>
                           <td className="px-6 py-4 font-semibold text-slate-800">
                             {req.taskName}
@@ -1249,6 +1269,10 @@ export default function TasksPage() {
             const activeProjects = projects.filter(p => {
               const isNotCompleted = p.status?.toLowerCase() !== "completed" && p.status?.toLowerCase() !== "cancelled";
               if (!isNotCompleted) return false;
+              
+              const isDevDept = p.department?.toLowerCase().trim() === 'development';
+              if (!isDevDept) return false;
+
               if (selectedDepartment !== "all") {
                 return p.department?.toLowerCase() === selectedDepartment.toLowerCase();
               }
@@ -1390,7 +1414,7 @@ export default function TasksPage() {
               </Popover>
             );
           })()}
-          {user && ((['admin', 'super admin', 'superadmin'].includes(user.role?.toLowerCase() || '')  || user.designation?.toLowerCase() === 'head' || user.designation?.toLowerCase() === 'hr')  || user.designation?.toLowerCase() === 'hr') && (
+          {user && ((['admin', 'super admin', 'superadmin', 'team leader', 'tl'].includes(user.role?.toLowerCase() || '') || ['head', 'hr', 'team leader', 'tl'].includes(user.designation?.toLowerCase() || '')) || isTeamLeader) && (
             <div className="flex items-center bg-slate-100 border border-slate-200 rounded-lg p-1 gap-1">
               <button 
                 type="button"
@@ -1937,8 +1961,7 @@ export default function TasksPage() {
                 <SelectContent>
                   {employees
                     .filter((emp: any) => {
-                      if (emp.id === user?.id) return false;
-                      return emp.department?.trim().toLowerCase() === 'development';
+                      return emp.id !== user?.id;
                     })
                     .map((emp: any) => {
                       const name = `${emp.firstName} ${emp.lastName || ''}`.trim();

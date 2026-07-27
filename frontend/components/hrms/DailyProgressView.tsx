@@ -357,7 +357,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
     if (!isAdmin && !isTeamLeader && !isHRUser) {
        filteredEmployees = filteredEmployees.filter((e: any) => e.id === user?.id)
     } else {
-       const deptToFilter = (isTeamLeader && !isAdmin && !isHRUser) ? user?.department : activeDeptTab
+       const deptToFilter = (isTeamLeader && !isAdmin && !isHRUser) ? user?.department : (isAdmin || isHRUser ? '' : activeDeptTab)
        if (deptToFilter) {
          filteredEmployees = filteredEmployees.filter((e: any) => e.department?.toLowerCase() === deptToFilter.toLowerCase())
        }
@@ -415,7 +415,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
             end.setHours(0,0,0,0)
             const current = new Date(dateObj)
             current.setHours(0,0,0,0)
-            return current >= start && current <= end && l.day_type !== 'Half Day'
+            return current >= start && current <= end && l.day_type === 'Full Day'
           })
         }
 

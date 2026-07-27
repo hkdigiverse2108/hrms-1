@@ -14,6 +14,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { SearchableSelect } from '@/components/ui/searchable-select'
 import { Plus, Loader2, Save, Trash2, Tag, Search, Filter, Calendar, Edit } from 'lucide-react'
 import { useUserContext } from '@/context/UserContext'
 import { useApi } from '@/hooks/useApi'
@@ -295,18 +296,21 @@ export default function BonusesPage() {
         {/* Employee Dropdown */}
         {canManage && (
           <div className="w-[200px]">
-            <Select value={selectedEmpId} onValueChange={setSelectedEmpId}>
-              <SelectTrigger className="h-10 text-sm font-semibold border-slate-200 rounded-lg bg-white text-gray-700 focus:ring-brand-teal shadow-sm">
-                <SelectValue placeholder="All Employees" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Employees</SelectItem>
-                {(employees as any[])?.map(emp => {
-                  if (!emp || !emp.id) return null;
-                  return <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                })}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              options={[
+                { value: "all", label: "All Employees" },
+                ...((employees as any[]) || [])
+                  .filter(emp => emp && emp.id)
+                  .map(emp => ({
+                    value: emp.id,
+                    label: emp.name
+                  }))
+              ]}
+              value={selectedEmpId}
+              onValueChange={setSelectedEmpId}
+              placeholder="All Employees"
+              triggerClassName="h-10 text-sm font-semibold border-slate-200 rounded-lg bg-white text-gray-700 focus:ring-brand-teal shadow-sm w-full"
+            />
           </div>
         )}
 

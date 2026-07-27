@@ -365,7 +365,7 @@ export default function SalesPage() {
         setLeads(data.leads || []);
         setEmployees(data.employees || []);
         setTargets(data.salesTargets || []);
-        setSlabs(data.incentiveSlabs || []);
+        setIncentiveSlabs(data.incentiveSlabs || []);
         if (data.systemSettings) {
           setLeadCategories(data.systemSettings.leadCategories || ["Hot Lead", "Warm Lead", "Cold Lead"]);
         }
@@ -1355,12 +1355,12 @@ export default function SalesPage() {
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-1">
-                  <Phone className="w-3 h-3 text-slate-400" />
+                <div className="flex items-center gap-1 mt-2">
+                  <Phone className="w-4 h-4 text-slate-500" />
                   {inlineEditing?.id === lead.id && inlineEditing?.field === 'phone' ? (
                     <Input 
                       autoFocus
-                      className="h-6 text-[10px] w-full py-0" 
+                      className="h-8 text-[13px] font-bold w-full py-0" 
                       defaultValue={lead.phone || ''} 
                       onBlur={(e) => handleInlineUpdate(lead.id, 'phone', e.target.value)} 
                       onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'phone', e.currentTarget.value)}
@@ -1369,7 +1369,7 @@ export default function SalesPage() {
                   ) : (
                     <span 
                       onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'phone' })}
-                      className="text-[10px] text-slate-500 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
+                      className="text-[13px] font-bold text-slate-700 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
                     >
                       {lead.phone || 'Add phone'}
                     </span>
@@ -1720,13 +1720,23 @@ export default function SalesPage() {
                 return (
                   <div className="flex flex-col gap-0.5 shrink-0">
                     {isMissed ? (
-                      <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100 border-rose-200 animate-pulse text-[9px] font-bold px-1.5 py-0.5 whitespace-nowrap">
-                        Follow-up Missed
-                      </Badge>
+                      <div className="flex flex-col gap-1 items-start">
+                        <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100 border-rose-200 animate-pulse text-[9px] font-bold px-1.5 py-0.5 whitespace-nowrap">
+                          Follow-up Missed
+                        </Badge>
+                        <span className="text-[9px] font-bold text-rose-500 uppercase tracking-wider whitespace-nowrap">
+                          {dayjs(lead.nextFollowUpDate).format("DD MMM, hh:mm A")}
+                        </span>
+                      </div>
                     ) : isDueToday ? (
-                      <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100 border-orange-200 animate-pulse text-[9px] font-bold px-1.5 py-0.5 whitespace-nowrap">
-                        Follow-up Due
-                      </Badge>
+                      <div className="flex flex-col gap-1 items-start">
+                        <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100 border-orange-200 animate-pulse text-[9px] font-bold px-1.5 py-0.5 whitespace-nowrap">
+                          Follow-up Due
+                        </Badge>
+                        <span className="text-[9px] font-bold text-orange-500 uppercase tracking-wider whitespace-nowrap">
+                          {dayjs(lead.nextFollowUpDate).format("DD MMM, hh:mm A")}
+                        </span>
+                      </div>
                     ) : (
                       <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">
                         Next: {dayjs(lead.nextFollowUpDate).format("DD MMM, hh:mm A")}
@@ -3284,6 +3294,54 @@ export default function SalesPage() {
           </div>
         </div>
       )}
+
+      {/* Status Update Dialog */}
+      <Dialog open={statusChangeData !== null} onOpenChange={(open) => !open && setStatusChangeData(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Update Lead Status</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label>Reason for changing to {statusChangeData?.newStatus}?</Label>
+              <Select value={selectedReason} onValueChange={setSelectedReason}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a reason" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Follow-up requested">Follow-up requested</SelectItem>
+                  <SelectItem value="Not interested currently">Not interested currently</SelectItem>
+                  <SelectItem value="Pricing issue">Pricing issue</SelectItem>
+                  <SelectItem value="Competitor chosen">Competitor chosen</SelectItem>
+                  <SelectItem value="Other">Other (Please specify)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {selectedReason === "Other" && (
+              <div className="space-y-2">
+                <Label>Custom Reason</Label>
+                <Input 
+                  placeholder="Enter reason..."
+                  value={customReason}
+                  onChange={e => setCustomReason(e.target.value)}
+                />
+              </div>
+            )}
+            
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setStatusChangeData(null)}>Cancel</Button>
+              <Button 
+                onClick={handleStatusChangeSubmit}
+                className="bg-brand-teal hover:bg-brand-teal-light text-white"
+                disabled={!selectedReason || (selectedReason === "Other" && !customReason.trim())}
+              >
+                Update Status
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

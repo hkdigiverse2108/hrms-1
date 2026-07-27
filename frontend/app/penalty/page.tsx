@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/common/PageHeader";
 import { TablePagination } from "@/components/common/TablePagination";
@@ -865,17 +866,19 @@ export default function RemarksPage() {
           <div className="flex flex-col sm:flex-row items-center gap-4">
             {canManageRemarks && (
               <div className="w-full sm:w-auto">
-                <Select value={employeeFilter} onValueChange={(v) => { setEmployeeFilter(v); setCurrentPage(1); }}>
-                  <SelectTrigger className="w-full sm:w-[180px] font-medium border-border shadow-sm">
-                    <SelectValue placeholder="All Employees" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="All">All Employees</SelectItem>
-                    {employees.map(emp => (
-                      <SelectItem key={emp.id} value={emp.id || emp.name}>{emp.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  options={[
+                    { value: "All", label: "All Employees" },
+                    ...employees.map(emp => ({
+                      value: emp.id || emp.name,
+                      label: emp.name
+                    }))
+                  ]}
+                  value={employeeFilter}
+                  onValueChange={(v) => { setEmployeeFilter(v); setCurrentPage(1); }}
+                  placeholder="All Employees"
+                  triggerClassName="w-full sm:w-[180px] font-medium border-border shadow-sm bg-white"
+                />
               </div>
             )}
             

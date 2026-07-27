@@ -2219,7 +2219,7 @@ async def get_my_tasks_page_data(
     """Clubbed endpoint for the My Tasks page. Replaces 3 separate calls."""
     import asyncio
     results = await asyncio.gather(
-        crud.get_tasks(db, userId, role, skip=0, limit=10000),
+        crud.get_tasks(db, userId, role, skip=0, limit=10000, exclude_department="HR"),
         crud.get_employees(db, skip=0, limit=10000),
         crud.get_departments(db, skip=0, limit=10000)
     )
@@ -2268,12 +2268,12 @@ async def get_employee_attendance_page_data(db=Depends(get_db)):
     }
 
 @app.get("/my-tasks-view-data")
-async def get_my_tasks_view_data(db=Depends(get_db)):
+async def get_my_tasks_view_data(userId: Optional[str] = None, role: Optional[str] = None, db=Depends(get_db)):
     """Clubbed endpoint for the MyTasksView component. Replaces 8 separate calls."""
     import asyncio
     results = await asyncio.gather(
-        crud.get_tasks(db, skip=0, limit=10000),
-        crud.get_wm_tasks(db, skip=0, limit=10000),
+        crud.get_tasks(db, userId, role, skip=0, limit=10000),
+        crud.get_wm_tasks(db, userId, role, skip=0, limit=10000),
         crud.get_all_content_calendar_entries(db),
         crud.get_all_other_work(db),
         crud.get_projects(db, skip=0, limit=10000),

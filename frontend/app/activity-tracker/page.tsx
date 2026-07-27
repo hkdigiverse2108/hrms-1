@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { TablePagination } from "@/components/common/TablePagination";
 import { exportToCSV } from "@/lib/export-utils";
@@ -278,17 +279,19 @@ export default function ActivityTrackerPage() {
         <div className="flex flex-wrap items-center gap-3">
           {/* Admin Select Employee */}
           {isAdminOrHR && (
-            <Select onValueChange={setSelectedEmployee} value={selectedEmployee}>
-              <SelectTrigger className="w-[180px] bg-white h-9 text-xs">
-                <SelectValue placeholder="All Employees" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="All">All Employees</SelectItem>
-                {employees.map(emp => (
-                  <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              options={[
+                { value: "All", label: "All Employees" },
+                ...employees.map(emp => ({
+                  value: emp.id,
+                  label: emp.name
+                }))
+              ]}
+              value={selectedEmployee}
+              onValueChange={setSelectedEmployee}
+              placeholder="All Employees"
+              triggerClassName="w-[180px] bg-white h-9 text-xs"
+            />
           )}
 
           {/* Filter Date */}

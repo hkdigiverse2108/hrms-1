@@ -249,58 +249,13 @@ export default function ProjectsPage() {
 
   const getProjectStats = (project: any) => {
     const teamIdSet = new Set<string>();
+    const projectModules = Array.isArray(project.modules) ? project.modules : [];
+    const projectPhases = Array.isArray(project.phases) ? project.phases : [];
+    const projectTasks = tasks.filter(t => String(t.projectId) === String(project.id));
 
     if (Array.isArray(project.assignedTeamIds)) {
       project.assignedTeamIds.forEach((id: any) => id && teamIdSet.add(String(id)));
     }
-    if (project.assignedEmployeeId) teamIdSet.add(String(project.assignedEmployeeId));
-    if (Array.isArray(project.assignedEmployeeIds)) {
-      project.assignedEmployeeIds.forEach((id: any) => id && teamIdSet.add(String(id)));
-    }
-
-    Object.keys(project).forEach(key => {
-      if (key.endsWith("Id") && key !== "id" && key !== "clientId" && key !== "leadId" && key !== "teamLeaderId" && key !== "performedBy" && key !== "projectId") {
-        const val = project[key];
-        if (val && typeof val === "string" && val !== "none" && val !== "unassigned") {
-          teamIdSet.add(String(val));
-        }
-      }
-    });
-
-    Object.keys(project).forEach(key => {
-      if (key.endsWith("Name") && key.startsWith("assigned") && key !== "clientName" && key !== "teamLeaderName" && key !== "userName") {
-        const nameVal = project[key];
-        if (nameVal && typeof nameVal === "string" && nameVal.trim()) {
-          const emp = employees.find(e => {
-            const fullName = `${e.firstName || ""} ${e.lastName || ""}`.trim() || e.name || "";
-            return fullName.toLowerCase() === nameVal.toLowerCase().trim() || (e.name && e.name.toLowerCase() === nameVal.toLowerCase().trim());
-          });
-          if (emp) teamIdSet.add(String(emp.id));
-        }
-      }
-    });
-
-    const projectModules = Array.isArray(project.modules) ? project.modules : [];
-    projectModules.forEach((m: any) => {
-      if (m.assignedToId) teamIdSet.add(String(m.assignedToId));
-      if (m.assignedEmployeeId) teamIdSet.add(String(m.assignedEmployeeId));
-      if (Array.isArray(m.assignedToIds)) m.assignedToIds.forEach((id: any) => id && teamIdSet.add(String(id)));
-      if (Array.isArray(m.assignedEmployeeIds)) m.assignedEmployeeIds.forEach((id: any) => id && teamIdSet.add(String(id)));
-    });
-
-    const projectPhases = Array.isArray(project.phases) ? project.phases : [];
-    projectPhases.forEach((p: any) => {
-      if (p.assignedToId) teamIdSet.add(String(p.assignedToId));
-      if (p.assignedEmployeeId) teamIdSet.add(String(p.assignedEmployeeId));
-      if (Array.isArray(p.assignedToIds)) p.assignedToIds.forEach((id: any) => id && teamIdSet.add(String(id)));
-    });
-
-    const projectTasks = tasks.filter(t => String(t.projectId) === String(project.id));
-    projectTasks.forEach((t: any) => {
-      if (t.assignedToId) teamIdSet.add(String(t.assignedToId));
-      if (t.assignedEmployeeId) teamIdSet.add(String(t.assignedEmployeeId));
-      if (Array.isArray(t.assignedToIds)) t.assignedToIds.forEach((id: any) => id && teamIdSet.add(String(id)));
-    });
 
     const isModuleInProgress = (m: any) => {
       const st = (m.stage || m.status || "").toLowerCase().trim().replace("_", "-");

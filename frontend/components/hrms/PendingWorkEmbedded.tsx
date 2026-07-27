@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { API_URL } from '@/lib/config';
 import { toast } from 'sonner';
 import { useConfirm } from "@/context/ConfirmContext";
@@ -44,6 +45,53 @@ const parseLocalDate = (dateStr: string) => {
   const d = new Date(dateStr);
   d.setHours(0, 0, 0, 0);
   return d;
+};
+
+const formatDateToDDMMYYYY = (dateInput: string | Date | undefined): string => {
+  if (!dateInput) return '';
+  try {
+    let dateObj: Date;
+    if (dateInput instanceof Date) {
+      dateObj = dateInput;
+    } else {
+      const cleanStr = dateInput.trim();
+      if (!cleanStr) return '';
+      
+      if (cleanStr.includes('T')) {
+        dateObj = new Date(cleanStr);
+      } else {
+        const delimiter = cleanStr.includes('-') ? '-' : '/';
+        const parts = cleanStr.split(delimiter);
+        if (parts.length === 3) {
+          if (parts[0].length === 4) {
+            const y = parseInt(parts[0]);
+            const m = parseInt(parts[1]);
+            const d = parseInt(parts[2]);
+            const dd = String(d).padStart(2, '0');
+            const mm = String(m).padStart(2, '0');
+            return `${dd}-${mm}-${y}`;
+          }
+          if (parts[2].length === 4) {
+            const d = parseInt(parts[0]);
+            const m = parseInt(parts[1]);
+            const y = parseInt(parts[2]);
+            const dd = String(d).padStart(2, '0');
+            const mm = String(m).padStart(2, '0');
+            return `${dd}-${mm}-${y}`;
+          }
+        }
+        dateObj = new Date(cleanStr);
+      }
+    }
+
+    if (isNaN(dateObj.getTime())) return '';
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const year = dateObj.getFullYear();
+    return `${day}-${month}-${year}`;
+  } catch (e) {
+    return '';
+  }
 };
 
 export function PendingWorkEmbedded({ 
@@ -830,8 +878,8 @@ export function PendingWorkEmbedded({
           
           const deadlineDate = parseLocalDate(t.deadline);
           
-          if (type === 'todays-work') return (deadlineDate <= today || t.isTransferredToMe) && t.status !== 'Approved';
-          if (type === 'upcoming-work') return (deadlineDate > today && !t.isTransferredToMe) && t.status !== 'Approved';
+          if (type === 'todays-work') return deadlineDate <= today && t.status !== 'Approved';
+          if (type === 'upcoming-work') return deadlineDate > today && t.status !== 'Approved';
           return true;
         }
 
@@ -854,8 +902,8 @@ export function PendingWorkEmbedded({
         
         const deadlineDate = parseLocalDate(t.deadline);
         
-        if (type === 'todays-work') return deadlineDate <= today || t.isTransferredToMe;
-        if (type === 'upcoming-work') return deadlineDate > today && !t.isTransferredToMe;
+        if (type === 'todays-work') return deadlineDate <= today;
+        if (type === 'upcoming-work') return deadlineDate > today;
         return true;
       });
     }
@@ -883,6 +931,40 @@ export function PendingWorkEmbedded({
     return defaultStages.filter(s => stages.has(s));
   }, [preFilteredTasks, isAdminOrTL]);
 
+  const getTaskDueDate = (req: any) => {
+    if (req.taskType === 'content-calendar') {
+      const entry = entries.find(e => e.id === req.taskId || e._id === req.taskId);
+      if (!entry) return '';
+      let dueDate = '';
+      const stage = req.stage;
+      if (stage === 'Script') dueDate = entry.scriptDate;
+      else if (stage === 'Shoot') dueDate = entry.shootDate;
+      else if (stage === 'Caption') dueDate = entry.captionDate || entry.editingStart;
+      else if (stage === 'Thumbnail') dueDate = entry.thumbnailDate || entry.editingStart;
+      else if (stage === 'Editing' || stage === 'Post/Graphics') dueDate = entry.editingStart;
+      else if (stage === 'Approval') dueDate = entry.approval;
+      else if (stage === 'Posting') dueDate = entry.postingDate;
+      else if (stage === 'Brand Person') dueDate = entry.shootDate || entry.postingDate;
+
+      if (!dueDate) {
+        dueDate = entry.postingDate || entry.scriptDate || entry.shootDate || entry.editingStart || entry.approval || '';
+      }
+
+      if (dueDate && dueDate.includes('T')) {
+        dueDate = dueDate.split('T')[0];
+      }
+      return dueDate;
+    } else {
+      const ow = otherWorkEntries.find(e => e.id === req.taskId || e._id === req.taskId);
+      if (!ow) return '';
+      let dueDate = ow.deadline || '';
+      if (dueDate && dueDate.includes('T')) {
+        dueDate = dueDate.split('T')[0];
+      }
+      return dueDate;
+    }
+  };
+
   const renderTaskDetails = (req: any) => {
     if (req.taskType === 'content-calendar') {
       const entry = entries.find(e => e.id === req.taskId || e._id === req.taskId);
@@ -892,11 +974,7 @@ export function PendingWorkEmbedded({
       return (
         <div className="flex flex-col gap-0.5 mt-1.5 p-2 bg-slate-50 rounded border border-slate-100 text-[10px] font-normal text-slate-500 max-w-sm">
           {cName && <div><span className="font-semibold text-slate-600">Client:</span> {cName}</div>}
-          {entry.platform && <div><span className="font-semibold text-slate-600">Platform:</span> {entry.platform}</div>}
           {entry.postReel && <div><span className="font-semibold text-slate-600">Format:</span> {entry.postReel}</div>}
-          {entry.concept && <div><span className="font-semibold text-slate-600">Concept:</span> {entry.concept}</div>}
-          {entry.topic && <div><span className="font-semibold text-slate-600">Topic:</span> {entry.topic}</div>}
-          {entry.caption && <div><span className="font-semibold text-slate-600">Caption:</span> {entry.caption}</div>}
         </div>
       );
     } else {
@@ -904,8 +982,7 @@ export function PendingWorkEmbedded({
       if (!ow) return null;
       return (
         <div className="flex flex-col gap-0.5 mt-1.5 p-2 bg-slate-50 rounded border border-slate-100 text-[10px] font-normal text-slate-500 max-w-sm">
-          {ow.clientDisplayName && <div><span className="font-semibold text-slate-600">Context:</span> {ow.clientDisplayName}</div>}
-          {ow.description && <div><span className="font-semibold text-slate-600">Description:</span> {ow.description}</div>}
+          {ow.clientDisplayName && <div><span className="font-semibold text-slate-600">Client:</span> {ow.clientDisplayName}</div>}
         </div>
       );
     }
@@ -972,7 +1049,8 @@ export function PendingWorkEmbedded({
                 <table className="w-full text-left text-sm text-slate-600">
                   <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider font-semibold">
                     <tr>
-                      <th className="px-6 py-4 whitespace-nowrap">Date</th>
+                      <th className="px-6 py-4 whitespace-nowrap">Transfer Date</th>
+                      <th className="px-6 py-4 whitespace-nowrap">Due Date</th>
                       <th className="px-6 py-4 whitespace-nowrap">Task Name</th>
                       <th className="px-6 py-4 whitespace-nowrap">Stage</th>
                       <th className="px-6 py-4 whitespace-nowrap">From</th>
@@ -985,7 +1063,10 @@ export function PendingWorkEmbedded({
                     {filteredIncoming.map(req => (
                       <tr key={req.id} className="hover:bg-slate-50/50 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500">
-                          {new Date(req.createdDate).toLocaleDateString()}
+                          {formatDateToDDMMYYYY(req.createdDate) || '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500 font-semibold">
+                          {formatDateToDDMMYYYY(getTaskDueDate(req)) || '-'}
                         </td>
                         <td className="px-6 py-4 font-semibold text-slate-800">
                           {req.taskName}
@@ -1056,7 +1137,8 @@ export function PendingWorkEmbedded({
                 <table className="w-full text-left text-sm text-slate-600">
                   <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider font-semibold">
                     <tr>
-                      <th className="px-6 py-4 whitespace-nowrap">Date</th>
+                      <th className="px-6 py-4 whitespace-nowrap">Transfer Date</th>
+                      <th className="px-6 py-4 whitespace-nowrap">Due Date</th>
                       <th className="px-6 py-4 whitespace-nowrap">Task Name</th>
                       <th className="px-6 py-4 whitespace-nowrap">Stage</th>
                       <th className="px-6 py-4 whitespace-nowrap">To</th>
@@ -1067,7 +1149,10 @@ export function PendingWorkEmbedded({
                     {filteredOutgoing.map(req => (
                       <tr key={req.id} className="hover:bg-slate-50/50 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500">
-                          {new Date(req.createdDate).toLocaleDateString()}
+                          {formatDateToDDMMYYYY(req.createdDate) || '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500 font-semibold">
+                          {formatDateToDDMMYYYY(getTaskDueDate(req)) || '-'}
                         </td>
                         <td className="px-6 py-4 font-semibold text-slate-800">
                           {req.taskName}
@@ -1255,41 +1340,35 @@ export function PendingWorkEmbedded({
 
             {(isAdminOrTL || defaultTaskType === 'dev-creative-work') && (
               <>
-                {isAdminOrTL && (
-                  <Select value={filterAssigner} onValueChange={setFilterAssigner}>
-                    <SelectTrigger className="w-[160px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal">
-                      <SelectValue placeholder="Assigned By" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Assigned By: All</SelectItem>
-                      {employees.map(emp => {
+                {isAdminOrTL && currentUser?.role?.toLowerCase() === 'admin' && (
+                  <SearchableSelect
+                    options={[
+                      { value: "all", label: "Assigned By: All" },
+                      ...employees.map(emp => {
                         const empName = `${emp.firstName} ${emp.lastName}`;
-                        return (
-                          <SelectItem key={`assigner-${emp.id}`} value={`${empName}|${emp.id}`}>
-                            {empName}
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
+                        return { value: `${empName}|${emp.id}`, label: empName };
+                      })
+                    ]}
+                    value={filterAssigner}
+                    onValueChange={setFilterAssigner}
+                    placeholder="Assigned By"
+                    triggerClassName="w-[160px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal"
+                  />
                 )}
 
-                <Select value={filterAssignee} onValueChange={setFilterAssignee}>
-                  <SelectTrigger className="w-[160px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal">
-                    <SelectValue placeholder="Assigned To" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Assigned To: All</SelectItem>
-                    {employees.map(emp => {
+                <SearchableSelect
+                  options={[
+                    { value: "all", label: "Assigned To: All" },
+                    ...employees.map(emp => {
                       const empName = `${emp.firstName} ${emp.lastName}`;
-                      return (
-                        <SelectItem key={`assignee-${emp.id}`} value={`${empName}|${emp.id}`}>
-                          {empName}
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
+                      return { value: `${empName}|${emp.id}`, label: empName };
+                    })
+                  ]}
+                  value={filterAssignee}
+                  onValueChange={setFilterAssignee}
+                  placeholder="Assigned To"
+                  triggerClassName="w-[160px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal"
+                />
               </>
             )}
           </div>
@@ -1337,7 +1416,7 @@ export function PendingWorkEmbedded({
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <Badge variant={isOverdue ? "destructive" : "secondary"} className="text-xs px-2.5 py-1">
-                        {item.deadline}
+                        {formatDateToDDMMYYYY(item.deadline) || '-'}
                       </Badge>
                     </td>
                     <td className="px-6 py-4 font-medium text-slate-800">
@@ -1462,7 +1541,7 @@ export function PendingWorkEmbedded({
                             </>
                           ) : item.isOtherWork ? (
                             <>
-                              {item.status === 'Pending' && isAssignee && (
+                              {(item.status === 'Pending' || item.status === 'In Progress') && isAssignee && (
                                 <>
                                   {(isAssigner || isAdminOrTL || !item.assignerId || item.assignerId === item.assigneeId) ? (
                                     <Button 
@@ -1726,23 +1805,7 @@ export function PendingWorkEmbedded({
 
                     return employees
                       .filter((emp: any) => {
-                        if (emp.id === currentUser?.id) return false;
-                        if (!targetDept) return true;
-                        
-                        const empDept = emp.department?.trim().toLowerCase();
-                        if (!empDept) return false;
-                        
-                        if (isCreativeDept) {
-                          return empDept === 'creative' || empDept === 'smm' || empDept === 'social media marketing' || empDept === 'graphics';
-                        }
-                        if (isDMDept) {
-                          return empDept === 'digital-marketing' || empDept === 'digital marketing' || empDept === 'dm';
-                        }
-                        if (isDevDept) {
-                          return empDept === 'development' || empDept === 'dev';
-                        }
-                        
-                        return empDept === targetDept.trim().toLowerCase();
+                        return emp.id !== currentUser?.id;
                       })
                       .map((emp: any) => {
                         const name = `${emp.firstName} ${emp.lastName || ''}`.trim();

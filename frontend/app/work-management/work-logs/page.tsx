@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useUser } from '@/hooks/useUser'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { SearchableSelect } from '@/components/ui/searchable-select'
 
 dayjs.extend(duration)
 
@@ -358,16 +359,16 @@ export default function WorkLogsPage() {
           {user?.role?.toLowerCase() === 'admin' && (
             <div className="flex items-center gap-2">
               <Users className="w-4 h-4 text-gray-500" />
-              <select
+              <SearchableSelect
+                options={[
+                  { value: "All", label: "All Employees" },
+                  ...employeeOptions.map(emp => ({ value: emp.id, label: emp.name }))
+                ]}
                 value={filterEmployee}
-                onChange={e => setFilterEmployee(e.target.value)}
-                className="border border-input bg-background rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring min-w-[150px]"
-              >
-                <option value="All">All Employees</option>
-                {employeeOptions.map(emp => (
-                  <option key={emp.id} value={emp.id}>{emp.name}</option>
-                ))}
-              </select>
+                onValueChange={setFilterEmployee}
+                placeholder="All Employees"
+                triggerClassName="min-w-[150px]"
+              />
             </div>
           )}
 

@@ -200,27 +200,7 @@ export default function MarketingReportsPage() {
     return perms.some((p: any) => dmPerms.includes(p.moduleName) && (p.canView || p.canEdit || p.canAdd));
   }, [user]);
 
-  const isUserAdminOrTLOrHead = React.useCallback((u: any) => {
-    if (!u) return false;
-    const r = (u.role || "").toLowerCase().trim();
-    const d = (u.designation || "").toLowerCase().trim();
-    const n = (u.name || "").toLowerCase().trim();
 
-    if (n === "admin admin") return true;
-
-    const fullRoles = [
-      "admin", "super admin", "superadmin", "hr", "manager", "director",
-      "sub admin", "sub-admin", "head", "team leader", "tl"
-    ];
-
-    if (fullRoles.includes(r) || fullRoles.includes(d)) return true;
-    if (r.includes("head") || d.includes("head") || r.includes("team leader") || d.includes("team leader") || r.includes("tl") || d.includes("tl")) return true;
-
-    return false;
-  }, []);
-
-  const isEmployee = user && !["Admin", "Manager", "HR"].includes(user.role) && !hasFullDMAccess;
-  const isRegularEmployee = !user || (!isUserAdminOrTLOrHead(user) && user.designation?.toLowerCase() !== 'hr' && user.role?.toLowerCase() !== 'hr');
 
   const getLocalDateString = () => {
     const d = new Date();
@@ -464,6 +444,32 @@ export default function MarketingReportsPage() {
   const [selectedClientForCampaigns, setSelectedClientForCampaigns] = useState<
     string | null
   >(null);
+
+  const isUserAdminOrTLOrHead = React.useCallback((u: any) => {
+    if (!u) return false;
+    const r = (u.role || "").toLowerCase().trim();
+    const d = (u.designation || "").toLowerCase().trim();
+    const n = (u.name || "").toLowerCase().trim();
+
+    if (n === "admin admin") return true;
+
+    const fullRoles = [
+      "admin", "super admin", "superadmin", "hr", "manager", "director",
+      "sub admin", "sub-admin", "head", "team leader", "tl"
+    ];
+
+    if (fullRoles.includes(r) || fullRoles.includes(d)) return true;
+    if (r.includes("head") || d.includes("head") || r.includes("team leader") || d.includes("team leader") || r.includes("tl") || d.includes("tl")) return true;
+
+    if (projects && projects.some((p: any) => String(p.teamLeaderId) === String(u.id || u._id))) {
+      return true;
+    }
+
+    return false;
+  }, [projects]);
+
+  const isEmployee = user && !["Admin", "Manager", "HR"].includes(user.role) && !hasFullDMAccess;
+  const isRegularEmployee = !user || (!isUserAdminOrTLOrHead(user) && user.designation?.toLowerCase() !== 'hr' && user.role?.toLowerCase() !== 'hr');
 
   const isActiveClientOnHold = clients?.find((c: any) => c.id === selectedClientForCampaigns)?.status === "on-hold";
   const [selectedClientFilter, setSelectedClientFilter] = useState("");
@@ -2382,15 +2388,7 @@ export default function MarketingReportsPage() {
                 <SelectContent>
                   {employees
                     .filter((emp: any) => {
-                      if (emp.id === user?.id) return false;
-                      const empDept = emp.department?.trim().toLowerCase();
-                      if (!empDept) return false;
-                      
-                      if (transferringProject?.department) {
-                        const projDepts = transferringProject.department.toLowerCase().split(',').map((d: string) => d.trim());
-                        return projDepts.includes(empDept);
-                      }
-                      return empDept === 'digital marketing';
+                      return emp.id !== user?.id;
                     })
                     .map((emp: any) => {
                       const name = `${emp.firstName} ${emp.lastName || ''}`.trim();
