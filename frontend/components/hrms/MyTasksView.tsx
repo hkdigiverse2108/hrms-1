@@ -855,8 +855,17 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                                   {grouped[deptName].map(task => {
                                     const todayStr = new Date().toISOString().split('T')[0]
                                     const isOverdue = task.dueDate && task.dueDate < todayStr
+                                    const isCustomTask = task.description === "Custom task created from Punch-In" || task.originalTask?.description === "Custom task created from Punch-In"
                                     return (
-                                      <tr key={task.id} className="hover:bg-slate-50/50 transition-colors group">
+                                      <tr 
+                                        key={task.id} 
+                                        onClick={() => {
+                                          if (!isCustomTask) {
+                                            router.push('/work-management/my-tasks');
+                                          }
+                                        }}
+                                        className={`hover:bg-slate-50/50 transition-colors group ${!isCustomTask ? 'cursor-pointer' : ''}`}
+                                      >
                                         <td className="p-4">
                                           <span className={`font-bold text-[10px] rounded px-2.5 py-1 ${isOverdue ? 'bg-red-800 text-white' : 'bg-slate-100 text-slate-700'}`}>
                                             {task.dueDate ? format(new Date(task.dueDate), 'dd/MM/yyyy') : '-'}
@@ -886,7 +895,7 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                                         </td>
                                         <td className="p-4 text-right">
                                           {task.status !== 'completed' && task.status !== 'Approved' && task.status?.toLowerCase() !== 'completed' ? (
-                                            task.description === "Custom task created from Punch-In" || task.originalTask?.description === "Custom task created from Punch-In" ? (
+                                            isCustomTask ? (
                                               <Button
                                                 variant="ghost"
                                                 size="icon"
@@ -899,20 +908,7 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                                               >
                                                 <CheckCircle2 className="w-4 h-4" />
                                               </Button>
-                                            ) : (
-                                              <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-8 w-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  router.push('/tasks');
-                                                }}
-                                                title="Open Tasks Page"
-                                              >
-                                                <ExternalLink className="w-4 h-4" />
-                                              </Button>
-                                            )
+                                            ) : null
                                           ) : (
                                             <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
                                               Completed
@@ -939,8 +935,17 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                                     {grouped[deptName].map(task => {
                                       const todayStr = new Date().toISOString().split('T')[0]
                                       const isOverdue = task.dueDate && task.dueDate < todayStr
+                                      const isCustomTask = task.description === "Custom task created from Punch-In" || task.originalTask?.description === "Custom task created from Punch-In"
                                       return (
-                                        <tr key={task.id} className="hover:bg-slate-50/50 transition-colors group">
+                                        <tr 
+                                          key={task.id} 
+                                          onClick={() => {
+                                            if (!isCustomTask) {
+                                              router.push('/work-management/my-tasks');
+                                            }
+                                          }}
+                                          className={`hover:bg-slate-50/50 transition-colors group ${!isCustomTask ? 'cursor-pointer' : ''}`}
+                                        >
                                           <td className="p-4 font-semibold text-slate-700">
                                             <div className={`flex items-center gap-1.5 ${isOverdue ? 'text-red-600 font-bold' : ''}`}>
                                               {isOverdue ? <AlertCircle className="w-3.5 h-3.5 text-red-600" /> : <CalendarIcon className="w-3.5 h-3.5 text-slate-400" />}
@@ -963,7 +968,7 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                                       </td>
                                       <td className="p-4 text-right">
                                           {task.status !== 'completed' && task.status !== 'Approved' && task.status?.toLowerCase() !== 'completed' ? (
-                                            task.description === "Custom task created from Punch-In" || task.originalTask?.description === "Custom task created from Punch-In" ? (
+                                            isCustomTask ? (
                                               <Button
                                                 variant="ghost"
                                                 size="icon"
@@ -976,20 +981,7 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                                               >
                                                 <CheckCircle2 className="w-4 h-4" />
                                               </Button>
-                                            ) : (
-                                              <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-8 w-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  router.push('/tasks');
-                                                }}
-                                                title="Open Tasks Page"
-                                              >
-                                                <ExternalLink className="w-4 h-4" />
-                                              </Button>
-                                            )
+                                            ) : null
                                           ) : (
                                             <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
                                               Completed
