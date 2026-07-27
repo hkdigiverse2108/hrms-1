@@ -624,9 +624,6 @@ export default function TaskManagementPage() {
   ];
 
   const statsTasks = tasks.filter(task => {
-    if (task.department?.toLowerCase().trim() === 'hr' || task.department?.toLowerCase().trim() === 'human resources') {
-      return false;
-    }
     const priorityMatch = activePriorities.length === 0 || activePriorities.includes(task.priority?.toLowerCase() || "");
     const assigneeMatch = activeAssignees.length === 0 || 
       (task.assignedToIds && activeAssignees.some(id => task.assignedToIds.includes(id))) || 
