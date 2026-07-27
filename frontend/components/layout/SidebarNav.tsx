@@ -256,9 +256,8 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       menuItems.push(getItem(<Link href="/schedule">Schedule</Link>, "/schedule", <CalendarDays className="w-5 h-5" />));
     }
 
-    
     const workspaceChildren: MenuItem[] = [];
-    if (isModuleEnabled('seating-arrangement') && (isAdmin || checkPermission('seating-arrangement', 'canView'))) {
+    if (isModuleEnabled('seating-arrangement') && (isAdmin || isHRUser || checkPermission('seating-arrangement', 'canView'))) {
       workspaceChildren.push(getItem(<Link href="/workspace/seating">Seating Arrangement</Link>, "/workspace/seating"));
     }
     if (isModuleEnabled('resource-management') && (isAdmin || checkPermission('resource-management', 'canView'))) {
