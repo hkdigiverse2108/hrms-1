@@ -2202,7 +2202,7 @@ async def get_my_tasks_page_data(
     """Clubbed endpoint for the My Tasks page. Replaces 3 separate calls."""
     import asyncio
     results = await asyncio.gather(
-        crud.get_tasks(db, userId, role, skip=0, limit=10000),
+        crud.get_tasks(db, userId, role, skip=0, limit=10000, exclude_department="HR"),
         crud.get_employees(db, skip=0, limit=10000),
         crud.get_departments(db, skip=0, limit=10000)
     )

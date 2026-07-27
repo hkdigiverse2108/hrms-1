@@ -4233,7 +4233,7 @@ async def add_module_comment(db, project_id: str, payload: schemas.ModuleComment
 
 
 # General Task CRUD
-async def get_tasks(db, userId: str = None, role: str = None, skip: int = 0, limit: int = 100):
+async def get_tasks(db, userId: str = None, role: str = None, skip: int = 0, limit: int = 100, exclude_department: str = None):
     query = {}
     if userId and not await user_has_full_entity_access(db, userId, role, "tasks"):
         # User sees tasks assigned to them, or tasks they assigned
@@ -4242,6 +4242,10 @@ async def get_tasks(db, userId: str = None, role: str = None, skip: int = 0, lim
             {"assignedToIds": userId},
             {"assignedById": userId}
         ]
+    
+    # Exclude tasks belonging to a specific department (e.g. "HR")
+    if exclude_department:
+        query["department"] = {"$ne": exclude_department}
                 
     cursor = db.tasks.find(query).sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
