@@ -182,8 +182,12 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                   return String(currentAssigneeId).trim() === String(userId).trim() && o.status !== 'Approved';
                 });
                 myOw.forEach((o: any) => {
-                  const client = clientList.find((c: any) => String(c.id || c._id).trim() === String(o.clientId).trim());
                   const project = projList.find((p: any) => String(p.id || p._id).trim() === String(o.projectId).trim());
+                  if (project) {
+                    const pStatus = (project.status || "").toLowerCase().trim();
+                    if (pStatus === "onhold" || pStatus === "on-hold" || pStatus === "on hold") return;
+                  }
+                  const client = clientList.find((c: any) => String(c.id || c._id).trim() === String(o.clientId).trim());
                   let displayName = "Other Work";
                   if (o.taskType === 'digital-marketing') displayName = 'Digital Marketing';
                   else if (client) displayName = project ? `${client.companyName || client.clientName} (${project.projectName})` : (client.companyName || client.clientName);
@@ -199,7 +203,14 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
               }
               
               if (isDigitalMarketingUser) {
-                const dmProjects = projList.filter((p: any) => p.department && p.department.trim().toLowerCase() === 'digital marketing' && p.status !== 'on-hold' && p.status !== 'Completed');
+                const dmProjects = projList.filter((p: any) => {
+                  if (p.department && p.department.trim().toLowerCase() === 'digital marketing') {
+                    const pStatus = (p.status || "").toLowerCase().trim();
+                    if (pStatus === "onhold" || pStatus === "on-hold" || pStatus === "on hold" || pStatus === "completed") return false;
+                    return true;
+                  }
+                  return false;
+                });
                 const myProjects = dmProjects.filter((p: any) => {
                   const isOriginalAssignee = String(p.assignedEmployeeId).trim() === String(userId).trim();
                   const isTransferredToMe = acceptedTransfers.some((t: any) => String(t.taskId) === String(p.id || p._id) && String(t.receiverId) === String(userId));
@@ -224,6 +235,11 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                   return String(currentAssigneeId).trim() === String(userId).trim() && o.status !== 'Approved' && o.taskType === 'dm-other-work';
                 });
                 myOw.forEach((o: any) => {
+                  const project = projList.find((p: any) => String(p.id || p._id).trim() === String(o.projectId).trim());
+                  if (project) {
+                    const pStatus = (project.status || "").toLowerCase().trim();
+                    if (pStatus === "onhold" || pStatus === "on-hold" || pStatus === "on hold") return;
+                  }
                   smmTasks.push({
                     id: o.id || o._id,
                     title: o.title || o.taskName || 'Other Work Task',
@@ -241,6 +257,8 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                   // In SMM, CC tasks use the client's Creative project
                   const project = projList.find((p: any) => String(p.clientId).trim() === String(entry.clientId).trim() && p.department?.toLowerCase().trim() === 'creative');
                   if (!project) return; // Only show if active creative project (matching SMM)
+                  const pStatus = (project.status || "").toLowerCase().trim();
+                  if (pStatus === "onhold" || pStatus === "on-hold" || pStatus === "on hold") return;
                   
                   const cName = client?.companyName || client?.clientName || "Unknown Client";
                   
