@@ -89,21 +89,8 @@ export default function HRTasksPage() {
   };
 
   const hrTasks = useMemo(() => {
-    const hrEmployeeIds = new Set(
-      employees
-        .filter(e => e.role === "HR" || e.department?.toLowerCase() === "hr" || e.department?.toLowerCase() === "human resources")
-        .map(e => e.id || e._id)
-    );
-
-    return tasks.filter((t: any) => {
-      const isAssignedToHREmployee = (t.assignedToId && hrEmployeeIds.has(t.assignedToId)) || 
-                                     (t.assignedToIds && t.assignedToIds.some((id: string) => hrEmployeeIds.has(id)));
-      return t.department === "HR" || 
-             t.assignedToName?.toLowerCase().includes("hr") ||
-             isAssignedToHREmployee ||
-             (user && (t.assignedToId === user.id || t.assignedToIds?.includes(user.id)));
-    });
-  }, [tasks, employees, user]);
+    return tasks.filter((t: any) => t.department === "HR" || t.department?.toUpperCase() === "HR");
+  }, [tasks]);
 
   const fetchEmployees = async () => {
     try {
