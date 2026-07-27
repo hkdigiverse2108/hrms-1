@@ -57,7 +57,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
       
       if (isUpdateMode && initialActivityType) {
         if (initialActivityType === "Work") {
-          if (['sales'].includes(userDept)) {
+          if (userDept.includes('sales')) {
             initialTab = "hr_sales_work";
           } else {
             initialTab = isDigitalMarketing ? "assigned_brands" : "today_work";
@@ -68,7 +68,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
           initialTab = `other_${initialActivitySubtype}`;
         }
       } else {
-        if (['sales'].includes(userDept)) initialTab = "hr_sales_work";
+        if (userDept.includes('sales')) initialTab = "hr_sales_work";
         else if (isDigitalMarketing) initialTab = "assigned_brands";
       }
       
@@ -381,8 +381,8 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
             taskType: (isDM || selectedTab === "dm_other_work") ? "dm-other-work" : "other-work"
           };
           
-          const isDev = userDept === 'development';
-          const isSales = userDept === 'sales';
+          const isDev = userDept.includes('development');
+          const isSales = userDept.includes('sales');
           let url = isDev && selectedTab !== "dm_other_work" ? `${API_URL}/wm-tasks` : `${API_URL}/other-work`;
           if (isSales && selectedTab === "hr_sales_work") {
             url = `${API_URL}/tasks`;
@@ -555,7 +555,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
               setIsNewWorkTask(false);
             }} className="w-full">
               <TabsList className="w-full flex flex-wrap h-auto gap-1 p-1 bg-muted/50 rounded-lg justify-start">
-                {userDept !== 'sales' && !['digital marketing', 'dm'].includes(userDept) && (
+                {!userDept.includes('sales') && !['digital marketing', 'dm'].includes(userDept) && (
                   <>
                     <TabsTrigger value="today_work" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Today's Work</TabsTrigger>
                     <TabsTrigger value="upcoming_work" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Upcoming Work</TabsTrigger>
@@ -570,7 +570,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                     <TabsTrigger value="dm_other_work" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Work</TabsTrigger>
                   </>
                 )}
-                {['sales'].includes(userDept) && (
+                {userDept.includes('sales') && (
                   <TabsTrigger value="hr_sales_work" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Work</TabsTrigger>
                 )}
                 <TabsTrigger value="research" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Research</TabsTrigger>
