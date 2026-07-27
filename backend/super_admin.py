@@ -522,6 +522,37 @@ class LandingFAQCreate(BaseModel):
     question: str
     answer: str
 
+class LandingSectionUpdate(BaseModel):
+    title: Optional[str] = None
+    subtitle: Optional[str] = None
+    cta_primary_text: Optional[str] = None
+    cta_primary_link: Optional[str] = None
+    cta_secondary_text: Optional[str] = None
+    cta_secondary_link: Optional[str] = None
+    image_url: Optional[str] = None
+    badge_text: Optional[str] = None
+    trust_badge_1: Optional[str] = None
+    trust_badge_2: Optional[str] = None
+    trust_badge_3: Optional[str] = None
+    headline: Optional[str] = None
+    subheadline: Optional[str] = None
+    bullets: Optional[List[str]] = None
+    cards: Optional[List[dict]] = None
+    items: Optional[List[dict]] = None
+    button_text: Optional[str] = None
+    button_link: Optional[str] = None
+    address: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    map_url: Optional[str] = None
+    stats: Optional[List[dict]] = None
+    trust_features: Optional[List[dict]] = None
+    badge: Optional[str] = None
+    working_hours: Optional[str] = None
+    form_title: Optional[str] = None
+    form_subtitle: Optional[str] = None
+    employee_options: Optional[List[str]] = None
+
 # --- Landing Page CRUD Endpoints ---
 
 # 1. Modules
@@ -758,5 +789,214 @@ async def delete_landing_faq(faq_id: str, token: dict = Depends(require_superadm
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="FAQ not found")
     return {"success": True, "message": "FAQ deleted successfully"}
+
+async def get_or_seed_section(section_key: str):
+    section = await db.landing_sections.find_one({"key": section_key})
+    if section:
+        section["id"] = str(section["_id"])
+        del section["_id"]
+        if section_key == "about":
+            cursor = db.stats.find({})
+            stats = []
+            async for doc in cursor:
+                doc["id"] = str(doc["_id"])
+                del doc["_id"]
+                stats.append(doc)
+            section["stats"] = stats
+        return section
+    
+    if section_key == "about":
+        stats_count = await db.stats.count_documents({})
+        if stats_count == 0:
+            default_stats = [
+                { "value": "500+", "label": "Companies onboarded" },
+                { "value": "1.2M+", "label": "Payslips processed" },
+                { "value": "99.9%", "label": "Platform uptime" },
+                { "value": "12 days", "label": "Average go-live" }
+            ]
+            await db.stats.insert_many(default_stats)
+    
+    # Define defaults
+    defaults = {
+        "hero": {
+            "title": "Complete HRMS Software for Modern Businesses",
+            "subtitle": "Manage employees, attendance, payroll, leave, recruitment, assets, performance, and every HR process from one powerful cloud-based HRMS platform.",
+            "cta_primary_text": "Book Free Demo",
+            "cta_primary_link": "/contact",
+            "cta_secondary_text": "View Pricing",
+            "cta_secondary_link": "/pricing",
+            "image_url": "/hero-dashboard.png",
+            "badge_text": "Cloud HRMS Platform",
+            "trust_badge_1": "Zero Setup Fee",
+            "trust_badge_2": "Instant Onboarding",
+            "trust_badge_3": "24/7 Support",
+            "trust_features": [
+                { "title": "Centralized HR Hub", "description": "One master platform for all employee records & organization data.", "icon_name": "Building2" },
+                { "title": "Automated Workflows", "description": "Zero manual friction for leave approvals, payroll, and onboarding.", "icon_name": "Cpu" },
+                { "title": "Real-Time Insights", "description": "Instant workforce reporting, attendance analytics & cost tracking.", "icon_name": "BarChart3" },
+                { "title": "Bank-Grade Security", "description": "Role-based encryption, audit logs & compliance protection.", "icon_name": "ShieldCheck" }
+            ]
+        },
+        "about": {
+            "headline": "One system for every people process",
+            "subheadline": "A Human Resource Management System replaces scattered spreadsheets, registers and email threads with a single connected platform. Every employee record, attendance log, leave request and payslip lives in one auditable place.",
+            "bullets": [
+                "Real-time attendance & live tracking",
+                "Dynamic leave request approvals",
+                "Comprehensive automated payroll system",
+                "Interactive self-service portals"
+            ],
+            "image_url": "/about-img.png"
+        },
+        "why_us": {
+            "headline": "Why Choose HK HRMS?",
+            "subheadline": "Designed for growing companies requiring reliability, compliance, and streamlined operations.",
+            "cards": [
+                {
+                    "title": "Reduce Manual HR Labor",
+                    "description": "Eliminate repetitive spreadsheets and automated routine HR approvals by up to 80%.",
+                    "icon_name": "Clock"
+                },
+                {
+                    "title": "Centralize Employee Data",
+                    "description": "Maintain a single source of truth for employee profiles, documents, and records.",
+                    "icon_name": "FolderKey"
+                },
+                {
+                    "title": "Simplify Attendance & Leaves",
+                    "description": "Real-time biometric/geo punch-ins, customizable leave policies, and shift management.",
+                    "icon_name": "CalendarCheck"
+                },
+                {
+                    "title": "Streamline Payroll Processes",
+                    "description": "Automate salary calculation, statutory deductions, tax reports, and single-click payslips.",
+                    "icon_name": "CreditCard"
+                },
+                {
+                    "title": "Elevate Employee Experience",
+                    "description": "Self-service portals empower staff to request leave, access tax docs, and track claims.",
+                    "icon_name": "HeartHandshake"
+                },
+                {
+                    "title": "Actionable Workforce Analytics",
+                    "description": "Make confident strategic decisions with real-time headcount, turnover, and cost metrics.",
+                    "icon_name": "LineChart"
+                }
+            ]
+        },
+        "benefits": {
+            "headline": "Less admin. More people work.",
+            "subheadline": "Unlock high-impact benefits by transitioning from manual processes to automated workflows.",
+            "items": [
+                {
+                    "title": "Save Time",
+                    "description": "Reduce hours spent on manual entries and paperwork."
+                },
+                {
+                    "title": "Accurate Attendance",
+                    "description": "Track shifts, overtime, and leaves with 100% precision."
+                },
+                {
+                    "title": "Easy Payroll",
+                    "description": "Process payroll and generate payslips with a single click."
+                },
+                {
+                    "title": "Secure Data",
+                    "description": "Enterprise-grade security ensures employee details are safe."
+                }
+            ]
+        },
+        "final_cta": {
+            "title": "Ready to Simplify Your HR Operations?",
+            "subtitle": "Bring your people, processes, attendance, and payroll data together in one clean, powerful platform.",
+            "button_text": "View Pricing & Plans",
+            "button_link": "/pricing"
+        },
+        "contact": {
+            "badge": "Contact",
+            "headline": "Let's Talk",
+            "subheadline": "We'd love to understand your HR needs and help your organization streamline every HR process.",
+            "email": "hello@hkdigiverse.com",
+            "phone": "+91 98765 43210",
+            "address": "402, Silver Business Point, Utran, Surat, Gujarat 394105",
+            "working_hours": "Mon - Sat, 10:00 AM - 7:00 PM IST",
+            "form_title": "Book a Demo",
+            "form_subtitle": "Fill in the form and our team will get back within one business day.",
+            "employee_options": [
+                "1 - 50 Employees",
+                "51 - 200 Employees",
+                "201 - 500 Employees",
+                "500+ Enterprise"
+            ],
+            "map_url": "https://www.google.com/maps/embed?pb="
+        }
+    }
+    
+    if section_key not in defaults:
+        raise HTTPException(status_code=400, detail="Invalid section key")
+        
+    import copy
+    data = copy.deepcopy(defaults[section_key])
+    data["key"] = section_key
+    await db.landing_sections.insert_one(data)
+    
+    inserted = await db.landing_sections.find_one({"key": section_key})
+    inserted["id"] = str(inserted["_id"])
+    del inserted["_id"]
+    if section_key == "about":
+        cursor = db.stats.find({})
+        stats = []
+        async for doc in cursor:
+            doc["id"] = str(doc["_id"])
+            del doc["_id"]
+            stats.append(doc)
+        inserted["stats"] = stats
+    return inserted
+
+@router.get("/landing/sections")
+async def list_landing_sections(token: dict = Depends(require_superadmin)):
+    keys = ["hero", "about", "why_us", "benefits", "final_cta", "contact"]
+    sections = {}
+    for key in keys:
+        sections[key] = await get_or_seed_section(key)
+    return sections
+
+@router.put("/landing/sections/{section_key}")
+async def update_landing_section(section_key: str, payload: LandingSectionUpdate, token: dict = Depends(require_superadmin)):
+    await get_or_seed_section(section_key)
+    update_data = {k: v for k, v in payload.dict().items() if v is not None}
+    
+    if section_key == "about" and "stats" in update_data:
+        stats_list = update_data.pop("stats")
+        await db.stats.delete_many({})
+        if stats_list:
+            for item in stats_list:
+                clean_item = {
+                    "value": item.get("value", ""),
+                    "label": item.get("label", "")
+                }
+                await db.stats.insert_one(clean_item)
+                
+    result = await db.landing_sections.find_one_and_update(
+        {"key": section_key},
+        {"$set": update_data},
+        return_document=True
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Section not found")
+        
+    result["id"] = str(result["_id"])
+    del result["_id"]
+    
+    if section_key == "about":
+        cursor = db.stats.find({})
+        stats = []
+        async for doc in cursor:
+            doc["id"] = str(doc["_id"])
+            del doc["_id"]
+            stats.append(doc)
+        result["stats"] = stats
+        
+    return result
 
 

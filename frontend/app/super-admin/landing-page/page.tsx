@@ -87,6 +87,16 @@ export default function LandingPageCRUD() {
   const [comparisons, setComparisons] = useState<ComparisonItem[]>([]);
   const [faqs, setFaqs] = useState<FAQItem[]>([]);
 
+  // Section States
+  const [sectionsData, setSectionsData] = useState<any>({
+    hero: { title: "", subtitle: "", cta_primary_text: "", cta_primary_link: "", cta_secondary_text: "", cta_secondary_link: "", image_url: "", badge_text: "", trust_badge_1: "", trust_badge_2: "", trust_badge_3: "" },
+    about: { headline: "", subheadline: "", bullets: [], image_url: "" },
+    why_us: { headline: "", subheadline: "", cards: [] },
+    benefits: { headline: "", subheadline: "", items: [] },
+    final_cta: { title: "", subtitle: "", button_text: "", button_link: "" },
+    contact: { address: "", email: "", phone: "", map_url: "" }
+  });
+
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -128,8 +138,73 @@ export default function LandingPageCRUD() {
   const [faqQuestion, setFaqQuestion] = useState("");
   const [faqAnswer, setFaqAnswer] = useState("");
 
+  // Fetch sections data
+  const fetchSections = async () => {
+    try {
+      setIsLoading(true);
+      setError("");
+      const token = localStorage.getItem("token");
+      if (!token) {
+        router.push("/super-admin/login");
+        return;
+      }
+      const headers = { Authorization: `Bearer ${token}` };
+      const res = await fetch(`${API_URL}/super-admin/landing/sections`, { headers });
+      if (res.status === 401 || res.status === 403) {
+        router.push("/super-admin/login");
+        return;
+      }
+      if (!res.ok) {
+        throw new Error("Failed to load sections data.");
+      }
+      const data = await res.json();
+      setSectionsData(data);
+    } catch (err: any) {
+      setError(err.message || "Failed to load sections data.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Save a section's data
+  const handleSaveSection = async (key: string, payloadData: any) => {
+    try {
+      setIsSubmitting(true);
+      setError("");
+      const token = localStorage.getItem("token");
+      const headers = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      };
+      
+      const res = await fetch(`${API_URL}/super-admin/landing/sections/${key}`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify(payloadData)
+      });
+
+      if (res.ok) {
+        setSuccessMsg("Section updated successfully!");
+        fetchSections();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || "Failed to update section.");
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to update section.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // Fetch data on mount / tab change
   const fetchData = async () => {
+    const isSectionTab = ["hero", "about", "why_us", "benefits", "final_cta", "contact"].includes(activeTab);
+    if (isSectionTab) {
+      await fetchSections();
+      return;
+    }
+
     try {
       setIsLoading(true);
       setError("");
@@ -460,272 +535,1330 @@ export default function LandingPageCRUD() {
           </div>
         )}
 
-        {/* Custom Premium Tabs Navigation */}
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-1.5 shadow-sm flex overflow-x-auto gap-1">
-          <button
-            onClick={() => setActiveTab("modules")}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === "modules"
-                ? "bg-[#EAF7F6] text-[#09A08A] border border-[#09A08A]/15"
-                : "text-slate-500 hover:bg-slate-50 border border-transparent"
-            }`}
-          >
-            <Layers className="w-4 h-4" />
-            Modules List
-          </button>
-          <button
-            onClick={() => setActiveTab("stats")}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === "stats"
-                ? "bg-[#EAF7F6] text-[#09A08A] border border-[#09A08A]/15"
-                : "text-slate-500 hover:bg-slate-50 border border-transparent"
-            }`}
-          >
-            <TrendingUp className="w-4 h-4" />
-            About Stats
-          </button>
-          <button
-            onClick={() => setActiveTab("plans")}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === "plans"
-                ? "bg-[#EAF7F6] text-[#09A08A] border border-[#09A08A]/15"
-                : "text-slate-500 hover:bg-slate-50 border border-transparent"
-            }`}
-          >
-            <Sparkles className="w-4 h-4" />
-            Pricing Plans
-          </button>
-          <button
-            onClick={() => setActiveTab("comparison")}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === "comparison"
-                ? "bg-[#EAF7F6] text-[#09A08A] border border-[#09A08A]/15"
-                : "text-slate-500 hover:bg-slate-50 border border-transparent"
-            }`}
-          >
-            <Table className="w-4 h-4" />
-            Comparison Matrix
-          </button>
-          <button
-            onClick={() => setActiveTab("faqs")}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === "faqs"
-                ? "bg-[#EAF7F6] text-[#09A08A] border border-[#09A08A]/15"
-                : "text-slate-500 hover:bg-slate-50 border border-transparent"
-            }`}
-          >
-            <HelpCircle className="w-4 h-4" />
-            FAQs List
-          </button>
-        </div>
-
-        {/* Tab Content Rendering */}
-        <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden min-h-[300px] flex flex-col">
-          {isLoading ? (
-            <div className="flex-1 flex flex-col items-center justify-center py-16 text-slate-400 gap-2">
-              <Loader2 className="w-8 h-8 animate-spin text-[#09A08A]" />
-              <span className="text-xs font-bold">Fetching latest {activeTab} data...</span>
+        {/* Main Content Layout with Vertical Sidebar */}
+        <div className="flex flex-col lg:flex-row gap-6 items-start w-full">
+          {/* Vertical Sidebar Navigation */}
+          <aside className="w-full lg:w-64 flex-shrink-0 bg-white border border-slate-200/80 rounded-2xl p-3 shadow-sm space-y-1">
+            <div className="px-3 py-2 text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
+              Page Sections
             </div>
-          ) : (
-            <div className="p-6 overflow-x-auto">
-              {/* Modules list */}
-              {activeTab === "modules" && (
-                <table className="w-full text-left text-xs text-slate-700">
-                  <thead className="bg-[#EAF7F6] text-xs font-bold text-slate-700 uppercase border-b border-[#09A08A]/15">
-                    <tr>
-                      <th className="py-3 px-4 rounded-l-xl w-12 text-center">Icon</th>
-                      <th className="py-3 px-4 w-52">Module Name</th>
-                      <th className="py-3 px-4">Description</th>
-                      <th className="py-3 px-4 text-right rounded-r-xl w-24">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                    {modules.length === 0 ? (
-                      <tr>
-                        <td colSpan={4} className="py-8 text-center text-slate-400">No modules found. Add one now!</td>
-                      </tr>
-                    ) : (
-                      modules.map((m) => (
-                        <tr key={m.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="py-4 px-4 text-center">
-                            <span className="px-2.5 py-1.5 bg-[#EAF7F6] text-[#09A08A] rounded-lg border border-[#09A08A]/15 font-mono text-[11px]">{m.icon_name || "Layers"}</span>
-                          </td>
-                          <td className="py-4 px-4 font-bold text-slate-900">{m.name}</td>
-                          <td className="py-4 px-4 text-slate-500 font-medium">{m.description}</td>
-                          <td className="py-4 px-4 text-right space-x-2">
-                            <button onClick={() => handleOpenEditModal(m)} className="p-1.5 text-slate-500 hover:text-[#09A08A] hover:bg-[#EAF7F6] rounded-lg transition-colors cursor-pointer" title="Edit"><Edit2 className="w-4 h-4" /></button>
-                            <button onClick={() => handleDeleteItem(m)} className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer" title="Delete"><Trash2 className="w-4 h-4" /></button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              )}
+            
+            <button
+              onClick={() => setActiveTab("hero")}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === "hero"
+                  ? "bg-[#EAF7F6] text-[#09A08A] border border-[#09A08A]/20 shadow-sm"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent"
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Globe className="w-4 h-4" />
+                <span>Hero Section</span>
+              </div>
+            </button>
 
-              {/* About Stats */}
-              {activeTab === "stats" && (
-                <table className="w-full text-left text-xs text-slate-700">
-                  <thead className="bg-[#EAF7F6] text-xs font-bold text-slate-700 uppercase border-b border-[#09A08A]/15">
-                    <tr>
-                      <th className="py-3 px-4 rounded-l-xl w-48">Value</th>
-                      <th className="py-3 px-4">Label</th>
-                      <th className="py-3 px-4 text-right rounded-r-xl w-24">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                    {stats.length === 0 ? (
-                      <tr>
-                        <td colSpan={3} className="py-8 text-center text-slate-400">No stats found. Add one now!</td>
-                      </tr>
-                    ) : (
-                      stats.map((s) => (
-                        <tr key={s.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="py-4 px-4 font-mono font-bold text-[#09A08A] text-sm">{s.value}</td>
-                          <td className="py-4 px-4 text-slate-800">{s.label}</td>
-                          <td className="py-4 px-4 text-right space-x-2">
-                            <button onClick={() => handleOpenEditModal(s)} className="p-1.5 text-slate-500 hover:text-[#09A08A] hover:bg-[#EAF7F6] rounded-lg transition-colors cursor-pointer" title="Edit"><Edit2 className="w-4 h-4" /></button>
-                            <button onClick={() => handleDeleteItem(s)} className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer" title="Delete"><Trash2 className="w-4 h-4" /></button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              )}
+            <button
+              onClick={() => setActiveTab("about")}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === "about"
+                  ? "bg-[#EAF7F6] text-[#09A08A] border border-[#09A08A]/20 shadow-sm"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent"
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Info className="w-4 h-4" />
+                <span>About Section</span>
+              </div>
+            </button>
 
-              {/* Pricing Plans */}
-              {activeTab === "plans" && (
-                <table className="w-full text-left text-xs text-slate-700">
-                  <thead className="bg-[#EAF7F6] text-xs font-bold text-slate-700 uppercase border-b border-[#09A08A]/15">
-                    <tr>
-                      <th className="py-3 px-4 rounded-l-xl w-36">Plan Name</th>
-                      <th className="py-3 px-4 w-44">Limit</th>
-                      <th className="py-3 px-4 w-28">Yearly (₹)</th>
-                      <th className="py-3 px-4 w-28">One-Time (₹)</th>
-                      <th className="py-3 px-4 w-20">Popular</th>
-                      <th className="py-3 px-4">Features</th>
-                      <th className="py-3 px-4 text-right rounded-r-xl w-24">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                    {plans.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="py-8 text-center text-slate-400">No plans found. Add one now!</td>
-                      </tr>
-                    ) : (
-                      plans.map((p) => (
-                        <tr key={p.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="py-4 px-4 font-bold text-slate-900">{p.name}</td>
-                          <td className="py-4 px-4 text-slate-600 font-mono text-[11px]">{p.limit}</td>
-                          <td className="py-4 px-4 font-mono">₹{p.priceYearly}</td>
-                          <td className="py-4 px-4 font-mono">₹{p.priceOnetime}</td>
-                          <td className="py-4 px-4">
-                            {p.isPopular ? (
-                              <span className="px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-[10px] font-bold">Yes</span>
-                            ) : (
-                              <span className="text-slate-400 text-[10px]">No</span>
-                            )}
-                          </td>
-                          <td className="py-4 px-4">
-                            <div className="flex flex-wrap gap-1 max-w-sm">
-                              {p.features?.map((f, i) => (
-                                <span key={i} className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200/50">{f}</span>
-                              ))}
+            <button
+              onClick={() => setActiveTab("why_us")}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === "why_us"
+                  ? "bg-[#EAF7F6] text-[#09A08A] border border-[#09A08A]/20 shadow-sm"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent"
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <CheckCircle className="w-4 h-4 text-emerald-600" />
+                <span>Why Choose Us</span>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("benefits")}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === "benefits"
+                  ? "bg-[#EAF7F6] text-[#09A08A] border border-[#09A08A]/20 shadow-sm"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent"
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Sparkles className="w-4 h-4 text-amber-500" />
+                <span>Benefits Section</span>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("final_cta")}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === "final_cta"
+                  ? "bg-[#EAF7F6] text-[#09A08A] border border-[#09A08A]/20 shadow-sm"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent"
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <ArrowLeft className="w-4 h-4 rotate-180" />
+                <span>Final CTA</span>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("contact")}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === "contact"
+                  ? "bg-[#EAF7F6] text-[#09A08A] border border-[#09A08A]/20 shadow-sm"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent"
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Globe className="w-4 h-4 text-sky-500" />
+                <span>Contact Info</span>
+              </div>
+            </button>
+
+            <div className="px-3 pt-4 py-2 text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
+              Dynamic Collections
+            </div>
+            
+            <button
+              onClick={() => setActiveTab("modules")}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === "modules"
+                  ? "bg-[#EAF7F6] text-[#09A08A] border border-[#09A08A]/20 shadow-sm"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent"
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Layers className="w-4 h-4" />
+                <span>Modules List</span>
+              </div>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                activeTab === "modules" ? "bg-[#09A08A] text-white" : "bg-slate-100 text-slate-500"
+              }`}>
+                {modules.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("plans")}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === "plans"
+                  ? "bg-[#EAF7F6] text-[#09A08A] border border-[#09A08A]/20 shadow-sm"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent"
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Sparkles className="w-4 h-4" />
+                <span>Pricing Plans</span>
+              </div>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                activeTab === "plans" ? "bg-[#09A08A] text-white" : "bg-slate-100 text-slate-500"
+              }`}>
+                {plans.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("comparison")}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === "comparison"
+                  ? "bg-[#EAF7F6] text-[#09A08A] border border-[#09A08A]/20 shadow-sm"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent"
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Table className="w-4 h-4" />
+                <span>Comparison Matrix</span>
+              </div>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                activeTab === "comparison" ? "bg-[#09A08A] text-white" : "bg-slate-100 text-slate-500"
+              }`}>
+                {comparisons.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("faqs")}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === "faqs"
+                  ? "bg-[#EAF7F6] text-[#09A08A] border border-[#09A08A]/20 shadow-sm"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent"
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <HelpCircle className="w-4 h-4" />
+                <span>FAQs List</span>
+              </div>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                activeTab === "faqs" ? "bg-[#09A08A] text-white" : "bg-slate-100 text-slate-500"
+              }`}>
+                {faqs.length}
+              </span>
+            </button>
+          </aside>
+
+          {/* Tab Content Rendering Container */}
+          <div className="flex-1 w-full bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden min-h-[450px] flex flex-col">
+            {/* Active Tab Header Bar */}
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-2">
+                <span className="font-extrabold text-slate-900 text-sm capitalize">
+                  {activeTab === "hero" && "Hero Section Content"}
+                  {activeTab === "about" && "About HRMS Section"}
+                  {activeTab === "why_us" && "Why Choose Us Section"}
+                  {activeTab === "benefits" && "Benefits Section"}
+                  {activeTab === "final_cta" && "Final CTA Block"}
+                  {activeTab === "contact" && "Contact Page Settings"}
+                  {activeTab === "modules" && "Modules List"}
+                  {activeTab === "stats" && "About Stats"}
+                  {activeTab === "plans" && "Pricing Plans"}
+                  {activeTab === "comparison" && "Comparison Matrix"}
+                  {activeTab === "faqs" && "FAQs List"}
+                </span>
+                {!["hero", "about", "why_us", "benefits", "final_cta", "contact"].includes(activeTab) && (
+                  <span className="text-xs text-slate-400 font-semibold">
+                    (
+                    {activeTab === "modules" && `${modules.length} items`}
+                    {activeTab === "stats" && `${stats.length} items`}
+                    {activeTab === "plans" && `${plans.length} items`}
+                    {activeTab === "comparison" && `${comparisons.length} items`}
+                    {activeTab === "faqs" && `${faqs.length} items`}
+                    )
+                  </span>
+                )}
+              </div>
+              {!["hero", "about", "why_us", "benefits", "final_cta", "contact"].includes(activeTab) && (
+                <button
+                  onClick={handleOpenAddModal}
+                  className="px-3.5 py-2 bg-[#09A08A] hover:bg-[#07806e] text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-[#09A08A]/10 transition-all cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Item
+                </button>
+              )}
+            </div>
+
+            {isLoading ? (
+              <div className="flex-1 flex flex-col items-center justify-center py-16 text-slate-400 gap-2">
+                <Loader2 className="w-8 h-8 animate-spin text-[#09A08A]" />
+                <span className="text-xs font-bold">Fetching latest {activeTab} data...</span>
+              </div>
+            ) : (
+              <div className="p-6 overflow-x-auto">
+                {/* 1. Hero Section Form */}
+                {activeTab === "hero" && (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleSaveSection("hero", sectionsData.hero);
+                    }}
+                    className="space-y-4 max-w-2xl"
+                  >
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Pill Badge Text</label>
+                      <input
+                        type="text"
+                        value={sectionsData.hero?.badge_text || ""}
+                        onChange={(e) => setSectionsData({
+                          ...sectionsData,
+                          hero: { ...sectionsData.hero, badge_text: e.target.value }
+                        })}
+                        placeholder="e.g. Cloud HRMS Platform"
+                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3 focus:outline-none focus:border-[#09A08A]"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Hero Title</label>
+                      <input
+                        type="text"
+                        value={sectionsData.hero?.title || ""}
+                        onChange={(e) => setSectionsData({
+                          ...sectionsData,
+                          hero: { ...sectionsData.hero, title: e.target.value }
+                        })}
+                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3 focus:outline-none focus:border-[#09A08A]"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Hero Subtitle</label>
+                      <textarea
+                        value={sectionsData.hero?.subtitle || ""}
+                        onChange={(e) => setSectionsData({
+                          ...sectionsData,
+                          hero: { ...sectionsData.hero, subtitle: e.target.value }
+                        })}
+                        rows={3}
+                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3 focus:outline-none focus:border-[#09A08A]"
+                        required
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Primary CTA Text</label>
+                        <input
+                          type="text"
+                          value={sectionsData.hero?.cta_primary_text || ""}
+                          onChange={(e) => setSectionsData({
+                            ...sectionsData,
+                            hero: { ...sectionsData.hero, cta_primary_text: e.target.value }
+                          })}
+                          className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Primary CTA Link</label>
+                        <input
+                          type="text"
+                          value={sectionsData.hero?.cta_primary_link || ""}
+                          onChange={(e) => setSectionsData({
+                            ...sectionsData,
+                            hero: { ...sectionsData.hero, cta_primary_link: e.target.value }
+                          })}
+                          className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Secondary CTA Text</label>
+                        <input
+                          type="text"
+                          value={sectionsData.hero?.cta_secondary_text || ""}
+                          onChange={(e) => setSectionsData({
+                            ...sectionsData,
+                            hero: { ...sectionsData.hero, cta_secondary_text: e.target.value }
+                          })}
+                          className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Secondary CTA Link</label>
+                        <input
+                          type="text"
+                          value={sectionsData.hero?.cta_secondary_link || ""}
+                          onChange={(e) => setSectionsData({
+                            ...sectionsData,
+                            hero: { ...sectionsData.hero, cta_secondary_link: e.target.value }
+                          })}
+                          className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Image / Banner URL</label>
+                      <input
+                        type="text"
+                        value={sectionsData.hero?.image_url || ""}
+                        onChange={(e) => setSectionsData({
+                          ...sectionsData,
+                          hero: { ...sectionsData.hero, image_url: e.target.value }
+                        })}
+                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
+                      />
+                    </div>
+                    <div className="grid grid-cols-3 gap-4 pt-2 border-t border-slate-100">
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Trust Indicator 1</label>
+                        <input
+                          type="text"
+                          value={sectionsData.hero?.trust_badge_1 || ""}
+                          onChange={(e) => setSectionsData({
+                            ...sectionsData,
+                            hero: { ...sectionsData.hero, trust_badge_1: e.target.value }
+                          })}
+                          className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Trust Indicator 2</label>
+                        <input
+                          type="text"
+                          value={sectionsData.hero?.trust_badge_2 || ""}
+                          onChange={(e) => setSectionsData({
+                            ...sectionsData,
+                            hero: { ...sectionsData.hero, trust_badge_2: e.target.value }
+                          })}
+                          className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Trust Indicator 3</label>
+                        <input
+                          type="text"
+                          value={sectionsData.hero?.trust_badge_3 || ""}
+                          onChange={(e) => setSectionsData({
+                            ...sectionsData,
+                            hero: { ...sectionsData.hero, trust_badge_3: e.target.value }
+                          })}
+                          className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Trust Features Grid List */}
+                    <div className="space-y-3 pt-3 border-t border-slate-100">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-bold text-slate-700 uppercase font-extrabold text-[#09A08A]">Trust Strip Features</h4>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const currentFeatures = Array.isArray(sectionsData.hero?.trust_features) ? sectionsData.hero.trust_features : [];
+                            setSectionsData({
+                              ...sectionsData,
+                              hero: {
+                                ...sectionsData.hero,
+                                trust_features: [...currentFeatures, { title: "New Feature", description: "Details...", icon_name: "Cpu" }]
+                              }
+                            });
+                          }}
+                          className="px-2.5 py-1.5 bg-[#EAF7F6] text-[#09A08A] border border-[#09A08A]/15 hover:bg-[#09A08A]/10 text-[10px] font-bold rounded-lg cursor-pointer"
+                        >
+                          + Add Feature Card
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {Array.isArray(sectionsData.hero?.trust_features) && sectionsData.hero.trust_features.map((item: any, idx: number) => (
+                          <div key={idx} className="p-4 bg-slate-50 border border-slate-200/60 rounded-xl space-y-2 relative">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newFeatures = [...sectionsData.hero.trust_features];
+                                newFeatures.splice(idx, 1);
+                                setSectionsData({
+                                  ...sectionsData,
+                                  hero: { ...sectionsData.hero, trust_features: newFeatures }
+                                });
+                              }}
+                              className="absolute top-2 right-2 text-rose-500 hover:bg-rose-50 p-1.5 rounded-lg cursor-pointer transition-colors"
+                              title="Delete Feature"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-slate-400">Title</label>
+                                <input
+                                  type="text"
+                                  value={item.title || ""}
+                                  onChange={(e) => {
+                                    const newFeatures = [...sectionsData.hero.trust_features];
+                                    newFeatures[idx].title = e.target.value;
+                                    setSectionsData({
+                                      ...sectionsData,
+                                      hero: { ...sectionsData.hero, trust_features: newFeatures }
+                                    });
+                                  }}
+                                  className="w-full text-xs bg-white border border-slate-200 rounded-lg p-2 focus:outline-none focus:border-[#09A08A]"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-slate-400">Icon Name</label>
+                                <input
+                                  type="text"
+                                  value={item.icon_name || ""}
+                                  onChange={(e) => {
+                                    const newFeatures = [...sectionsData.hero.trust_features];
+                                    newFeatures[idx].icon_name = e.target.value;
+                                    setSectionsData({
+                                      ...sectionsData,
+                                      hero: { ...sectionsData.hero, trust_features: newFeatures }
+                                    });
+                                  }}
+                                  placeholder="e.g. Cpu, ShieldCheck"
+                                  className="w-full text-xs bg-white border border-slate-200 rounded-lg p-2 focus:outline-none focus:border-[#09A08A] font-mono"
+                                />
+                              </div>
                             </div>
-                          </td>
-                          <td className="py-4 px-4 text-right space-x-2">
-                            <button onClick={() => handleOpenEditModal(p)} className="p-1.5 text-slate-500 hover:text-[#09A08A] hover:bg-[#EAF7F6] rounded-lg transition-colors cursor-pointer" title="Edit"><Edit2 className="w-4 h-4" /></button>
-                            <button onClick={() => handleDeleteItem(p)} className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer" title="Delete"><Trash2 className="w-4 h-4" /></button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              )}
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-slate-400">Description</label>
+                              <textarea
+                                value={item.description || ""}
+                                onChange={(e) => {
+                                  const newFeatures = [...sectionsData.hero.trust_features];
+                                  newFeatures[idx].description = e.target.value;
+                                  setSectionsData({
+                                    ...sectionsData,
+                                    hero: { ...sectionsData.hero, trust_features: newFeatures }
+                                  });
+                                }}
+                                rows={2}
+                                className="w-full text-xs bg-white border border-slate-200 rounded-lg p-2 focus:outline-none focus:border-[#09A08A]"
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
 
-              {/* Comparison Matrix */}
-              {activeTab === "comparison" && (
-                <table className="w-full text-left text-xs text-slate-700 min-w-[800px]">
-                  <thead className="bg-[#EAF7F6] text-xs font-bold text-slate-700 uppercase border-b border-[#09A08A]/15">
-                    <tr>
-                      <th className="py-3 px-4 rounded-l-xl w-44">Category</th>
-                      <th className="py-3 px-4 w-48">Feature</th>
-                      <th className="py-3 px-4 text-center">Lite</th>
-                      <th className="py-3 px-4 text-center">Starter</th>
-                      <th className="py-3 px-4 text-center">Pro</th>
-                      <th className="py-3 px-4 text-center">Elite</th>
-                      <th className="py-3 px-4 text-center">Hybrid</th>
-                      <th className="py-3 px-4 text-right rounded-r-xl w-24">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                    {comparisons.length === 0 ? (
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="px-5 py-2.5 bg-[#09A08A] hover:bg-[#07806e] disabled:bg-slate-300 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      {isSubmitting ? "Saving..." : "Save Hero Section"}
+                    </button>
+                  </form>
+                )}
+
+                {/* 2. About Section Form */}
+                {activeTab === "about" && (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleSaveSection("about", sectionsData.about);
+                    }}
+                    className="space-y-4 max-w-2xl"
+                  >
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Headline</label>
+                      <input
+                        type="text"
+                        value={sectionsData.about?.headline || ""}
+                        onChange={(e) => setSectionsData({
+                          ...sectionsData,
+                          about: { ...sectionsData.about, headline: e.target.value }
+                        })}
+                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3 focus:outline-none"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Sub-headline</label>
+                      <textarea
+                        value={sectionsData.about?.subheadline || ""}
+                        onChange={(e) => setSectionsData({
+                          ...sectionsData,
+                          about: { ...sectionsData.about, subheadline: e.target.value }
+                        })}
+                        rows={3}
+                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3 focus:outline-none"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Feature Bullets (One per line)</label>
+                      <textarea
+                        value={Array.isArray(sectionsData.about?.bullets) ? sectionsData.about.bullets.join("\n") : ""}
+                        onChange={(e) => setSectionsData({
+                          ...sectionsData,
+                          about: { ...sectionsData.about, bullets: e.target.value.split("\n") }
+                        })}
+                        rows={5}
+                        placeholder="Feature bullet 1&#10;Feature bullet 2"
+                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3 focus:outline-none font-sans"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Side Image URL</label>
+                      <input
+                        type="text"
+                        value={sectionsData.about?.image_url || ""}
+                        onChange={(e) => setSectionsData({
+                          ...sectionsData,
+                          about: { ...sectionsData.about, image_url: e.target.value }
+                        })}
+                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
+                      />
+                    </div>
+
+                    {/* Stats List */}
+                    <div className="space-y-3 pt-3 border-t border-slate-100">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-bold text-slate-700 uppercase font-extrabold text-[#09A08A]">About Section Statistics</h4>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const currentStats = Array.isArray(sectionsData.about?.stats) ? sectionsData.about.stats : [];
+                            setSectionsData({
+                              ...sectionsData,
+                              about: {
+                                ...sectionsData.about,
+                                stats: [...currentStats, { value: "100+", label: "New Stat Label" }]
+                              }
+                            });
+                          }}
+                          className="px-2.5 py-1.5 bg-[#EAF7F6] text-[#09A08A] border border-[#09A08A]/15 hover:bg-[#09A08A]/10 text-[10px] font-bold rounded-lg cursor-pointer"
+                        >
+                          + Add Stat Card
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {Array.isArray(sectionsData.about?.stats) && sectionsData.about.stats.map((stat: any, idx: number) => (
+                          <div key={idx} className="p-4 bg-slate-50 border border-slate-200/60 rounded-xl space-y-2 relative">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newStats = [...sectionsData.about.stats];
+                                newStats.splice(idx, 1);
+                                setSectionsData({
+                                  ...sectionsData,
+                                  about: { ...sectionsData.about, stats: newStats }
+                                });
+                              }}
+                              className="absolute top-2 right-2 text-rose-500 hover:bg-rose-50 p-1.5 rounded-lg cursor-pointer transition-colors"
+                              title="Delete Stat"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-slate-400">Stat Value (e.g. 500+)</label>
+                              <input
+                                type="text"
+                                value={stat.value || ""}
+                                onChange={(e) => {
+                                  const newStats = [...sectionsData.about.stats];
+                                  newStats[idx].value = e.target.value;
+                                  setSectionsData({
+                                    ...sectionsData,
+                                    about: { ...sectionsData.about, stats: newStats }
+                                  });
+                                }}
+                                className="w-full text-xs bg-white border border-slate-200 rounded-lg p-2 focus:outline-none focus:border-[#09A08A]"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-slate-400">Stat Label</label>
+                              <input
+                                type="text"
+                                value={stat.label || ""}
+                                onChange={(e) => {
+                                  const newStats = [...sectionsData.about.stats];
+                                  newStats[idx].label = e.target.value;
+                                  setSectionsData({
+                                    ...sectionsData,
+                                    about: { ...sectionsData.about, stats: newStats }
+                                  });
+                                }}
+                                className="w-full text-xs bg-white border border-slate-200 rounded-lg p-2 focus:outline-none focus:border-[#09A08A]"
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="px-5 py-2.5 bg-[#09A08A] hover:bg-[#07806e] disabled:bg-slate-300 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      {isSubmitting ? "Saving..." : "Save About Settings"}
+                    </button>
+                  </form>
+                )}
+
+                {/* 3. Why Choose Us Form */}
+                {activeTab === "why_us" && (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleSaveSection("why_us", sectionsData.why_us);
+                    }}
+                    className="space-y-4 max-w-3xl"
+                  >
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Section Headline</label>
+                      <input
+                        type="text"
+                        value={sectionsData.why_us?.headline || ""}
+                        onChange={(e) => setSectionsData({
+                          ...sectionsData,
+                          why_us: { ...sectionsData.why_us, headline: e.target.value }
+                        })}
+                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Sub-headline</label>
+                      <textarea
+                        value={sectionsData.why_us?.subheadline || ""}
+                        onChange={(e) => setSectionsData({
+                          ...sectionsData,
+                          why_us: { ...sectionsData.why_us, subheadline: e.target.value }
+                        })}
+                        rows={2}
+                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
+                      />
+                    </div>
+                    
+                    {/* Cards Sub List */}
+                    <div className="space-y-3 pt-3 border-t border-slate-100">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-bold text-slate-700 uppercase">Features Grid Cards</h4>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const currentCards = Array.isArray(sectionsData.why_us?.cards) ? sectionsData.why_us.cards : [];
+                            setSectionsData({
+                              ...sectionsData,
+                              why_us: {
+                                ...sectionsData.why_us,
+                                cards: [...currentCards, { title: "New Feature", description: "Details...", icon_name: "Sparkles" }]
+                              }
+                            });
+                          }}
+                          className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold rounded-lg cursor-pointer"
+                        >
+                          + Add Card
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {Array.isArray(sectionsData.why_us?.cards) && sectionsData.why_us.cards.map((card: any, idx: number) => (
+                          <div key={idx} className="p-4 bg-slate-50 border border-slate-200/60 rounded-xl space-y-2 relative">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newCards = [...sectionsData.why_us.cards];
+                                newCards.splice(idx, 1);
+                                setSectionsData({
+                                  ...sectionsData,
+                                  why_us: { ...sectionsData.why_us, cards: newCards }
+                                });
+                              }}
+                              className="absolute top-2 right-2 text-rose-500 hover:bg-rose-50 p-1 rounded-lg cursor-pointer"
+                              title="Delete Card"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-slate-400">Card Title</label>
+                                <input
+                                  type="text"
+                                  value={card.title || ""}
+                                  onChange={(e) => {
+                                    const newCards = [...sectionsData.why_us.cards];
+                                    newCards[idx].title = e.target.value;
+                                    setSectionsData({
+                                      ...sectionsData,
+                                      why_us: { ...sectionsData.why_us, cards: newCards }
+                                    });
+                                  }}
+                                  className="w-full text-xs bg-white border border-slate-200 rounded-lg p-2"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-slate-400">Icon Name</label>
+                                <input
+                                  type="text"
+                                  value={card.icon_name || ""}
+                                  onChange={(e) => {
+                                    const newCards = [...sectionsData.why_us.cards];
+                                    newCards[idx].icon_name = e.target.value;
+                                    setSectionsData({
+                                      ...sectionsData,
+                                      why_us: { ...sectionsData.why_us, cards: newCards }
+                                    });
+                                  }}
+                                  placeholder="e.g. Clock, ShieldCheck"
+                                  className="w-full text-xs bg-white border border-slate-200 rounded-lg p-2 font-mono"
+                                />
+                              </div>
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-slate-400">Description</label>
+                              <textarea
+                                value={card.description || ""}
+                                onChange={(e) => {
+                                  const newCards = [...sectionsData.why_us.cards];
+                                  newCards[idx].description = e.target.value;
+                                  setSectionsData({
+                                    ...sectionsData,
+                                    why_us: { ...sectionsData.why_us, cards: newCards }
+                                  });
+                                }}
+                                rows={2}
+                                className="w-full text-xs bg-white border border-slate-200 rounded-lg p-2"
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="px-5 py-2.5 bg-[#09A08A] hover:bg-[#07806e] disabled:bg-slate-300 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      {isSubmitting ? "Saving..." : "Save Why Choose Us"}
+                    </button>
+                  </form>
+                )}
+
+                {/* 4. Benefits Section Form */}
+                {activeTab === "benefits" && (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleSaveSection("benefits", sectionsData.benefits);
+                    }}
+                    className="space-y-4 max-w-3xl"
+                  >
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Headline</label>
+                      <input
+                        type="text"
+                        value={sectionsData.benefits?.headline || ""}
+                        onChange={(e) => setSectionsData({
+                          ...sectionsData,
+                          benefits: { ...sectionsData.benefits, headline: e.target.value }
+                        })}
+                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Subtext Description</label>
+                      <textarea
+                        value={sectionsData.benefits?.subheadline || ""}
+                        onChange={(e) => setSectionsData({
+                          ...sectionsData,
+                          benefits: { ...sectionsData.benefits, subheadline: e.target.value }
+                        })}
+                        rows={2}
+                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
+                      />
+                    </div>
+
+                    {/* Benefit Items List */}
+                    <div className="space-y-3 pt-3 border-t border-slate-100">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-bold text-slate-700 uppercase">Benefits List Items</h4>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const currentItems = Array.isArray(sectionsData.benefits?.items) ? sectionsData.benefits.items : [];
+                            setSectionsData({
+                              ...sectionsData,
+                              benefits: {
+                                ...sectionsData.benefits,
+                                items: [...currentItems, { title: "Benefit Title", description: "Details..." }]
+                              }
+                            });
+                          }}
+                          className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold rounded-lg cursor-pointer"
+                        >
+                          + Add Benefit
+                        </button>
+                      </div>
+
+                      <div className="space-y-3">
+                        {Array.isArray(sectionsData.benefits?.items) && sectionsData.benefits.items.map((item: any, idx: number) => (
+                          <div key={idx} className="p-4 bg-slate-50 border border-slate-200/60 rounded-xl space-y-2 relative">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newItems = [...sectionsData.benefits.items];
+                                newItems.splice(idx, 1);
+                                setSectionsData({
+                                  ...sectionsData,
+                                  benefits: { ...sectionsData.benefits, items: newItems }
+                                });
+                              }}
+                              className="absolute top-2 right-2 text-rose-500 hover:bg-rose-50 p-1 rounded-lg cursor-pointer"
+                              title="Delete Item"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-slate-400">Benefit Title</label>
+                              <input
+                                type="text"
+                                value={item.title || ""}
+                                onChange={(e) => {
+                                  const newItems = [...sectionsData.benefits.items];
+                                  newItems[idx].title = e.target.value;
+                                  setSectionsData({
+                                    ...sectionsData,
+                                    benefits: { ...sectionsData.benefits, items: newItems }
+                                  });
+                                }}
+                                className="w-full text-xs bg-white border border-slate-200 rounded-lg p-2"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-slate-400">Description</label>
+                              <textarea
+                                value={item.description || ""}
+                                onChange={(e) => {
+                                  const newItems = [...sectionsData.benefits.items];
+                                  newItems[idx].description = e.target.value;
+                                  setSectionsData({
+                                    ...sectionsData,
+                                    benefits: { ...sectionsData.benefits, items: newItems }
+                                  });
+                                }}
+                                rows={2}
+                                className="w-full text-xs bg-white border border-slate-200 rounded-lg p-2"
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="px-5 py-2.5 bg-[#09A08A] hover:bg-[#07806e] disabled:bg-slate-300 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      {isSubmitting ? "Saving..." : "Save Benefits"}
+                    </button>
+                  </form>
+                )}
+
+                {/* 5. Final CTA Form */}
+                {activeTab === "final_cta" && (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleSaveSection("final_cta", sectionsData.final_cta);
+                    }}
+                    className="space-y-4 max-w-2xl"
+                  >
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Title</label>
+                      <input
+                        type="text"
+                        value={sectionsData.final_cta?.title || ""}
+                        onChange={(e) => setSectionsData({
+                          ...sectionsData,
+                          final_cta: { ...sectionsData.final_cta, title: e.target.value }
+                        })}
+                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Subtitle Description</label>
+                      <textarea
+                        value={sectionsData.final_cta?.subtitle || ""}
+                        onChange={(e) => setSectionsData({
+                          ...sectionsData,
+                          final_cta: { ...sectionsData.final_cta, subtitle: e.target.value }
+                        })}
+                        rows={3}
+                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Button Text</label>
+                        <input
+                          type="text"
+                          value={sectionsData.final_cta?.button_text || ""}
+                          onChange={(e) => setSectionsData({
+                            ...sectionsData,
+                            final_cta: { ...sectionsData.final_cta, button_text: e.target.value }
+                          })}
+                          className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Button Link Path</label>
+                        <input
+                          type="text"
+                          value={sectionsData.final_cta?.button_link || ""}
+                          onChange={(e) => setSectionsData({
+                            ...sectionsData,
+                            final_cta: { ...sectionsData.final_cta, button_link: e.target.value }
+                          })}
+                          className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="px-5 py-2.5 bg-[#09A08A] hover:bg-[#07806e] disabled:bg-slate-300 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      {isSubmitting ? "Saving..." : "Save Final CTA"}
+                    </button>
+                  </form>
+                )}
+
+                {/* 6. Contact Info Form */}
+                {activeTab === "contact" && (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleSaveSection("contact", sectionsData.contact);
+                    }}
+                    className="space-y-4 max-w-2xl"
+                  >
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Page Badge</label>
+                        <input
+                          type="text"
+                          value={sectionsData.contact?.badge || ""}
+                          onChange={(e) => setSectionsData({
+                            ...sectionsData,
+                            contact: { ...sectionsData.contact, badge: e.target.value }
+                          })}
+                          className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Working Hours</label>
+                        <input
+                          type="text"
+                          value={sectionsData.contact?.working_hours || ""}
+                          onChange={(e) => setSectionsData({
+                            ...sectionsData,
+                            contact: { ...sectionsData.contact, working_hours: e.target.value }
+                          })}
+                          className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Headline</label>
+                      <input
+                        type="text"
+                        value={sectionsData.contact?.headline || ""}
+                        onChange={(e) => setSectionsData({
+                          ...sectionsData,
+                          contact: { ...sectionsData.contact, headline: e.target.value }
+                        })}
+                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Description Sub-headline</label>
+                      <textarea
+                        value={sectionsData.contact?.subheadline || ""}
+                        onChange={(e) => setSectionsData({
+                          ...sectionsData,
+                          contact: { ...sectionsData.contact, subheadline: e.target.value }
+                        })}
+                        rows={2}
+                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Office Address</label>
+                      <textarea
+                        value={sectionsData.contact?.address || ""}
+                        onChange={(e) => setSectionsData({
+                          ...sectionsData,
+                          contact: { ...sectionsData.contact, address: e.target.value }
+                        })}
+                        rows={2}
+                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
+                        required
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Contact Email</label>
+                        <input
+                          type="email"
+                          value={sectionsData.contact?.email || ""}
+                          onChange={(e) => setSectionsData({
+                            ...sectionsData,
+                            contact: { ...sectionsData.contact, email: e.target.value }
+                          })}
+                          className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Contact Phone</label>
+                        <input
+                          type="text"
+                          value={sectionsData.contact?.phone || ""}
+                          onChange={(e) => setSectionsData({
+                            ...sectionsData,
+                            contact: { ...sectionsData.contact, phone: e.target.value }
+                          })}
+                          className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Form Title</label>
+                        <input
+                          type="text"
+                          value={sectionsData.contact?.form_title || ""}
+                          onChange={(e) => setSectionsData({
+                            ...sectionsData,
+                            contact: { ...sectionsData.contact, form_title: e.target.value }
+                          })}
+                          className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Form Subtitle Description</label>
+                        <input
+                          type="text"
+                          value={sectionsData.contact?.form_subtitle || ""}
+                          onChange={(e) => setSectionsData({
+                            ...sectionsData,
+                            contact: { ...sectionsData.contact, form_subtitle: e.target.value }
+                          })}
+                          className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Google Map Embed URL</label>
+                      <input
+                        type="text"
+                        value={sectionsData.contact?.map_url || ""}
+                        onChange={(e) => setSectionsData({
+                          ...sectionsData,
+                          contact: { ...sectionsData.contact, map_url: e.target.value }
+                        })}
+                        placeholder="https://www.google.com/maps/embed?pb=..."
+                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3 font-mono"
+                      />
+                    </div>
+
+                    {/* Employee Range Dropdown Options */}
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Employee Range Dropdown Options (One per line)</label>
+                      <textarea
+                        value={Array.isArray(sectionsData.contact?.employee_options) ? sectionsData.contact.employee_options.join("\n") : ""}
+                        onChange={(e) => setSectionsData({
+                          ...sectionsData,
+                          contact: { ...sectionsData.contact, employee_options: e.target.value.split("\n") }
+                        })}
+                        rows={4}
+                        placeholder="1 - 50 Employees&#10;51 - 200 Employees"
+                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3 focus:outline-none font-sans"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="px-5 py-2.5 bg-[#09A08A] hover:bg-[#07806e] disabled:bg-slate-300 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      {isSubmitting ? "Saving..." : "Save Contact Info"}
+                    </button>
+                  </form>        )}
+
+                {/* Modules list */}
+                {activeTab === "modules" && (
+                  <table className="w-full text-left text-xs text-slate-700">
+                    <thead className="bg-[#EAF7F6] text-xs font-bold text-slate-700 uppercase border-b border-[#09A08A]/15">
                       <tr>
-                        <td colSpan={8} className="py-8 text-center text-slate-400">No features mapped yet. Add one now!</td>
+                        <th className="py-3 px-4 rounded-l-xl w-12 text-center">Icon</th>
+                        <th className="py-3 px-4 w-52">Module Name</th>
+                        <th className="py-3 px-4">Description</th>
+                        <th className="py-3 px-4 text-right rounded-r-xl w-24">Actions</th>
                       </tr>
-                    ) : (
-                      comparisons.map((c) => {
-                        const renderVal = (v: string | boolean) => {
-                          if (typeof v === "boolean") {
-                            return v ? <Check className="w-4 h-4 mx-auto text-emerald-600 font-bold" /> : <CrossIcon className="w-4 h-4 mx-auto text-slate-300" />;
-                          }
-                          return <span className="text-[11px] font-medium text-slate-500">{v}</span>;
-                        };
-                        return (
-                          <tr key={c.id} className="hover:bg-slate-50 transition-colors">
-                            <td className="py-4 px-4 font-bold text-slate-900">{c.category}</td>
-                            <td className="py-4 px-4 text-slate-800">{c.featureName}</td>
-                            <td className="py-4 px-4 text-center">{renderVal(c.lite)}</td>
-                            <td className="py-4 px-4 text-center">{renderVal(c.starter)}</td>
-                            <td className="py-4 px-4 text-center">{renderVal(c.pro)}</td>
-                            <td className="py-4 px-4 text-center">{renderVal(c.elite)}</td>
-                            <td className="py-4 px-4 text-center">{renderVal(c.hybrid)}</td>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                      {modules.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="py-8 text-center text-slate-400">No modules found. Add one now!</td>
+                        </tr>
+                      ) : (
+                        modules.map((m) => (
+                          <tr key={m.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="py-4 px-4 text-center">
+                              <span className="px-2.5 py-1.5 bg-[#EAF7F6] text-[#09A08A] rounded-lg border border-[#09A08A]/15 font-mono text-[11px]">{m.icon_name || "Layers"}</span>
+                            </td>
+                            <td className="py-4 px-4 font-bold text-slate-900">{m.name}</td>
+                            <td className="py-4 px-4 text-slate-500 font-medium">{m.description}</td>
                             <td className="py-4 px-4 text-right space-x-2">
-                              <button onClick={() => handleOpenEditModal(c)} className="p-1.5 text-slate-500 hover:text-[#09A08A] hover:bg-[#EAF7F6] rounded-lg transition-colors cursor-pointer" title="Edit"><Edit2 className="w-4 h-4" /></button>
-                              <button onClick={() => handleDeleteItem(c)} className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer" title="Delete"><Trash2 className="w-4 h-4" /></button>
+                              <button onClick={() => handleOpenEditModal(m)} className="p-1.5 text-slate-500 hover:text-[#09A08A] hover:bg-[#EAF7F6] rounded-lg transition-colors cursor-pointer" title="Edit"><Edit2 className="w-4 h-4" /></button>
+                              <button onClick={() => handleDeleteItem(m)} className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer" title="Delete"><Trash2 className="w-4 h-4" /></button>
                             </td>
                           </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              )}
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                )}
 
-              {/* FAQs */}
-              {activeTab === "faqs" && (
-                <table className="w-full text-left text-xs text-slate-700">
-                  <thead className="bg-[#EAF7F6] text-xs font-bold text-slate-700 uppercase border-b border-[#09A08A]/15">
-                    <tr>
-                      <th className="py-3 px-4 rounded-l-xl w-72">Question</th>
-                      <th className="py-3 px-4">Answer</th>
-                      <th className="py-3 px-4 text-right rounded-r-xl w-24">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                    {faqs.length === 0 ? (
+                {/* About Stats */}
+                {activeTab === "stats" && (
+                  <table className="w-full text-left text-xs text-slate-700">
+                    <thead className="bg-[#EAF7F6] text-xs font-bold text-slate-700 uppercase border-b border-[#09A08A]/15">
                       <tr>
-                        <td colSpan={3} className="py-8 text-center text-slate-400">No FAQs found. Add one now!</td>
+                        <th className="py-3 px-4 rounded-l-xl w-48">Value</th>
+                        <th className="py-3 px-4">Label</th>
+                        <th className="py-3 px-4 text-right rounded-r-xl w-24">Actions</th>
                       </tr>
-                    ) : (
-                      faqs.map((f) => (
-                        <tr key={f.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="py-4 px-4 font-bold text-slate-950">{f.question}</td>
-                          <td className="py-4 px-4 text-slate-500 font-medium leading-relaxed max-w-md">{f.answer}</td>
-                          <td className="py-4 px-4 text-right space-x-2">
-                            <button onClick={() => handleOpenEditModal(f)} className="p-1.5 text-slate-500 hover:text-[#09A08A] hover:bg-[#EAF7F6] rounded-lg transition-colors cursor-pointer" title="Edit"><Edit2 className="w-4 h-4" /></button>
-                            <button onClick={() => handleDeleteItem(f)} className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer" title="Delete"><Trash2 className="w-4 h-4" /></button>
-                          </td>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                      {stats.length === 0 ? (
+                        <tr>
+                          <td colSpan={3} className="py-8 text-center text-slate-400">No stats found. Add one now!</td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          )}
+                      ) : (
+                        stats.map((s) => (
+                          <tr key={s.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="py-4 px-4 font-mono font-bold text-[#09A08A] text-sm">{s.value}</td>
+                            <td className="py-4 px-4 text-slate-800">{s.label}</td>
+                            <td className="py-4 px-4 text-right space-x-2">
+                              <button onClick={() => handleOpenEditModal(s)} className="p-1.5 text-slate-500 hover:text-[#09A08A] hover:bg-[#EAF7F6] rounded-lg transition-colors cursor-pointer" title="Edit"><Edit2 className="w-4 h-4" /></button>
+                              <button onClick={() => handleDeleteItem(s)} className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer" title="Delete"><Trash2 className="w-4 h-4" /></button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                )}
+
+                {/* Pricing Plans */}
+                {activeTab === "plans" && (
+                  <table className="w-full text-left text-xs text-slate-700">
+                    <thead className="bg-[#EAF7F6] text-xs font-bold text-slate-700 uppercase border-b border-[#09A08A]/15">
+                      <tr>
+                        <th className="py-3 px-4 rounded-l-xl w-36">Plan Name</th>
+                        <th className="py-3 px-4 w-44">Limit</th>
+                        <th className="py-3 px-4 w-28">Yearly (₹)</th>
+                        <th className="py-3 px-4 w-28">One-Time (₹)</th>
+                        <th className="py-3 px-4 w-20">Popular</th>
+                        <th className="py-3 px-4">Features</th>
+                        <th className="py-3 px-4 text-right rounded-r-xl w-24">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                      {plans.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="py-8 text-center text-slate-400">No plans found. Add one now!</td>
+                        </tr>
+                      ) : (
+                        plans.map((p) => (
+                          <tr key={p.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="py-4 px-4 font-bold text-slate-900">{p.name}</td>
+                            <td className="py-4 px-4 text-slate-600 font-mono text-[11px]">{p.limit}</td>
+                            <td className="py-4 px-4 font-mono">₹{p.priceYearly}</td>
+                            <td className="py-4 px-4 font-mono">₹{p.priceOnetime}</td>
+                            <td className="py-4 px-4">
+                              {p.isPopular ? (
+                                <span className="px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-[10px] font-bold">Yes</span>
+                              ) : (
+                                <span className="text-slate-400 text-[10px]">No</span>
+                              )}
+                            </td>
+                            <td className="py-4 px-4">
+                              <div className="flex flex-wrap gap-1 max-w-sm">
+                                {p.features?.map((f, i) => (
+                                  <span key={i} className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200/50">{f}</span>
+                                ))}
+                              </div>
+                            </td>
+                            <td className="py-4 px-4 text-right space-x-2">
+                              <button onClick={() => handleOpenEditModal(p)} className="p-1.5 text-slate-500 hover:text-[#09A08A] hover:bg-[#EAF7F6] rounded-lg transition-colors cursor-pointer" title="Edit"><Edit2 className="w-4 h-4" /></button>
+                              <button onClick={() => handleDeleteItem(p)} className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer" title="Delete"><Trash2 className="w-4 h-4" /></button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                )}
+
+                {/* Comparison Matrix */}
+                {activeTab === "comparison" && (
+                  <table className="w-full text-left text-xs text-slate-700 min-w-[800px]">
+                    <thead className="bg-[#EAF7F6] text-xs font-bold text-slate-700 uppercase border-b border-[#09A08A]/15">
+                      <tr>
+                        <th className="py-3 px-4 rounded-l-xl w-44">Category</th>
+                        <th className="py-3 px-4 w-48">Feature</th>
+                        <th className="py-3 px-4 text-center">Lite</th>
+                        <th className="py-3 px-4 text-center">Starter</th>
+                        <th className="py-3 px-4 text-center">Pro</th>
+                        <th className="py-3 px-4 text-center">Elite</th>
+                        <th className="py-3 px-4 text-center">Hybrid</th>
+                        <th className="py-3 px-4 text-right rounded-r-xl w-24">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                      {comparisons.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="py-8 text-center text-slate-400">No features mapped yet. Add one now!</td>
+                        </tr>
+                      ) : (
+                        comparisons.map((c) => {
+                          const renderVal = (v: string | boolean) => {
+                            if (typeof v === "boolean") {
+                              return v ? <Check className="w-4 h-4 mx-auto text-emerald-600 font-bold" /> : <CrossIcon className="w-4 h-4 mx-auto text-slate-300" />;
+                            }
+                            return <span className="text-[11px] font-medium text-slate-500">{v}</span>;
+                          };
+                          return (
+                            <tr key={c.id} className="hover:bg-slate-50 transition-colors">
+                              <td className="py-4 px-4 font-bold text-slate-900">{c.category}</td>
+                              <td className="py-4 px-4 text-slate-800">{c.featureName}</td>
+                              <td className="py-4 px-4 text-center">{renderVal(c.lite)}</td>
+                              <td className="py-4 px-4 text-center">{renderVal(c.starter)}</td>
+                              <td className="py-4 px-4 text-center">{renderVal(c.pro)}</td>
+                              <td className="py-4 px-4 text-center">{renderVal(c.elite)}</td>
+                              <td className="py-4 px-4 text-center">{renderVal(c.hybrid)}</td>
+                              <td className="py-4 px-4 text-right space-x-2">
+                                <button onClick={() => handleOpenEditModal(c)} className="p-1.5 text-slate-500 hover:text-[#09A08A] hover:bg-[#EAF7F6] rounded-lg transition-colors cursor-pointer" title="Edit"><Edit2 className="w-4 h-4" /></button>
+                                <button onClick={() => handleDeleteItem(c)} className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer" title="Delete"><Trash2 className="w-4 h-4" /></button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                )}
+
+                {/* FAQs */}
+                {activeTab === "faqs" && (
+                  <table className="w-full text-left text-xs text-slate-700">
+                    <thead className="bg-[#EAF7F6] text-xs font-bold text-slate-700 uppercase border-b border-[#09A08A]/15">
+                      <tr>
+                        <th className="py-3 px-4 rounded-l-xl w-72">Question</th>
+                        <th className="py-3 px-4">Answer</th>
+                        <th className="py-3 px-4 text-right rounded-r-xl w-24">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                      {faqs.length === 0 ? (
+                        <tr>
+                          <td colSpan={3} className="py-8 text-center text-slate-400">No FAQs found. Add one now!</td>
+                        </tr>
+                      ) : (
+                        faqs.map((f) => (
+                          <tr key={f.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="py-4 px-4 font-bold text-slate-950">{f.question}</td>
+                            <td className="py-4 px-4 text-slate-500 font-medium leading-relaxed max-w-md">{f.answer}</td>
+                            <td className="py-4 px-4 text-right space-x-2">
+                              <button onClick={() => handleOpenEditModal(f)} className="p-1.5 text-slate-500 hover:text-[#09A08A] hover:bg-[#EAF7F6] rounded-lg transition-colors cursor-pointer" title="Edit"><Edit2 className="w-4 h-4" /></button>
+                              <button onClick={() => handleDeleteItem(f)} className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer" title="Delete"><Trash2 className="w-4 h-4" /></button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </main>
 
