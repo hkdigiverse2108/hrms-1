@@ -168,13 +168,23 @@ export default function CreativeClientsPage() {
     if (!user) return false;
     const r = (user.role || "").toLowerCase();
     const d = (user.designation || "").toLowerCase();
-    const fullRoles = ["admin", "manager", "social media manager", "smm", "director", "head", "super admin", "digital marketer", "digital marketing", "sub admin", "sub-admin", "hr"];
-    if (fullRoles.includes(r) || fullRoles.includes(d) || r.includes("social media") || d.includes("social media") || r.includes("digital marketing") || d.includes("digital marketing")) {
+    const fullRoles = ["admin", "manager", "social media manager", "smm", "director", "head", "super admin", "digital marketer", "digital marketing", "sub admin", "sub-admin", "hr", "team leader", "tl"];
+    if (
+      fullRoles.includes(r) || 
+      fullRoles.includes(d) || 
+      r.includes("social media") || 
+      d.includes("social media") || 
+      r.includes("digital marketing") || 
+      d.includes("digital marketing") ||
+      d.includes("team leader") ||
+      d.includes("tl") ||
+      d.includes("head") ||
+      r.includes("team leader") ||
+      r.includes("tl") ||
+      r.includes("head")
+    ) {
       return true;
     }
-    const isTL = d === 'team leader' || r === 'team leader';
-    const dept = (user.department || "").toLowerCase();
-    if (isTL && dept.includes('creative')) return true;
 
     const perms = (user as any).permissions || [];
     const smmPerms = ["projects", "smm", "clients", "digital-marketing", "work-management"];
@@ -189,14 +199,22 @@ export default function CreativeClientsPage() {
     if (!user) return false;
     const r = (user.role || "").toLowerCase();
     const d = (user.designation || "").toLowerCase();
-    const allAccessRoles = ["admin", "super admin", "manager", "director", "head", "sub admin", "sub-admin", "hr"];
+    const allAccessRoles = ["admin", "super admin", "manager", "director", "head", "sub admin", "sub-admin", "hr", "team leader", "tl"];
     
-    if (allAccessRoles.includes(r) || allAccessRoles.includes(d) || d.includes("head") || d.includes("manager") || r.includes("admin")) {
+    if (
+      allAccessRoles.includes(r) || 
+      allAccessRoles.includes(d) || 
+      d.includes("head") || 
+      d.includes("manager") || 
+      d.includes("team leader") ||
+      d.includes("tl") ||
+      r.includes("admin") ||
+      r.includes("team leader") ||
+      r.includes("tl") ||
+      r.includes("head")
+    ) {
       return true;
     }
-    const isTL = d === 'team leader' || r === 'team leader';
-    const dept = (user.department || "").toLowerCase();
-    if (isTL && dept.includes('creative')) return true;
     
     return false;
   }, [user]);
@@ -555,7 +573,7 @@ export default function CreativeClientsPage() {
         
         // Filter for Creative department AND must have a creative project
         const validClientIds = new Set(Object.keys(projectMap));
-        let filteredClients = clientsData.filter((c: any) => c.department?.includes("Creative") && validClientIds.has(c.id));
+        let filteredClients = clientsData.filter((c: any) => c.department?.includes("Creative") && (canViewAllClients || validClientIds.has(c.id)));
         filteredClients.sort((a: any, b: any) => {
           const dateA = maxDatesLocal[a.id] ? maxDatesLocal[a.id].getTime() : Infinity;
           const dateB = maxDatesLocal[b.id] ? maxDatesLocal[b.id].getTime() : Infinity;
