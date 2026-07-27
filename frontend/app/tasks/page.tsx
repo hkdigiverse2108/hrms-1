@@ -707,7 +707,7 @@ export default function TaskManagementPage() {
   const tabFilteredTasks = sortedTasks.filter(task => {
     switch (viewTab) {
       case 'today':
-        return task.dueDate === todayStr;
+        return task.dueDate && task.dueDate <= todayStr && task.status !== 'completed' && task.status !== 'rejected';
       case 'pending':
         return task.status !== 'completed' && task.status !== 'rejected';
       case 'upcoming':
@@ -722,7 +722,7 @@ export default function TaskManagementPage() {
   // Tab counts (computed from sortedTasks before tab filter)
   const tabCounts = {
     all: sortedTasks.length,
-    today: sortedTasks.filter(t => t.dueDate === todayStr).length,
+    today: sortedTasks.filter(t => t.dueDate && t.dueDate <= todayStr && t.status !== 'completed' && t.status !== 'rejected').length,
     pending: sortedTasks.filter(t => t.status !== 'completed' && t.status !== 'rejected').length,
     upcoming: sortedTasks.filter(t => t.dueDate && t.dueDate > todayStr && t.status !== 'completed' && t.status !== 'rejected').length,
     completed: sortedTasks.filter(t => t.status === 'completed').length,
