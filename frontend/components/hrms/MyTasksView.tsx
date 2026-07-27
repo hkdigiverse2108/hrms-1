@@ -180,27 +180,13 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
         assIds = t.assignedToIds
       } else if (typeof t.assignedToIds === 'string') {
         try {
-          assIds = JSON.parse(t.assignedToIds)
+          assIds = t.assignedToIds.split(',').map((id: string) => id.trim()).filter(Boolean)
         } catch (e) {
           assIds = t.assignedToIds.split(',').map((id: string) => id.trim()).filter(Boolean)
         }
       }
 
-      const targetEmployee = employees.find(e => e.id === uId) || currentUser
-      const userDept = targetEmployee?.department?.toLowerCase() || ''
-      const userRole = targetEmployee?.role?.toLowerCase() || ''
-      const isHRUser = userDept === 'hr' || userDept === 'human resources' || userRole === 'hr'
-
-      const taskDept = t.department?.toLowerCase() || ''
-      const isDeptMatched = taskDept !== '' && (
-        taskDept === userDept ||
-        (userDept === 'creative' && taskDept === 'smm') ||
-        (userDept === 'smm' && taskDept === 'creative')
-      )
-
-      const isHRTask = isHRUser && (taskDept === 'hr' || t.assignedToName?.toLowerCase().includes('hr'))
-
-      const isAssigned = t.assignedToId === uId || assIds.includes(uId) || isDeptMatched || isHRTask
+      const isAssigned = t.assignedToId === uId || assIds.includes(uId);
 
       if (isAssigned) {
         let isProjectOnHold = false;
@@ -210,19 +196,19 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
         }
         
         if (!isProjectOnHold) {
-          const isHR = t.department === 'HR' || t.assignedToName?.toLowerCase().includes('hr')
+          const isHR = t.department === 'HR' || t.department?.toUpperCase() === 'HR';
           consolidated.push({
             id: t.id,
-          title: t.title,
-          description: t.description,
-          dueDate: t.dueDate ? (t.dueDate.includes('T') ? t.dueDate.split('T')[0] : t.dueDate) : '',
-          priority: t.priority || 'medium',
-          status: t.status,
-          frequency: t.frequency || 'one-time',
-          department: isHR ? 'HR Tasks' : 'General Tasks',
-          sourceType: 'general-task',
-          originalTask: t
-        })
+            title: t.title,
+            description: t.description,
+            dueDate: t.dueDate ? (t.dueDate.includes('T') ? t.dueDate.split('T')[0] : t.dueDate) : '',
+            priority: t.priority || 'medium',
+            status: t.status,
+            frequency: t.frequency || 'one-time',
+            department: isHR ? 'HR Tasks' : 'General Tasks',
+            sourceType: 'general-task',
+            originalTask: t
+          });
         }
       }
     })
