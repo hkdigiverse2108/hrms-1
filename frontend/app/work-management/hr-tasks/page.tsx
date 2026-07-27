@@ -446,7 +446,7 @@ export default function HRTasksPage() {
               if (taskSubTab === "upcoming" && task.frequency && task.frequency !== "one-time" && eff === todayStr) {
                 return getNextOccurrenceDate(task);
               }
-              if (taskSubTab === "today" || eff === todayStr) {
+              if (eff === todayStr) {
                 return todayStr;
               }
               return task.dueDate || task.createdDate || eff;
@@ -454,11 +454,7 @@ export default function HRTasksPage() {
 
             const countToday = freqTasks.filter(t => {
               const eff = getEffectiveDueDate(t);
-              return t.status !== "completed" && eff && eff === todayStr;
-            }).length;
-            const countPending = freqTasks.filter(t => {
-              const eff = getEffectiveDueDate(t);
-              return t.status !== "completed" && eff && eff < todayStr;
+              return t.status !== "completed" && eff && eff <= todayStr;
             }).length;
             const countUpcoming = freqTasks.filter(t => isTaskUpcoming(t)).length;
             const countCompleted = freqTasks.filter(t => t.status === "completed").length;
@@ -466,10 +462,7 @@ export default function HRTasksPage() {
             const filteredTasks = freqTasks.filter((task) => {
               const taskDateStr = getEffectiveDueDate(task);
               if (taskSubTab === "today") {
-                return task.status !== "completed" && taskDateStr && taskDateStr === todayStr;
-              }
-              if (taskSubTab === "pending") {
-                return task.status !== "completed" && taskDateStr && taskDateStr < todayStr;
+                return task.status !== "completed" && taskDateStr && taskDateStr <= todayStr;
               }
               if (taskSubTab === "upcoming") {
                 return isTaskUpcoming(task);
@@ -485,7 +478,10 @@ export default function HRTasksPage() {
               const bComp = b.status === "completed";
               if (aComp && !bComp) return 1;
               if (!aComp && bComp) return -1;
-              return 0;
+
+              const aEff = getEffectiveDueDate(a) || "";
+              const bEff = getEffectiveDueDate(b) || "";
+              return aEff.localeCompare(bEff);
             });
 
             return (
@@ -495,7 +491,6 @@ export default function HRTasksPage() {
                     {[
                       { id: "all", label: "All Tasks", count: freqTasks.length },
                       { id: "today", label: "Today's Tasks", count: countToday },
-                      { id: "pending", label: "Pending Tasks", count: countPending },
                       { id: "upcoming", label: "Upcoming Tasks", count: countUpcoming },
                       { id: "completed", label: "Completed", count: countCompleted }
                     ].map((sub) => (
