@@ -13,6 +13,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
+import { formatDisplayDate } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useUser } from "@/hooks/useUser";
@@ -93,7 +94,7 @@ export default function ModulesPage() {
 
   const selectedProject = projects.find(p => p.id === selectedProjectId);
   const canManageModule = Boolean(user && (
-    ['admin', 'super admin', 'superadmin', 'team leader'].includes(user.role?.toLowerCase() || '') ||
+    (['admin', 'super admin', 'superadmin'].includes(user.role?.toLowerCase() || '')  || user.designation?.toLowerCase() === 'head') ||
     user.designation?.toLowerCase() === 'team leader' ||
     selectedProject?.teamLeaderId === user.id ||
     projects.some((p: any) => p.teamLeaderId === user.id)
@@ -2469,7 +2470,7 @@ export default function ModulesPage() {
                                       ? "bg-red-50 text-red-600 border-red-200"
                                       : "bg-slate-100 text-slate-600 border-slate-200"
                                   }`}>
-                                    📅 {task.dueDate}
+                                    📅 {formatDisplayDate(task.dueDate)}
                                   </span>
                                 )}
                               </div>

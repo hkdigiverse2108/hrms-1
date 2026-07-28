@@ -52,7 +52,7 @@ export function ViewAllEventsDialog({
   const allEvents = processedEvents.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   const groupedEvents = allEvents.reduce((acc, event) => {
-    const monthYear = dayjs(event.date).format("MMMM YYYY");
+    const monthYear = dayjs(event.date).format("MM/YYYY");
     if (!acc[monthYear]) acc[monthYear] = [];
     acc[monthYear].push(event);
     return acc;
@@ -94,7 +94,7 @@ export function ViewAllEventsDialog({
                          <p className="text-[12px] text-gray-500 font-medium truncate">{event.description}</p>
                        </div>
                        <div className="text-right">
-                         <div className="text-[13px] font-bold text-[#111827]">{dayjs(event.date).format("DD MMM")}</div>
+                         <div className="text-[13px] font-bold text-[#111827]">{dayjs(event.date).format("DD/MM/YYYY")}</div>
                          {event.type !== 'birthday' && (
                            <div className="text-[11px] text-gray-400 font-medium">{event.time}</div>
                          )}

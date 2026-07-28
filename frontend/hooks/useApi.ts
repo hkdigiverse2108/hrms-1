@@ -10,6 +10,7 @@ const ENDPOINTS = [
   { key: 'dashboardStats', url: '/dashboard-stats' },
   { key: 'payrollRecords', url: '/payroll' },
   { key: 'departments', url: '/departments' },
+  { key: 'subDepartments', url: '/sub-departments' },
   { key: 'designations', url: '/designations' },
   { key: 'companies', url: '/companies' },
   { key: 'roles', url: '/roles' },

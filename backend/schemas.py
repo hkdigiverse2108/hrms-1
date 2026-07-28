@@ -121,7 +121,12 @@ def serialize_robust_datetime_standard(v: Optional[datetime], info: Serializatio
     if v is None:
         return None
     if info.mode == 'json':
-        return v.isoformat()
+        # If the datetime is naive, it came from MongoDB, which stores as UTC.
+        # Append 'Z' so the frontend dayjs correctly interprets it as UTC and converts to local time.
+        iso_str = v.isoformat()
+        if v.tzinfo is None and not iso_str.endswith('Z') and '+' not in iso_str:
+            return iso_str + 'Z'
+        return iso_str
     return v
 
 def serialize_robust_datetime_dmy(v: Optional[datetime], info: SerializationInfo) -> Any:
@@ -222,6 +227,9 @@ class EmployeeBase(BaseModel):
     password: Optional[str] = None
     dob: Optional[RobustDate] = None
     department: Optional[str] = None
+    sub_department: Optional[str] = ''
+    subDepartment: Optional[str] = ''
+
     designation: Optional[str] = None
     joinDate: Optional[RobustDate] = None
     status: Optional[str] = "active"
@@ -275,6 +283,8 @@ class EmployeeUpdate(BaseModel):
     password: Optional[str] = None
     dob: Optional[RobustDate] = None
     department: Optional[str] = None
+    sub_department: Optional[str] = None
+    subDepartment: Optional[str] = None
     designation: Optional[str] = None
     position: Optional[str] = None
     joinDate: Optional[RobustDate] = None
@@ -544,6 +554,20 @@ class DepartmentBase(BaseModel):
 class DepartmentCreate(DepartmentBase):
     pass
 
+class SubDepartmentBase(BaseModel):
+    name: str
+    department: Optional[str] = ''
+
+class SubDepartmentCreate(SubDepartmentBase):
+    pass
+
+class SubDepartmentUpdate(BaseModel):
+    name: Optional[str] = None
+    department: Optional[str] = None
+
+class SubDepartment(SubDepartmentBase):
+    id: str
+
 class DepartmentUpdate(BaseModel):
     name: Optional[str] = None
     head: Optional[str] = None
@@ -554,6 +578,7 @@ class Department(DepartmentBase):
 class DesignationBase(BaseModel):
     title: str
     department: str
+    sub_department: Optional[str] = ''
 
 class DesignationCreate(DesignationBase):
     pass
@@ -561,6 +586,7 @@ class DesignationCreate(DesignationBase):
 class DesignationUpdate(BaseModel):
     title: Optional[str] = None
     department: Optional[str] = None
+    sub_department: Optional[str] = None
 
 class Designation(DesignationBase):
     id: str
@@ -800,10 +826,13 @@ class ReviewBase(BaseModel):
     summary: str
     rating: int
     date: Optional[RobustDate] = None
+    showNameToAdmin: Optional[bool] = False
     logs: Optional[List[dict]] = None
     updatedBy: Optional[str] = None
     query: Optional[str] = None
     adminReply: Optional[str] = None
+    replies: Optional[List[dict]] = None
+    isApproved: Optional[bool] = False
 
 class ReviewCreate(ReviewBase):
     pass
@@ -811,9 +840,12 @@ class ReviewCreate(ReviewBase):
 class ReviewUpdate(BaseModel):
     summary: Optional[str] = None
     rating: Optional[int] = None
+    showNameToAdmin: Optional[bool] = None
     updatedBy: Optional[str] = None
     query: Optional[str] = None
     adminReply: Optional[str] = None
+    replies: Optional[List[dict]] = None
+    isApproved: Optional[bool] = False
 
 class Review(ReviewBase):
     id: str
@@ -912,6 +944,9 @@ class LoginResponse(BaseModel):
     user: Optional[Employee] = None
     token: Optional[str] = None
     require_otp: Optional[bool] = None
+
+class FinanceOTPRequest(BaseModel):
+    email: str
 
 class VerifyOTPRequest(BaseModel):
     email: str
@@ -1603,6 +1638,15 @@ class LeadUpdate(BaseModel):
     reason: Optional[str] = None
     category: Optional[str] = None
 
+class BulkAssignLeads(BaseModel):
+    leadIds: List[str]
+    assignedTo: RobustAssignedTo
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
+
+class BulkDeleteLeads(BaseModel):
+    leadIds: List[str]
+
 class Lead(LeadBase):
     id: str
     class Config:
@@ -1620,6 +1664,7 @@ class SystemSettingsBase(BaseModel):
     inactivityTimeoutMins: Optional[int] = 5
     allowedMonthlyPaidLeaves: Optional[int] = 1
     companyGstin: Optional[str] = "24AAXFN3372M1ZK"
+    financeOtpEmail: Optional[str] = ""
     otherActivities: Optional[List[str]] = Field(default_factory=list)
     otherMeetings: Optional[List[str]] = Field(default_factory=list)
     otherCategories: Optional[List[str]] = ["Activity", "Meeting"]
@@ -1653,6 +1698,17 @@ class SystemSettingsBase(BaseModel):
     financeDecimalScaling: Optional[int] = 0
     leadCategories: Optional[List[str]] = Field(default_factory=list)
     dashboardBanners: Optional[List[Dict[str, Any]]] = Field(default_factory=list)
+    enabledModules: Optional[List[str]] = Field(default_factory=lambda: [
+        "dashboard", "employee-list", "org-structure", "employee-attendance", 
+        "leave-requests", "employee-documents", "document-generator",
+        "salary-structure", "payroll-processing", "payslips", "bonuses-deductions",
+        "interviews", "hirings", "attendance", "leave", "schedule",
+        "projects", "tasks", "personal-tasks", "daily-progress", "work-logs", 
+        "sales", "clients", "marketing", "creative", "research",
+        "seating-arrangement", "resource-management", "gallery",
+        "remarks", "review", "invoice", "chat", "activity-tracker", 
+        "activity-logs", "training", "admin-courses"
+    ])
 
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
@@ -1665,6 +1721,7 @@ class SystemSettingsUpdate(BaseModel):
     inactivityTimeoutMins: Optional[int] = None
     allowedMonthlyPaidLeaves: Optional[int] = None
     companyGstin: Optional[str] = None
+    financeOtpEmail: Optional[str] = None
     otherCategories: Optional[List[str]] = None
     companyAddress: Optional[str] = None
     companyPhone: Optional[str] = None
@@ -1696,6 +1753,7 @@ class SystemSettingsUpdate(BaseModel):
     financeDecimalScaling: Optional[int] = None
     leadCategories: Optional[List[str]] = None
     dashboardBanners: Optional[List[Dict[str, Any]]] = None
+    enabledModules: Optional[List[str]] = None
 
 class SystemSettings(SystemSettingsBase):
     id: str
@@ -1968,10 +2026,12 @@ class DocumentRequestBase(BaseModel):
     employeeName: str
     documentType: str
     reason: Optional[str] = None
-    status: str = "Pending" # Pending, Approved, Rejected, Generated, Sent
+    status: str = "Pending" # Pending, Approved, Rejected, Generated, Sent, Pending Signature, Signed
     requestDate: RobustDate
     fileName: Optional[str] = None
     fileUrl: Optional[str] = None
+    htmlContent: Optional[str] = None
+    requireSignature: Optional[bool] = False
     generatedDate: Optional[RobustDate] = None
     sentDate: Optional[RobustDate] = None
     neededByDate: Optional[RobustDate] = None
@@ -1983,6 +2043,8 @@ class DocumentRequestUpdate(BaseModel):
     status: Optional[str] = None
     fileName: Optional[str] = None
     fileUrl: Optional[str] = None
+    htmlContent: Optional[str] = None
+    requireSignature: Optional[bool] = None
     generatedDate: Optional[RobustDate] = None
     sentDate: Optional[RobustDate] = None
     neededByDate: Optional[RobustDate] = None
@@ -2109,12 +2171,29 @@ class UserPermissionUpdate(BaseModel):
     permissions: List[ModulePermission]
     presetId: Optional[str] = None
 
+class ModuleBulkUpdateItem(BaseModel):
+    employeeId: str
+    canAdd: bool = False
+    canEdit: bool = False
+    canDelete: bool = False
+    canView: bool = False
+
+class ModuleBulkUpdateRequest(BaseModel):
+    moduleName: str
+    displayName: str
+    tabUrl: str
+    updates: List[ModuleBulkUpdateItem]
+
 class UserPermission(UserPermissionBase):
     id: Optional[str] = None
 
 class PermissionPresetBase(BaseModel):
     name: str
     description: Optional[str] = ""
+    presetType: Optional[str] = "role"
+    targetModule: Optional[str] = None
+    department: Optional[str] = None
+    designation: Optional[str] = None
     permissions: List[ModulePermission]
 
 class PermissionPresetCreate(PermissionPresetBase):
@@ -2123,6 +2202,10 @@ class PermissionPresetCreate(PermissionPresetBase):
 class PermissionPresetUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    presetType: Optional[str] = None
+    targetModule: Optional[str] = None
+    department: Optional[str] = None
+    designation: Optional[str] = None
     permissions: Optional[List[ModulePermission]] = None
 
 class PermissionPreset(PermissionPresetBase):
@@ -2475,12 +2558,15 @@ class ContentCalendarEntryBase(BaseModel):
     finalPostLink: Optional[str] = None
     approval: Optional[str] = None
     isApproved: Optional[str] = None
+    thumbnailDate: Optional[str] = None
     thumbnailLink: Optional[str] = None
+    captionDate: Optional[str] = None
     caption: Optional[str] = None
     postingLinkOfIg: Optional[str] = None
     actualPostingDate: Optional[str] = None
     updatedBy: Optional[str] = None
     logs: Optional[List[dict]] = None
+    queries: Optional[List[dict]] = None
     remark: Optional[str] = None
     remarkStage: Optional[str] = None
     assignedBrandPersonIds: Optional[List[str]] = None
@@ -2511,11 +2597,14 @@ class ContentCalendarEntryUpdate(BaseModel):
     finalPostLink: Optional[str] = None
     approval: Optional[str] = None
     isApproved: Optional[str] = None
+    thumbnailDate: Optional[str] = None
     thumbnailLink: Optional[str] = None
+    captionDate: Optional[str] = None
     caption: Optional[str] = None
     postingLinkOfIg: Optional[str] = None
     actualPostingDate: Optional[str] = None
     updatedBy: Optional[str] = None
+    queries: Optional[List[dict]] = None
     remark: Optional[str] = None
     remarkStage: Optional[str] = None
     assignedScriptwriterId: Optional[str] = None
@@ -2593,6 +2682,7 @@ class OtherWorkBase(BaseModel):
     taskType: Optional[str] = "other-work"
     remark: Optional[str] = None
     remarkStage: Optional[str] = None
+    queries: Optional[List[dict]] = None
     logs: Optional[List[dict]] = None
 
 class OtherWorkCreate(OtherWorkBase):
@@ -2607,6 +2697,7 @@ class OtherWorkUpdate(BaseModel):
     status: Optional[str] = None
     remark: Optional[str] = None
     remarkStage: Optional[str] = None
+    queries: Optional[List[dict]] = None
     updatedBy: Optional[str] = None
     logs: Optional[List[dict]] = None
 

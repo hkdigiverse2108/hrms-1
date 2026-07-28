@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/common/PageHeader";
 import { TablePagination } from "@/components/common/TablePagination";
@@ -108,7 +109,7 @@ export default function RemarksPage() {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [penaltyTypes, setPenaltyTypes] = useState<any[]>([]);
   const [manageTypesOpen, setManageTypesOpen] = useState(false);
-  const [newType, setNewType] = useState({ name: "", amount: 0, warningLimit: 3 });
+  const [newType, setNewType] = useState({ name: "", amount: 0, warningLimit: 0 });
   const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
 
   const getPenaltyAmount = (type: string) => {
@@ -133,7 +134,7 @@ export default function RemarksPage() {
       const empId = r.employeeId;
       if (!empId) return;
       
-      const penaltyAmount = r.computedAmount !== undefined ? r.computedAmount : (r.amount || getPenaltyAmount(r.type));
+      const penaltyAmount = r.computedAmount != null ? r.computedAmount : (r.amount || getPenaltyAmount(r.type));
       
       if (!counts[empId]) {
         counts[empId] = {
@@ -197,7 +198,7 @@ export default function RemarksPage() {
     if (!newType.name || newType.amount <= 0) return;
     const bodyData = {
       ...newType,
-      warningLimit: parseInt(String(newType.warningLimit)) !== undefined && !isNaN(parseInt(String(newType.warningLimit))) ? parseInt(String(newType.warningLimit)) : 3
+      warningLimit: parseInt(String(newType.warningLimit)) !== undefined && !isNaN(parseInt(String(newType.warningLimit))) ? parseInt(String(newType.warningLimit)) : 0
     };
     try {
       if (editingTypeId && !editingTypeId.startsWith('fallback-')) {
@@ -207,7 +208,7 @@ export default function RemarksPage() {
           body: JSON.stringify(bodyData)
         });
         if (res.ok) {
-          setNewType({ name: "", amount: 0, warningLimit: 3 });
+          setNewType({ name: "", amount: 0, warningLimit: 0 });
           setEditingTypeId(null);
           fetchData();
         }
@@ -218,7 +219,7 @@ export default function RemarksPage() {
           body: JSON.stringify(bodyData)
         });
         if (res.ok) {
-          setNewType({ name: "", amount: 0, warningLimit: 3 });
+          setNewType({ name: "", amount: 0, warningLimit: 0 });
           fetchData();
         }
       }
@@ -263,16 +264,45 @@ export default function RemarksPage() {
     }
   };
 
+  const getEmployeeRoleSubtitle = (employeeIdOrName: string, defaultRole?: string) => {
+    const emp = employees.find(e => 
+      e.id === employeeIdOrName || 
+      e.employeeId === employeeIdOrName || 
+      e.name === employeeIdOrName ||
+      e.name?.toLowerCase() === employeeIdOrName?.toLowerCase()
+    );
+
+    if (emp) {
+      const roleClean = (emp.role || "").toLowerCase().trim();
+      const isAdminOrSubAdmin = roleClean.includes('admin') || roleClean.includes('administrator') || roleClean.includes('founder');
+      if (isAdminOrSubAdmin) {
+        return emp.designation || emp.role || defaultRole || "Admin";
+      }
+      const subDept = emp.sub_department || emp.subDepartment;
+      const dept = emp.department;
+      if (emp.designation && subDept) {
+        return `${emp.designation} ${subDept}`;
+      } else if (emp.designation && dept) {
+        return `${emp.designation} ${dept}`;
+      } else if (emp.designation) {
+        return emp.designation;
+      }
+    }
+
+    return defaultRole || "Staff";
+  };
+
   const handleCreateRemark = async () => {
     if (!newRemark.employeeId || !newRemark.details) return;
     
     setIsSubmitting(true);
     try {
       const emp = employees.find(e => e.id === newRemark.employeeId || e.employeeId === newRemark.employeeId);
+      const empRole = getEmployeeRoleSubtitle(newRemark.employeeId, emp?.designation || "Staff");
       const payload = {
         ...newRemark,
         employeeName: emp?.name || "Unknown",
-        role: emp?.designation || "Staff",
+        role: empRole,
         avatar: emp?.profilePhoto || "",
         addedBy: user?.name || "Admin",
         date: new Date(newRemark.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -423,7 +453,7 @@ export default function RemarksPage() {
         r.type || "",
         (r.details || "").replace(/₹/g, "Rs."),
         r.addedBy || "",
-        r.isWarning ? "Warning" : `Rs. ${Number((r.computedAmount !== undefined ? r.computedAmount : (r.amount || getPenaltyAmount(r.type))).toFixed(2))}`
+        r.isWarning ? "Warning" : `Rs. ${Number((r.computedAmount != null ? r.computedAmount : (r.amount || getPenaltyAmount(r.type))) || 0).toFixed(2)}`
       ])
 
       if (rows.length > 0) {
@@ -544,7 +574,7 @@ export default function RemarksPage() {
     currentPage * itemsPerPage
   );
 
-  const totalPenalty = Number(tabRemarks.reduce((sum, r) => sum + (r.computedAmount !== undefined ? r.computedAmount : (r.amount || getPenaltyAmount(r.type))), 0).toFixed(2));
+  const totalPenalty = Number(tabRemarks.reduce((sum, r) => sum + ((r.computedAmount != null ? r.computedAmount : (r.amount || getPenaltyAmount(r.type))) || 0), 0).toFixed(2));
 
   if (permissionsLoading) {
     return (
@@ -715,7 +745,7 @@ export default function RemarksPage() {
                   </div>
                   
                   <div className="font-extrabold text-slate-800 text-[14px] mt-3 leading-snug truncate w-full group-hover:text-brand-teal transition-colors duration-200">{item.name}</div>
-                  <div className="text-[11px] text-muted-foreground font-bold uppercase tracking-wider mt-0.5 truncate w-full">{item.role}</div>
+                  <div className="text-[11px] text-muted-foreground font-bold uppercase tracking-wider mt-0.5 truncate w-full">{getEmployeeRoleSubtitle((item as any).employeeId || item.name, item.role)}</div>
                   
                   <div className="mt-4 flex items-center justify-between w-full pt-3 border-t border-slate-100 text-xs">
                     <div className="text-left">
@@ -836,17 +866,19 @@ export default function RemarksPage() {
           <div className="flex flex-col sm:flex-row items-center gap-4">
             {canManageRemarks && (
               <div className="w-full sm:w-auto">
-                <Select value={employeeFilter} onValueChange={(v) => { setEmployeeFilter(v); setCurrentPage(1); }}>
-                  <SelectTrigger className="w-full sm:w-[180px] font-medium border-border shadow-sm">
-                    <SelectValue placeholder="All Employees" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="All">All Employees</SelectItem>
-                    {employees.map(emp => (
-                      <SelectItem key={emp.id} value={emp.id || emp.name}>{emp.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  options={[
+                    { value: "All", label: "All Employees" },
+                    ...employees.map(emp => ({
+                      value: emp.id || emp.name,
+                      label: emp.name
+                    }))
+                  ]}
+                  value={employeeFilter}
+                  onValueChange={(v) => { setEmployeeFilter(v); setCurrentPage(1); }}
+                  placeholder="All Employees"
+                  triggerClassName="w-full sm:w-[180px] font-medium border-border shadow-sm bg-white"
+                />
               </div>
             )}
             
@@ -959,7 +991,7 @@ export default function RemarksPage() {
                         </Avatar>
                         <div>
                           <div className="font-bold text-foreground text-[14px] leading-tight">{remark.employeeName}</div>
-                          <div className="text-[12px] text-muted-foreground font-medium mt-0.5">{remark.role}</div>
+                          <div className="text-[12px] text-muted-foreground font-medium mt-0.5">{getEmployeeRoleSubtitle(remark.employeeId || remark.employeeName, remark.role)}</div>
                         </div>
                       </div>
                     </td>
@@ -984,7 +1016,7 @@ export default function RemarksPage() {
                         </span>
                       ) : (
                         <span className="text-red-600">
-                          ₹{Number((remark.computedAmount !== undefined ? remark.computedAmount : (remark.amount || getPenaltyAmount(remark.type))).toFixed(2))}
+                          ₹{Number((remark.computedAmount != null ? remark.computedAmount : (remark.amount || getPenaltyAmount(remark.type))) || 0).toFixed(2)}
                         </span>
                       )}
                     </td>
@@ -1094,7 +1126,7 @@ export default function RemarksPage() {
                   {editingTypeId ? 'Update' : 'Add'}
                 </Button>
                 {editingTypeId && (
-                  <Button variant="ghost" onClick={() => { setNewType({ name: "", amount: 0, warningLimit: 3 }); setEditingTypeId(null); }} className="shrink-0 text-muted-foreground">
+                  <Button variant="ghost" onClick={() => { setNewType({ name: "", amount: 0, warningLimit: 0 }); setEditingTypeId(null); }} className="shrink-0 text-muted-foreground">
                     Cancel
                   </Button>
                 )}

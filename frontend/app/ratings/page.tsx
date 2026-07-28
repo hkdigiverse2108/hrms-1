@@ -5,6 +5,7 @@ import { useApi } from '@/hooks/useApi';
 import { useUser } from '@/hooks/useUser';
 import { format } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Star, ArrowLeft, Calendar } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { PageHeader } from '@/components/common/PageHeader';
@@ -126,21 +127,21 @@ export default function RatingsPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-4">
-          <Select value={selectedEmployee} onValueChange={(v: any) => setSelectedEmployee(v)}>
-            <SelectTrigger className="w-[200px] h-9 text-xs font-semibold bg-white border border-slate-200 rounded-xl">
-              <SelectValue placeholder="All Employees" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Employees</SelectItem>
-              {employees
+          <SearchableSelect
+            options={[
+              { value: "all", label: "All Employees" },
+              ...(employees || [])
                 .filter((e: any) => e.status?.trim()?.toLowerCase() === 'active')
-                .map((emp: any) => (
-                  <SelectItem key={emp.id} value={emp.id}>
-                    {emp.name || `${emp.firstName} ${emp.lastName}`}
-                  </SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
+                .map((emp: any) => ({
+                  value: emp.id,
+                  label: emp.name || `${emp.firstName} ${emp.lastName}`
+                }))
+            ]}
+            value={selectedEmployee}
+            onValueChange={(v: any) => setSelectedEmployee(v)}
+            placeholder="All Employees"
+            triggerClassName="w-[200px] h-9 text-xs rounded-xl"
+          />
 
           <Select value={ratingFilter} onValueChange={(v: any) => setRatingFilter(v)}>
             <SelectTrigger className="w-[160px] h-9 text-xs font-semibold bg-white border border-slate-200 rounded-xl">
@@ -164,9 +165,9 @@ export default function RatingsPage() {
                   <Calendar className="w-3.5 h-3.5 mr-2 text-slate-500" />
                   {dateRange?.from ? (
                     dateRange.to ? (
-                      `${format(dateRange.from, "LLL dd, y")} - ${format(dateRange.to, "LLL dd, y")}`
+                      `${format(dateRange.from, "dd/MM/yyyy")} - ${format(dateRange.to, "dd/MM/yyyy")}`
                     ) : (
-                      format(dateRange.from, "LLL dd, y")
+                      format(dateRange.from, "dd/MM/yyyy")
                     )
                   ) : (
                     "Select Date Range"

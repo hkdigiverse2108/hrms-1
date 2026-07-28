@@ -125,28 +125,39 @@ export default function DashboardPage() {
   const [activeTaskTitle, setActiveTaskTitle] = useState<string | null>(null);
   const [hasTargetedBanner, setHasTargetedBanner] = useState(false);
 
-  useEffect(() => {
-    if (user?.id) {
-      fetch(`${API_URL}/system-settings`)
-        .then(res => res.json())
-        .then(data => {
-          const banners = data.dashboardBanners || [];
-          const todayStr = dayjs().format('YYYY-MM-DD');
-          const active = banners.filter((b: any) => {
-            if (!b.isActive) return false;
-            if (b.employeeId && b.employeeId !== "all" && b.employeeId !== user.id) return false;
-            const hasStartDate = !!b.startDate;
-            const hasEndDate = !!b.endDate;
-            if (!hasStartDate && !hasEndDate) return true;
-            if (hasStartDate && !hasEndDate) return dayjs(todayStr).isSameOrAfter(b.startDate);
-            if (!hasStartDate && hasEndDate) return dayjs(todayStr).isSameOrBefore(b.endDate);
-            return dayjs(todayStr).isSameOrAfter(b.startDate) && dayjs(todayStr).isSameOrBefore(b.endDate);
-          });
-          setHasTargetedBanner(active.some((b: any) => b.employeeId === user.id));
-        })
-        .catch(err => console.error("Error fetching settings for banners:", err));
+  const fetchDashboardData = async () => {
+    if (!user?.id) return;
+    try {
+      const res = await fetch(`${API_URL}/dashboard-data?userId=${user.id}&role=${user.role || ''}`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        // Process banner settings
+        const banners = data.systemSettings?.dashboardBanners || [];
+        const todayStr = dayjs().format('YYYY-MM-DD');
+        const active = banners.filter((b: any) => {
+          if (!b.isActive) return false;
+          if (b.employeeId && b.employeeId !== "all" && b.employeeId !== user.id) return false;
+          const hasStartDate = !!b.startDate;
+          const hasEndDate = !!b.endDate;
+          if (!hasStartDate && !hasEndDate) return true;
+          if (hasStartDate && !hasEndDate) return dayjs(todayStr).isSameOrAfter(b.startDate);
+          if (!hasStartDate && hasEndDate) return dayjs(todayStr).isSameOrBefore(b.endDate);
+          return dayjs(todayStr).isSameOrAfter(b.startDate) && dayjs(todayStr).isSameOrBefore(b.endDate);
+        });
+        setHasTargetedBanner(active.some((b: any) => b.employeeId === user.id));
+        
+        // Set data
+        setLeaveRequests(data.leaves || []);
+        if (data.employees) setEmployees(data.employees);
+        if (data.interns) setInterns(data.interns);
+        if (data.attendance) setAllAttendance(data.attendance);
+        if (data.applications) setApplications(data.applications);
+        if (data.assets) setAssets(data.assets);
+      }
+    } catch (err) {
+      console.error("Error fetching dashboard data:", err);
     }
-  }, [user?.id]);
+  };
 
   useEffect(() => {
     if (attendanceStatus?.isPunchedIn && attendanceStatus.record?.punchInActivityType === "Work" && attendanceStatus.record?.punchInTaskId) {
@@ -178,14 +189,7 @@ export default function DashboardPage() {
     if (user?.id) {
       fetchStatus();
       fetchHistory();
-      fetchLeaveRequests();
-      if (user.role === "Admin" || user.role === "HR") {
-        fetchEmployees();
-        fetchInterns();
-        fetchAllAttendance();
-        fetchApplications();
-        fetchAssets();
-      }
+      fetchDashboardData();
     }
 
     const handleUpdate = () => {
@@ -1408,7 +1412,7 @@ function EmployeeView({
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="relative">
-                    <Avatar className={`w-16 h-16 border-2 shadow-sm transition-all duration-500 ${hasTargetedBanner ? 'border-transparent ring-4 ring-brand-teal ring-offset-2' : 'border-border'}`}>
+                    <Avatar className={`w-16 h-16 border-2 border-border shadow-sm transition-all duration-500`}>
                       <AvatarImage src={getAvatarUrl(user?.profilePhoto, userName)} />
                       <AvatarFallback className="bg-brand-light text-brand-teal font-bold">{initials}</AvatarFallback>
                     </Avatar>
@@ -1893,35 +1897,53 @@ function EventsSidebar({ user, leaves }: { user: any, leaves: any[] }) {
           </h3>
         </div>
         {activeBanners.length > 0 ? (
-          <div className="rounded-xl overflow-hidden shadow-sm relative group w-full h-[380px]">
+          <div className="rounded-xl overflow-hidden shadow-sm relative group w-full aspect-[4/5] max-h-[550px]">
             <Carousel setApi={setCarouselApi} opts={{ loop: true }} className="w-full h-full">
               <CarouselContent className="h-full">
-                {activeBanners.map(banner => (
-                  <CarouselItem key={banner.id} className="h-full flex items-center justify-center">
-                    {banner.externalUrl ? (
-                      <a href={banner.externalUrl} target="_blank" rel="noreferrer" className="block w-full h-full cursor-pointer">
+                {activeBanners.map(banner => {
+                  let formattedUrl = banner.externalUrl ? banner.externalUrl.trim() : "";
+                  if (formattedUrl && !formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://') && !formattedUrl.startsWith('/')) {
+                    formattedUrl = 'https://' + formattedUrl;
+                  }
+                  const handleBannerClick = (e: React.MouseEvent) => {
+                    if (!formattedUrl) return;
+                    e.stopPropagation();
+                    window.open(formattedUrl, '_blank', 'noopener,noreferrer');
+                  };
+                  return (
+                    <CarouselItem key={banner.id} className="h-full flex items-center justify-center">
+                      {formattedUrl ? (
+                        <a 
+                          href={formattedUrl} 
+                          target="_blank" 
+                          rel="noreferrer" 
+                          onClick={handleBannerClick}
+                          className="block w-full h-full cursor-pointer hover:opacity-95 transition-opacity"
+                          title={`Click to open: ${formattedUrl}`}
+                        >
+                          <img 
+                            src={banner.imageUrl.startsWith('http') ? banner.imageUrl : `${API_URL}${banner.imageUrl}`} 
+                            alt="Banner" 
+                            className="w-full h-full object-contain bg-white rounded-xl"
+                          />
+                        </a>
+                      ) : (
                         <img 
                           src={banner.imageUrl.startsWith('http') ? banner.imageUrl : `${API_URL}${banner.imageUrl}`} 
                           alt="Banner" 
-                          className="w-full h-full object-cover rounded-xl"
+                          className="w-full h-full object-contain bg-white rounded-xl"
                         />
-                      </a>
-                    ) : (
-                      <img 
-                        src={banner.imageUrl.startsWith('http') ? banner.imageUrl : `${API_URL}${banner.imageUrl}`} 
-                        alt="Banner" 
-                        className="w-full h-full object-cover rounded-xl"
-                      />
-                    )}
-                  </CarouselItem>
-                ))}
+                      )}
+                    </CarouselItem>
+                  );
+                })}
               </CarouselContent>
               <CarouselPrevious className="absolute left-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 hover:bg-white text-brand-teal border-none" />
               <CarouselNext className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 hover:bg-white text-brand-teal border-none" />
             </Carousel>
           </div>
         ) : (
-          <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50/50 flex flex-col items-center justify-center p-6 h-[380px] text-gray-400">
+          <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50/50 flex flex-col items-center justify-center p-6 aspect-[4/5] max-h-[550px] text-gray-400">
             <ImageIcon className="w-8 h-8 mb-2 text-gray-300" />
             <span className="text-[12px] font-semibold">No Active Banners</span>
           </div>

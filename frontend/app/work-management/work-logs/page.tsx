@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useUser } from '@/hooks/useUser'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { SearchableSelect } from '@/components/ui/searchable-select'
 
 dayjs.extend(duration)
 
@@ -59,14 +60,13 @@ export default function WorkLogsPage() {
   const fetchData = async () => {
     setLoading(true)
     try {
-      const [attRes, tasksRes, empRes] = await Promise.all([
-        fetch(`${API_URL}/attendance`),
-        fetch(`${API_URL}/wm-tasks`),
-        fetch(`${API_URL}/employees`),
-      ])
-      if (attRes.ok)   setAttendance(await attRes.json())
-      if (tasksRes.ok) setTasks(await tasksRes.json())
-      if (empRes.ok)   setEmployees(await empRes.json())
+      const res = await fetch(`${API_URL}/work-logs-data`, { cache: 'no-store' })
+      if (res.ok) {
+        const data = await res.json()
+        setAttendance(data.attendance || [])
+        setTasks(data.wmTasks || [])
+        setEmployees(data.employees || [])
+      }
     } catch {
       toast.error('Failed to fetch work log data')
     } finally {
@@ -353,22 +353,22 @@ export default function WorkLogsPage() {
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
         <PageHeader
           title="Work Logs"
-          subtitle="Track and analyze employee activities with time breakdown"
+          description="Track and analyze employee activities with time breakdown"
         />
         <div className="flex flex-wrap items-center gap-3">
           {user?.role?.toLowerCase() === 'admin' && (
             <div className="flex items-center gap-2">
               <Users className="w-4 h-4 text-gray-500" />
-              <select
+              <SearchableSelect
+                options={[
+                  { value: "All", label: "All Employees" },
+                  ...employeeOptions.map(emp => ({ value: emp.id, label: emp.name }))
+                ]}
                 value={filterEmployee}
-                onChange={e => setFilterEmployee(e.target.value)}
-                className="border border-input bg-background rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring min-w-[150px]"
-              >
-                <option value="All">All Employees</option>
-                {employeeOptions.map(emp => (
-                  <option key={emp.id} value={emp.id}>{emp.name}</option>
-                ))}
-              </select>
+                onValueChange={setFilterEmployee}
+                placeholder="All Employees"
+                triggerClassName="min-w-[150px]"
+              />
             </div>
           )}
 
@@ -498,7 +498,7 @@ export default function WorkLogsPage() {
           ) : (
             <div className="grid grid-cols-1 gap-4">
             {singleDayData.length > 0 ? singleDayData.map((emp, idx) => {
-            const key = `${emp.employeeId}-${emp.date}-${idx}`
+            const key = `${(emp as any).employeeId}-${emp.date}-${idx}`
             const open = !!expandedCards[key]
             return (
               <Card key={key} className="overflow-hidden">

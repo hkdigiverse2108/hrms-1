@@ -9,6 +9,7 @@ import google_auth
 import google_calendar
 import pytz
 from websocket import manager as ws_manager
+from email_utils import send_caution_email
 
 import time
 import urllib.request
@@ -268,6 +269,13 @@ async def update_employee(db, employee_id: str, employee_update: schemas.Employe
         return None
     
     update_data = employee_update.dict(exclude_unset=True)
+
+    # Ensure sub_department is synced in both naming styles
+    if "sub_department" in update_data or "subDepartment" in update_data:
+        sub_dept_val = update_data.get("sub_department") or update_data.get("subDepartment") or ""
+        update_data["sub_department"] = sub_dept_val
+        update_data["subDepartment"] = sub_dept_val
+
     sync_active_bond(update_data)
     
     # If a new profile photo is uploaded/edited, delete the old one from the uploads folder
@@ -711,10 +719,10 @@ async def get_bonus_deductions_with_remarks(db, month: str = None, year: int = N
                             unique_holidays += 1
                             
                     total_working_days = max(1, num_days - sundays - unique_holidays)
-                    p_amount = round(salary_struct["monthlyGross"] / total_working_days, 2)
+                    p_amount = int(round(salary_struct["monthlyGross"] / total_working_days))
                 except Exception as e:
                     print(f"Error calculating p_amount in merged list: {e}")
-                    p_amount = round(salary_struct["monthlyGross"] / 30, 2)
+                    p_amount = int(round(salary_struct["monthlyGross"] / 30))
         else:
             p_amount = next((p["amount"] for p in penalty_types if p["name"] == r["type"]), 0)
 
@@ -1260,10 +1268,11 @@ async def run_payroll_processing(db, month: str, year: int, performed_by: str = 
         # Sort by parsed date
         emp_remarks.sort(key=lambda x: x["_sort_date"])
             
-        penalty_counts = {}
+        emp_all_time_remarks_cache = {}
         
         for r in emp_remarks:
             remark_type = r.get("type")
+            remark_type_lower = remark_type.lower()
             r_date_val = r.get("date")
             r_date_str = r_date_val.strftime("%d-%m-%Y") if isinstance(r_date_val, (date, datetime)) else str(r_date_val)
             
@@ -1278,8 +1287,42 @@ async def run_payroll_processing(db, month: str, year: int, performed_by: str = 
                 if remark_type == "Late Punch-in" and not late_punch_deduction_enabled:
                     continue
                     
-                penalty_counts[remark_type] = penalty_counts.get(remark_type, 0) + 1
-                current_type_count = penalty_counts[remark_type]
+                if remark_type_lower not in emp_all_time_remarks_cache:
+                    try:
+                        emp_obj_id = ObjectId(str(emp_id))
+                    except:
+                        emp_obj_id = str(emp_id)
+                    q_all = {
+                        "employeeId": {"$in": [str(emp_id), emp_obj_id]},
+                        "type": {"$regex": f"^{remark_type}$", "$options": "i"},
+                        "isDeleted": {"$nin": [True, "true", "True"]}
+                    }
+                    all_time_rems = await db.remarks.find(q_all).to_list(length=10000)
+                    
+                    for atr in all_time_rems:
+                        atr_dt = atr.get("date")
+                        if isinstance(atr_dt, str):
+                            try:
+                                if "-" in atr_dt and len(atr_dt.split("-")[0]) != 4:
+                                    atr["_sort_date"] = datetime.strptime(atr_dt, "%d-%m-%Y")
+                                else:
+                                    from dateutil.parser import parse
+                                    atr["_sort_date"] = parse(atr_dt)
+                            except:
+                                atr["_sort_date"] = datetime.min
+                        elif isinstance(atr_dt, datetime):
+                            atr["_sort_date"] = atr_dt
+                        else:
+                            atr["_sort_date"] = datetime.min
+                    all_time_rems.sort(key=lambda x: x["_sort_date"])
+                    emp_all_time_remarks_cache[remark_type_lower] = [str(x.get("id") or x.get("_id")) for x in all_time_rems]
+                
+                try:
+                    r_id_str = str(r.get("id") or r.get("_id"))
+                    current_type_rank = emp_all_time_remarks_cache[remark_type_lower].index(r_id_str) + 1
+                except ValueError:
+                    current_type_rank = 999
+
                 amount_to_deduct = r_amount
                 if amount_to_deduct <= 0:
                     amount_to_deduct = next((p["amount"] for p in penalty_types if p["name"] == remark_type), 0)
@@ -1287,11 +1330,14 @@ async def run_payroll_processing(db, month: str, year: int, performed_by: str = 
                 if remark_type == "Late Punch-in" and amount_to_deduct <= 0:
                     amount_to_deduct = per_day_gross if per_day_gross > 0 else 0
                 
+                if remark_type == "Late Punch-in":
+                    amount_to_deduct = int(round(amount_to_deduct))
+                
                 if amount_to_deduct > 0:
                     pt_obj = next((p for p in penalty_types if p["name"] == remark_type), None)
                     type_warning_limit = pt_obj.get("warningLimit", 3) if pt_obj else 3
                     
-                    if current_type_count <= type_warning_limit:
+                    if current_type_rank <= type_warning_limit:
                         deduction_details.append(f"Warning: {remark_type} ({r_date_str})")
                     else:
                         penalty_total += amount_to_deduct
@@ -1442,6 +1488,12 @@ async def create_employee(db, employee: schemas.EmployeeCreate, performed_by: st
     
     employee_dict = employee.dict()
     employee_dict["name"] = name
+
+    # Ensure sub_department is synced in both naming styles
+    sub_dept_val = employee_dict.get("sub_department") or employee_dict.get("subDepartment") or ""
+    employee_dict["sub_department"] = sub_dept_val
+    employee_dict["subDepartment"] = sub_dept_val
+
     sync_active_bond(employee_dict)
     
     if next_id:
@@ -1515,6 +1567,8 @@ async def update_department(db, department_id: str, department_update: schemas.D
         await db.clients.update_many({"department": old_name}, {"$set": {"department": new_name}})
         await db.tasks.update_many({"department": old_name}, {"$set": {"department": new_name}})
         await db.projects.update_many({"department": old_name}, {"$set": {"department": new_name}})
+        await db.designations.update_many({"department": old_name}, {"$set": {"department": new_name}})
+        await db.sub_departments.update_many({"department": old_name}, {"$set": {"department": new_name}})
         
     updated_doc = await db.departments.find_one({"_id": ObjectId(department_id)})
     return fix_id(updated_doc)
@@ -1523,11 +1577,61 @@ async def delete_department(db, department_id: str):
     await db.departments.delete_one({"_id": ObjectId(department_id)})
     return True
 
+# SubDepartment CRUD
+async def get_sub_departments(db, skip: int = 0, limit: int = 100):
+    cursor = db.sub_departments.find().sort("_id", -1).skip(skip).limit(limit)
+    rows = await cursor.to_list(length=limit)
+    result = []
+    for row in rows:
+        r = fix_id(row)
+        if 'department' not in r or r['department'] is None:
+            r['department'] = ''
+        result.append(r)
+    return result
+
+async def create_sub_department(db, sub_department: schemas.SubDepartmentCreate):
+    sub_department_dict = sub_department.dict()
+    result = await db.sub_departments.insert_one(sub_department_dict)
+    sub_department_dict["id"] = str(result.inserted_id)
+    if "_id" in sub_department_dict:
+        sub_department_dict.pop("_id")
+    return sub_department_dict
+
+async def update_sub_department(db, sub_department_id: str, sub_department_update: schemas.SubDepartmentUpdate):
+    update_data = sub_department_update.dict(exclude_unset=True)
+    
+    old_doc = await db.sub_departments.find_one({"_id": ObjectId(sub_department_id)})
+    
+    await db.sub_departments.update_one(
+        {"_id": ObjectId(sub_department_id)},
+        {"$set": update_data}
+    )
+    
+    if old_doc and "name" in update_data and old_doc.get("name") != update_data["name"]:
+        old_name = old_doc.get("name")
+        new_name = update_data["name"]
+        await db.employees.update_many({"sub_department": old_name}, {"$set": {"sub_department": new_name}})
+        await db.designations.update_many({"sub_department": old_name}, {"$set": {"sub_department": new_name}})
+        
+    updated_doc = await db.sub_departments.find_one({"_id": ObjectId(sub_department_id)})
+    return fix_id(updated_doc)
+
+async def delete_sub_department(db, sub_department_id: str):
+    await db.sub_departments.delete_one({"_id": ObjectId(sub_department_id)})
+    return True
+
+
 # Designation CRUD
 async def get_designations(db, skip: int = 0, limit: int = 100):
     cursor = db.designations.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
-    return [fix_id(row) for row in rows]
+    result = []
+    for row in rows:
+        r = fix_id(row)
+        if 'sub_department' not in r or r['sub_department'] is None:
+            r['sub_department'] = ''
+        result.append(r)
+    return result
 
 async def create_designation(db, designation: schemas.DesignationCreate):
     designation_dict = designation.dict()
@@ -1535,18 +1639,75 @@ async def create_designation(db, designation: schemas.DesignationCreate):
     designation_dict["id"] = str(result.inserted_id)
     if "_id" in designation_dict:
         designation_dict.pop("_id")
+
+    title = designation_dict.get("title")
+    if title:
+        # Automatically generate this new designation's preset across ALL existing department presets
+        dept_presets = await db.permission_presets.find({"presetType": "department"}).to_list(length=1000)
+        for dept_preset in dept_presets:
+            dept_name = dept_preset.get("department") or dept_preset.get("name")
+            if not dept_name:
+                continue
+                
+            permissions = dept_preset.get("permissions", [])
+            preset_name = f"{dept_name} - {title}"
+            
+            existing_preset = await db.permission_presets.find_one({
+                "presetType": "designation",
+                "department": dept_name,
+                "designation": title
+            })
+            
+            if not existing_preset:
+                await db.permission_presets.insert_one({
+                    "name": preset_name,
+                    "description": f"Designation preset for {title} in {dept_name}",
+                    "presetType": "designation",
+                    "department": dept_name,
+                    "designation": title,
+                    "permissions": permissions
+                })
+
     return designation_dict
 
 async def update_designation(db, designation_id: str, designation_update: schemas.DesignationUpdate):
+    old_doc = await db.designations.find_one({"_id": ObjectId(designation_id)})
     update_data = designation_update.dict(exclude_unset=True)
     await db.designations.update_one(
         {"_id": ObjectId(designation_id)},
         {"$set": update_data}
     )
     updated_doc = await db.designations.find_one({"_id": ObjectId(designation_id)})
+
+    if old_doc and updated_doc:
+        old_dept = old_doc.get("department")
+        old_title = old_doc.get("title")
+        new_dept = updated_doc.get("department")
+        new_title = updated_doc.get("title")
+        
+        if old_dept != new_dept or old_title != new_title:
+            await db.permission_presets.update_many(
+                {"presetType": "designation", "department": old_dept, "designation": old_title},
+                {"$set": {
+                    "name": f"{new_dept} - {new_title}",
+                    "department": new_dept,
+                    "designation": new_title
+                }}
+            )
+
     return fix_id(updated_doc)
 
 async def delete_designation(db, designation_id: str):
+    desig = await db.designations.find_one({"_id": ObjectId(designation_id)})
+    if desig:
+        dept = desig.get("department")
+        title = desig.get("title")
+        if dept and title:
+            await db.permission_presets.delete_many({
+                "presetType": "designation",
+                "department": dept,
+                "designation": title
+            })
     await db.designations.delete_one({"_id": ObjectId(designation_id)})
     return True
 
@@ -1942,14 +2103,15 @@ async def get_remarks(db, skip: int = 0, limit: int = 100):
     items = await get_items(db, "remarks", skip, limit)
     # Enrich with penalty amount
     penalty_types = await get_penalty_types(db)
-    
+
     # Cache salary structures to avoid repeated DB calls
     salary_cache = {}
     # Cache for employee month remarks to compute warnings
     emp_month_remarks_cache = {}
 
     for item in items:
-        p_amount = next((p["amount"] for p in penalty_types if p["name"] == item.get("type")), 0)
+        remark_type_lower = item.get("type", "").lower() if item.get("type") else ""
+        p_amount = next((p["amount"] for p in penalty_types if p["name"].lower() == remark_type_lower), 0)
         
         month_num = None
         r_year = None
@@ -1983,7 +2145,7 @@ async def get_remarks(db, skip: int = 0, limit: int = 100):
                 pass
 
         # Calculate one-day salary for Late Punch-in if amount is 0
-        if item.get("type") == "Late Punch-in" and p_amount == 0 and month_num and r_year:
+        if remark_type_lower == "late punch-in" and p_amount == 0 and month_num and r_year:
             if emp_id not in salary_cache:
                 salary_cache[emp_id] = await get_salary_structure_by_employee(db, emp_id)
             
@@ -1993,26 +2155,20 @@ async def get_remarks(db, skip: int = 0, limit: int = 100):
                     _, num_days = calendar.monthrange(r_year, month_num)
                     sundays = sum(1 for d in range(1, num_days + 1) if calendar.weekday(r_year, month_num, d) == 6)
                     total_working_days = max(1, num_days - sundays)
-                    p_amount = round(salary_struct["monthlyGross"] / total_working_days, 2)
+                    p_amount = int(round(salary_struct["monthlyGross"] / total_working_days))
                 except Exception as e:
                     print(f"Error calculating p_amount in remarks list: {e}")
-                    p_amount = round(salary_struct["monthlyGross"] / 30, 2)
+                    p_amount = int(round(salary_struct["monthlyGross"] / 30))
         
         is_warning = False
         remark_type = item.get("type")
-        pt_names = [p["name"] for p in penalty_types]
-        is_in_penalty_types = remark_type in pt_names
-        is_penalty = p_amount > 0 or is_in_penalty_types or remark_type == "Late Punch-in"
+        pt_names = [p["name"].lower() for p in penalty_types]
+        is_in_penalty_types = remark_type_lower in pt_names
+        is_penalty = p_amount > 0 or is_in_penalty_types or remark_type_lower == "late punch-in"
         
-        if is_in_penalty_types and month_num and r_year and emp_id:
-            cache_key = (str(emp_id), month_num, r_year, remark_type)
+        if (is_in_penalty_types or remark_type_lower == "late punch-in") and emp_id:
+            cache_key = (str(emp_id), remark_type.lower())
             if cache_key not in emp_month_remarks_cache:
-                _, num_days = calendar.monthrange(r_year, month_num)
-                r_start_dt_naive = datetime(r_year, month_num, 1)
-                r_end_dt_naive = datetime(r_year, month_num, num_days, 23, 59, 59)
-                r_start_dt_aware = r_start_dt_naive.replace(tzinfo=IST)
-                r_end_dt_aware = r_end_dt_naive.replace(tzinfo=IST)
-                
                 try:
                     emp_obj_id = ObjectId(str(emp_id))
                 except:
@@ -2020,77 +2176,48 @@ async def get_remarks(db, skip: int = 0, limit: int = 100):
 
                 q = {
                     "employeeId": {"$in": [str(emp_id), emp_obj_id]},
-                    "type": remark_type,
+                    "type": {"$regex": f"^{remark_type}$", "$options": "i"},
                     "isDeleted": {"$nin": [True, "true", "True"]}
                 }
-                all_remarks = await db.remarks.find(q).to_list(length=1000)
+                all_remarks = await db.remarks.find(q).to_list(length=10000)
                 
-                # Filter by month and year in python
-                month_remarks = []
                 for mr in all_remarks:
                     mr_dt = mr.get("date")
-                    mr_m = None
-                    mr_y = None
-                    if mr_dt:
+                    if isinstance(mr_dt, str):
                         try:
-                            if isinstance(mr_dt, datetime):
-                                mr_m = mr_dt.month
-                                mr_y = mr_dt.year
-                            elif isinstance(mr_dt, str):
-                                if "T" in mr_dt or "-" in mr_dt:
-                                    parts = mr_dt.split("T")[0].split("-")
-                                    if len(parts[0]) == 4:
-                                        mr_y = int(parts[0])
-                                        mr_m = int(parts[1])
-                                    else:
-                                        mr_y = int(parts[2])
-                                        mr_m = int(parts[1])
-                                else:
-                                    date_parts = mr_dt.split(" ")
-                                    r_month_name = date_parts[0].replace(",", "")
-                                    mr_y = int(date_parts[-1])
-                                    try:
-                                        mr_m = list(calendar.month_abbr).index(r_month_name)
-                                    except ValueError:
-                                        mr_m = list(calendar.month_name).index(r_month_name)
-                        except Exception:
-                            pass
-                    
-                    if mr_m == month_num and mr_y == r_year:
-                        # Normalize date for sorting
-                        if isinstance(mr_dt, str):
-                            try:
-                                if "-" in mr_dt and len(mr_dt.split("-")[0]) != 4:
-                                    mr["_sort_date"] = datetime.strptime(mr_dt, "%d-%m-%Y")
-                                else:
-                                    from dateutil.parser import parse
-                                    mr["_sort_date"] = parse(mr_dt)
-                            except:
-                                mr["_sort_date"] = datetime.min
-                        elif isinstance(mr_dt, datetime):
-                            mr["_sort_date"] = mr_dt
-                        else:
+                            if "-" in mr_dt and len(mr_dt.split("-")[0]) != 4:
+                                mr["_sort_date"] = datetime.strptime(mr_dt, "%d-%m-%Y")
+                            else:
+                                from dateutil.parser import parse
+                                mr["_sort_date"] = parse(mr_dt)
+                        except:
                             mr["_sort_date"] = datetime.min
-                        month_remarks.append(mr)
+                    elif isinstance(mr_dt, datetime):
+                        mr["_sort_date"] = mr_dt
+                    else:
+                        mr["_sort_date"] = datetime.min
                 
-                # Sort by parsed date
-                month_remarks.sort(key=lambda x: x["_sort_date"])
-                emp_month_remarks_cache[cache_key] = [str(r["_id"]) for r in month_remarks]
+                all_remarks.sort(key=lambda x: x["_sort_date"])
+                emp_month_remarks_cache[cache_key] = [str(r.get("id") or r.get("_id")) for r in all_remarks]
                 
-            month_remark_ids = emp_month_remarks_cache[cache_key]
+            all_remark_ids = emp_month_remarks_cache[cache_key]
             try:
                 item_id = item.get("id") or item.get("_id")
-                rank = month_remark_ids.index(str(item_id)) + 1
+                rank = all_remark_ids.index(str(item_id)) + 1
             except ValueError:
                 rank = 999
                 
-            pt_obj = next((p for p in penalty_types if p["name"] == remark_type), None)
+            pt_obj = next((p for p in penalty_types if p["name"].lower() == remark_type_lower), None)
             type_warning_limit = pt_obj.get("warningLimit", 3) if pt_obj else 3
             if rank <= type_warning_limit:
                 is_warning = True
 
-        item["amount"] = p_amount
-        item["computedAmount"] = 0 if is_warning else p_amount
+        if is_warning:
+            item["amount"] = 0
+            item["computedAmount"] = 0
+        else:
+            item["amount"] = p_amount
+            item["computedAmount"] = p_amount
         item["isWarning"] = is_warning
         
     return items
@@ -3261,7 +3388,7 @@ async def user_has_full_entity_access(db, user_id: str, role: str, target_module
     if not role and not user_id:
         return False
     role_lower = str(role or "").lower().strip()
-    full_roles = {"admin", "manager", "social media manager", "smm", "director", "head", "super admin", "digital marketer", "digital marketing", "hr"}
+    full_roles = {"admin", "manager", "social media manager", "smm", "director", "head", "super admin", "digital marketer", "digital marketing", "hr", "team leader", "tl"}
     if role_lower in full_roles or "social media" in role_lower or "digital marketing" in role_lower:
         return True
         
@@ -3411,6 +3538,37 @@ async def calculate_next_followup_date(db, start_date_str: str, config: dict) ->
             current_date += timedelta(days=1)
             
     return None
+
+async def bulk_assign_leads(db, lead_ids: List[str], assigned_to, performed_by: str = None, user_name: str = None):
+    obj_ids = [ObjectId(lid) if ObjectId.is_valid(lid) else lid for lid in lead_ids]
+    log_entry = {
+        "action": "Assigned (Bulk)",
+        "performedBy": performed_by,
+        "userName": user_name,
+        "timestamp": datetime.now(),
+        "details": f"Bulk assigned to {assigned_to}"
+    }
+
+    # Extract plain data if assigned_to is a pydantic model (it might be RobustAssignedTo, which is a Union, so it could be str or dict)
+    assigned_val = assigned_to
+    if hasattr(assigned_to, 'model_dump'):
+        assigned_val = assigned_to.model_dump()
+    elif isinstance(assigned_to, list):
+        assigned_val = [v.model_dump() if hasattr(v, 'model_dump') else v for v in assigned_to]
+
+    result = await db.leads.update_many(
+        {"_id": {"$in": obj_ids}},
+        {
+            "$set": {"assignedTo": assigned_val, "updated_at": datetime.now()},
+            "$push": {"logs": log_entry}
+        }
+    )
+    return result.modified_count
+
+async def bulk_delete_leads(db, lead_ids: List[str]):
+    obj_ids = [ObjectId(lid) if ObjectId.is_valid(lid) else lid for lid in lead_ids]
+    result = await db.leads.delete_many({"_id": {"$in": obj_ids}})
+    return result.deleted_count
 
 async def create_client(db, client: schemas.ClientCreate):
     client_dict = client.dict()
@@ -4075,7 +4233,7 @@ async def add_module_comment(db, project_id: str, payload: schemas.ModuleComment
 
 
 # General Task CRUD
-async def get_tasks(db, userId: str = None, role: str = None, skip: int = 0, limit: int = 100):
+async def get_tasks(db, userId: str = None, role: str = None, skip: int = 0, limit: int = 100, exclude_department: str = None):
     query = {}
     if userId and not await user_has_full_entity_access(db, userId, role, "tasks"):
         # User sees tasks assigned to them, or tasks they assigned
@@ -4084,6 +4242,10 @@ async def get_tasks(db, userId: str = None, role: str = None, skip: int = 0, lim
             {"assignedToIds": userId},
             {"assignedById": userId}
         ]
+    
+    # Exclude tasks belonging to a specific department (e.g. "HR")
+    if exclude_department:
+        query["department"] = {"$ne": exclude_department}
                 
     cursor = db.tasks.find(query).sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
@@ -4234,6 +4396,11 @@ async def update_task(db, task_id: str, task: schemas.TaskUpdate):
                 next_due = base_date + timedelta(days=30)
             else:
                 next_due = base_date
+
+            # Ensure that HR tasks only generate on working days (skip Sunday)
+            if updated.get("department") == "HR" or (updated.get("department") and str(updated["department"]).upper() == "HR"):
+                while next_due.weekday() == 6:  # 6 is Sunday
+                    next_due = next_due + timedelta(days=1)
                 
             new_task_doc = {
                 "title": updated.get("title"),
@@ -4295,7 +4462,8 @@ async def get_wm_tasks(db, userId: Optional[str] = None, role: Optional[str] = N
                 query["$or"] = [
                     {"assignedToId": {"$in": dept_emp_ids}},
                     {"department": dept},
-                    {"performedBy": userId}
+                    {"performedBy": userId},
+                    {"assignedToId": userId}
                 ]
             else:
                 # Employee sees their own tasks or tasks they created
@@ -5226,6 +5394,7 @@ async def get_system_settings(db):
             "officeStartTime": "09:30",
             "officeEndTime": "18:30",
             "lateBufferMins": 10,
+            "financeOtpEmail": "",
             "inactivityTimeoutEnabled": False,
             "inactivityTimeoutMins": 5,
             "allowedMonthlyPaidLeaves": 1,
@@ -5259,7 +5428,21 @@ async def get_system_settings(db):
 async def update_system_settings(db, settings_update: schemas.SystemSettingsUpdate):
     update_data = settings_update.dict(exclude_unset=True)
     if update_data:
+        old_settings = await db.system_settings.find_one({}) or {}
+        old_email = old_settings.get("companyEmail")
+        new_email = update_data.get("companyEmail")
+        
         await db.system_settings.update_one({}, {"$set": update_data}, upsert=True)
+        
+        if "companyEmail" in update_data and old_email and new_email and old_email != new_email:
+            await db.system_logs.insert_one({
+                "event": "companyEmail_changed",
+                "old_email": old_email,
+                "new_email": new_email,
+                "timestamp": get_now().isoformat()
+            })
+            send_caution_email(old_email, new_email)
+            
     return await get_system_settings(db)
 # Marketing Reports CRUD
 async def create_marketing_daily_report(db, report: schemas.MarketingDailyReportCreate):
@@ -7160,35 +7343,97 @@ async def get_permission_presets(db, skip: int = 0, limit: int = 100):
     return [fix_id(row) for row in rows]
 
 async def get_permission_preset(db, preset_id: str):
-    doc = await db.permission_presets.find_one({"_id": ObjectId(preset_id)})
+    query = {"_id": ObjectId(preset_id)} if ObjectId.is_valid(preset_id) else {"_id": preset_id}
+    doc = await db.permission_presets.find_one(query)
     if doc:
         return fix_id(doc)
     return None
+
+async def sync_designation_presets_for_department(db, department_name: str, permissions: list):
+    if not department_name:
+        return
+    # Fetch all designations globally so presets are created for all titles under this department
+    cursor = db.designations.find({})
+    designations = await cursor.to_list(length=1000)
+    
+    clean_perms = [p.dict() if hasattr(p, 'dict') else p for p in permissions]
+    
+    for desig in designations:
+        title = desig.get("title")
+        if not title:
+            continue
+        preset_name = f"{department_name} - {title}"
+        
+        existing = await db.permission_presets.find_one({
+            "presetType": "designation",
+            "department": department_name,
+            "designation": title
+        })
+        
+        if existing:
+            await db.permission_presets.update_one(
+                {"_id": existing["_id"]},
+                {"$set": {"permissions": clean_perms, "name": preset_name}}
+            )
+            await db.user_permissions.update_many(
+                {"presetId": str(existing["_id"])},
+                {"$set": {"permissions": clean_perms}}
+            )
+        else:
+            new_doc = {
+                "name": preset_name,
+                "description": f"Designation preset for {title} in {department_name}",
+                "presetType": "designation",
+                "department": department_name,
+                "designation": title,
+                "permissions": clean_perms
+            }
+            await db.permission_presets.insert_one(new_doc)
 
 async def create_permission_preset(db, preset: schemas.PermissionPresetCreate):
     doc = preset.dict()
     result = await db.permission_presets.insert_one(doc)
     doc["_id"] = result.inserted_id
+    
+    if doc.get("presetType") == "department" and (doc.get("department") or doc.get("name")):
+        dept_name = doc.get("department") or doc.get("name")
+        await sync_designation_presets_for_department(db, dept_name, doc.get("permissions", []))
+        
     return fix_id(doc)
 
 async def update_permission_preset(db, preset_id: str, preset_update: schemas.PermissionPresetUpdate):
-    update_data = preset_update.dict(exclude_unset=True)
-    if update_data:
-        await db.permission_presets.update_one({"_id": ObjectId(preset_id)}, {"$set": update_data})
-    
-    # Propagate permissions to linked employees if permissions were updated
-    if "permissions" in update_data and update_data["permissions"] is not None:
-        permissions_list = [p.dict() for p in preset_update.permissions]
-        await db.user_permissions.update_many(
-            {"presetId": preset_id},
-            {"$set": {"permissions": permissions_list}}
-        )
+    try:
+        update_data = preset_update.dict(exclude_unset=True)
+        query = {"_id": ObjectId(preset_id)} if ObjectId.is_valid(preset_id) else {"_id": preset_id}
         
-    doc = await db.permission_presets.find_one({"_id": ObjectId(preset_id)})
-    return fix_id(doc)
+        if update_data:
+            await db.permission_presets.update_one(query, {"$set": update_data})
+        
+        doc = await db.permission_presets.find_one(query)
+        
+        if "permissions" in update_data and update_data["permissions"] is not None:
+            raw_perms = update_data["permissions"]
+            permissions_list = [p.dict() if hasattr(p, 'dict') else p for p in raw_perms]
+            await db.user_permissions.update_many(
+                {"presetId": preset_id},
+                {"$set": {"permissions": permissions_list}}
+            )
+            
+        if doc and doc.get("presetType") == "department":
+            dept_name = doc.get("department") or doc.get("name")
+            current_perms = doc.get("permissions", [])
+            await sync_designation_presets_for_department(db, dept_name, current_perms)
+
+        return fix_id(doc) if doc else None
+    except Exception as e:
+        print(f"Error updating permission preset {preset_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        raise e
 
 async def delete_permission_preset(db, preset_id: str):
-    result = await db.permission_presets.delete_one({"_id": ObjectId(preset_id)})
+    query = {"_id": ObjectId(preset_id)} if ObjectId.is_valid(preset_id) else {"_id": preset_id}
+    result = await db.permission_presets.delete_one(query)
     return result.deleted_count > 0
 
 async def create_time_recovery(db, recovery: schemas.TimeRecoveryCreate):
@@ -8024,8 +8269,27 @@ async def update_invoice(db, invoice_id: str, invoice_update: schemas.InvoiceUpd
     return fix_id(updated_doc) if updated_doc else None
 
 async def delete_invoice(db, invoice_id: str):
-    await db.invoices.delete_one({"_id": ObjectId(invoice_id)})
-    return True
+    invoice = await db.invoices.find_one({"_id": ObjectId(invoice_id)})
+    if invoice:
+        await db.deleted_invoices.insert_one(invoice)
+        await db.invoices.delete_one({"_id": ObjectId(invoice_id)})
+        return True
+    return False
+
+async def get_deleted_invoices(db):
+    cursor = db.deleted_invoices.find().sort("timestamp", -1)
+    invoices = []
+    async for doc in cursor:
+        invoices.append(fix_id(doc))
+    return invoices
+
+async def restore_invoice(db, invoice_id: str):
+    invoice = await db.deleted_invoices.find_one({"_id": ObjectId(invoice_id)})
+    if invoice:
+        await db.invoices.insert_one(invoice)
+        await db.deleted_invoices.delete_one({"_id": ObjectId(invoice_id)})
+        return True
+    return False
 
 async def get_next_invoice_number(db, invoice_type: str = "Tax Invoice", tax_type: str = "CGST+SGST"):
     import re
@@ -8724,6 +8988,13 @@ async def calculate_public_slots(db, employee_id: str, date_str: str, config_id:
         all_member_ids.extend([str(x) for x in config.get("employeeIds")])
     all_member_ids = list(set(all_member_ids))
 
+    # Sync Google Calendar events for all members before calculating available slots
+    sync_tasks = []
+    for member_id in all_member_ids:
+        sync_tasks.append(sync_google_events(db, member_id, date_str, date_str))
+    if sync_tasks:
+        await asyncio.gather(*sync_tasks, return_exceptions=True)
+
     query = {
         "$or": [
             {"employeeId": {"$in": all_member_ids}},
@@ -8747,7 +9018,12 @@ async def calculate_public_slots(db, employee_id: str, date_str: str, config_id:
         s_start = s.get("startTime")
         s_end = s.get("endTime")
         if s_start and s_end:
-            existing_ranges.append((time_str_to_mins(s_start), time_str_to_mins(s_end)))
+            start_mins = time_str_to_mins(s_start)
+            end_mins = time_str_to_mins(s_end)
+            # Full day event (00:00 to 00:00) blocks the entire day
+            if start_mins == 0 and end_mins == 0:
+                end_mins = 1440
+            existing_ranges.append((start_mins, end_mins))
             
     candidate_slots = []
     for window in day_slots:
@@ -9190,6 +9466,8 @@ async def get_all_transfer_requests(db, task_id: str = None, task_type: str = No
     if task_type:
         if task_type in ["smm", "all"]:
             query["taskType"] = {"$in": ["content-calendar", "creative", "other-work"]}
+        elif task_type in ["wm-task", "wm-tasks"]:
+            query["taskType"] = {"$in": ["wm-task", "wm-tasks"]}
         else:
             query["taskType"] = task_type
     cursor = db.work_transfer_requests.find(query).sort("createdDate", -1)
@@ -9231,6 +9509,8 @@ async def get_incoming_transfer_requests(db, receiver_id: str, task_type: str = 
     if task_type:
         if task_type in ["smm", "all"]:
             query["taskType"] = {"$in": ["content-calendar", "creative", "other-work"]}
+        elif task_type in ["wm-task", "wm-tasks"]:
+            query["taskType"] = {"$in": ["wm-task", "wm-tasks"]}
         else:
             query["taskType"] = task_type
     cursor = db.work_transfer_requests.find(query).sort("createdDate", -1)
@@ -9242,6 +9522,8 @@ async def get_outgoing_transfer_requests(db, sender_id: str, task_type: str = No
     if task_type:
         if task_type in ["smm", "all"]:
             query["taskType"] = {"$in": ["content-calendar", "creative", "other-work"]}
+        elif task_type in ["wm-task", "wm-tasks"]:
+            query["taskType"] = {"$in": ["wm-task", "wm-tasks"]}
         else:
             query["taskType"] = task_type
     cursor = db.work_transfer_requests.find(query).sort("createdDate", -1)
@@ -9273,6 +9555,10 @@ async def respond_to_transfer_request(db, request_id: str, status: str):
                     update_field = "assignedScriptwriterId"
                 elif stage == "Shoot":
                     update_field = "assignedShooterId"
+                elif stage == "Caption":
+                    update_field = "assignedCaptionWriterId"
+                elif stage == "Thumbnail":
+                    update_field = "assignedThumbnailDesignerId"
                 elif stage == "Editing":
                     entry = await db.content_calendar_entries.find_one({"_id": ObjectId(task_id)})
                     if entry and entry.get("postReel") == "Post":
@@ -9285,6 +9571,27 @@ async def respond_to_transfer_request(db, request_id: str, status: str):
                     update_field = "assignedApproverId"
                 elif stage == "Posting":
                     update_field = "assignedPosterId"
+                elif stage == "Brand Person":
+                    entry = await db.content_calendar_entries.find_one({"_id": ObjectId(task_id)})
+                    if entry:
+                        bp_ids = entry.get("assignedBrandPersonIds", [])
+                        sender_id = req.get("senderId")
+                        if sender_id in bp_ids:
+                            bp_ids = [receiver_id if x == sender_id else x for x in bp_ids]
+                        else:
+                            if receiver_id not in bp_ids:
+                                bp_ids.append(receiver_id)
+                        logs = entry.get("logs", [])
+                        logs.append({
+                            "timestamp": datetime.now(IST).isoformat(),
+                            "action": "Task Transferred",
+                            "details": f"Stage '{stage}' transferred from {req.get('senderName')} to {req.get('receiverName')}.",
+                            "userName": "System"
+                        })
+                        await db.content_calendar_entries.update_one(
+                            {"_id": ObjectId(task_id)},
+                            {"$set": {"assignedBrandPersonIds": bp_ids, "logs": logs}}
+                        )
                 
                 if update_field:
                     entry = await db.content_calendar_entries.find_one({"_id": ObjectId(task_id)})
@@ -9443,8 +9750,8 @@ async def get_finance_transactions(db, payment_method: str = None, type_filter: 
         try:
             inv_cursor = db.invoices.find({})
             async for inv in inv_cursor:
-                # Skip Proforma invoices
-                if inv.get("invoiceType") == "Proforma Invoice":
+                # Skip Proforma invoices and hidden invoices
+                if inv.get("invoiceType") == "Proforma Invoice" or inv.get("hiddenFromFinance"):
                     continue
                     
                 inv_id = str(inv.get("_id") or inv.get("id", ""))
@@ -9655,11 +9962,11 @@ async def delete_finance_transaction(db, tx_id: str, current_user=None):
         inv_id = tx_id[4:]
         try:
             existing = await get_finance_transaction_by_id(db, tx_id)
-            res = await db.invoices.delete_one({"_id": ObjectId(inv_id)})
-            if res.deleted_count > 0 and existing:
-                details = f"Deleted synced invoice transaction: {existing.get('category')} - {existing.get('description')} (Amount: {existing.get('amount')})"
+            res = await db.invoices.update_one({"_id": ObjectId(inv_id)}, {"$set": {"hiddenFromFinance": True}})
+            if res.modified_count > 0 and existing:
+                details = f"Removed synced invoice transaction from finance: {existing.get('category')} - {existing.get('description')} (Amount: {existing.get('amount')})"
                 await log_activity(db, "Finance Transaction Deleted", performed_by_id, performed_by_name, details)
-            return res.deleted_count > 0
+            return res.modified_count > 0
         except Exception as e:
             print(f"Error deleting synced invoice: {e}")
             return False
@@ -10099,3 +10406,61 @@ async def get_all_course_progress(db, course_id: str):
     docs = await cursor.to_list(length=None)
     return [fix_id(d) for d in docs]
 
+
+
+async def get_all_user_permissions(db):
+    cursor = db.user_permissions.find({})
+    perms = await cursor.to_list(length=2000)
+    return [fix_id(p) for p in perms]
+
+async def bulk_update_module_permissions(db, request: schemas.ModuleBulkUpdateRequest, performed_by: str = "System", user_name: str = "System User"):
+    module_name = request.moduleName
+    updates = request.updates
+    
+    for emp_update in updates:
+        emp_id = emp_update.employeeId
+        existing_doc = await db.user_permissions.find_one({"employeeId": emp_id})
+        if not existing_doc:
+            new_doc = {
+                "employeeId": emp_id,
+                "presetId": None,
+                "permissions": [{
+                    "moduleName": module_name,
+                    "displayName": request.displayName,
+                    "tabUrl": request.tabUrl,
+                    "canAdd": emp_update.canAdd,
+                    "canEdit": emp_update.canEdit,
+                    "canDelete": emp_update.canDelete,
+                    "canView": emp_update.canView
+                }]
+            }
+            await db.user_permissions.insert_one(new_doc)
+        else:
+            perms = existing_doc.get("permissions", [])
+            mod_found = False
+            for m in perms:
+                if m.get("moduleName") == module_name:
+                    m["canAdd"] = emp_update.canAdd
+                    m["canEdit"] = emp_update.canEdit
+                    m["canDelete"] = emp_update.canDelete
+                    m["canView"] = emp_update.canView
+                    m["displayName"] = request.displayName
+                    m["tabUrl"] = request.tabUrl
+                    mod_found = True
+                    break
+            if not mod_found:
+                perms.append({
+                    "moduleName": module_name,
+                    "displayName": request.displayName,
+                    "tabUrl": request.tabUrl,
+                    "canAdd": emp_update.canAdd,
+                    "canEdit": emp_update.canEdit,
+                    "canDelete": emp_update.canDelete,
+                    "canView": emp_update.canView
+                })
+            
+            await db.user_permissions.update_one(
+                {"employeeId": emp_id},
+                {"$set": {"permissions": perms, "presetId": None}}
+            )
+    return {"message": "Bulk permissions updated successfully"}

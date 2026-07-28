@@ -205,3 +205,23 @@ export function calculateAttendanceTimes(record: any, now: Date): CalculatedTime
   };
 }
 
+/**
+ * Standardize date display across the HRMS to strictly use DD/MM/YYYY.
+ * CAUTION: Do not use this for API payloads, which typically require YYYY-MM-DD.
+ */
+export function formatDisplayDate(dateInput: string | Date | null | undefined): string {
+  if (!dateInput) return '-';
+  const d = dayjs(dateInput);
+  if (!d.isValid()) return '-';
+  return d.format('DD/MM/YYYY');
+}
+
+/**
+ * Standardize date + time display across the HRMS to strictly use DD/MM/YYYY, hh:mm A.
+ */
+export function formatDisplayDateTime(dateInput: string | Date | null | undefined): string {
+  if (!dateInput) return '-';
+  const d = dayjs(dateInput);
+  if (!d.isValid()) return '-';
+  return d.format('DD/MM/YYYY, hh:mm A');
+}

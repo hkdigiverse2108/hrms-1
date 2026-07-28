@@ -9,8 +9,10 @@ import {
   Star,
   StarHalf,
   Loader2,
-  History
+  History,
+  Check
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { API_URL } from "@/lib/config";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +21,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
 import { PageHeader } from "@/components/common/PageHeader";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { TablePagination } from "@/components/common/TablePagination";
@@ -160,7 +163,8 @@ export default function ReviewPage() {
   const [newReview, setNewReview] = useState({
     employeeId: "",
     summary: "",
-    rating: 0
+    rating: 0,
+    showNameToAdmin: false
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -168,6 +172,7 @@ export default function ReviewPage() {
   
   const [createQueryModalOpen, setCreateQueryModalOpen] = useState(false);
   const [newQueryText, setNewQueryText] = useState("");
+  const [replyText, setReplyText] = useState("");
 
   useEffect(() => {
     if (user !== undefined) {
@@ -219,6 +224,7 @@ export default function ReviewPage() {
           department: user.department || "N/A",
           summary: newReview.summary,
           rating: newReview.rating,
+          showNameToAdmin: newReview.showNameToAdmin,
           updatedBy: currentUserName
         };
       } else {
@@ -241,7 +247,7 @@ export default function ReviewPage() {
 
       if (res.ok) {
         setCreateModalOpen(false);
-        setNewReview({ employeeId: (!isAdmin && user) ? (user.id || user._id || "") : "", summary: "", rating: 0 });
+        setNewReview({ employeeId: (!isAdmin && user) ? (user.id || user._id || "") : "", summary: "", rating: 0, showNameToAdmin: false });
         setNewRating(0);
         fetchData();
       }
@@ -307,16 +313,61 @@ export default function ReviewPage() {
           rating: selectedReview.rating,
           query: selectedReview.query,
           adminReply: selectedReview.adminReply,
+          replies: selectedReview.replies,
+          isApproved: selectedReview.isApproved,
+          showNameToAdmin: selectedReview.showNameToAdmin,
           updatedBy: currentUserName
         })
       });
 
       if (res.ok) {
         setEditModalOpen(false);
+        setReplyText("");
         fetchData();
       }
     } catch (err) {
       console.error("Error updating review:", err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleInstantReplyOrApprove = async (newReply?: any, isApproved?: boolean) => {
+    if (!selectedReview) return;
+    setIsSubmitting(true);
+    try {
+      const storedUser = localStorage.getItem('user');
+      const currentUser = storedUser ? JSON.parse(storedUser) : null;
+      const currentUserName = currentUser?.name || (currentUser?.firstName ? `${currentUser.firstName} ${currentUser.lastName || ''}`.trim() : null) || "Unknown User";
+
+      const updatedReplies = newReply ? [...(selectedReview.replies || []), newReply] : selectedReview.replies;
+      const updatedApproval = isApproved !== undefined ? isApproved : selectedReview.isApproved;
+
+      const res = await fetch(`${API_URL}/reviews/${selectedReview.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          summary: selectedReview.summary,
+          rating: selectedReview.rating,
+          query: selectedReview.query,
+          adminReply: selectedReview.adminReply,
+          replies: updatedReplies,
+          isApproved: updatedApproval,
+          updatedBy: currentUserName
+        })
+      });
+
+      if (res.ok) {
+        setSelectedReview((prev: any) => ({
+          ...prev,
+          replies: updatedReplies,
+          isApproved: updatedApproval
+        }));
+        setReplyText("");
+        fetchData();
+      }
+    } catch (err) {
+      console.error("Error instant saving:", err);
     } finally {
       setIsSubmitting(false);
     }
@@ -484,6 +535,19 @@ export default function ReviewPage() {
                     className="h-32 resize-none bg-white"
                   />
                 </div>
+
+                <div className="flex items-center space-x-2 pt-2 border-t border-slate-100">
+                  <input 
+                    type="checkbox"
+                    id="showNameToAdminCreate" 
+                    checked={newReview.showNameToAdmin || false}
+                    onChange={(e) => setNewReview(prev => ({ ...prev, showNameToAdmin: e.target.checked }))}
+                    className="w-4 h-4 rounded border-gray-300 text-brand-teal focus:ring-brand-teal cursor-pointer"
+                  />
+                  <label htmlFor="showNameToAdminCreate" className="text-sm font-medium text-slate-700 cursor-pointer select-none">
+                    Show my name to Admins
+                  </label>
+                </div>
               </div>
 
               <DialogFooter className="flex flex-col-reverse sm:flex-row gap-3 mt-4">
@@ -551,7 +615,14 @@ export default function ReviewPage() {
                 </tr>
               ) : (
                 paginatedReviews.map((review, idx) => {
-                  const shouldHideNames = isAdmin && sysSettings && sysSettings.showNamesInRemarksToAdmin === false;
+                  const isQuery = review.summary === "Employee Query" || review.query;
+                  let shouldHideNames = false;
+                  if (isAdmin && sysSettings && sysSettings.showNamesInRemarksToAdmin === false && !isQuery) {
+                    shouldHideNames = true;
+                  }
+                  if (review.showNameToAdmin === true) {
+                    shouldHideNames = false;
+                  }
                   const displayName = shouldHideNames ? "Anonymous" : review.employeeName;
                   const displayRole = shouldHideNames ? "Employee" : review.role;
                   const displayAvatarFallback = shouldHideNames ? "A" : review.employeeName?.split(' ').map((n:any) => n[0]).join('');
@@ -592,20 +663,14 @@ export default function ReviewPage() {
                       </td>
                     )}
                     {activeTab === "queries" && (
-                      <td className="px-6 py-4 max-w-[350px]">
-                        {review.query && (
-                          <div className="text-[12px] mb-1">
-                            <span className="font-semibold text-brand-teal">Query:</span> <span className="text-slate-600 whitespace-normal">{review.query}</span>
-                          </div>
-                        )}
-                        {review.adminReply && (
-                          <div className="text-[12px]">
-                            <span className="font-semibold text-amber-600">Reply:</span> <span className="text-slate-600 whitespace-normal">{review.adminReply}</span>
-                          </div>
-                        )}
-                        {!review.query && !review.adminReply && (
-                          <span className="text-[12px] text-slate-400">No queries</span>
-                        )}
+                      <td className="px-6 py-4">
+                        <div className="flex items-center">
+                          {review.isApproved ? (
+                            <Badge className="bg-green-500 text-white text-[10px] h-5 px-1.5 border-none uppercase font-bold tracking-wider"><Check className="w-2.5 h-2.5 mr-0.5"/> Approved</Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50 text-[10px] h-5 px-1.5 font-bold uppercase tracking-wider">Pending</Badge>
+                          )}
+                        </div>
                       </td>
                     )}
                     <td className="px-6 py-4 text-right">
@@ -651,9 +716,8 @@ export default function ReviewPage() {
         />
       </div>
 
-      {/* Edit Modal */}
       <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto custom-scrollbar">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold">Edit Remark</DialogTitle>
           </DialogHeader>
@@ -686,30 +750,102 @@ export default function ReviewPage() {
               )}
 
               {(selectedReview.summary === "Employee Query" || selectedReview.query) && (
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-foreground">Employee Query</label>
-                  <Textarea
-                    value={selectedReview.query || ""}
-                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setSelectedReview((prev: any) => ({ ...prev, query: e.target.value }))}
-                    className="h-24 resize-none bg-white"
-                    disabled={isAdmin}
-                    placeholder="Enter your query..."
-                  />
+                <div className="col-span-1 sm:col-span-2 space-y-4 border rounded-lg p-4 bg-slate-50">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-semibold text-slate-800">Query Thread</h3>
+                    {selectedReview.isApproved ? (
+                      <Badge className="bg-green-500 text-white border-none font-bold uppercase tracking-wider flex items-center gap-0.5"><Check className="w-3 h-3"/> Approved</Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50">Pending</Badge>
+                    )}
+                  </div>
+                  <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                    {selectedReview.query && (
+                      <div className="bg-white border border-slate-200 rounded-lg p-3 shadow-sm">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-semibold text-slate-900">{selectedReview.employeeName} (Initial Query)</span>
+                          <span className="text-[10px] text-slate-400">{selectedReview.date || "Unknown Date"}</span>
+                        </div>
+                        <p className="text-sm text-slate-700 whitespace-pre-wrap">{selectedReview.query}</p>
+                      </div>
+                    )}
+                    
+                    {selectedReview.adminReply && (
+                      <div className="bg-white border border-slate-200 rounded-lg p-3 shadow-sm ml-6">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-semibold text-slate-900">Admin Reply</span>
+                        </div>
+                        <p className="text-sm text-slate-700 whitespace-pre-wrap">{selectedReview.adminReply}</p>
+                      </div>
+                    )}
+
+                    {selectedReview.replies?.map((reply: any, idx: number) => (
+                      <div key={idx} className={`bg-white border border-slate-200 rounded-lg p-3 shadow-sm ${reply.sender === 'Admin' ? 'ml-6 border-l-4 border-l-brand-teal' : 'mr-6 border-l-4 border-l-amber-500'}`}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-semibold text-slate-900">{reply.senderName || reply.sender}</span>
+                          <span className="text-[10px] text-slate-400">{reply.timestamp ? new Date(reply.timestamp).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}</span>
+                        </div>
+                        <p className="text-sm text-slate-700 whitespace-pre-wrap">{reply.text}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {!selectedReview.isApproved && (
+                    <div className="pt-2 border-t border-slate-200 space-y-3">
+                      <div className="flex gap-2">
+                        <Textarea 
+                          value={replyText}
+                          onChange={(e) => setReplyText(e.target.value)}
+                          placeholder="Type a reply..."
+                          className="min-h-[40px] h-[40px] resize-none"
+                        />
+                        <Button 
+                          onClick={() => {
+                            if (!replyText.trim()) return;
+                            const newReply = {
+                              text: replyText,
+                              sender: isAdmin ? 'Admin' : 'Employee',
+                              senderName: user?.name || (isAdmin ? "Admin" : "Employee"),
+                              timestamp: new Date().toISOString()
+                            };
+                            handleInstantReplyOrApprove(newReply, undefined);
+                          }}
+                          className="bg-brand-teal hover:bg-brand-teal-light text-white shrink-0"
+                          disabled={!replyText.trim() || isSubmitting}
+                        >
+                          {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Add"}
+                        </Button>
+                      </div>
+                      
+                      {!isAdmin && user && (user.id === selectedReview.employeeId || user._id === selectedReview.employeeId) && (
+                        <div className="flex justify-end">
+                          <Button 
+                            variant="outline"
+                            className="text-green-600 border-green-200 hover:bg-green-50"
+                            onClick={() => handleInstantReplyOrApprove(undefined, true)}
+                            disabled={isSubmitting}
+                          >
+                            <Check className="w-4 h-4 mr-2" /> Mark as Approved
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
-              {(selectedReview.summary === "Employee Query" || selectedReview.adminReply) && (
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-foreground">Admin Reply</label>
-                  <Textarea 
-                    value={selectedReview.adminReply || ""}
-                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setSelectedReview((prev: any) => ({ ...prev, adminReply: e.target.value }))}
-                    placeholder={isAdmin ? "Enter a reply to the employee's query..." : "Waiting for admin reply..."}
-                    className="h-24 resize-none bg-white"
-                    disabled={!isAdmin}
-                  />
-                </div>
-              )}
+              <div className="flex items-center space-x-2 pt-2 border-t border-slate-100">
+                <input 
+                  type="checkbox"
+                  id="showNameToAdminEdit" 
+                  checked={selectedReview.showNameToAdmin || false}
+                  onChange={(e) => setSelectedReview((prev: any) => ({ ...prev, showNameToAdmin: e.target.checked }))}
+                  className="w-4 h-4 rounded border-gray-300 text-brand-teal focus:ring-brand-teal cursor-pointer"
+                />
+                <label htmlFor="showNameToAdminEdit" className="text-sm font-medium text-slate-700 cursor-pointer select-none">
+                  Show my name to Admins
+                </label>
+              </div>
               </div>
             </div>
           )}

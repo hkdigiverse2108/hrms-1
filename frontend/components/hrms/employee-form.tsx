@@ -27,6 +27,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { API_URL, getAvatarUrl } from '@/lib/config'
 import { toast } from "sonner";
 import { TIME_OPTIONS } from '@/lib/constants'
+import { useUser } from '@/hooks/useUser'
 
 export interface EmployeeFormData {
   employeeId: string
@@ -51,6 +52,7 @@ export interface EmployeeFormData {
   aadharCard: string
   panCard: string
   department: string
+  sub_department?: string
   designation: string
   startTime: string
   endTime: string
@@ -90,7 +92,7 @@ const defaultFormData: EmployeeFormData = {
   dob: '',
   joinDate: '',
   salary: '',
-  role: '',
+  role: 'Employee',
   upiId: '',
   accountNumber: '',
   ifscCode: '',
@@ -102,6 +104,7 @@ const defaultFormData: EmployeeFormData = {
   aadharCard: '',
   panCard: '',
   department: '',
+  sub_department: '',
   designation: '',
   startTime: '',
   endTime: '',
@@ -158,13 +161,16 @@ const calculateResignationDate = (startDateStr: string, daysCountStr: string, ho
 };
 
 export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: EmployeeFormProps) {
-  const { data, refresh } = useApi()
+  const { user } = useUser()
+  const { data, isLoading } = useApi()
+  
   const departments = data?.departments || []
+  const subDepartments = (data as any)?.subDepartments || []
   const designations = data?.designations || []
-  const roles = data?.roles || []
   const relations = data?.relations || []
   const documentTypes = (data as any)?.documentTypes || []
   const holidays = (data as any)?.holidays || []
+  const roles = data?.roles || []
   
   const [formData, setFormData] = useState<EmployeeFormData>(defaultFormData)
   const [showPassword, setShowPassword] = useState(false)
@@ -185,10 +191,14 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
         // Try exact match
         let value = initialData[k]
         
-        // Try case-insensitive match if not found
+        if (k === 'sub_department' && (value === undefined || value === null)) {
+          value = (initialData as any).subDepartment ?? (initialData as any).sub_dept ?? (initialData as any).subDept
+        }
+
+        // Try case-insensitive and underscore-insensitive match if not found
         if (value === undefined || value === null) {
-          const lowerKey = k.toLowerCase()
-          const foundKey = dataKeys.find(dk => dk.toLowerCase() === lowerKey)
+          const cleanKey = k.toLowerCase().replace(/_/g, '')
+          const foundKey = dataKeys.find(dk => dk.toLowerCase().replace(/_/g, '') === cleanKey)
           if (foundKey) {
             value = (initialData as any)[foundKey]
           }
@@ -252,7 +262,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
   const isRoleAdmin = (r?: string) => {
     if (!r) return false;
     const clean = r.toLowerCase().trim();
-    return clean === 'admin' || clean === 'super admin' || clean === 'superadmin' || clean === 'administrator' || clean === 'founder' || clean === 'super_admin';
+    return clean === 'admin' || clean === 'super admin' || clean === 'superadmin' || clean === 'administrator' || clean === 'founder' || clean === 'super_admin' || clean === 'sub-admin' || clean === 'sub admin';
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -267,6 +277,13 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
   const handleChange = (field: keyof EmployeeFormData, value: any) => {
     setFormData((prev) => {
       const next = { ...prev, [field]: value }
+      if (field === 'department') {
+        next.sub_department = ''
+        next.designation = ''
+      }
+      if (field === 'sub_department') {
+        next.designation = ''
+      }
       if (field === 'noticePeriodDays' || field === 'noticePeriodStartDate' || field === 'hasNoticePeriod') {
         if (next.hasNoticePeriod && next.noticePeriodStartDate && next.noticePeriodDays) {
           const calculatedDate = calculateResignationDate(next.noticePeriodStartDate, next.noticePeriodDays, holidays)
@@ -389,11 +406,62 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
           value={formData.role}
           onValueChange={(v: string) => handleChange('role', v)}
           options={[
-            ...roles.map((r: any) => ({ label: r.name, value: r.name })),
-            ...(roles.some((r: any) => r.name?.toLowerCase() === 'intern') ? [] : [{ label: 'Intern', value: 'Intern' }])
-          ]}
+            { label: 'Admin', value: 'Admin' },
+            { label: 'Sub-Admin', value: 'Sub-Admin' },
+            { label: 'Employee', value: 'Employee' }
+          ].filter(roleOption => {
+            const rName = roleOption.value.toLowerCase().trim();
+            const uRole = user?.role?.toLowerCase().trim() || '';
+            
+            const ROLE_HIERARCHY: Record<string, number> = {
+              'admin': 0, 'super admin': 0, 'superadmin': 0, 'administrator': 0, 'founder': 0, 'super_admin': 0,
+              'sub-admin': 1,
+              'employee': 5
+            };
+            const getRoleLevel = (r: string) => ROLE_HIERARCHY[r] ?? 5;
+            
+            const actorLevel = getRoleLevel(uRole);
+            const targetLevel = getRoleLevel(rName);
+            
+            return actorLevel === 0 || targetLevel >= actorLevel;
+          })}
           placeholder="Select role"
         />
+
+        {isRoleAdmin(formData.role) && (
+          <FormField label="Designation" id="designation" required value={formData.designation} onChange={(v: string) => handleChange('designation', v)} />
+        )}
+        
+        {!isRoleAdmin(formData.role) && (
+          <>
+            <FormSelect 
+              key={`dept-${departments.length}`} 
+              label="Department" 
+              id="department" 
+              required 
+              value={formData.department} 
+              onValueChange={(v: string) => handleChange('department', v)} 
+              options={departments.map((d: any) => ({ label: d.name, value: d.name }))} 
+              placeholder="Select department" 
+            />
+            <FormSelect 
+              key={`subdept-${subDepartments.length}-${formData.department}`} 
+              label="Sub Department" 
+              id="sub_department" 
+              required
+              value={formData.sub_department || ''} 
+              onValueChange={(v: string) => handleChange('sub_department', v)} 
+              options={subDepartments.filter((d: any) => {
+                if (!formData.department) return true;
+                const dDept = (d.department || d.department_name || '').trim().toLowerCase();
+                const formDept = (formData.department || '').trim().toLowerCase();
+                return !dDept || !formDept || dDept === formDept;
+              }).map((d: any) => ({ label: d.name || d.title, value: d.name || d.title }))} 
+              placeholder="Select sub department" 
+            />
+            <FormSelect key={`des-${designations.length}-${formData.sub_department}`} label="Designation" id="designation" required value={formData.designation} onValueChange={(v: string) => handleChange('designation', v)} options={designations.map((d: any) => ({ label: d.title, value: d.title }))} placeholder="Select designation" />
+          </>
+        )}
       </div>
  
       {/* Dynamic Conditional Sections */}
@@ -467,18 +535,6 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
         
         {!isRoleAdmin(formData.role) && (
           <>
-            <FormSelect 
-              key={`dept-${departments.length}`} 
-              label="Department" 
-              id="department" 
-              required 
-              value={formData.department} 
-              onValueChange={(v: string) => handleChange('department', v)} 
-              options={departments.map((d: any) => ({ label: d.name, value: d.name }))} 
-              placeholder="Select department" 
-            />
-            <FormSelect key={`des-${designations.length}-${formData.department}`} label="Designation" id="designation" required value={formData.designation} onValueChange={(v: string) => handleChange('designation', v)} options={designations.filter((d: any) => d.department === formData.department).map((d: any) => ({ label: d.title, value: d.title }))} placeholder="Select designation" />
-            
             <FormSelect 
               label="Status" 
               id="status" 
@@ -840,11 +896,11 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
 
 function FormField({ label, id, required, value, onChange, placeholder, type = 'text', className = "", rightElement }: any) {
   return (
-    <div className={`flex items-center gap-4 ${className}`}>
-      <Label htmlFor={id} className="w-44 text-left font-medium text-gray-700 whitespace-nowrap">
-        {label}{required && <span className="text-red-500 ml-1 text-lg font-bold">*</span>}:
+    <div className={`flex flex-col gap-1.5 ${className}`}>
+      <Label htmlFor={id} className="font-semibold text-gray-700 text-xs uppercase tracking-wider">
+        {label}{required && <span className="text-red-500 ml-0.5 font-bold">*</span>}
       </Label>
-      <div className="relative flex-1">
+      <div className="relative w-full">
         <Input
           id={id}
           type={type}
@@ -852,7 +908,7 @@ function FormField({ label, id, required, value, onChange, placeholder, type = '
           value={value || ''}
           onChange={(e) => onChange(e.target.value)}
           required={required}
-          className="w-full bg-white border-gray-200 focus-visible:ring-brand-teal h-10 shadow-sm pr-10"
+          className="w-full bg-white border-gray-200 focus-visible:ring-brand-teal h-10 shadow-sm pr-10 text-sm"
         />
         {rightElement}
       </div>
@@ -862,9 +918,9 @@ function FormField({ label, id, required, value, onChange, placeholder, type = '
 
 function FormSelect({ label, id, required, value, onValueChange, options, placeholder, className = "" }: any) {
   return (
-    <div className={`flex items-center gap-4 ${className}`}>
-      <Label htmlFor={id} className="w-44 text-left font-medium text-gray-700 whitespace-nowrap">
-        {label}{required && <span className="text-red-500 ml-1 text-lg font-bold">*</span>}:
+    <div className={`flex flex-col gap-1.5 ${className}`}>
+      <Label htmlFor={id} className="font-semibold text-gray-700 text-xs uppercase tracking-wider">
+        {label}{required && <span className="text-red-500 ml-0.5 font-bold">*</span>}
       </Label>
       <Select 
         key={`${id}-${value}-${options.length}`} 
@@ -872,7 +928,7 @@ function FormSelect({ label, id, required, value, onValueChange, options, placeh
         onValueChange={onValueChange} 
         required={required}
       >
-        <SelectTrigger className="flex-1 bg-white border-gray-200 focus:ring-brand-teal h-10 shadow-sm">
+        <SelectTrigger className="w-full bg-white border-gray-200 focus:ring-brand-teal h-10 shadow-sm text-sm">
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
@@ -885,7 +941,6 @@ function FormSelect({ label, id, required, value, onValueChange, options, placeh
           )}
         </SelectContent>
       </Select>
-
     </div>
   )
 }

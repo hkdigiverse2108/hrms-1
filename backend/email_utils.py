@@ -64,3 +64,58 @@ def send_otp_email(to_email: str, otp: str):
         # Even if email fails, we don't want to completely crash if it's a dev environment.
         # But we should log it.
         return False
+
+def send_caution_email(to_email: str, new_email: str):
+    """
+    Sends a caution email notifying that the company email has been changed.
+    """
+    smtp_server = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user = os.getenv("SMTP_USER", "")
+    smtp_pass = os.getenv("SMTP_PASS", "")
+
+    if not smtp_user or not smtp_pass:
+        print(f"\n[WARNING] SMTP credentials not configured.")
+        print(f"--- MOCK CAUTION EMAIL ---")
+        print(f"To: {to_email}")
+        print(f"Subject: Security Alert - Company Email Changed")
+        print(f"Message: The company email has been changed to {new_email}.")
+        print(f"--------------------------\n")
+        return True
+
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = f"HK DigiVerse Security <{smtp_user}>"
+        msg['To'] = to_email
+        msg['Subject'] = "Security Alert - Company Email Changed"
+
+        html_body = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; color: #333;">
+            <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #fee2e2; border-radius: 8px; background: #fff5f5;">
+                <h2 style="color: #dc2626; text-align: center;">Security Alert</h2>
+                <p>Hello,</p>
+                <p>This is a notice that the registered company email address for the Finance module has just been changed.</p>
+                <p><strong>New Email:</strong> {new_email}</p>
+                <p>If you or your administrative team did not make this change, please log in immediately and review your system settings.</p>
+                <br/>
+                <p style="font-size: 12px; color: #94a3b8; text-align: center;">
+                    &copy; HK DigiVerse. All rights reserved.
+                </p>
+            </div>
+        </body>
+        </html>
+        """
+        
+        msg.attach(MIMEText(html_body, 'html'))
+
+        server = smtplib.SMTP(smtp_server, smtp_port)
+        server.starttls()
+        server.login(smtp_user, smtp_pass)
+        server.send_message(msg)
+        server.quit()
+        return True
+    except Exception as e:
+        print(f"Error sending caution email: {e}")
+        return False
+

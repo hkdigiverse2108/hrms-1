@@ -41,10 +41,11 @@ import { API_URL } from "@/lib/config";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 import { INDIAN_STATES, TIME_OPTIONS } from "@/lib/constants";
-
+import { FLAT_MODULES } from "@/lib/modules";
 
 export default function SettingsPage() {
   const { user, updateUser } = useUserContext();
@@ -240,6 +241,31 @@ export default function SettingsPage() {
     }
   };
 
+  const handleToggleModule = async (moduleKey: string, checked: boolean) => {
+    setIsUpdating(true);
+    try {
+      const current = settings?.enabledModules || [];
+      let newModules = [...current];
+      if (checked && !newModules.includes(moduleKey)) {
+        newModules.push(moduleKey);
+      } else if (!checked && newModules.includes(moduleKey)) {
+        newModules = newModules.filter(m => m !== moduleKey);
+      }
+      const res = await fetch(`${API_URL}/system-settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabledModules: newModules })
+      });
+      if (res.ok) {
+        setSettings(await res.json());
+      }
+    } catch (err) {
+      console.error("Error updating settings:", err);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const handleUpdateShiftSettings = async (key: string, value: any) => {
     setIsUpdating(true);
     try {
@@ -275,6 +301,7 @@ export default function SettingsPage() {
           companyAddress: settings?.companyAddress || "",
           companyPhone: settings?.companyPhone || "",
           companyEmail: settings?.companyEmail || "",
+          financeOtpEmail: settings?.financeOtpEmail || "",
           companyPan: settings?.companyPan || "",
           companyLlpin: settings?.companyLlpin || "",
           companyState: settings?.companyState || "",
@@ -302,7 +329,8 @@ export default function SettingsPage() {
           addHoldDaysToEndDate: settings?.addHoldDaysToEndDate !== undefined ? settings.addHoldDaysToEndDate : true,
           otpRequiredRoles: settings?.otpRequiredRoles || [],
           financeDecimalScaling: settings?.financeDecimalScaling !== undefined ? Number(settings.financeDecimalScaling) : 0,
-          dashboardBanners: settings?.dashboardBanners || []
+          dashboardBanners: settings?.dashboardBanners || [],
+          enabledModules: settings?.enabledModules || []
         })
       });
       if (res.ok) {
@@ -365,11 +393,17 @@ export default function SettingsPage() {
       return;
     }
     
+    let normalizedUrl = newBanner.externalUrl ? newBanner.externalUrl.trim() : "";
+    if (normalizedUrl && !normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://') && !normalizedUrl.startsWith('/')) {
+      normalizedUrl = 'https://' + normalizedUrl;
+    }
+    const bannerToSave = { ...newBanner, externalUrl: normalizedUrl };
+
     let updatedBanners;
     if (editingBannerId) {
-      updatedBanners = (settings?.dashboardBanners || []).map((b: any) => b.id === editingBannerId ? { ...newBanner, id: editingBannerId } : b);
+      updatedBanners = (settings?.dashboardBanners || []).map((b: any) => b.id === editingBannerId ? { ...bannerToSave, id: editingBannerId } : b);
     } else {
-      const banner = { ...newBanner, id: Date.now().toString() };
+      const banner = { ...bannerToSave, id: Date.now().toString() };
       updatedBanners = [...(settings?.dashboardBanners || []), banner];
     }
     
@@ -770,6 +804,37 @@ export default function SettingsPage() {
             </Card>
           )}
 
+          {/* Global Module Configuration Card */}
+          {isAdmin && (
+            <Card className="p-6 border-border shadow-sm">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-indigo-50 rounded-lg">
+                  <LayoutDashboard className="w-5 h-5 text-indigo-600" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg text-foreground">Global Module Configuration</h3>
+                  <p className="text-xs text-muted-foreground">Select which modules are actively used by your company. Disabled modules will be hidden globally.</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {FLAT_MODULES.filter(m => m.moduleName !== 'access-control' && m.moduleName !== 'settings' && m.moduleName !== 'dashboard').map(module => (
+                  <div key={module.moduleName} className="flex items-center justify-between p-3 rounded-lg border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                    <Label className="text-sm font-medium cursor-pointer flex-1" htmlFor={`module-${module.moduleName}`}>
+                      {module.displayName}
+                    </Label>
+                    <Switch
+                      id={`module-${module.moduleName}`}
+                      checked={settings?.enabledModules?.includes(module.moduleName) ?? true}
+                      onCheckedChange={(c) => handleToggleModule(module.moduleName, c)}
+                      disabled={isUpdating}
+                    />
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
           {/* Shift Configuration Card */}
           <Card className="p-6 border-border shadow-sm">
             <div className="flex items-center gap-3 mb-6">
@@ -958,7 +1023,7 @@ export default function SettingsPage() {
                         disabled={isUpdating || !canEditSettings}
                       />
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                       <Label className="text-xs font-bold text-muted-foreground uppercase">Company Email</Label>
                       <Input 
                         type="email" 
@@ -968,6 +1033,19 @@ export default function SettingsPage() {
                         onChange={(e) => setSettings({...settings, companyEmail: e.target.value})}
                         disabled={isUpdating || !canEditSettings}
                       />
+                    </div>
+                    
+                    <div className="space-y-1">
+                      <Label className="text-xs font-bold text-muted-foreground uppercase">Finance OTP Email</Label>
+                      <Input 
+                        type="email" 
+                        className="w-full bg-white border-border focus-visible:ring-brand-teal"
+                        placeholder="e.g. finance@hkdigiverse.com (Defaults to Company Email)"
+                        value={settings?.financeOtpEmail || ""}
+                        onChange={(e) => setSettings({...settings, financeOtpEmail: e.target.value})}
+                        disabled={isUpdating || !canEditSettings}
+                      />
+                      <p className="text-[10px] text-muted-foreground">Overrides the company email for Finance OTPs.</p>
                     </div>
                   </div>
                 </div>
@@ -1604,17 +1682,19 @@ export default function SettingsPage() {
                         </div>
                         <div className="space-y-2">
                           <Label>Employee</Label>
-                          <Select value={newBanner.employeeId || "all"} onValueChange={(val) => setNewBanner({...newBanner, employeeId: val === "all" ? "" : val})}>
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="All Employees" />
-                            </SelectTrigger>
-                            <SelectContent className="max-h-[200px]">
-                              <SelectItem value="all">All Employees</SelectItem>
-                              {employees.map(emp => (
-                                <SelectItem key={emp.id} value={emp.id}>{emp.name || `${emp.firstName} ${emp.lastName}`}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <SearchableSelect
+                            options={[
+                              { value: "all", label: "All Employees" },
+                              ...employees.map(emp => ({
+                                value: emp.id,
+                                label: emp.name || `${emp.firstName} ${emp.lastName}`
+                              }))
+                            ]}
+                            value={newBanner.employeeId || "all"}
+                            onValueChange={(val) => setNewBanner({...newBanner, employeeId: val === "all" ? "" : val})}
+                            placeholder="All Employees"
+                            triggerClassName="w-full"
+                          />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
@@ -1662,10 +1742,15 @@ export default function SettingsPage() {
                           </span>
                         </div>
                         {banner.externalUrl && (
-                          <div className="flex items-center gap-2 text-xs text-brand-teal">
+                          <a 
+                            href={banner.externalUrl.startsWith('http') || banner.externalUrl.startsWith('/') ? banner.externalUrl : `https://${banner.externalUrl}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-2 text-xs text-brand-teal hover:underline cursor-pointer"
+                          >
                             <LinkIcon className="w-3 h-3" />
                             <span className="truncate max-w-[200px] block">{banner.externalUrl}</span>
-                          </div>
+                          </a>
                         )}
                         {banner.employeeId && (
                           <div className="flex items-center gap-2 text-xs text-brand-teal">

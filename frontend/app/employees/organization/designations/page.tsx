@@ -28,7 +28,7 @@ import {
 import { Plus, MoreHorizontal, Pencil, Trash2, Loader2, UserCircle2, Briefcase } from 'lucide-react'
 import { useApi } from '@/hooks/useApi'
 import { API_URL } from '@/lib/config'
-import type { Designation, Department } from '@/lib/types'
+import type { Designation, Department, SubDepartment } from '@/lib/types'
 
 import { usePermissions } from '@/hooks/usePermissions'
 
@@ -42,7 +42,9 @@ export default function DesignationsPage() {
   const [editingDesig, setEditingDesig] = useState<Designation | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [itemToDelete, setItemToDelete] = useState<Designation | null>(null)
-  const [desigForm, setDesigForm] = useState({ title: '', department: '' })
+  const [desigForm, setDesigForm] = useState({ title: '', department: '', sub_department: '' })
+  
+  const subDepartments = (data as any)?.subDepartments || []
 
   useEffect(() => {
     if (data?.designations) setDesignations(data.designations)
@@ -52,16 +54,16 @@ export default function DesignationsPage() {
   const handleOpenModal = (desig?: Designation) => {
     if (desig) {
       setEditingDesig(desig)
-      setDesigForm({ title: desig.title, department: desig.department })
+      setDesigForm({ title: desig.title, department: desig.department, sub_department: desig.sub_department || '' })
     } else {
       setEditingDesig(null)
-      setDesigForm({ title: '', department: '' })
+      setDesigForm({ title: '', department: '', sub_department: '' })
     }
     setModalOpen(true)
   }
 
   const handleSave = async () => {
-    if (!desigForm.title.trim() || !desigForm.department) return
+    if (!desigForm.title.trim()) return
     setIsLoading(true)
     try {
       const url = editingDesig ? `${API_URL}/designations/${editingDesig.id}` : `${API_URL}/designations`
@@ -107,15 +109,6 @@ export default function DesignationsPage() {
           </div>
           <span className="font-bold text-slate-700">{desig.title}</span>
         </div>
-      )
-    },
-    { 
-      key: 'department' as const, 
-      header: 'Department',
-      render: (desig: Designation) => (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200 uppercase tracking-wider">
-          {desig.department}
-        </span>
       )
     },
   ]
@@ -164,7 +157,7 @@ export default function DesignationsPage() {
             <UserCircle2 className="w-6 h-6 text-brand-teal" />
           </div>
           <div>
-            <h3 className="text-lg font-extrabold text-slate-800 tracking-tight">Job Designations</h3>
+            <h3 className="text-lg font-extrabold text-slate-800 tracking-tight">Designations</h3>
             <p className="text-xs font-medium text-slate-500 uppercase tracking-widest">{designations.length} defined roles</p>
           </div>
         </div>
@@ -212,15 +205,7 @@ export default function DesignationsPage() {
                 onChange={e => setDesigForm({ ...desigForm, title: e.target.value })}
               />
             </div>
-            <div className="space-y-2">
-              <Label>Department</Label>
-              <Select value={desigForm.department} onValueChange={v => setDesigForm({ ...desigForm, department: v })}>
-                <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
-                <SelectContent>
-                  {departments.map(d => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
+
             <div className="flex justify-end gap-3 pt-4">
               <Button variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
               <Button onClick={handleSave} disabled={isLoading} className="bg-brand-teal text-white">

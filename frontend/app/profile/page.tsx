@@ -481,8 +481,15 @@ export default function ProfilePage() {
                   />
                 </div>
                 
-                <h3 className="mt-4 text-lg font-extrabold text-gray-800 tracking-tight">{userName}</h3>
-                <p className="text-brand-teal font-semibold text-xs mt-0.5">{user.designation}</p>
+                <p className="text-brand-teal font-semibold text-xs mt-0.5">
+                  {user.role?.toLowerCase().includes('admin')
+                    ? user.designation || user.role
+                    : (user.designation && (user.sub_department || (user as any).subDepartment))
+                      ? `${user.designation} ${user.sub_department || (user as any).subDepartment}`
+                      : (user.designation && user.department)
+                        ? `${user.designation} ${user.department}`
+                        : user.designation || user.role || 'Employee'}
+                </p>
                 
                 <div className="mt-3">
                   <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200/50 font-bold px-2.5 py-0.5 text-[9px] uppercase tracking-wider">

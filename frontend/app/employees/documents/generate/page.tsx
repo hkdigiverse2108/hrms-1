@@ -141,6 +141,7 @@ export default function DocumentGeneratorPage() {
   const previewRef = useRef<HTMLDivElement>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [includeAcceptance, setIncludeAcceptance] = useState(false)
+  const [requireSignature, setRequireSignature] = useState(false)
 
   const templateData = documentTemplates.find((t: any) => t.template_id === selectedTemplate)
 
@@ -227,26 +228,22 @@ export default function DocumentGeneratorPage() {
 
     // Add employee signature image
     if (htmlContent.includes('{{employeeSignature}}')) {
-      if (currentEmployee.signatureUrl) {
-        const signUrl = currentEmployee.signatureUrl.startsWith('http') ? currentEmployee.signatureUrl : `${API_URL}${currentEmployee.signatureUrl}`
-        const signHtml = `<span style="display: inline-block; text-align: center; border-bottom: 1px solid black; margin: 0 5px; min-width: 100px; vertical-align: baseline;"><img src="${signUrl}" alt="Employee Signature" style="display: inline-block; max-height: 25px; max-width: 100px; object-fit: contain; vertical-align: bottom;" /></span>`
-        htmlContent = htmlContent.replace(/\{\{employeeSignature\}\}/g, signHtml)
+      if (requireSignature) {
+        htmlContent = htmlContent.replace(/\{\{employeeSignature\}\}/g, '<div id="employee-signature-placeholder" style="display: inline-block; min-width: 100px; text-align: center; border-bottom: 1px solid black; color: #999; font-style: italic; margin: 0 5px; vertical-align: baseline;">[Pending Employee Signature]</div>')
       } else {
-        htmlContent = htmlContent.replace(/\{\{employeeSignature\}\}/g, '<span style="display: inline-block; border-bottom: 1px solid black; color: #999; font-style: italic; min-width: 100px; text-align: center; margin: 0 5px; vertical-align: baseline;">[Signature Not Uploaded]</span>')
+        htmlContent = htmlContent.replace(/\{\{employeeSignature\}\}/g, '')
       }
     }
 
     // Add admin/company signature image
     if (htmlContent.includes('{{adminSignature}}') || htmlContent.includes('{{companySignature}}')) {
-      if (systemSettings && systemSettings.companySignatureUrl) {
-        const signUrl = systemSettings.companySignatureUrl.startsWith('http') ? systemSettings.companySignatureUrl : `${API_URL}${systemSettings.companySignatureUrl}`
-        const signHtml = `<span style="display: inline-block; text-align: center; border-bottom: 1px solid black; margin: 0 5px; min-width: 100px; vertical-align: baseline;"><img src="${signUrl}" alt="Authorized Signature" style="display: inline-block; max-height: 25px; max-width: 100px; object-fit: contain; vertical-align: bottom;" /></span>`
-        htmlContent = htmlContent.replace(/\{\{adminSignature\}\}/g, signHtml)
-        htmlContent = htmlContent.replace(/\{\{companySignature\}\}/g, signHtml)
-      } else {
-        const placeholder = '<span style="display: inline-block; border-bottom: 1px solid black; color: #999; font-style: italic; min-width: 100px; text-align: center; margin: 0 5px; vertical-align: baseline;">[Signature Not Uploaded]</span>'
+      if (requireSignature) {
+        const placeholder = '<div id="company-signature-placeholder" style="display: inline-block; min-width: 100px; text-align: center; border-bottom: 1px solid black; color: #999; font-style: italic; margin: 0 5px; vertical-align: baseline;">[Pending Company Stamp]</div>'
         htmlContent = htmlContent.replace(/\{\{adminSignature\}\}/g, placeholder)
         htmlContent = htmlContent.replace(/\{\{companySignature\}\}/g, placeholder)
+      } else {
+        htmlContent = htmlContent.replace(/\{\{adminSignature\}\}/g, '')
+        htmlContent = htmlContent.replace(/\{\{companySignature\}\}/g, '')
       }
     }
 
@@ -468,13 +465,13 @@ export default function DocumentGeneratorPage() {
       let heightLeft = pdfHeight
       let position = 0
       
-      pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, pdfHeight)
+      pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, pdfHeight, undefined, 'FAST')
       heightLeft -= pageHeight
       
       while (heightLeft > 1) {
         position -= pageHeight
         pdf.addPage()
-        pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, pdfHeight)
+        pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, pdfHeight, undefined, 'FAST')
         heightLeft -= pageHeight
       }
       
@@ -530,6 +527,7 @@ export default function DocumentGeneratorPage() {
         return
       }
 
+      if (!requireSignature) {
         const domtoimage = (window as any).domtoimage
         const { jsPDF } = (window as any).jspdf
 
@@ -578,7 +576,7 @@ export default function DocumentGeneratorPage() {
         el.classList.remove('opacity-30')
       })
 
-      const scale = 4
+      const scale = 1.5
       const dataUrl = await domtoimage.toPng(clone, {
         bgcolor: '#ffffff',
         width: a4WidthPx * scale,
@@ -603,13 +601,13 @@ export default function DocumentGeneratorPage() {
       let heightLeft = pdfHeight
       let position = 0
       
-      pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, pdfHeight)
+      pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, pdfHeight, undefined, 'FAST')
       heightLeft -= pageHeight
       
       while (heightLeft > 1) {
         position -= pageHeight
         pdf.addPage()
-        pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, pdfHeight)
+        pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, pdfHeight, undefined, 'FAST')
         heightLeft -= pageHeight
       }
       
@@ -645,6 +643,10 @@ export default function DocumentGeneratorPage() {
         absoluteUrl = uploadData.url.startsWith('http') 
           ? uploadData.url 
           : `${API_URL}${uploadData.url}`
+      } else {
+        filename = `${templateLabel}_${employeeName}.html`
+      }
+
         
       let matchedRequest = null
       
@@ -675,10 +677,12 @@ export default function DocumentGeneratorPage() {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            status: 'Sent',
+            status: requireSignature ? 'Pending Signature' : 'Sent',
             fileName: filename,
             fileUrl: absoluteUrl,
-            sentDate: new Date().toISOString().split('T')[0]
+            htmlContent: requireSignature ? node.innerHTML : undefined,
+            requireSignature: requireSignature,
+            sentDate: requireSignature ? undefined : new Date().toISOString().split('T')[0]
           })
         })
         
@@ -698,11 +702,13 @@ export default function DocumentGeneratorPage() {
             employeeName: empDisplayName,
             documentType: templateData?.name || 'Official Letter',
             reason: 'Generated via built-in Document Generator',
-            status: 'Sent',
+            status: requireSignature ? 'Pending Signature' : 'Sent',
             requestDate: new Date().toISOString().split('T')[0],
             fileName: filename,
             fileUrl: absoluteUrl,
-            sentDate: new Date().toISOString().split('T')[0]
+            htmlContent: requireSignature ? node.innerHTML : undefined,
+            requireSignature: requireSignature,
+            sentDate: requireSignature ? undefined : new Date().toISOString().split('T')[0]
           })
         })
         
@@ -978,6 +984,17 @@ export default function DocumentGeneratorPage() {
                     </Label>
                   </div>
                 )}
+
+                <div className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
+                  <Checkbox
+                    id="require-signature"
+                    checked={requireSignature}
+                    onCheckedChange={(checked) => setRequireSignature(checked === true)}
+                  />
+                  <Label htmlFor="require-signature" className="text-sm font-semibold text-slate-700 cursor-pointer">
+                    Require Employee Signature
+                  </Label>
+                </div>
 
                 <Button 
                   className="w-full bg-brand-teal hover:bg-brand-teal/90 text-white font-bold h-12 shadow-lg shadow-brand-teal/20"

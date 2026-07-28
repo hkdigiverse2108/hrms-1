@@ -190,7 +190,7 @@ export function FeedbackReviewsEmbedded() {
               {enrichedResponses.map((item, idx) => (
                 <tr key={`${item.id}-${idx}`} className="hover:bg-slate-50/50 transition-colors group">
                   <td className="px-6 py-4 whitespace-nowrap text-slate-500">
-                    {dayjs(item.submittedAt).format('MMM D, YYYY • h:mm A')}
+                    {dayjs(item.submittedAt).format('DD/MM/YYYY, hh:mm A')}
                   </td>
                   <td className="px-6 py-4 font-medium text-slate-800">
                     {item.clientName}
@@ -230,7 +230,7 @@ export function FeedbackReviewsEmbedded() {
               Review Details
             </DialogTitle>
             <DialogDescription>
-              Submitted by {selectedResponse?.clientName} on {selectedResponse && dayjs(selectedResponse.submittedAt).format('MMMM D, YYYY at h:mm A')}
+              Submitted by {selectedResponse?.clientName} on {selectedResponse && dayjs(selectedResponse.submittedAt).format('DD/MM/YYYY, hh:mm A')}
             </DialogDescription>
           </DialogHeader>
 

@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { API_URL } from '@/lib/config';
 import { toast } from 'sonner';
 import { useConfirm } from "@/context/ConfirmContext";
@@ -44,6 +45,53 @@ const parseLocalDate = (dateStr: string) => {
   const d = new Date(dateStr);
   d.setHours(0, 0, 0, 0);
   return d;
+};
+
+const formatDateToDDMMYYYY = (dateInput: string | Date | undefined): string => {
+  if (!dateInput) return '';
+  try {
+    let dateObj: Date;
+    if (dateInput instanceof Date) {
+      dateObj = dateInput;
+    } else {
+      const cleanStr = dateInput.trim();
+      if (!cleanStr) return '';
+      
+      if (cleanStr.includes('T')) {
+        dateObj = new Date(cleanStr);
+      } else {
+        const delimiter = cleanStr.includes('-') ? '-' : '/';
+        const parts = cleanStr.split(delimiter);
+        if (parts.length === 3) {
+          if (parts[0].length === 4) {
+            const y = parseInt(parts[0]);
+            const m = parseInt(parts[1]);
+            const d = parseInt(parts[2]);
+            const dd = String(d).padStart(2, '0');
+            const mm = String(m).padStart(2, '0');
+            return `${dd}-${mm}-${y}`;
+          }
+          if (parts[2].length === 4) {
+            const d = parseInt(parts[0]);
+            const m = parseInt(parts[1]);
+            const y = parseInt(parts[2]);
+            const dd = String(d).padStart(2, '0');
+            const mm = String(m).padStart(2, '0');
+            return `${dd}-${mm}-${y}`;
+          }
+        }
+        dateObj = new Date(cleanStr);
+      }
+    }
+
+    if (isNaN(dateObj.getTime())) return '';
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const year = dateObj.getFullYear();
+    return `${day}-${month}-${year}`;
+  } catch (e) {
+    return '';
+  }
 };
 
 export function PendingWorkEmbedded({ 
@@ -94,19 +142,11 @@ export function PendingWorkEmbedded({
   const [outgoingRequests, setOutgoingRequests] = useState<any[]>([]);
 
   const filteredIncoming = incomingRequests.filter((r: any) => {
-    if (defaultTaskType === 'digital-marketing') {
-      return r.taskType === 'digital-marketing';
-    } else {
-      return r.taskType === 'content-calendar' || r.taskType === 'other-work' || r.taskType === 'creative' || r.taskType === 'dev-creative-work';
-    }
+    return r.taskType === 'content-calendar' || r.taskType === 'other-work' || r.taskType === 'creative' || r.taskType === 'dev-creative-work';
   });
 
   const filteredOutgoing = outgoingRequests.filter((r: any) => {
-    if (defaultTaskType === 'digital-marketing') {
-      return r.taskType === 'digital-marketing';
-    } else {
-      return r.taskType === 'content-calendar' || r.taskType === 'other-work' || r.taskType === 'creative' || r.taskType === 'dev-creative-work';
-    }
+    return r.taskType === 'content-calendar' || r.taskType === 'other-work' || r.taskType === 'creative' || r.taskType === 'dev-creative-work';
   });
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [viewingTransferRequestsInternal, setViewingTransferRequestsInternal] = useState(false);
@@ -332,8 +372,8 @@ export function PendingWorkEmbedded({
       ]);
 
       if (user?.id) {
-        const isUserAdminOrTL = user.role === 'Team Leader' || user.role === 'HR' || user.role?.toLowerCase() === 'admin' || user.name === 'Admin Admin';
-        const taskTypeQuery = defaultTaskType ? `?taskType=${defaultTaskType}` : "";
+        const isUserAdminOrTL = (user.designation?.toLowerCase() === 'team leader' || user.designation?.toLowerCase() === 'head') || user.designation?.toLowerCase() === 'hr' || user.role?.toLowerCase() === 'admin' || user.name === 'Admin Admin';
+        const taskTypeQuery = `?taskType=smm`;
         if (isUserAdminOrTL) {
           const [allRes, outgoingRes] = await Promise.all([
             fetch(`${API_URL}/work-transfer-requests${taskTypeQuery}`),
@@ -405,7 +445,13 @@ export function PendingWorkEmbedded({
 
     entries.forEach(entry => {
       const client = clients.find(c => c.id === entry.clientId);
-      const project = clientProjects[entry.clientId];
+      let project = null;
+      if (entry.projectId) {
+        project = projects.find(p => p.id === entry.projectId);
+      }
+      if (!project) {
+        project = clientProjects[entry.clientId];
+      }
       if (!project) return; // Only show if active creative project
       if (project.status === "on-hold" || project.status === "onhold" || project.status?.toLowerCase() === "on-hold") return;
       
@@ -435,12 +481,15 @@ export function PendingWorkEmbedded({
         const assigner = employees.find((e: any) => e.id === assignerId);
 
         const finalStage = (stage === 'Editing' && entry.postReel === 'Post') ? 'Post/Graphics' : stage;
+        const transfer = incomingRequests.find((r: any) => r.taskId === (entry.id || entry._id) && r.stage === finalStage && r.status === 'Accepted' && String(r.receiverId) === String(user?.id));
         return {
           ...entry,
           clientDisplayName: displayName,
           clientId: entry.clientId,
+          projectId: entry.projectId || project.id,
           stage: finalStage,
           deadline,
+          isTransferredToMe: !!transfer,
           type,
           taskName: entry.concept || entry.topic || (entry.postReel ? `${entry.postReel} Content` : `Task for ${entry.postingDate || entry.monthYear || 'Unknown Date'}`),
           assigneeName: assignee ? `${assignee.firstName} ${assignee.lastName}` : null,
@@ -454,7 +503,13 @@ export function PendingWorkEmbedded({
         const uId = user?.id;
         if (!uId) return false;
         
-        const transfer = incomingRequests.find(r => r.taskId === (entry.id || entry._id) && r.stage === (stage === 'Editing' && entry.postReel === 'Post' ? 'Post/Graphics' : stage) && r.status === 'Accepted');
+        const finalStageName = (stage === 'Editing' && entry.postReel === 'Post') ? 'Post/Graphics' : stage;
+        
+        // Hide task if the current user has sent a transfer request that has been accepted
+        const outgoingTransfer = outgoingRequests.find(r => r.taskId === (entry.id || entry._id) && r.stage === finalStageName && r.status === 'Accepted');
+        if (outgoingTransfer && workScope === 'my') return false;
+
+        const transfer = incomingRequests.find(r => r.taskId === (entry.id || entry._id) && r.stage === finalStageName && r.status === 'Accepted');
         
         let isAssignedToMe = false;
         if (stage === 'Script') isAssignedToMe = String(transfer ? transfer.receiverId : (entry.assignedScriptwriterId || project.assignedScriptwriterId || client?.assignedScriptwriterId)) === String(uId);
@@ -471,7 +526,7 @@ export function PendingWorkEmbedded({
         else if (stage === 'Approval') isAssignedToMe = String(transfer ? transfer.receiverId : (entry.assignedApproverId || project.assignedApproverId || client?.assignedApproverId)) === String(uId);
         else if (stage === 'Posting') isAssignedToMe = String(transfer ? transfer.receiverId : (entry.assignedPosterId || project.assignedPosterId || client?.assignedPosterId)) === String(uId);
         
-        if (!isEmployeeOrIntern && type === 'all') return true;
+        if (isAdminOrTL && (type === 'all' || workScope === 'all')) return true;
         return isAssignedToMe;
       };
 
@@ -483,7 +538,7 @@ export function PendingWorkEmbedded({
         const bpIds = Array.isArray(bpIdsRaw) ? bpIdsRaw : (typeof bpIdsRaw === 'string' ? bpIdsRaw.split(',').map((id: string) => id.trim()).filter(Boolean) : []);
         bpIds.forEach((bpId: string) => {
           const isAssignedToMe = user?.id === bpId;
-          if ((!isEmployeeOrIntern && type === 'all') || isAssignedToMe) {
+          if ((isAdminOrTL && (type === 'all' || workScope === 'all')) || isAssignedToMe) {
              const assignerId = project.teamLeaderId || client?.teamLeaderId;
              const assigner = employees.find((e: any) => e.id === assignerId);
              const assignee = employees.find((e: any) => e.id === bpId);
@@ -494,6 +549,7 @@ export function PendingWorkEmbedded({
                ...entry,
                clientDisplayName: displayName,
                clientId: entry.clientId,
+               projectId: entry.projectId || project.id,
                stage: 'Brand Person',
                deadline: taskDeadline,
                type: 'brand-person',
@@ -553,11 +609,11 @@ export function PendingWorkEmbedded({
     }
 
     otherWorkEntries.forEach(ow => {
-      const uId = user?.id;
+      const uId = user?.id || user?._id;
       const transfer = incomingRequests.find(r => r.taskId === (ow.id || ow._id) && (r.taskType === 'other-work' || r.taskType === 'dm-other-work' || r.taskType === 'creative') && r.status === 'Accepted');
       const currentAssigneeId = transfer ? transfer.receiverId : ow.assigneeId;
-      const isAssignee = String(currentAssigneeId) === String(uId);
-      const isAssigner = String(ow.assignerId) === String(uId);
+      const isAssignee = String(currentAssigneeId) === String(uId) || (user?.name && ow.assigneeName && ow.assigneeName.toLowerCase().includes(user.name.toLowerCase()));
+      const isAssigner = String(ow.assignerId) === String(uId) || (user?.name && ow.assignerName && ow.assignerName.toLowerCase().includes(user.name.toLowerCase()));
       
       // Assignee sees it in their today/upcoming/pending until they submit for review
       // Assigner sees it in their pending when it's Ready for Review
@@ -566,12 +622,15 @@ export function PendingWorkEmbedded({
       else if (ow.status === 'Ready for Review') canSee = isAssigner || isAssignee;
       else if (ow.status === 'Approved') canSee = isAssignee || isAssigner;
 
-      const isManagerOrAdmin = ['Team Leader', 'Admin', 'HR', 'Manager', 'Social Media Manager'].includes(user?.role) || user?.role?.toLowerCase() === 'admin';
-      if ((isManagerOrAdmin && type === 'all') || isAssignee || isAssigner) {
+      const userDeptName = (user?.department || "").toLowerCase();
+      const userDesigName = (user?.designation || "").toLowerCase();
+      const userRoleName = (user?.role || "").toLowerCase();
+      const isManagerOrAdmin = ['Team Leader', 'Admin', 'HR', 'Manager', 'Social Media Manager'].includes(user?.role) || userRoleName === 'admin' || userDesigName === 'team leader' || userDesigName === 'head' || userRoleName === 'team leader' || userRoleName === 'head' || userDeptName.includes('marketing') || userDeptName.includes('dm');
+      if ((isManagerOrAdmin && (type === 'all' || workScope === 'all')) || isAssignee || isAssigner) {
         if (type === 'all' || (type === 'completed-work' ? ow.status === 'Approved' : ow.status !== 'Approved')) {
           
-          const assignee = employees.find((e: any) => e.id === ow.assigneeId);
-          const assigner = employees.find((e: any) => e.id === ow.assignerId);
+          const assignee = employees.find((e: any) => String(e.id) === String(ow.assigneeId));
+          const assigner = employees.find((e: any) => String(e.id) === String(ow.assignerId));
 
           tasks.push({
             ...ow,
@@ -583,7 +642,8 @@ export function PendingWorkEmbedded({
             taskName: ow.title,
             assigneeName: assignee ? `${assignee.firstName} ${assignee.lastName}` : (ow.assigneeName || null),
             assignerName: assigner ? `${assigner.firstName} ${assigner.lastName}` : (ow.assignerName || null),
-            isOtherWork: true
+            isOtherWork: true,
+            isTransferredToMe: !!transfer && String(transfer.receiverId) === String(user?.id)
           });
         }
       }
@@ -604,7 +664,7 @@ export function PendingWorkEmbedded({
       
       const isManagerOrAdmin = ['Team Leader', 'Admin', 'HR', 'Manager', 'Social Media Manager'].includes(user?.role) || user?.role?.toLowerCase() === 'admin';
       
-      if ((isManagerOrAdmin && type === 'all') || isAssignee) {
+      if ((isManagerOrAdmin && (type === 'all' || workScope === 'all')) || isAssignee) {
         const deadlineStr = typeof project.nextFollowupDate === 'string' && project.nextFollowupDate.includes('T') 
           ? project.nextFollowupDate.split('T')[0] 
           : String(project.nextFollowupDate);
@@ -613,6 +673,7 @@ export function PendingWorkEmbedded({
           id: `${project.id}-followup`,
           clientDisplayName: displayName,
           clientId: project.clientId,
+          projectId: project.id,
           stage: 'Follow-up',
           deadline: deadlineStr,
           type: 'follow-up',
@@ -641,12 +702,13 @@ export function PendingWorkEmbedded({
       // 1. WhatsApp Group
       const waAssigneeId = project.assignedWhatsappGroupCreatorId || client.assignedWhatsappGroupCreatorId;
       if (waAssigneeId && !client.whatsappGroup) {
-        if ((isManagerOrAdmin && type === 'all') || waAssigneeId === uId) {
+        if ((isManagerOrAdmin && (type === 'all' || workScope === 'all')) || waAssigneeId === uId) {
           const assignee = employees.find((e: any) => e.id === waAssigneeId);
           tasks.push({
             id: `${project.id}-whatsapp`,
             clientDisplayName: displayName,
             clientId: project.clientId || project.id,
+            projectId: project.id,
             stage: 'WhatsApp Group',
             deadline: deadlineStr,
             type: 'whatsapp-group',
@@ -663,12 +725,13 @@ export function PendingWorkEmbedded({
       // 2. Greetings Msg
       const greetingAssigneeId = project.assignedGreetingsMsgSenderId || client.assignedGreetingsMsgSenderId;
       if (greetingAssigneeId && !client.greetingsMsgSent) {
-        if ((isManagerOrAdmin && type === 'all') || greetingAssigneeId === uId) {
+        if ((isManagerOrAdmin && (type === 'all' || workScope === 'all')) || greetingAssigneeId === uId) {
           const assignee = employees.find((e: any) => e.id === greetingAssigneeId);
           tasks.push({
             id: `${project.id}-greetings`,
             clientDisplayName: displayName,
             clientId: project.clientId || project.id,
+            projectId: project.id,
             stage: 'Greetings Msg',
             deadline: deadlineStr,
             type: 'greetings-msg',
@@ -685,12 +748,13 @@ export function PendingWorkEmbedded({
       // 3. Meetings
       const meetingAssigneeId = project.assignedMeetingsAssigneeId || client.assignedMeetingsAssigneeId;
       if (meetingAssigneeId && (!client.meetings || client.meetings.length === 0)) {
-        if ((isManagerOrAdmin && type === 'all') || meetingAssigneeId === uId) {
+        if ((isManagerOrAdmin && (type === 'all' || workScope === 'all')) || meetingAssigneeId === uId) {
           const assignee = employees.find((e: any) => e.id === meetingAssigneeId);
           tasks.push({
             id: `${project.id}-meetings`,
             clientDisplayName: displayName,
             clientId: project.clientId || project.id,
+            projectId: project.id,
             stage: 'Meeting',
             deadline: deadlineStr,
             type: 'meetings',
@@ -708,12 +772,13 @@ export function PendingWorkEmbedded({
       const ccAssigneeId = project.assignedContentCalendarCreatorId || client.assignedContentCalendarCreatorId;
       const ccCreated = entries.some(e => e.clientId === project.clientId || e.projectId === project.id);
       if (ccAssigneeId && !ccCreated) {
-        if ((isManagerOrAdmin && type === 'all') || ccAssigneeId === uId) {
+        if ((isManagerOrAdmin && (type === 'all' || workScope === 'all')) || ccAssigneeId === uId) {
           const assignee = employees.find((e: any) => e.id === ccAssigneeId);
           tasks.push({
             id: `${project.id}-cc-create`,
             clientDisplayName: displayName,
             clientId: project.clientId || project.id,
+            projectId: project.id,
             stage: 'Content Calendar',
             deadline: deadlineStr,
             type: 'content-calendar-create',
@@ -732,12 +797,12 @@ export function PendingWorkEmbedded({
     let filteredTasks = tasks;
     if (workScope === 'my') {
       const uId = user?.id || user?._id;
-      filteredTasks = filteredTasks.filter(t => t.assigneeId === uId || t.assignerId === uId);
+      filteredTasks = filteredTasks.filter(t => String(t.assigneeId) === String(uId) || String(t.assignerId) === String(uId) || (user?.name && t.assigneeName && t.assigneeName.toLowerCase().includes(user.name.toLowerCase())));
     }
 
     // Apply Project Filter
     if (filterProject !== 'all') {
-      filteredTasks = filteredTasks.filter(t => t.clientId === filterProject);
+      filteredTasks = filteredTasks.filter(t => t.projectId === filterProject || t.clientId === filterProject);
     }
 
     // Apply Task Type Filter
@@ -746,10 +811,28 @@ export function PendingWorkEmbedded({
         filteredTasks = filteredTasks.filter(t => t.isOtherWork && t.type !== 'digital-marketing' && t.type !== 'dm-other-work');
       } else if (filterTaskType === 'content-calendar') {
         filteredTasks = filteredTasks.filter(t => !t.isOtherWork && t.type !== 'digital-marketing' && t.type !== 'dm-other-work' && !t.isFollowup);
+      } else if (filterTaskType === 'smm-all') {
+        filteredTasks = filteredTasks.filter(t => {
+          if (t.type === 'digital-marketing' || t.type === 'dm-other-work' || t.taskType === 'dm-other-work' || t.taskType === 'digital-marketing') return false;
+          const assigneeEmp = employees.find((e: any) => String(e.id) === String(t.assigneeId));
+          if (assigneeEmp?.department?.toLowerCase().includes('marketing') || assigneeEmp?.department?.toLowerCase().includes('dm')) return false;
+          return true;
+        });
       } else if (filterTaskType === 'digital-marketing') {
         filteredTasks = filteredTasks.filter(t => t.type === 'digital-marketing');
       } else if (filterTaskType === 'dm-other-work') {
-        filteredTasks = filteredTasks.filter(t => t.type === 'dm-other-work');
+        filteredTasks = filteredTasks.filter(t => {
+          if (!t.isOtherWork) return false;
+          if (t.type === 'dm-other-work' || t.taskType === 'dm-other-work' || t.type === 'digital-marketing' || t.taskType === 'digital-marketing') {
+            return true;
+          }
+          const assigneeEmp = employees.find((e: any) => String(e.id) === String(t.assigneeId));
+          const assignerEmp = employees.find((e: any) => String(e.id) === String(t.assignerId));
+          const isAssigneeDM = assigneeEmp?.department?.toLowerCase().includes('marketing') || assigneeEmp?.department?.toLowerCase().includes('dm');
+          const isAssignerDM = assignerEmp?.department?.toLowerCase().includes('marketing') || assignerEmp?.department?.toLowerCase().includes('dm');
+          const isCurrentDM = (user?.department || "").toLowerCase().includes('marketing') || (user?.department || "").toLowerCase().includes('dm');
+          return isAssigneeDM || isAssignerDM || isCurrentDM;
+        });
       } else if (filterTaskType === 'dev-creative-work') {
         filteredTasks = filteredTasks.filter(t => t.type === 'dev-creative-work');
       } else if (filterTaskType === 'follow-up') {
@@ -854,6 +937,63 @@ export function PendingWorkEmbedded({
     return defaultStages.filter(s => stages.has(s));
   }, [preFilteredTasks, isAdminOrTL]);
 
+  const getTaskDueDate = (req: any) => {
+    if (req.taskType === 'content-calendar') {
+      const entry = entries.find(e => e.id === req.taskId || e._id === req.taskId);
+      if (!entry) return '';
+      let dueDate = '';
+      const stage = req.stage;
+      if (stage === 'Script') dueDate = entry.scriptDate;
+      else if (stage === 'Shoot') dueDate = entry.shootDate;
+      else if (stage === 'Caption') dueDate = entry.captionDate || entry.editingStart;
+      else if (stage === 'Thumbnail') dueDate = entry.thumbnailDate || entry.editingStart;
+      else if (stage === 'Editing' || stage === 'Post/Graphics') dueDate = entry.editingStart;
+      else if (stage === 'Approval') dueDate = entry.approval;
+      else if (stage === 'Posting') dueDate = entry.postingDate;
+      else if (stage === 'Brand Person') dueDate = entry.shootDate || entry.postingDate;
+
+      if (!dueDate) {
+        dueDate = entry.postingDate || entry.scriptDate || entry.shootDate || entry.editingStart || entry.approval || '';
+      }
+
+      if (dueDate && dueDate.includes('T')) {
+        dueDate = dueDate.split('T')[0];
+      }
+      return dueDate;
+    } else {
+      const ow = otherWorkEntries.find(e => e.id === req.taskId || e._id === req.taskId);
+      if (!ow) return '';
+      let dueDate = ow.deadline || '';
+      if (dueDate && dueDate.includes('T')) {
+        dueDate = dueDate.split('T')[0];
+      }
+      return dueDate;
+    }
+  };
+
+  const renderTaskDetails = (req: any) => {
+    if (req.taskType === 'content-calendar') {
+      const entry = entries.find(e => e.id === req.taskId || e._id === req.taskId);
+      if (!entry) return null;
+      const client = clients.find(c => c.id === entry.clientId);
+      const cName = client ? (client.companyName || client.clientName) : '';
+      return (
+        <div className="flex flex-col gap-0.5 mt-1.5 p-2 bg-slate-50 rounded border border-slate-100 text-[10px] font-normal text-slate-500 max-w-sm">
+          {cName && <div><span className="font-semibold text-slate-600">Client:</span> {cName}</div>}
+          {entry.postReel && <div><span className="font-semibold text-slate-600">Format:</span> {entry.postReel}</div>}
+        </div>
+      );
+    } else {
+      const ow = otherWorkEntries.find(e => e.id === req.taskId || e._id === req.taskId);
+      if (!ow) return null;
+      return (
+        <div className="flex flex-col gap-0.5 mt-1.5 p-2 bg-slate-50 rounded border border-slate-100 text-[10px] font-normal text-slate-500 max-w-sm">
+          {ow.clientDisplayName && <div><span className="font-semibold text-slate-600">Client:</span> {ow.clientDisplayName}</div>}
+        </div>
+      );
+    }
+  };
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden min-h-[calc(100vh-250px)] flex flex-col">
       {viewingTransferRequests ? (
@@ -915,7 +1055,8 @@ export function PendingWorkEmbedded({
                 <table className="w-full text-left text-sm text-slate-600">
                   <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider font-semibold">
                     <tr>
-                      <th className="px-6 py-4 whitespace-nowrap">Date</th>
+                      <th className="px-6 py-4 whitespace-nowrap">Transfer Date</th>
+                      <th className="px-6 py-4 whitespace-nowrap">Due Date</th>
                       <th className="px-6 py-4 whitespace-nowrap">Task Name</th>
                       <th className="px-6 py-4 whitespace-nowrap">Stage</th>
                       <th className="px-6 py-4 whitespace-nowrap">From</th>
@@ -928,10 +1069,14 @@ export function PendingWorkEmbedded({
                     {filteredIncoming.map(req => (
                       <tr key={req.id} className="hover:bg-slate-50/50 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500">
-                          {new Date(req.createdDate).toLocaleDateString()}
+                          {formatDateToDDMMYYYY(req.createdDate) || '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500 font-semibold">
+                          {formatDateToDDMMYYYY(getTaskDueDate(req)) || '-'}
                         </td>
                         <td className="px-6 py-4 font-semibold text-slate-800">
                           {req.taskName}
+                          {renderTaskDetails(req)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <Badge variant="outline" className="text-xs text-brand-teal border-brand-teal/30 bg-brand-teal/5">
@@ -998,7 +1143,8 @@ export function PendingWorkEmbedded({
                 <table className="w-full text-left text-sm text-slate-600">
                   <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider font-semibold">
                     <tr>
-                      <th className="px-6 py-4 whitespace-nowrap">Date</th>
+                      <th className="px-6 py-4 whitespace-nowrap">Transfer Date</th>
+                      <th className="px-6 py-4 whitespace-nowrap">Due Date</th>
                       <th className="px-6 py-4 whitespace-nowrap">Task Name</th>
                       <th className="px-6 py-4 whitespace-nowrap">Stage</th>
                       <th className="px-6 py-4 whitespace-nowrap">To</th>
@@ -1009,10 +1155,14 @@ export function PendingWorkEmbedded({
                     {filteredOutgoing.map(req => (
                       <tr key={req.id} className="hover:bg-slate-50/50 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500">
-                          {new Date(req.createdDate).toLocaleDateString()}
+                          {formatDateToDDMMYYYY(req.createdDate) || '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500 font-semibold">
+                          {formatDateToDDMMYYYY(getTaskDueDate(req)) || '-'}
                         </td>
                         <td className="px-6 py-4 font-semibold text-slate-800">
                           {req.taskName}
+                          {renderTaskDetails(req)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <Badge variant="outline" className="text-xs text-brand-teal border-brand-teal/30 bg-brand-teal/5">
@@ -1183,11 +1333,11 @@ export function PendingWorkEmbedded({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Projects</SelectItem>
-                  {Object.entries(clientProjects).map(([cId, project]) => {
-                    const client = clients.find(c => c.id === cId);
+                  {projects.filter((p: any) => p.department === 'Creative' && p.status !== 'on-hold' && p.status !== 'onhold').map((project: any) => {
+                    const client = clients.find(c => c.id === project.clientId);
                     const cName = client ? (client.companyName || client.clientName) : '';
                     return (
-                      <SelectItem key={cId} value={cId}>{project.title} ({cName})</SelectItem>
+                      <SelectItem key={project.id} value={project.id}>{project.title} ({cName})</SelectItem>
                     );
                   })}
                 </SelectContent>
@@ -1196,41 +1346,35 @@ export function PendingWorkEmbedded({
 
             {(isAdminOrTL || defaultTaskType === 'dev-creative-work') && (
               <>
-                {isAdminOrTL && (
-                  <Select value={filterAssigner} onValueChange={setFilterAssigner}>
-                    <SelectTrigger className="w-[160px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal">
-                      <SelectValue placeholder="Assigned By" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Assigned By: All</SelectItem>
-                      {employees.map(emp => {
+                {isAdminOrTL && currentUser?.role?.toLowerCase() === 'admin' && (
+                  <SearchableSelect
+                    options={[
+                      { value: "all", label: "Assigned By: All" },
+                      ...employees.map(emp => {
                         const empName = `${emp.firstName} ${emp.lastName}`;
-                        return (
-                          <SelectItem key={`assigner-${emp.id}`} value={`${empName}|${emp.id}`}>
-                            {empName}
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
+                        return { value: `${empName}|${emp.id}`, label: empName };
+                      })
+                    ]}
+                    value={filterAssigner}
+                    onValueChange={setFilterAssigner}
+                    placeholder="Assigned By"
+                    triggerClassName="w-[160px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal"
+                  />
                 )}
 
-                <Select value={filterAssignee} onValueChange={setFilterAssignee}>
-                  <SelectTrigger className="w-[160px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal">
-                    <SelectValue placeholder="Assigned To" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Assigned To: All</SelectItem>
-                    {employees.map(emp => {
+                <SearchableSelect
+                  options={[
+                    { value: "all", label: "Assigned To: All" },
+                    ...employees.map(emp => {
                       const empName = `${emp.firstName} ${emp.lastName}`;
-                      return (
-                        <SelectItem key={`assignee-${emp.id}`} value={`${empName}|${emp.id}`}>
-                          {empName}
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
+                      return { value: `${empName}|${emp.id}`, label: empName };
+                    })
+                  ]}
+                  value={filterAssignee}
+                  onValueChange={setFilterAssignee}
+                  placeholder="Assigned To"
+                  triggerClassName="w-[160px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal"
+                />
               </>
             )}
           </div>
@@ -1278,7 +1422,7 @@ export function PendingWorkEmbedded({
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <Badge variant={isOverdue ? "destructive" : "secondary"} className="text-xs px-2.5 py-1">
-                        {item.deadline}
+                        {formatDateToDDMMYYYY(item.deadline) || '-'}
                       </Badge>
                     </td>
                     <td className="px-6 py-4 font-medium text-slate-800">
@@ -1403,16 +1547,29 @@ export function PendingWorkEmbedded({
                             </>
                           ) : item.isOtherWork ? (
                             <>
-                              {item.status === 'Pending' && item.description !== 'Custom task created from Punch-In' && isAssignee && (
-                                <Button 
-                                  size="sm" 
-                                  className="bg-brand-teal hover:bg-brand-teal/90 text-white text-xs h-7"
-                                  onClick={() => handleUpdateOtherWorkStatus(item.id, 'Ready for Review')}
-                                >
-                                  Submit for Review
-                                </Button>
+                              {(item.status === 'Pending' || item.status === 'In Progress') && isAssignee && (
+                                <>
+                                  {(isAssigner || isAdminOrTL || !item.assignerId || item.assignerId === item.assigneeId) ? (
+                                    <Button 
+                                      size="sm" 
+                                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-7 rounded-lg flex items-center gap-1 shadow-sm"
+                                      onClick={() => handleUpdateOtherWorkStatus(item.id, 'Approved')}
+                                    >
+                                      <Check className="w-3.5 h-3.5" />
+                                      Completed
+                                    </Button>
+                                  ) : (
+                                    <Button 
+                                      size="sm" 
+                                      className="bg-brand-teal hover:bg-brand-teal/90 text-white text-xs h-7"
+                                      onClick={() => handleUpdateOtherWorkStatus(item.id, 'Ready for Review')}
+                                    >
+                                      Submit for Review
+                                    </Button>
+                                  )}
+                                </>
                               )}
-                              {item.status === 'Ready for Review' && item.description !== 'Custom task created from Punch-In' && (isAssigner || isAdminOrTL) && (
+                              {item.status === 'Ready for Review' && (isAssigner || isAdminOrTL) && (
                                 <>
                                   <Button 
                                     size="sm" 
@@ -1498,7 +1655,7 @@ export function PendingWorkEmbedded({
                                 <History className="w-4 h-4" />
                               </Button>
                               <Button
-                                onClick={() => router.push(`/work-management/smm/${item.clientId}?highlightTask=${item.id}`)}
+                                onClick={() => router.push(`/work-management/smm/${item.clientId}?projectId=${item.projectId}&highlightTask=${item.id}&highlightDate=${item.postingDate || ''}`)}
                                 variant="ghost"
                                 size="icon"
                                 title="Show in Calendar"
@@ -1654,23 +1811,7 @@ export function PendingWorkEmbedded({
 
                     return employees
                       .filter((emp: any) => {
-                        if (emp.id === currentUser?.id) return false;
-                        if (!targetDept) return true;
-                        
-                        const empDept = emp.department?.trim().toLowerCase();
-                        if (!empDept) return false;
-                        
-                        if (isCreativeDept) {
-                          return empDept === 'creative' || empDept === 'smm' || empDept === 'social media marketing' || empDept === 'graphics';
-                        }
-                        if (isDMDept) {
-                          return empDept === 'digital-marketing' || empDept === 'digital marketing' || empDept === 'dm';
-                        }
-                        if (isDevDept) {
-                          return empDept === 'development' || empDept === 'dev';
-                        }
-                        
-                        return empDept === targetDept.trim().toLowerCase();
+                        return emp.id !== currentUser?.id;
                       })
                       .map((emp: any) => {
                         const name = `${emp.firstName} ${emp.lastName || ''}`.trim();

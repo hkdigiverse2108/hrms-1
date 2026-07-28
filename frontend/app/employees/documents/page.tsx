@@ -14,6 +14,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { SearchableSelect } from '@/components/ui/searchable-select'
 import { Plus, Loader2, Save, Trash2, FileText, Download, ExternalLink, Calendar, Search, Pencil, Eye, CheckCircle2, History, IndianRupee, ShieldCheck } from 'lucide-react'
 import { useApi } from '@/hooks/useApi'
 import { usePermissions } from '@/hooks/usePermissions'
@@ -40,6 +41,21 @@ export default function EmployeeDocumentsPage() {
   const [payrolls, setPayrolls] = useState<any[]>([])
 
   useEffect(() => {
+    const scripts = [
+      'https://cdnjs.cloudflare.com/ajax/libs/dom-to-image/2.6.0/dom-to-image.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
+    ]
+    scripts.forEach(src => {
+      if (!document.querySelector(`script[src="${src}"]`)) {
+        const script = document.createElement('script')
+        script.src = src
+        script.async = true
+        document.body.appendChild(script)
+      }
+    })
+  }, [])
+
+  useEffect(() => {
     if (!permissionsLoading) {
       if (!isAdmin && !checkPermission('employee-documents', 'canView')) {
         router.push('/')
@@ -51,6 +67,15 @@ export default function EmployeeDocumentsPage() {
   const [activeMainTab, setActiveMainTab] = useState<string>('submitted')
   const [contractEmployeeFilter, setContractEmployeeFilter] = useState('all')
   const [contractTypeFilter, setContractTypeFilter] = useState('all')
+  
+  const [signatureEmployeeFilter, setSignatureEmployeeFilter] = useState('all')
+  const [signatureStatusFilter, setSignatureStatusFilter] = useState('all')
+  
+  // Sign Document Modal States
+  const [isSignModalOpen, setIsSignModalOpen] = useState(false)
+  const [selectedSignRequest, setSelectedSignRequest] = useState<any>(null)
+  const [signConsent, setSignConsent] = useState(false)
+  const [isSigning, setIsSigning] = useState(false)
   
   // Deposit Ledger States
   const [isLedgerModalOpen, setIsLedgerModalOpen] = useState(false)
@@ -434,6 +459,118 @@ export default function EmployeeDocumentsPage() {
     } catch (error) {
       console.error('Update request error:', error)
       toast.error('Error updating request')
+    }
+  }
+
+  const handleSignDocument = async () => {
+    if (!selectedSignRequest || !signConsent) return
+    setIsSigning(true)
+    try {
+      // 1. Fetch system settings for company signature
+      const sysRes = await fetch(`${API_URL}/system-settings`)
+      let systemSettings = null
+      if (sysRes.ok) systemSettings = await sysRes.json()
+
+      // 2. Prepare HTML
+      let html = selectedSignRequest.htmlContent || ''
+      const empSignUrl = user?.signatureUrl ? (user.signatureUrl.startsWith('http') ? user.signatureUrl : `${API_URL}${user.signatureUrl}`) : ''
+      const compSignUrl = systemSettings?.companySignatureUrl ? (systemSettings.companySignatureUrl.startsWith('http') ? systemSettings.companySignatureUrl : `${API_URL}${systemSettings.companySignatureUrl}`) : ''
+      
+      const empSignHtml = empSignUrl ? `<span style="display: inline-block; text-align: center; border-bottom: 1px solid black; margin: 0 5px; min-width: 100px; vertical-align: baseline;"><img src="${empSignUrl}" alt="Employee Signature" style="display: inline-block; max-height: 25px; max-width: 100px; object-fit: contain; vertical-align: bottom;" /></span>` : '<span style="display: inline-block; border-bottom: 1px solid black; color: #999; font-style: italic; min-width: 100px; text-align: center; margin: 0 5px; vertical-align: baseline;">[Signature Not Uploaded]</span>'
+      const compSignHtml = compSignUrl ? `<span style="display: inline-block; text-align: center; border-bottom: 1px solid black; margin: 0 5px; min-width: 100px; vertical-align: baseline;"><img src="${compSignUrl}" alt="Authorized Signature" style="display: inline-block; max-height: 25px; max-width: 100px; object-fit: contain; vertical-align: bottom;" /></span>` : '<span style="display: inline-block; border-bottom: 1px solid black; color: #999; font-style: italic; min-width: 100px; text-align: center; margin: 0 5px; vertical-align: baseline;">[Signature Not Uploaded]</span>'
+
+      html = html.replace(/<div id="employee-signature-placeholder"[^>]*>.*?<\/div>/g, empSignHtml)
+      html = html.replace(/<div id="company-signature-placeholder"[^>]*>.*?<\/div>/g, compSignHtml)
+
+      // 3. Render HTML in hidden container
+      const container = document.createElement('div')
+      container.style.position = 'fixed'
+      container.style.left = '-10000px'
+      container.style.top = '0'
+      const a4WidthPx = 794
+      container.style.width = `${a4WidthPx}px`
+      container.style.background = 'white'
+      container.innerHTML = `<div class="ql-container ql-snow border-none !font-sans"><div class="ql-editor">${html}</div></div>`
+      document.body.appendChild(container)
+      
+      const node = container.firstChild?.firstChild as HTMLElement
+      if (!node) throw new Error("Failed to parse HTML")
+
+      const domtoimage = (window as any).domtoimage
+      const { jsPDF } = (window as any).jspdf
+      if (!domtoimage || !jsPDF) throw new Error("PDF libraries not loaded")
+      
+      // small delay to let images load
+      await new Promise(res => setTimeout(res, 500))
+
+      const rect = node.getBoundingClientRect()
+      const nodeHeight = Math.max(1123, rect.height)
+      container.style.height = `${nodeHeight}px`
+      node.style.height = `${nodeHeight}px`
+
+      const scale = 1.5
+      const dataUrl = await domtoimage.toPng(node, {
+        bgcolor: '#ffffff',
+        width: a4WidthPx * scale,
+        height: nodeHeight * scale,
+        cacheBust: true,
+        style: {
+          transform: `scale(${scale})`,
+          transformOrigin: 'top left',
+          width: `${a4WidthPx}px`,
+          height: `${nodeHeight}px`,
+        }
+      })
+
+      document.body.removeChild(container)
+
+      const pdf = new jsPDF('p', 'mm', 'a4')
+      const pdfWidth = pdf.internal.pageSize.getWidth()
+      const pdfHeight = (nodeHeight * pdfWidth) / a4WidthPx
+      let heightLeft = pdfHeight
+      let position = 0
+      pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, pdfHeight, undefined, 'FAST')
+      heightLeft -= pdf.internal.pageSize.getHeight()
+      while (heightLeft > 1) {
+        position -= pdf.internal.pageSize.getHeight()
+        pdf.addPage()
+        pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, pdfHeight, undefined, 'FAST')
+        heightLeft -= pdf.internal.pageSize.getHeight()
+      }
+
+      const filename = `${selectedSignRequest.documentType.replace(/\s+/g, '_')}_Signed.pdf`
+      const pdfBlob = pdf.output('blob')
+      const pdfFile = new File([pdfBlob], filename, { type: 'application/pdf' })
+      const formDataUpload = new FormData()
+      formDataUpload.append('file', pdfFile)
+
+      const uploadRes = await fetch(`${API_URL}/upload`, { method: 'POST', body: formDataUpload })
+      if (!uploadRes.ok) throw new Error('Upload failed')
+      const uploadData = await uploadRes.json()
+      const absoluteUrl = uploadData.url.startsWith('http') ? uploadData.url : `${API_URL}${uploadData.url}`
+
+      const updateRes = await fetch(`${API_URL}/document-requests/${selectedSignRequest.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'Signed',
+          fileName: filename,
+          fileUrl: absoluteUrl,
+          htmlContent: null,
+          requireSignature: false,
+          sentDate: new Date().toISOString().split('T')[0]
+        })
+      })
+      if (!updateRes.ok) throw new Error('Failed to update request')
+      
+      toast.success('Document successfully signed!')
+      setIsSignModalOpen(false)
+      fetchRequests()
+    } catch (error: any) {
+      console.error(error)
+      toast.error(error.message || 'Error signing document')
+    } finally {
+      setIsSigning(false)
     }
   }
 
@@ -1131,7 +1268,7 @@ export default function EmployeeDocumentsPage() {
   const employeeRequestActions = (record: any) => {
     return (
       <div className="flex items-center gap-2 justify-end">
-        {record.status === 'Sent' && record.fileUrl ? (
+        {(record.status === 'Sent' || record.status === 'Signed') && record.fileUrl ? (
           <>
             <Button variant="ghost" size="icon" className="text-brand-teal" onClick={() => window.open(record.fileUrl, '_blank')} title="View Letter">
               <ExternalLink className="h-4 w-4" />
@@ -1148,6 +1285,16 @@ export default function EmployeeDocumentsPage() {
               <Download className="h-4 w-4" />
             </Button>
           </>
+        ) : record.status === 'Pending Signature' ? (
+          <Button 
+            className="bg-brand-teal hover:bg-brand-teal/90 text-white font-bold h-8 px-3 text-xs" 
+            onClick={() => {
+              setSelectedSignRequest(record);
+              setIsSignModalOpen(true);
+            }}
+          >
+            Review & Sign
+          </Button>
         ) : record.status === 'Rejected' ? (
           <span className="text-xs text-rose-600 font-bold uppercase">Rejected</span>
         ) : (
@@ -1210,109 +1357,7 @@ export default function EmployeeDocumentsPage() {
       </PageHeader>
 
       <Tabs value={activeMainTab} onValueChange={(val: any) => setActiveMainTab(val)} className="w-full">
-          {activeMainTab === 'submitted' && isAdminOrHR && (
-            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-5 mb-4">
-              <div className="flex items-center gap-4">
-                <div className="w-64">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Filter by Employee</span>
-                  <Select value={filterEmployee} onValueChange={setFilterEmployee}>
-                    <SelectTrigger className="h-10 border-slate-200 bg-slate-50/50 font-semibold">
-                      <SelectValue placeholder="All Employees" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Employees</SelectItem>
-                      {employees.map((emp: any) => (
-                        <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.employeeId})</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="w-64">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Document Type</span>
-                  <Select value={filterType} onValueChange={setFilterType}>
-                    <SelectTrigger className="h-10 border-slate-200 bg-slate-50/50 font-semibold">
-                      <SelectValue placeholder="All Types" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Types</SelectItem>
-                      {documentTypes.map((t: string) => (
-                        <SelectItem key={t} value={t}>{t}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="w-56">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Status</span>
-                  <Select value={filterStatus} onValueChange={setFilterStatus}>
-                    <SelectTrigger className="h-10 border-slate-200 bg-slate-50/50 font-semibold">
-                      <SelectValue placeholder="All Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Status</SelectItem>
-                      <SelectItem value="pending">Pending to Submit</SelectItem>
-                      <SelectItem value="accepted">Accepted</SelectItem>
-                      <SelectItem value="rejected">Rejected</SelectItem>
-                      <SelectItem value="returned">Returned to Employee</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
 
-              {filterType !== 'all' && (
-                <div className={`grid gap-4 ${(filterType.includes('Deposit') || filterType.includes('Deposite')) ? 'grid-cols-4' : 'grid-cols-3'} pt-5 border-t border-slate-100`}>
-                  <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-100 shadow-sm flex flex-col justify-center items-center">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total Assigned</span>
-                    <span className="text-2xl font-black text-slate-800 mt-1">{filteredDocuments.length}</span>
-                  </div>
-                  <div className="bg-emerald-50/40 p-4 rounded-xl border border-emerald-100/50 shadow-sm flex flex-col justify-center items-center">
-                    <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Accepted / Submitted</span>
-                    <span className="text-2xl font-black text-emerald-700 mt-1">{filteredDocuments.filter((d: any) => d.status === 'Accepted' || (!d.isPendingSubmit && d.status !== 'Rejected' && d.status !== 'Returned to Employee' && d.status !== 'Pending to Submit')).length}</span>
-                  </div>
-                  <div className="bg-rose-50/40 p-4 rounded-xl border border-rose-100/50 shadow-sm flex flex-col justify-center items-center">
-                    <span className="text-[10px] font-bold text-rose-600 uppercase tracking-wider">Left to Submit</span>
-                    <span className="text-2xl font-black text-rose-700 mt-1">{filteredDocuments.filter((d: any) => d.isPendingSubmit || d.status === 'Pending to Submit' || d.status === 'Rejected' || d.status === 'Returned to Employee').length}</span>
-                  </div>
-                  {(filterType.includes('Deposit') || filterType.includes('Deposite')) && (() => {
-                    let totalTarget = 0;
-                    let totalCollected = 0;
-                    filteredDocuments.forEach((record: any) => {
-                      let target = 10000;
-                      if (record.documentName?.includes('Intern - 2000')) target = 2000;
-                      else if (record.documentName?.includes('Employee - 10000')) target = 10000;
-                      else {
-                        const match = record.documentName?.match(/(\d+)/);
-                        if (match) target = Number(match[0]);
-                      }
-                      
-                      const emp = employees.find((e: any) => e.id === record.employeeId);
-                      const isExempt = emp?.securityDepositExempt || false;
-                      const directPayments = emp?.securityDepositDirectPayments || [];
-                      const directPaid = directPayments.reduce((sum: number, dp: any) => sum + (dp.amount || 0), 0);
-                      
-                      const empPayrolls = payrolls.filter((p: any) => p.employeeId === record.employeeId);
-                      const payrollCollected = empPayrolls.reduce((sum: number, p: any) => sum + (p.securityDeposit || 0), 0);
-                      
-                      const collected = payrollCollected + directPaid;
-                      
-                      if (isExempt) {
-                        totalTarget += target;
-                        totalCollected += target;
-                      } else {
-                        totalTarget += target;
-                        totalCollected += Math.min(collected, target);
-                      }
-                    });
-                    return (
-                      <div className="bg-blue-50/40 p-4 rounded-xl border border-blue-100/50 shadow-sm flex flex-col justify-center items-center">
-                        <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Financial Collection</span>
-                        <span className="text-lg font-black text-blue-800 mt-1">₹{totalCollected.toLocaleString('en-IN')} / ₹{totalTarget.toLocaleString('en-IN')}</span>
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
-            </div>
-          )}
 
         <TabsList className="inline-flex items-center gap-1 w-max bg-slate-100/70 p-1 rounded-xl shadow-inner border border-slate-200/60 h-auto justify-start shrink-0 mb-6">
           <TabsTrigger 
@@ -1351,13 +1396,118 @@ export default function EmployeeDocumentsPage() {
               Verify Contracts
             </TabsTrigger>
           )}
+          {isAdminOrHR && (
+            <TabsTrigger 
+              value="signatures" 
+              className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto"
+            >
+              Employee Signatures
+            </TabsTrigger>
+          )}
         </TabsList>
 
 
         <TabsContent value="submitted" className="mt-6 space-y-6">
+          {isAdminOrHR && filterType !== 'all' && (
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+              <div className={`grid gap-4 ${(filterType.includes('Deposit') || filterType.includes('Deposite')) ? 'grid-cols-4' : 'grid-cols-3'}`}>
+                <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-100 shadow-sm flex flex-col justify-center items-center">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total Assigned</span>
+                  <span className="text-2xl font-black text-slate-800 mt-1">{filteredDocuments.length}</span>
+                </div>
+                <div className="bg-emerald-50/40 p-4 rounded-xl border border-emerald-100/50 shadow-sm flex flex-col justify-center items-center">
+                  <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Accepted / Submitted</span>
+                  <span className="text-2xl font-black text-emerald-700 mt-1">{filteredDocuments.filter((d: any) => d.status === 'Accepted' || (!d.isPendingSubmit && d.status !== 'Rejected' && d.status !== 'Returned to Employee' && d.status !== 'Pending to Submit')).length}</span>
+                </div>
+                <div className="bg-rose-50/40 p-4 rounded-xl border border-rose-100/50 shadow-sm flex flex-col justify-center items-center">
+                  <span className="text-[10px] font-bold text-rose-600 uppercase tracking-wider">Left to Submit</span>
+                  <span className="text-2xl font-black text-rose-700 mt-1">{filteredDocuments.filter((d: any) => d.isPendingSubmit || d.status === 'Pending to Submit' || d.status === 'Rejected' || d.status === 'Returned to Employee').length}</span>
+                </div>
+                {(filterType.includes('Deposit') || filterType.includes('Deposite')) && (() => {
+                  let totalTarget = 0;
+                  let totalCollected = 0;
+                  filteredDocuments.forEach((record: any) => {
+                    let target = 10000;
+                    if (record.documentName?.includes('Intern - 2000')) target = 2000;
+                    else if (record.documentName?.includes('Employee - 10000')) target = 10000;
+                    else {
+                      const match = record.documentName?.match(/(\d+)/);
+                      if (match) target = Number(match[0]);
+                    }
+                    
+                    const emp = employees.find((e: any) => e.id === record.employeeId);
+                    const isExempt = emp?.securityDepositExempt || false;
+                    const directPayments = emp?.securityDepositDirectPayments || [];
+                    const directPaid = directPayments.reduce((sum: number, dp: any) => sum + (dp.amount || 0), 0);
+                    
+                    const empPayrolls = payrolls.filter((p: any) => p.employeeId === record.employeeId);
+                    const payrollCollected = empPayrolls.reduce((sum: number, p: any) => sum + (p.securityDeposit || 0), 0);
+                    
+                    const collected = payrollCollected + directPaid;
+                    
+                    if (isExempt) {
+                      totalTarget += target;
+                      totalCollected += target;
+                    } else {
+                      totalTarget += target;
+                      totalCollected += Math.min(collected, target);
+                    }
+                  });
+                  return (
+                    <div className="bg-blue-50/40 p-4 rounded-xl border border-blue-100/50 shadow-sm flex flex-col justify-center items-center">
+                      <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Financial Collection</span>
+                      <span className="text-lg font-black text-blue-800 mt-1">₹{totalCollected.toLocaleString('en-IN')} / ₹{totalTarget.toLocaleString('en-IN')}</span>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
           
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <DataTable
+              extraFilters={
+                isAdminOrHR ? (
+                  <>
+                    <SearchableSelect
+                      options={[
+                        { value: "all", label: "All Employees" },
+                        ...employees.map((emp: any) => ({
+                          value: emp.id,
+                          label: `${emp.name} (${emp.employeeId})`
+                        }))
+                      ]}
+                      value={filterEmployee}
+                      onValueChange={setFilterEmployee}
+                      placeholder="All Employees"
+                      triggerClassName="h-10 w-[200px] border-slate-200 bg-slate-50/50 font-semibold"
+                    />
+                    <Select value={filterType} onValueChange={setFilterType}>
+                      <SelectTrigger className="h-10 w-[160px] border-slate-200 bg-slate-50/50 font-semibold">
+                        <SelectValue placeholder="All Types" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Types</SelectItem>
+                        {documentTypes.map((t: string) => (
+                          <SelectItem key={t} value={t}>{t}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={filterStatus} onValueChange={setFilterStatus}>
+                      <SelectTrigger className="h-10 w-[150px] border-slate-200 bg-slate-50/50 font-semibold">
+                        <SelectValue placeholder="All Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="accepted">Accepted</SelectItem>
+                        <SelectItem value="rejected">Rejected</SelectItem>
+                        <SelectItem value="returned">Returned</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </>
+                ) : undefined
+              }
               data={filteredDocuments}
               columns={columns}
               actions={isAdminOrHR ? actions : undefined}
@@ -1461,17 +1611,19 @@ export default function EmployeeDocumentsPage() {
               <div className="flex flex-wrap items-center gap-4">
                 <div className="w-64">
                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Filter by Employee</span>
-                  <Select value={contractEmployeeFilter} onValueChange={setContractEmployeeFilter}>
-                    <SelectTrigger className="h-10 border-slate-200 bg-slate-50/50 font-semibold">
-                      <SelectValue placeholder="All Employees" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Employees</SelectItem>
-                      {employees.map((emp: any) => (
-                        <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.employeeId})</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    options={[
+                      { value: "all", label: "All Employees" },
+                      ...employees.map((emp: any) => ({
+                        value: emp.id,
+                        label: `${emp.name} (${emp.employeeId})`
+                      }))
+                    ]}
+                    value={contractEmployeeFilter}
+                    onValueChange={setContractEmployeeFilter}
+                    placeholder="All Employees"
+                    triggerClassName="h-10 border-slate-200 bg-slate-50/50 font-semibold w-full"
+                  />
                 </div>
                 <div className="w-64">
                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Filter by Term Type</span>
@@ -1543,6 +1695,105 @@ export default function EmployeeDocumentsPage() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          </TabsContent>
+        )}
+
+        {isAdminOrHR && (
+          <TabsContent value="signatures" className="mt-6 space-y-6">
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+              <DataTable
+                extraFilters={
+                  <>
+                    <SearchableSelect
+                      options={[
+                        { value: "all", label: "All Employees" },
+                        ...employees.map((emp: any) => ({
+                          value: emp.id,
+                          label: `${emp.name} (${emp.employeeId})`
+                        }))
+                      ]}
+                      value={signatureEmployeeFilter}
+                      onValueChange={setSignatureEmployeeFilter}
+                      placeholder="All Employees"
+                      triggerClassName="h-10 w-[200px] border-slate-200 bg-slate-50/50 font-semibold"
+                    />
+                    <Select value={signatureStatusFilter} onValueChange={setSignatureStatusFilter}>
+                      <SelectTrigger className="h-10 w-[160px] border-slate-200 bg-slate-50/50 font-semibold">
+                        <SelectValue placeholder="All Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value="completed">Completed</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </>
+                }
+                data={employees
+                  .filter((emp: any) => signatureEmployeeFilter === 'all' || emp.id === signatureEmployeeFilter)
+                  .map((emp: any) => ({
+                    id: emp.id,
+                    employeeName: emp.name,
+                    signatureUrl: emp.signatureUrl,
+                    status: emp.signatureUrl ? 'Completed' : 'Pending'
+                  }))
+                  .filter((record: any) => signatureStatusFilter === 'all' || record.status.toLowerCase() === signatureStatusFilter.toLowerCase())
+                }
+                columns={[
+                  { key: 'employeeName' as const, header: 'Employee Name' },
+                  { 
+                    key: 'status' as const, 
+                    header: 'Status', 
+                    render: (record: any) => (
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                        record.status === 'Completed' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
+                      }`}>
+                        {record.status}
+                      </span>
+                    )
+                  },
+                  { 
+                    key: 'actions' as const, 
+                    header: 'Actions',
+                    render: (record: any) => (
+                      <div className="flex items-center gap-2">
+                        {record.signatureUrl ? (
+                          <>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="text-brand-teal hover:bg-brand-teal/10 h-8 px-2"
+                              onClick={() => window.open(record.signatureUrl, '_blank')}
+                            >
+                              <Eye className="w-4 h-4 mr-1.5" /> View
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="text-blue-600 hover:bg-blue-50 h-8 px-2"
+                              onClick={() => {
+                                const a = document.createElement('a');
+                                a.href = record.signatureUrl;
+                                a.download = `${record.employeeName}_Signature.png`;
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                              }}
+                            >
+                              <Download className="w-4 h-4 mr-1.5" /> Download
+                            </Button>
+                          </>
+                        ) : (
+                          <span className="text-xs text-slate-400 italic px-2">Not Uploaded</span>
+                        )}
+                      </div>
+                    )
+                  }
+                ]}
+                searchKey="employeeName"
+                searchPlaceholder="Search by employee name..."
+              />
             </div>
           </TabsContent>
         )}
@@ -2078,6 +2329,39 @@ export default function EmployeeDocumentsPage() {
             <Button className="bg-brand-teal hover:bg-brand-teal/90 font-bold" onClick={handleSaveType} disabled={isSubmitting}>
               {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               {editingType ? 'Save Changes' : 'Create Type'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Sign Document Modal */}
+      <Dialog open={isSignModalOpen} onOpenChange={(open) => { setIsSignModalOpen(open); if(!open) setSignConsent(false); }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Review and Sign Document</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto p-4 bg-slate-50 border rounded-xl" dangerouslySetInnerHTML={{ __html: selectedSignRequest?.htmlContent || '' }} />
+          <div className="flex items-center gap-3 p-4 rounded-xl border border-slate-200 bg-white shadow-sm mt-4">
+            <input 
+              type="checkbox" 
+              id="sign-consent" 
+              className="w-5 h-5 text-brand-teal rounded border-slate-300 focus:ring-brand-teal cursor-pointer"
+              checked={signConsent}
+              onChange={(e) => setSignConsent(e.target.checked)}
+            />
+            <Label htmlFor="sign-consent" className="text-sm font-semibold text-slate-700 cursor-pointer">
+              I have reviewed this document and consent to applying my digital signature along with the company's authorized stamp/signature.
+            </Label>
+          </div>
+          <DialogFooter className="mt-2">
+            <Button variant="ghost" onClick={() => setIsSignModalOpen(false)}>Cancel</Button>
+            <Button 
+              className="bg-brand-teal hover:bg-brand-teal/90 font-bold" 
+              disabled={!signConsent || isSigning} 
+              onClick={handleSignDocument}
+            >
+              {isSigning ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              {isSigning ? 'Signing...' : 'Sign & Submit'}
             </Button>
           </DialogFooter>
         </DialogContent>

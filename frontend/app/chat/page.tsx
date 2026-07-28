@@ -4634,7 +4634,7 @@ export default function ChatPage() {
             </TabsContent>
 
             <TabsContent value="Groups" className="m-0">
-              {(user?.role === 'Admin' || user?.role === 'HR') && (
+              {(user?.role === 'Admin' || user?.designation?.toLowerCase() === 'hr') && (
                 <div className="p-4">
                   <Button
                     className="w-full bg-brand-teal hover:bg-brand-teal/90 rounded-xl gap-2"
@@ -4714,7 +4714,7 @@ export default function ChatPage() {
                             })()
                           )}
                         </p>
-                        {(user?.role === 'Admin' || user?.role === 'HR' || group.createdBy === user?.id) && (
+                        {(user?.role === 'Admin' || user?.designation?.toLowerCase() === 'hr' || group.createdBy === user?.id) && (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                               <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full opacity-0 group-hover:opacity-100 transition-all hover:bg-white shrink-0">
@@ -5389,7 +5389,7 @@ export default function ChatPage() {
                       </Button>
                     )}
 
-                    {selectedChat.type === 'group' && (selectedChat.createdBy === user?.id || user?.role === 'Admin' || user?.role === 'HR') && (
+                    {selectedChat.type === 'group' && (selectedChat.createdBy === user?.id || user?.role === 'Admin' || user?.designation?.toLowerCase() === 'hr') && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon" className="text-muted-foreground h-9 w-9 rounded-full hover:bg-gray-100">

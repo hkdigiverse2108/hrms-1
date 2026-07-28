@@ -5,7 +5,7 @@ import Link from "next/link";
 import { 
   LayoutDashboard, Users, Clock, Calendar, CalendarDays, ClipboardList, MonitorPlay,
   MessagesSquare, Star, FileText, Files, Briefcase, IndianRupee, Activity, Plus, Search,
-  Check, X, Loader2, ChevronDown, LayoutGrid
+  Check, X, Loader2, ChevronDown, LayoutGrid, Landmark, BookOpen, Settings, ShieldHalf
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +21,17 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { usePermissions } from "@/hooks/usePermissions";
 
-const AVAILABLE_ACTIONS = [
+interface AvailableAction {
+  id: string;
+  label: string;
+  path: string;
+  icon: React.ComponentType<any>;
+  category: string;
+  perm?: string;
+  adminOnly?: boolean;
+}
+
+const AVAILABLE_ACTIONS: AvailableAction[] = [
   { id: 'dashboard', label: 'Dashboard', path: '/', icon: LayoutDashboard, category: 'General' },
   { id: 'attendance', label: 'Attendance', path: '/attendance', icon: Clock, category: 'General', perm: 'attendance' },
   { id: 'leave', label: 'Leave', path: '/leave', icon: Calendar, category: 'General', perm: 'leave' },
@@ -30,10 +40,13 @@ const AVAILABLE_ACTIONS = [
   { id: 'remarks', label: 'Remarks', path: '/remarks', icon: Star, category: 'General', perm: 'review' },
   { id: 'activity_tracker', label: 'Activity Tracker', path: '/activity-tracker', icon: Activity, category: 'General', perm: 'activity-tracker' },
   { id: 'chat', label: 'Chat', path: '/chat', icon: MessagesSquare, category: 'General', perm: 'chat' },
+  { id: 'tasks', label: 'Tasks', path: '/tasks', icon: ClipboardList, category: 'General', perm: 'personal-tasks' },
 
+  { id: 'wm_my_tasks', label: 'My Tasks', path: '/work-management/my-tasks', icon: ClipboardList, category: 'Work Management' },
   { id: 'wm_projects', label: 'Projects', path: '/work-management/projects', icon: ClipboardList, category: 'Work Management', perm: 'projects' },
   { id: 'wm_development', label: 'Development', path: '/work-management/development', icon: ClipboardList, category: 'Work Management', perm: 'development' },
   { id: 'wm_daily_progress', label: 'Daily Progress', path: '/work-management/daily-progress', icon: ClipboardList, category: 'Work Management', perm: 'daily-progress' },
+  { id: 'wm_hr_tasks', label: 'HR Tasks', path: '/work-management/hr-tasks', icon: ClipboardList, category: 'Work Management' },
   { id: 'wm_sales', label: 'Sales', path: '/work-management/sales', icon: ClipboardList, category: 'Work Management', perm: 'sales' },
   { id: 'wm_work_logs', label: 'Work Logs', path: '/work-management/work-logs', icon: ClipboardList, category: 'Work Management', perm: 'work-logs' },
   { id: 'wm_clients', label: 'Clients', path: '/work-management/clients', icon: ClipboardList, category: 'Work Management', perm: 'clients' },
@@ -57,6 +70,12 @@ const AVAILABLE_ACTIONS = [
   { id: 'interviews', label: 'Interviews', path: '/recruitment/hiring-board', icon: Briefcase, category: 'Recruitment', perm: 'interviews' },
   { id: 'hirings', label: 'Hirings', path: '/recruitment', icon: Briefcase, category: 'Recruitment', perm: 'hirings' },
   
+  { id: 'finance_transactions', label: 'Transactions', path: '/company-finance', icon: Landmark, category: 'Company Finance', perm: 'company-finance' },
+  { id: 'finance_plan', label: 'Plan', path: '/company-finance/plan', icon: Landmark, category: 'Company Finance', perm: 'company-finance' },
+  { id: 'finance_summary', label: 'Summary', path: '/company-finance/summary', icon: Landmark, category: 'Company Finance', perm: 'company-finance' },
+  { id: 'finance_client_transactions', label: 'Client Transactions', path: '/company-finance/client-transactions', icon: Landmark, category: 'Company Finance', perm: 'company-finance' },
+  { id: 'finance_logs', label: 'Audit Logs', path: '/company-finance/logs', icon: Landmark, category: 'Company Finance', perm: 'company-finance' },
+
   { id: 'workspace_seating', label: 'Seating Arrangement', path: '/workspace/seating', icon: MonitorPlay, category: 'Workspace', perm: 'seating-arrangement' },
   { id: 'workspace_resource', label: 'Resource Management', path: '/workspace/resource', icon: MonitorPlay, category: 'Workspace', perm: 'resource-management' },
   { id: 'workspace_gallery', label: 'Gallery', path: '/workspace/gallery', icon: MonitorPlay, category: 'Workspace', perm: 'gallery' },
@@ -65,6 +84,13 @@ const AVAILABLE_ACTIONS = [
   { id: 'invoice_ledger', label: 'Invoice Ledger', path: '/invoice/ledger', icon: FileText, category: 'Invoice', perm: 'invoice' },
   { id: 'invoice_create', label: 'Create Invoice', path: '/invoice/create', icon: FileText, category: 'Invoice', perm: 'invoice' },
   { id: 'invoice_proforma', label: 'Create Proforma', path: '/invoice/create?type=Proforma', icon: FileText, category: 'Invoice', perm: 'invoice' },
+
+  { id: 'training_library', label: 'Course Library', path: '/training', icon: BookOpen, category: 'Training & Courses', perm: 'training' },
+  { id: 'training_manage', label: 'Manage Courses', path: '/admin/courses', icon: BookOpen, category: 'Training & Courses', perm: 'admin-courses' },
+
+  { id: 'settings', label: 'Settings', path: '/settings', icon: Settings, category: 'System', perm: 'settings' },
+  { id: 'restrictions', label: 'Restrictions', path: '/restrictions', icon: ShieldHalf, category: 'System', adminOnly: true },
+  { id: 'activity_logs', label: 'Activity Logs', path: '/activity-logs', icon: Activity, category: 'System', perm: 'activity-logs' },
 ];
 
 export function QuickActionsWidget({ 
@@ -97,24 +123,36 @@ export function QuickActionsWidget({
   const accessibleActions = useMemo(() => {
     return AVAILABLE_ACTIONS.filter(action => {
       if (isAdmin) return true;
-      if (!action.perm) return true;
+      if (action.adminOnly) return false;
+      if (!action.perm) {
+        // Special case for HR Tasks or My Tasks
+        if (action.id === 'wm_hr_tasks') {
+          const isHRUser = user?.designation?.toLowerCase() === 'hr' || user?.department?.toLowerCase() === 'hr';
+          return isHRUser;
+        }
+        return true;
+      }
       
       if (action.id === 'wm_development') {
-        const isTL = Boolean(user && (user.role?.toLowerCase() === 'team leader' || user.designation?.toLowerCase() === 'team leader'));
+        const isTL = Boolean(user && ((user.designation?.toLowerCase() === 'team leader' || user.designation?.toLowerCase() === 'head') ));
         if (isTL || checkPermission('tasks', 'canView') || checkPermission('development', 'canView')) return true;
         return false;
       }
       
       if (action.id === 'wm_daily_progress') {
-        const isHRUser = user?.role === 'HR' || user?.department?.toLowerCase() === 'hr';
+        const isHRUser = user?.designation?.toLowerCase() === 'hr' || user?.department?.toLowerCase() === 'hr';
         if (isHRUser || checkPermission(action.perm, 'canView')) return true;
         return false;
       }
       
       if (action.id === 'wm_smm') {
-        const isCreativeSpecial = user?.role === 'HR' || user?.role === 'Team Leader';
+        const isCreativeSpecial = user?.designation?.toLowerCase() === 'hr' || (user?.designation?.toLowerCase() === 'team leader' || user?.designation?.toLowerCase() === 'head');
         if (isCreativeSpecial || checkPermission('creative', 'canView')) return true;
         return false;
+      }
+
+      if (action.id === 'tasks') {
+        return checkPermission('personal-tasks', 'canView') || checkPermission('tasks', 'canView');
       }
 
       return checkPermission(action.perm, 'canView');

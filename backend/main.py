@@ -324,6 +324,90 @@ async def lifespan(app):
             {"$set": {"department": "", "designation": ""}}
         )
         print("[Admin Migration] Completed admin cleanup.", flush=True)
+
+        # Create Default Admin & Sub-Admin Presets if they don't exist
+        print("[Admin Migration] Checking for Admin and Sub-Admin presets...", flush=True)
+        default_presets = [
+            {"name": "Admin", "description": "System Administrator Preset with Full Access", "presetType": "role"},
+            {"name": "Sub Admin", "description": "Sub Administrator Preset", "presetType": "role"}
+        ]
+        
+        modules_config = [
+            {'moduleName': 'employee-list', 'displayName': 'Employee List', 'tabUrl': '/employees'},
+            {'moduleName': 'org-structure', 'displayName': 'Org Structure', 'tabUrl': '/employees/organization/departments'},
+            {'moduleName': 'employee-attendance', 'displayName': 'Employee Attendance List', 'tabUrl': '/employees/attendance'},
+            {'moduleName': 'leave-requests', 'displayName': 'Leave Requests', 'tabUrl': '/employees/leave'},
+            {'moduleName': 'employee-documents', 'displayName': 'Employee Documents', 'tabUrl': '/employees/documents'},
+            {'moduleName': 'document-generator', 'displayName': 'Document Generator', 'tabUrl': '/employees/documents/generate'},
+            {'moduleName': 'salary-structure', 'displayName': 'Salary Structure', 'tabUrl': '/payroll/salary-structure'},
+            {'moduleName': 'payroll-processing', 'displayName': 'Payroll Processing', 'tabUrl': '/payroll'},
+            {'moduleName': 'payslips', 'displayName': 'Payslips', 'tabUrl': '/payroll/payslips'},
+            {'moduleName': 'bonuses-deductions', 'displayName': 'Bonuses & Deductions', 'tabUrl': '/payroll/bonuses'},
+            {'moduleName': 'company-finance-transactions', 'displayName': 'Transactions', 'tabUrl': '/company-finance'},
+            {'moduleName': 'company-finance-plan', 'displayName': 'Plan', 'tabUrl': '/company-finance/plan'},
+            {'moduleName': 'company-finance-summary', 'displayName': 'Summary', 'tabUrl': '/company-finance/summary'},
+            {'moduleName': 'company-finance-client-transactions', 'displayName': 'Client Transactions', 'tabUrl': '/company-finance/client-transactions'},
+            {'moduleName': 'company-finance-audit-logs', 'displayName': 'Audit Logs', 'tabUrl': '/company-finance/logs'},
+            {'moduleName': 'interviews', 'displayName': 'Interviews', 'tabUrl': '/recruitment/hiring-board'},
+            {'moduleName': 'hirings', 'displayName': 'Hirings', 'tabUrl': '/recruitment'},
+            {'moduleName': 'attendance', 'displayName': 'Attendance', 'tabUrl': '/attendance'},
+            {'moduleName': 'leave', 'displayName': 'Leave', 'tabUrl': '/leave'},
+            {'moduleName': 'schedule', 'displayName': 'Schedule', 'tabUrl': '/schedule'},
+            {'moduleName': 'projects', 'displayName': 'Projects', 'tabUrl': '/work-management/projects'},
+            {'moduleName': 'tasks', 'displayName': 'Development', 'tabUrl': '/work-management/development'},
+            {'moduleName': 'personal-tasks', 'displayName': 'Tasks', 'tabUrl': '/tasks'},
+            {'moduleName': 'daily-progress', 'displayName': 'Daily Progress', 'tabUrl': '/work-management/daily-progress'},
+            {'moduleName': 'work-logs', 'displayName': 'Work Logs', 'tabUrl': '/work-management/work-logs'},
+            {'moduleName': 'sales', 'displayName': 'Sales', 'tabUrl': '/work-management/sales'},
+            {'moduleName': 'clients', 'displayName': 'Clients', 'tabUrl': '/work-management/clients'},
+            {'moduleName': 'marketing', 'displayName': 'Digital Marketing', 'tabUrl': '/work-management/digital-marketing'},
+            {'moduleName': 'creative', 'displayName': 'Social Media Management', 'tabUrl': '/work-management/smm'},
+            {'moduleName': 'research', 'displayName': 'Research', 'tabUrl': '/work-management/research'},
+            {'moduleName': 'seating-arrangement', 'displayName': 'Seating Arrangement', 'tabUrl': '/workspace/seating'},
+            {'moduleName': 'resource-management', 'displayName': 'Resource Management', 'tabUrl': '/workspace/resource'},
+            {'moduleName': 'remarks', 'displayName': 'Penalty', 'tabUrl': '/penalty'},
+            {'moduleName': 'review', 'displayName': 'Remarks', 'tabUrl': '/remarks'},
+            {'moduleName': 'invoice', 'displayName': 'Invoice', 'tabUrl': '/invoice'},
+            {'moduleName': 'chat', 'displayName': 'Chat', 'tabUrl': '/chat'},
+            {'moduleName': 'activity-tracker', 'displayName': 'Activity Tracker', 'tabUrl': '/activity-tracker'},
+            {'moduleName': 'activity-logs', 'displayName': 'Activity Logs', 'tabUrl': '/activity-logs'},
+            {'moduleName': 'gallery', 'displayName': 'Gallery', 'tabUrl': '/workspace/gallery'},
+            {'moduleName': 'training', 'displayName': 'Course Library', 'tabUrl': '/training'},
+            {'moduleName': 'admin-courses', 'displayName': 'Manage Courses', 'tabUrl': '/admin/courses'},
+            {'moduleName': 'dashboard', 'displayName': 'Dashboard', 'tabUrl': '/'},
+            {'moduleName': 'access-control', 'displayName': 'Access Control', 'tabUrl': '/settings'},
+            {'moduleName': 'settings', 'displayName': 'Settings', 'tabUrl': '/settings'}
+        ]
+        
+        for preset_info in default_presets:
+            existing = await db.permission_presets.find_one({
+                "name": {"$regex": f"^{preset_info['name']}$", "$options": "i"}, 
+                "presetType": "role"
+            })
+            if not existing:
+                is_admin = (preset_info['name'] == 'Admin')
+                permissions = []
+                for mod in modules_config:
+                    permissions.append({
+                        "moduleName": mod["moduleName"],
+                        "displayName": mod["displayName"],
+                        "tabUrl": mod["tabUrl"],
+                        "canAdd": is_admin,
+                        "canEdit": is_admin,
+                        "canDelete": is_admin,
+                        "canView": is_admin
+                    })
+                
+                await db.permission_presets.insert_one({
+                    "name": preset_info['name'],
+                    "description": preset_info['description'],
+                    "presetType": preset_info['presetType'],
+                    "department": None,
+                    "designation": None,
+                    "permissions": permissions
+                })
+                print(f"[Admin Migration] Created default preset for {preset_info['name']}", flush=True)
+
     except Exception as e:
         print(f"[Admin Migration] Error: {e}", flush=True)
 
@@ -911,6 +995,56 @@ async def verify_otp(otp_data: schemas.VerifyOTPRequest, db=Depends(get_db)):
     
     return {"message": "Login successful", "user": user_fixed, "token": token, "require_otp": False}
 
+@app.post("/finance-otp/request")
+async def request_finance_otp(req: schemas.FinanceOTPRequest, db=Depends(get_db)):
+    settings = await db.system_settings.find_one({}) or {}
+    finance_email = settings.get("financeOtpEmail")
+    if not finance_email:
+        finance_email = settings.get("companyEmail")
+    
+    if not finance_email:
+        raise HTTPException(status_code=400, detail="Finance or Company email not configured in settings")
+        
+    otp = str(random.randint(100000, 999999))
+    expiry = datetime.now(pytz.timezone('Asia/Kolkata')) + timedelta(minutes=10)
+    
+    # Save OTP to user document
+    await db.employees.update_one(
+        {"email": req.email},
+        {"$set": {"finance_otp": otp, "finance_otp_expiry": expiry.isoformat()}}
+    )
+    
+    # Send email to finance_email instead of user email
+    send_otp_email(finance_email, otp)
+    
+    return {"message": "OTP sent to finance admin email"}
+
+@app.post("/finance-otp/verify")
+async def verify_finance_otp(otp_data: schemas.VerifyOTPRequest, db=Depends(get_db)):
+    user = await db.employees.find_one({"email": otp_data.email})
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+        
+    stored_otp = user.get("finance_otp")
+    expiry_str = user.get("finance_otp_expiry")
+    
+    if not stored_otp or not expiry_str:
+        raise HTTPException(status_code=400, detail="OTP not requested or expired")
+        
+    expiry = datetime.fromisoformat(expiry_str)
+    now = datetime.now(pytz.timezone('Asia/Kolkata'))
+    
+    if now > expiry:
+        await db.employees.update_one({"email": otp_data.email}, {"$unset": {"finance_otp": "", "finance_otp_expiry": ""}})
+        raise HTTPException(status_code=400, detail="OTP expired")
+        
+    if stored_otp != otp_data.otp:
+        raise HTTPException(status_code=400, detail="Invalid OTP")
+        
+    await db.employees.update_one({"email": otp_data.email}, {"$unset": {"finance_otp": "", "finance_otp_expiry": ""}})
+    
+    return {"message": "Finance OTP verified successfully"}
+
 # Employee Endpoints
 @app.get("/time")
 async def get_system_time():
@@ -932,9 +1066,42 @@ async def read_employee(employee_id: str, db=Depends(get_db)):
         raise HTTPException(status_code=404, detail="Employee not found")
     return employee
 
+ROLE_HIERARCHY = {
+    "super admin": 0,
+    "admin": 0,
+    "superadmin": 0,
+    "administrator": 0,
+    "founder": 0,
+    "super_admin": 0,
+    "sub-admin": 1,
+    "hr": 2,
+    "manager": 3,
+    "team leader": 4,
+    "employee": 5,
+    "intern": 6
+}
+
+def get_role_level(role: str) -> int:
+    if not role:
+        return 5
+    return ROLE_HIERARCHY.get(role.lower().strip(), 5)
+
 @app.post("/employees", response_model=schemas.Employee)
 async def create_employee(employee: schemas.EmployeeCreate, request: Request, db=Depends(get_db)):
     performed_by, user_name = await get_actor_from_request(request, db)
+    
+    if performed_by != "System":
+        actor = await db.employees.find_one({"_id": ObjectId(performed_by) if len(performed_by) == 24 else performed_by})
+        if actor:
+            actor_role = actor.get("role", "").lower()
+            target_role = (employee.role or "").lower()
+            
+            actor_level = get_role_level(actor_role)
+            target_level = get_role_level(target_role)
+            
+            if actor_level > 0 and target_level < actor_level:
+                raise HTTPException(status_code=403, detail="You do not have permission to create this role")
+
     return await crud.create_employee(db, employee, performed_by=performed_by, user_name=user_name)
 
 @app.put("/employees/{employee_id}", response_model=schemas.Employee)
@@ -942,8 +1109,25 @@ async def update_employee(employee_id: str, employee_update: schemas.EmployeeUpd
     performed_by, user_name = await get_actor_from_request(request, db)
     if performed_by != "System" and performed_by != employee_id:
         actor = await db.employees.find_one({"_id": ObjectId(performed_by) if len(performed_by) == 24 else performed_by})
-        if not actor or actor.get("role", "").lower() not in ["admin", "super admin", "manager"]:
+        if not actor:
             raise HTTPException(status_code=403, detail="You do not have permission to modify this employee's details")
+        
+        actor_role = actor.get("role", "").lower()
+        actor_level = get_role_level(actor_role)
+        
+        target_emp = await db.employees.find_one({"_id": ObjectId(employee_id) if len(employee_id) == 24 else employee_id})
+        if target_emp:
+            target_emp_role = target_emp.get("role", "").lower()
+            new_role = (employee_update.role or "").lower() if employee_update.role is not None else target_emp_role
+            
+            target_emp_level = get_role_level(target_emp_role)
+            new_role_level = get_role_level(new_role)
+            
+            if actor_level > 0:
+                if target_emp_level < actor_level:
+                    raise HTTPException(status_code=403, detail="You cannot modify a profile with a higher role")
+                if new_role_level < actor_level:
+                    raise HTTPException(status_code=403, detail="You cannot assign a role higher than your own")
     updated = await crud.update_employee(db, employee_id, employee_update, performed_by=performed_by, user_name=user_name)
     if not updated:
         raise HTTPException(status_code=404, detail="Employee not found")
@@ -1257,6 +1441,24 @@ async def update_department(department_id: str, department_update: schemas.Depar
 async def delete_department(department_id: str, db=Depends(get_db)):
     await crud.delete_department(db, department_id)
     return {"message": "Department deleted successfully"}
+
+# SubDepartment Endpoints
+@app.get("/sub-departments", response_model=List[schemas.SubDepartment])
+async def read_sub_departments(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
+    return await crud.get_sub_departments(db, skip=skip, limit=limit)
+
+@app.post("/sub-departments", response_model=schemas.SubDepartment)
+async def create_sub_department(sub_department: schemas.SubDepartmentCreate, db=Depends(get_db)):
+    return await crud.create_sub_department(db, sub_department)
+
+@app.put("/sub-departments/{sub_department_id}", response_model=schemas.SubDepartment)
+async def update_sub_department(sub_department_id: str, sub_department_update: schemas.SubDepartmentUpdate, db=Depends(get_db)):
+    return await crud.update_sub_department(db, sub_department_id, sub_department_update)
+
+@app.delete("/sub-departments/{sub_department_id}")
+async def delete_sub_department(sub_department_id: str, db=Depends(get_db)):
+    await crud.delete_sub_department(db, sub_department_id)
+    return {"message": "SubDepartment deleted successfully"}
 
 # Designation Endpoints
 @app.get("/designations", response_model=List[schemas.Designation])
@@ -1679,6 +1881,407 @@ async def delete_task_api(task_id: str, db=Depends(get_db)):
 @app.get("/tasks/{task_id}/activities")
 async def read_task_activities(task_id: str, db=Depends(get_db)):
     return await crud.get_task_activities(db, task_id)
+
+@app.get("/dev-board-data")
+async def get_dev_board_data(
+    userId: Optional[str] = None, 
+    role: Optional[str] = None,
+    db=Depends(get_db)
+):
+    import asyncio
+    wm_tasks_coro = crud.get_wm_tasks(db, userId, role, skip=0, limit=10000)
+    projects_coro = crud.get_projects(db, userId, role, skip=0, limit=10000)
+    employees_coro = crud.get_employees(db, skip=0, limit=10000, include_inactive=False)
+    
+    transfer_all_coro = crud.get_all_transfer_requests(db, None, "wm-task")
+    transfer_out_coro = crud.get_outgoing_transfer_requests(db, userId or "", "wm-task")
+    
+    results = await asyncio.gather(
+        wm_tasks_coro,
+        projects_coro,
+        employees_coro,
+        transfer_all_coro,
+        transfer_out_coro
+    )
+    
+    projects = [
+        {
+            "id": p.get("id"),
+            "title": p.get("title"),
+            "department": p.get("department"),
+            "status": p.get("status"),
+            "teamLeaderId": p.get("teamLeaderId"),
+            "isPhaseWise": p.get("isPhaseWise"),
+            "phases": p.get("phases")
+        } for p in results[1]
+    ]
+    
+    employees = [
+        {
+            "id": e.get("id"),
+            "firstName": e.get("firstName"),
+            "lastName": e.get("lastName"),
+            "name": e.get("name"),
+            "department": e.get("department")
+        } for e in results[2]
+    ]
+    
+    return {
+        "wmTasks": results[0],
+        "projects": projects,
+        "employees": employees,
+        "transferRequestsAll": results[3],
+        "transferRequestsOutgoing": results[4]
+    }
+
+# --- Clubbed Page Data Endpoints ---
+# These endpoints reduce multiple frontend API calls into a single request per page.
+
+@app.get("/dashboard-data")
+async def get_dashboard_data(
+    userId: Optional[str] = None,
+    role: Optional[str] = None,
+    db=Depends(get_db)
+):
+    """Clubbed endpoint for the main Dashboard page. Replaces 7 separate calls."""
+    import asyncio
+    is_admin = role and role.lower() in ["admin", "super admin", "hr"]
+    
+    coros = [
+        crud.get_system_settings(db),
+        crud.get_all_leave_requests(db, skip=0, limit=10000),
+    ]
+    
+    # Admin-only data
+    if is_admin:
+        coros.extend([
+            crud.get_employees(db, skip=0, limit=10000),
+            crud.get_interns(db, skip=0, limit=10000),
+            crud.get_attendance(db, skip=0, limit=10000),
+            crud.get_applications(db, skip=0, limit=10000),
+            crud.get_assets(db, skip=0, limit=10000),
+        ])
+    
+    results = await asyncio.gather(*coros)
+    
+    response = {
+        "systemSettings": results[0],
+        "leaves": results[1],
+    }
+    
+    if is_admin:
+        employees = [
+            {"id": e.get("id"), "firstName": e.get("firstName"), "lastName": e.get("lastName"),
+             "name": e.get("name"), "department": e.get("department"), "designation": e.get("designation"),
+             "role": e.get("role"), "email": e.get("email"), "photoUrl": e.get("photoUrl"),
+             "status": e.get("status"), "joiningDate": e.get("joiningDate")}
+            for e in results[2]
+        ]
+        response["employees"] = employees
+        response["interns"] = results[3]
+        response["attendance"] = results[4]
+        response["applications"] = results[5]
+        response["assets"] = results[6]
+    
+    return response
+
+@app.get("/attendance-page-data")
+async def get_attendance_page_data(
+    userId: Optional[str] = None,
+    role: Optional[str] = None,
+    db=Depends(get_db)
+):
+    """Clubbed endpoint for the Attendance page. Replaces 4 separate calls."""
+    import asyncio
+    is_admin = role and role.lower() in ["admin", "super admin", "hr"]
+    
+    coros = [
+        crud.get_employees(db, skip=0, limit=10000),
+        crud.get_attendance(db, skip=0, limit=10000),
+        crud.get_system_settings(db),
+    ]
+    
+    if is_admin:
+        coros.append(crud.get_time_recoveries(db, skip=0, limit=10000))
+    elif userId:
+        coros.append(crud.get_employee_time_recoveries(db, userId))
+    
+    results = await asyncio.gather(*coros)
+    
+    employees = [
+        {"id": e.get("id"), "firstName": e.get("firstName"), "lastName": e.get("lastName"),
+         "name": e.get("name"), "department": e.get("department"), "designation": e.get("designation"),
+         "role": e.get("role"), "email": e.get("email"), "photoUrl": e.get("photoUrl"),
+         "status": e.get("status")}
+        for e in results[0]
+    ]
+    
+    return {
+        "employees": employees,
+        "attendance": results[1],
+        "systemSettings": results[2],
+        "recoveryRequests": results[3] if len(results) > 3 else [],
+    }
+
+@app.get("/hr-tasks-data")
+async def get_hr_tasks_data(db=Depends(get_db)):
+    """Clubbed endpoint for the HR Tasks page. Replaces 4 separate calls."""
+    import asyncio
+    results = await asyncio.gather(
+        crud.get_employees(db, skip=0, limit=10000),
+        crud.get_tasks(db, skip=0, limit=10000),
+        crud.get_all_leave_requests(db, skip=0, limit=10000),
+        crud.get_document_requests(db),
+    )
+    
+    employees = [
+        {"id": e.get("id"), "firstName": e.get("firstName"), "lastName": e.get("lastName"),
+         "name": e.get("name"), "department": e.get("department"), "designation": e.get("designation"),
+         "role": e.get("role")}
+        for e in results[0]
+    ]
+    
+    return {
+        "employees": employees,
+        "tasks": results[1],
+        "leaves": results[2],
+        "documentRequests": results[3],
+    }
+
+@app.get("/leave-page-data")
+async def get_leave_page_data(
+    userId: Optional[str] = None,
+    db=Depends(get_db)
+):
+    """Clubbed endpoint for the Leave page. Replaces 4 separate calls."""
+    import asyncio
+    
+    leaves_coro = crud.get_user_leave_requests(db, userId, skip=0, limit=10000) if userId else crud.get_all_leave_requests(db, skip=0, limit=10000)
+    
+    results = await asyncio.gather(
+        leaves_coro,
+        crud.get_holidays(db, skip=0, limit=10000),
+        crud.get_companies(db, skip=0, limit=10000),
+        crud.get_system_settings(db),
+    )
+    
+    return {
+        "leaves": results[0],
+        "holidays": results[1],
+        "companies": results[2],
+        "systemSettings": results[3],
+    }
+
+@app.get("/sales-page-data")
+async def get_sales_page_data(db=Depends(get_db)):
+    """Clubbed endpoint for the Sales page. Replaces 5 separate calls."""
+    import asyncio
+    results = await asyncio.gather(
+        crud.get_leads(db, skip=0, limit=10000),
+        crud.get_employees(db, skip=0, limit=10000),
+        crud.get_sales_targets(db),
+        crud.get_incentive_slabs(db),
+        crud.get_system_settings(db),
+    )
+    
+    employees = [
+        {"id": e.get("id"), "firstName": e.get("firstName"), "lastName": e.get("lastName"),
+         "name": e.get("name"), "department": e.get("department"), "designation": e.get("designation"),
+         "role": e.get("role"), "photoUrl": e.get("photoUrl")}
+        for e in results[1]
+    ]
+    
+    return {
+        "leads": results[0],
+        "employees": employees,
+        "salesTargets": results[2],
+        "incentiveSlabs": results[3],
+        "systemSettings": results[4],
+    }
+
+@app.get("/work-logs-data")
+async def get_work_logs_data(db=Depends(get_db)):
+    """Clubbed endpoint for the Work Logs page. Replaces 3 separate calls."""
+    import asyncio
+    results = await asyncio.gather(
+        crud.get_attendance(db, skip=0, limit=10000),
+        crud.get_wm_tasks(db, skip=0, limit=10000),
+        crud.get_employees(db, skip=0, limit=10000),
+    )
+    
+    employees = [
+        {"id": e.get("id"), "firstName": e.get("firstName"), "lastName": e.get("lastName"),
+         "name": e.get("name"), "department": e.get("department"), "designation": e.get("designation"),
+         "role": e.get("role")}
+        for e in results[2]
+    ]
+    
+    return {
+        "attendance": results[0],
+        "wmTasks": results[1],
+        "employees": employees,
+    }
+
+@app.get("/research-page-data")
+async def get_research_page_data(
+    userId: Optional[str] = None,
+    role: Optional[str] = None,
+    db=Depends(get_db)
+):
+    """Clubbed endpoint for the Research page. Replaces 4 separate calls."""
+    import asyncio
+    is_admin = role and role.lower() in ["admin", "super admin"]
+    
+    coros = [
+        crud.get_research(db, userId or "", is_admin),
+        crud.get_employees(db, skip=0, limit=10000),
+        crud.get_projects(db, userId, role, skip=0, limit=10000),
+    ]
+    
+    if userId:
+        coros.append(crud.get_attendance_status(db, userId))
+    
+    results = await asyncio.gather(*coros)
+    
+    employees = [
+        {"id": e.get("id"), "firstName": e.get("firstName"), "lastName": e.get("lastName"),
+         "name": e.get("name"), "department": e.get("department")}
+        for e in results[1]
+    ]
+    
+    projects = [
+        {"id": p.get("id"), "title": p.get("title"), "department": p.get("department"),
+         "status": p.get("status")}
+        for p in results[2]
+    ]
+    
+    return {
+        "research": results[0],
+        "employees": employees,
+        "projects": projects,
+        "attendanceStatus": results[3] if len(results) > 3 else None,
+    }
+
+@app.get("/projects-page-data")
+async def get_projects_page_data(
+    userId: Optional[str] = None,
+    role: Optional[str] = None,
+    db=Depends(get_db)
+):
+    """Clubbed endpoint for the Projects page. Replaces 5 separate calls."""
+    import asyncio
+    results = await asyncio.gather(
+        crud.get_projects(db, userId, role, skip=0, limit=10000),
+        crud.get_wm_tasks(db, userId, role, skip=0, limit=10000),
+        crud.get_leads(db, skip=0, limit=10000),
+        crud.get_clients(db, skip=0, limit=10000),
+        crud.get_employees(db, skip=0, limit=10000),
+    )
+    
+    employees = [
+        {"id": e.get("id"), "firstName": e.get("firstName"), "lastName": e.get("lastName"),
+         "name": e.get("name"), "department": e.get("department"), "designation": e.get("designation"),
+         "role": e.get("role")}
+        for e in results[4]
+    ]
+    
+    return {
+        "projects": results[0],
+        "wmTasks": results[1],
+        "leads": results[2],
+        "clients": results[3],
+        "employees": employees,
+    }
+
+@app.get("/my-tasks-page-data")
+async def get_my_tasks_page_data(
+    userId: Optional[str] = None,
+    role: Optional[str] = None,
+    db=Depends(get_db)
+):
+    """Clubbed endpoint for the My Tasks page. Replaces 3 separate calls."""
+    import asyncio
+    results = await asyncio.gather(
+        crud.get_tasks(db, userId, role, skip=0, limit=10000, exclude_department="HR"),
+        crud.get_employees(db, skip=0, limit=10000),
+        crud.get_departments(db, skip=0, limit=10000)
+    )
+    
+    employees = [
+        {"id": e.get("id"), "firstName": e.get("firstName"), "lastName": e.get("lastName"),
+         "name": e.get("name"), "email": e.get("email"), "department": e.get("department"), 
+         "designation": e.get("designation")}
+        for e in results[1]
+    ]
+    
+    return {
+        "tasks": results[0],
+        "employees": employees,
+        "departments": results[2]
+    }
+
+@app.get("/employee-attendance-page-data")
+async def get_employee_attendance_page_data(db=Depends(get_db)):
+    """Clubbed endpoint for the Employee Attendance page. Replaces 6 separate calls."""
+    import asyncio
+    results = await asyncio.gather(
+        crud.get_attendance(db, skip=0, limit=10000),
+        crud.get_employees(db, skip=0, limit=10000),
+        crud.get_departments(db, skip=0, limit=10000),
+        crud.get_system_settings(db),
+        crud.get_time_recoveries(db, skip=0, limit=10000),
+        crud.get_all_leave_requests(db, skip=0, limit=10000)
+    )
+    
+    employees = [
+        {"id": e.get("id"), "firstName": e.get("firstName"), "lastName": e.get("lastName"),
+         "name": e.get("name"), "department": e.get("department"), "designation": e.get("designation"),
+         "role": e.get("role"), "email": e.get("email"), "photoUrl": e.get("photoUrl"),
+         "joiningDate": e.get("joiningDate"), "status": e.get("status")}
+        for e in results[1]
+    ]
+    
+    return {
+        "attendance": results[0],
+        "employees": employees,
+        "departments": results[2],
+        "systemSettings": results[3],
+        "timeRecovery": results[4],
+        "leaves": results[5]
+    }
+
+@app.get("/my-tasks-view-data")
+async def get_my_tasks_view_data(userId: Optional[str] = None, role: Optional[str] = None, db=Depends(get_db)):
+    """Clubbed endpoint for the MyTasksView component. Replaces 8 separate calls."""
+    import asyncio
+    results = await asyncio.gather(
+        crud.get_tasks(db, userId, role, skip=0, limit=10000),
+        crud.get_wm_tasks(db, userId, role, skip=0, limit=10000),
+        crud.get_all_content_calendar_entries(db),
+        crud.get_all_other_work(db),
+        crud.get_projects(db, skip=0, limit=10000),
+        crud.get_clients(db, skip=0, limit=10000),
+        crud.get_employees(db, skip=0, limit=10000),
+        crud.get_leads(db, skip=0, limit=10000)
+    )
+    
+    employees = [
+        {"id": e.get("id"), "firstName": e.get("firstName"), "lastName": e.get("lastName"),
+         "name": e.get("name"), "department": e.get("department"), "designation": e.get("designation"),
+         "role": e.get("role"), "email": e.get("email")}
+        for e in results[6]
+    ]
+    
+    return {
+        "tasks": results[0],
+        "wmTasks": results[1],
+        "contentCalendar": results[2],
+        "otherWork": results[3],
+        "projects": results[4],
+        "clients": results[5],
+        "employees": employees,
+        "leads": results[7]
+    }
 
 @app.get("/wm-tasks", response_model=List[schemas.WMTask])
 async def read_wm_tasks(userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 10000, db=Depends(get_db)):
@@ -2420,6 +3023,16 @@ async def create_lead(lead: schemas.LeadCreate, db=Depends(get_db)):
 async def create_leads_bulk(leads: List[schemas.LeadCreate], db=Depends(get_db)):
     return await crud.create_leads_bulk(db, leads)
 
+@app.put("/leads/bulk-assign", response_model=dict)
+async def bulk_assign_leads(payload: schemas.BulkAssignLeads, db=Depends(get_db)):
+    result = await crud.bulk_assign_leads(db, payload.leadIds, payload.assignedTo, payload.performedBy, payload.userName)
+    return {"message": "Leads assigned successfully", "modified_count": result}
+
+@app.post("/leads/bulk-delete", response_model=dict)
+async def bulk_delete_leads(payload: schemas.BulkDeleteLeads, db=Depends(get_db)):
+    result = await crud.bulk_delete_leads(db, payload.leadIds)
+    return {"message": "Leads deleted successfully", "deleted_count": result}
+
 @app.put("/leads/{lead_id}", response_model=schemas.Lead)
 async def update_lead(lead_id: str, lead_update: schemas.LeadUpdate, db=Depends(get_db)):
     result = await crud.update_lead(db, lead_id, lead_update)
@@ -2598,6 +3211,21 @@ async def create_invoice(invoice: schemas.InvoiceCreate, db=Depends(get_db)):
 @app.get("/invoices", response_model=List[schemas.Invoice])
 async def read_invoices(skip: int = 0, limit: int = 10000, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
     return await crud.get_invoices(db, current_user, skip=skip, limit=limit)
+
+@app.get("/invoices/deleted", response_model=List[schemas.Invoice])
+async def get_deleted_invoices(db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
+    if current_user.get("role") != "Admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+    return await crud.get_deleted_invoices(db)
+
+@app.post("/invoices/{invoice_id}/restore")
+async def restore_invoice(invoice_id: str, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
+    if current_user.get("role") != "Admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+    success = await crud.restore_invoice(db, invoice_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return {"message": "Invoice restored successfully"}
 
 @app.get("/invoices/next-number")
 async def get_next_number(type: str = "Tax Invoice", taxType: str = "CGST+SGST", db=Depends(get_db)):
@@ -4160,6 +4788,15 @@ async def get_my_course_progress(course_id: str, db=Depends(get_db), token_paylo
 async def get_all_course_progress(course_id: str, db=Depends(get_db), token_payload: dict = Depends(auth.require_admin)):
     return await crud.get_all_course_progress(db, course_id)
 
+
+
+@app.get("/user-permissions/all", response_model=List[schemas.UserPermission])
+async def read_all_user_permissions(db=Depends(get_db)):
+    return await crud.get_all_user_permissions(db)
+
+@app.put("/user-permissions/bulk-module")
+async def update_bulk_module_permissions(request: schemas.ModuleBulkUpdateRequest, db=Depends(get_db), ):
+    return await crud.bulk_update_module_permissions(db, request, performed_by="System", user_name="System User")
 
 if __name__ == "__main__":
 

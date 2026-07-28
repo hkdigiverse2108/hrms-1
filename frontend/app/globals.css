@@ -266,3 +266,14 @@
 }
 
 .chat-link-hover:hover { text-decoration: underline !important; text-decoration-thickness: 1.5px !important; text-underline-offset: 2px !important; }
+
+@keyframes glitter-border {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.animate-glitter {
+  background-size: 200% 200%;
+  animation: glitter-border 2.5s linear infinite;
+}
