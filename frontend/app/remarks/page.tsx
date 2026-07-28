@@ -843,7 +843,7 @@ export default function ReviewPage() {
                   className="w-4 h-4 rounded border-gray-300 text-brand-teal focus:ring-brand-teal cursor-pointer"
                 />
                 <label htmlFor="showNameToAdminEdit" className="text-sm font-medium text-slate-700 cursor-pointer select-none">
-                  Force show my name to Admins
+                  Show my name to Admins
                 </label>
               </div>
               </div>

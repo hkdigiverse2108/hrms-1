@@ -75,6 +75,14 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
   const [ratingsModalOpen, setRatingsModalOpen] = useState(false)
   const [ratingDateFilter, setRatingDateFilter] = useState<'yesterday' | 'this_week' | 'all'>('all')
 
+  const [verifyRecord, setVerifyRecord] = useState<any>(null)
+  const [verifyNote, setVerifyNote] = useState('')
+  const [verifyRating, setVerifyRating] = useState('')
+  const [pendingTasks, setPendingTasks] = useState<any[]>([])
+  const [isLoadingPendingTasks, setIsLoadingPendingTasks] = useState(false)
+  const [approveRecord, setApproveRecord] = useState<any>(null)
+  const [approveRating, setApproveRating] = useState<number | ''>('')
+
   const availableDepartments = useMemo(() => {
     if (!employees || employees.length === 0) return []
     const depts = new Set(employees.map((e: any) => e.department).filter(Boolean))
@@ -517,8 +525,8 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
     }
   }
 
-  const handleSaveNote = async () => {
-    if (!noteRecord) return
+  const handleVerify = async (status: string) => {
+    if (!verifyRecord) return
     setIsSubmitting(true)
     try {
       const method = verifyRecord.reportId ? 'PUT' : 'POST'
@@ -1008,8 +1016,8 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {allRatingsData.length > 0 ? (
-                  allRatingsData.map((emp, i) => (
+                {ratingData.length > 0 ? (
+                  ratingData.map((emp: any, i: number) => (
                     <tr key={i} className="hover:bg-slate-50/50 transition-colors">
                       <td className="px-4 py-3 font-bold text-slate-700 text-xs">{emp.name}</td>
                       <td className="px-4 py-3">
