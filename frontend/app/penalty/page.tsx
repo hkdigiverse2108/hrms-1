@@ -109,7 +109,7 @@ export default function RemarksPage() {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [penaltyTypes, setPenaltyTypes] = useState<any[]>([]);
   const [manageTypesOpen, setManageTypesOpen] = useState(false);
-  const [newType, setNewType] = useState({ name: "", amount: 0, warningLimit: 3 });
+  const [newType, setNewType] = useState({ name: "", amount: 0, warningLimit: 0 });
   const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
 
   const getPenaltyAmount = (type: string) => {
@@ -198,7 +198,7 @@ export default function RemarksPage() {
     if (!newType.name || newType.amount <= 0) return;
     const bodyData = {
       ...newType,
-      warningLimit: parseInt(String(newType.warningLimit)) !== undefined && !isNaN(parseInt(String(newType.warningLimit))) ? parseInt(String(newType.warningLimit)) : 3
+      warningLimit: parseInt(String(newType.warningLimit)) !== undefined && !isNaN(parseInt(String(newType.warningLimit))) ? parseInt(String(newType.warningLimit)) : 0
     };
     try {
       if (editingTypeId && !editingTypeId.startsWith('fallback-')) {
@@ -208,7 +208,7 @@ export default function RemarksPage() {
           body: JSON.stringify(bodyData)
         });
         if (res.ok) {
-          setNewType({ name: "", amount: 0, warningLimit: 3 });
+          setNewType({ name: "", amount: 0, warningLimit: 0 });
           setEditingTypeId(null);
           fetchData();
         }
@@ -219,7 +219,7 @@ export default function RemarksPage() {
           body: JSON.stringify(bodyData)
         });
         if (res.ok) {
-          setNewType({ name: "", amount: 0, warningLimit: 3 });
+          setNewType({ name: "", amount: 0, warningLimit: 0 });
           fetchData();
         }
       }
@@ -1126,7 +1126,7 @@ export default function RemarksPage() {
                   {editingTypeId ? 'Update' : 'Add'}
                 </Button>
                 {editingTypeId && (
-                  <Button variant="ghost" onClick={() => { setNewType({ name: "", amount: 0, warningLimit: 3 }); setEditingTypeId(null); }} className="shrink-0 text-muted-foreground">
+                  <Button variant="ghost" onClick={() => { setNewType({ name: "", amount: 0, warningLimit: 0 }); setEditingTypeId(null); }} className="shrink-0 text-muted-foreground">
                     Cancel
                   </Button>
                 )}
