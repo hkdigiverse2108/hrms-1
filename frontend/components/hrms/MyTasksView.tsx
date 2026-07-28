@@ -165,6 +165,29 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
     }
   }
 
+  const getRedirectUrl = (task: any) => {
+    if (task.sourceType === 'wm-task') {
+      return '/work-management/development';
+    }
+    if (task.sourceType === 'smm-creative') {
+      return '/work-management/smm';
+    }
+    if (task.sourceType === 'smm-other') {
+      if (task.department?.toLowerCase() === 'digital marketing' || task.originalTask?.taskType === 'digital-marketing') {
+        return '/work-management/digital-marketing';
+      }
+      return '/work-management/smm';
+    }
+    if (task.sourceType === 'general-task') {
+      const dept = task.originalTask?.department;
+      if (task.department === 'HR Tasks' || (dept && dept.toUpperCase() === 'HR')) {
+        return '/work-management/hr-tasks';
+      }
+      return '/tasks';
+    }
+    return null;
+  };
+
   // Process all tasks assigned to the current user
   const effectiveUserId = targetUserId || (selectedEmployeeId !== 'all' ? selectedEmployeeId : currentUser?.id);
   const allConsolidatedTasks = useMemo(() => {
@@ -847,10 +870,11 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                                         key={task.id} 
                                         onClick={() => {
                                           if (!isCustomTask) {
-                                            router.push('/work-management/my-tasks');
+                                            const url = getRedirectUrl(task);
+                                            if (url) router.push(url);
                                           }
                                         }}
-                                        className={`hover:bg-slate-50/50 transition-colors group ${!isCustomTask ? 'cursor-pointer' : ''}`}
+                                        className={`hover:bg-slate-50/50 transition-colors group ${!isCustomTask && getRedirectUrl(task) ? 'cursor-pointer' : ''}`}
                                       >
                                         <td className="p-4">
                                           <span className={`font-bold text-[10px] rounded px-2.5 py-1 ${isOverdue ? 'bg-red-800 text-white' : 'bg-slate-100 text-slate-700'}`}>
@@ -880,26 +904,43 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                                           {task.originalTask?.remark || '-'}
                                         </td>
                                         <td className="p-4 text-right">
-                                          {task.status !== 'completed' && task.status !== 'Approved' && task.status?.toLowerCase() !== 'completed' ? (
-                                            isCustomTask ? (
+                                          <div className="flex items-center justify-end gap-1.5">
+                                            {task.status !== 'completed' && task.status !== 'Approved' && task.status?.toLowerCase() !== 'completed' ? (
+                                              isCustomTask && (
+                                                <Button
+                                                  variant="ghost"
+                                                  size="icon"
+                                                  className="h-8 w-8 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleMarkComplete(task);
+                                                  }}
+                                                  title="Mark Complete"
+                                                >
+                                                  <CheckCircle2 className="w-4 h-4" />
+                                                </Button>
+                                              )
+                                            ) : (
+                                              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                                                Completed
+                                              </Badge>
+                                            )}
+                                            {getRedirectUrl(task) && (
                                               <Button
                                                 variant="ghost"
                                                 size="icon"
-                                                className="h-8 w-8 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50"
+                                                className="h-8 w-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
                                                 onClick={(e) => {
                                                   e.stopPropagation();
-                                                  handleMarkComplete(task);
+                                                  const url = getRedirectUrl(task);
+                                                  if (url) router.push(url);
                                                 }}
-                                                title="Mark Complete"
+                                                title="Go to Task Section"
                                               >
-                                                <CheckCircle2 className="w-4 h-4" />
+                                                <ExternalLink className="w-4 h-4" />
                                               </Button>
-                                            ) : null
-                                          ) : (
-                                            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-                                              Completed
-                                            </Badge>
-                                          )}
+                                            )}
+                                          </div>
                                         </td>
                                       </tr>
                                     )
@@ -922,58 +963,76 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                                       const todayStr = new Date().toISOString().split('T')[0]
                                       const isOverdue = task.dueDate && task.dueDate < todayStr
                                       const isCustomTask = task.description === "Custom task created from Punch-In" || task.originalTask?.description === "Custom task created from Punch-In"
-                                      return (
-                                        <tr 
-                                          key={task.id} 
-                                          onClick={() => {
-                                            if (!isCustomTask) {
-                                              router.push('/work-management/my-tasks');
-                                            }
-                                          }}
-                                          className={`hover:bg-slate-50/50 transition-colors group ${!isCustomTask ? 'cursor-pointer' : ''}`}
-                                        >
-                                          <td className="p-4 font-semibold text-slate-700">
-                                            <div className={`flex items-center gap-1.5 ${isOverdue ? 'text-red-600 font-bold' : ''}`}>
-                                              {isOverdue ? <AlertCircle className="w-3.5 h-3.5 text-red-600" /> : <CalendarIcon className="w-3.5 h-3.5 text-slate-400" />}
-                                              <span className={isOverdue ? 'bg-red-100 px-2 py-0.5 rounded text-[10px]' : ''}>
-                                                {task.dueDate ? format(new Date(task.dueDate), 'dd/MM/yyyy') : 'No Date'}
-                                              </span>
-                                            </div>
-                                          </td>
-                                      <td className="p-4 font-bold text-slate-800">
-                                        {task.projectName || '-'}
-                                      </td>
-                                      <td className="p-4" title={`${task.title}${task.description ? '\n' + task.description : ''}`}>
-                                        <div className="font-semibold text-slate-700 truncate max-w-[400px]">{task.title}</div>
-                                        {task.description && <div className="text-[10px] text-slate-400 mt-0.5 truncate max-w-[400px]">{task.description}</div>}
-                                      </td>
-                                      <td className="p-4">
-                                        <Badge className={`${getPriorityColor(task.priority)} border font-bold text-[9px] uppercase shadow-none`}>
-                                          {task.priority}
-                                        </Badge>
-                                      </td>
-                                      <td className="p-4 text-right">
-                                          {task.status !== 'completed' && task.status !== 'Approved' && task.status?.toLowerCase() !== 'completed' ? (
-                                            isCustomTask ? (
+                                        return (
+                                          <tr 
+                                            key={task.id} 
+                                            onClick={() => {
+                                              if (!isCustomTask) {
+                                                const url = getRedirectUrl(task);
+                                                if (url) router.push(url);
+                                              }
+                                            }}
+                                            className={`hover:bg-slate-50/50 transition-colors group ${!isCustomTask && getRedirectUrl(task) ? 'cursor-pointer' : ''}`}
+                                          >
+                                            <td className="p-4 font-semibold text-slate-700">
+                                              <div className={`flex items-center gap-1.5 ${isOverdue ? 'text-red-600 font-bold' : ''}`}>
+                                                {isOverdue ? <AlertCircle className="w-3.5 h-3.5 text-red-600" /> : <CalendarIcon className="w-3.5 h-3.5 text-slate-400" />}
+                                                <span className={isOverdue ? 'bg-red-100 px-2 py-0.5 rounded text-[10px]' : ''}>
+                                                  {task.dueDate ? format(new Date(task.dueDate), 'dd/MM/yyyy') : 'No Date'}
+                                                </span>
+                                              </div>
+                                            </td>
+                                        <td className="p-4 font-bold text-slate-800">
+                                          {task.projectName || '-'}
+                                        </td>
+                                        <td className="p-4" title={`${task.title}${task.description ? '\n' + task.description : ''}`}>
+                                          <div className="font-semibold text-slate-700 truncate max-w-[400px]">{task.title}</div>
+                                          {task.description && <div className="text-[10px] text-slate-400 mt-0.5 truncate max-w-[400px]">{task.description}</div>}
+                                        </td>
+                                        <td className="p-4">
+                                          <Badge className={`${getPriorityColor(task.priority)} border font-bold text-[9px] uppercase shadow-none`}>
+                                            {task.priority}
+                                          </Badge>
+                                        </td>
+                                        <td className="p-4 text-right">
+                                          <div className="flex items-center justify-end gap-1.5">
+                                            {task.status !== 'completed' && task.status !== 'Approved' && task.status?.toLowerCase() !== 'completed' ? (
+                                              isCustomTask && (
+                                                <Button
+                                                  variant="ghost"
+                                                  size="icon"
+                                                  className="h-8 w-8 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleMarkComplete(task);
+                                                  }}
+                                                  title="Mark Complete"
+                                                >
+                                                  <CheckCircle2 className="w-4 h-4" />
+                                                </Button>
+                                              )
+                                            ) : (
+                                              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                                                Completed
+                                              </Badge>
+                                            )}
+                                            {getRedirectUrl(task) && (
                                               <Button
                                                 variant="ghost"
                                                 size="icon"
-                                                className="h-8 w-8 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50"
+                                                className="h-8 w-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
                                                 onClick={(e) => {
                                                   e.stopPropagation();
-                                                  handleMarkComplete(task);
+                                                  const url = getRedirectUrl(task);
+                                                  if (url) router.push(url);
                                                 }}
-                                                title="Mark Complete"
+                                                title="Go to Task Section"
                                               >
-                                                <CheckCircle2 className="w-4 h-4" />
+                                                <ExternalLink className="w-4 h-4" />
                                               </Button>
-                                            ) : null
-                                          ) : (
-                                            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-                                              Completed
-                                            </Badge>
-                                          )}
-                                      </td>
+                                            )}
+                                          </div>
+                                        </td>
                                     </tr>
                                       )
                                     })}

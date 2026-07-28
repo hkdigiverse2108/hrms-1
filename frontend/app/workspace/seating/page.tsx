@@ -349,7 +349,7 @@ export default function SeatingArrangementPage() {
   const [modalStatus, setModalStatus] = useState<"available" | "allocated">("available");
   const [modalEmployeeId, setModalEmployeeId] = useState<string>("");
 
-  const isAdminOrHR = user?.role?.toLowerCase() === "admin" || user?.role?.toLowerCase() === "hr";
+  const isAdminOrHR = user?.role?.toLowerCase() === "admin" || user?.role?.toLowerCase() === "hr" || user?.designation?.toLowerCase() === 'hr' || user?.department?.toLowerCase() === 'hr';
 
   useEffect(() => {
     // Fetch seating arrangement from global database for all-employee sync

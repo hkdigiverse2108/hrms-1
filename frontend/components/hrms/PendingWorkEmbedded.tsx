@@ -503,7 +503,13 @@ export function PendingWorkEmbedded({
         const uId = user?.id;
         if (!uId) return false;
         
-        const transfer = incomingRequests.find(r => r.taskId === (entry.id || entry._id) && r.stage === (stage === 'Editing' && entry.postReel === 'Post' ? 'Post/Graphics' : stage) && r.status === 'Accepted');
+        const finalStageName = (stage === 'Editing' && entry.postReel === 'Post') ? 'Post/Graphics' : stage;
+        
+        // Hide task if the current user has sent a transfer request that has been accepted
+        const outgoingTransfer = outgoingRequests.find(r => r.taskId === (entry.id || entry._id) && r.stage === finalStageName && r.status === 'Accepted');
+        if (outgoingTransfer && workScope === 'my') return false;
+
+        const transfer = incomingRequests.find(r => r.taskId === (entry.id || entry._id) && r.stage === finalStageName && r.status === 'Accepted');
         
         let isAssignedToMe = false;
         if (stage === 'Script') isAssignedToMe = String(transfer ? transfer.receiverId : (entry.assignedScriptwriterId || project.assignedScriptwriterId || client?.assignedScriptwriterId)) === String(uId);

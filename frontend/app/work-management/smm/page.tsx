@@ -168,13 +168,23 @@ export default function CreativeClientsPage() {
     if (!user) return false;
     const r = (user.role || "").toLowerCase();
     const d = (user.designation || "").toLowerCase();
-    const fullRoles = ["admin", "manager", "social media manager", "smm", "director", "head", "super admin", "digital marketer", "digital marketing", "sub admin", "sub-admin", "hr"];
-    if (fullRoles.includes(r) || fullRoles.includes(d) || r.includes("social media") || d.includes("social media") || r.includes("digital marketing") || d.includes("digital marketing")) {
+    const fullRoles = ["admin", "manager", "social media manager", "smm", "director", "head", "super admin", "digital marketer", "digital marketing", "sub admin", "sub-admin", "hr", "team leader", "tl"];
+    if (
+      fullRoles.includes(r) || 
+      fullRoles.includes(d) || 
+      r.includes("social media") || 
+      d.includes("social media") || 
+      r.includes("digital marketing") || 
+      d.includes("digital marketing") ||
+      d.includes("team leader") ||
+      d.includes("tl") ||
+      d.includes("head") ||
+      r.includes("team leader") ||
+      r.includes("tl") ||
+      r.includes("head")
+    ) {
       return true;
     }
-    const isTL = d === 'team leader' || r === 'team leader';
-    const dept = (user.department || "").toLowerCase();
-    if (isTL && dept.includes('creative')) return true;
 
     const perms = (user as any).permissions || [];
     const smmPerms = ["projects", "smm", "clients", "digital-marketing", "work-management"];
@@ -189,19 +199,28 @@ export default function CreativeClientsPage() {
     if (!user) return false;
     const r = (user.role || "").toLowerCase();
     const d = (user.designation || "").toLowerCase();
-    const allAccessRoles = ["admin", "super admin", "manager", "director", "head", "sub admin", "sub-admin", "hr"];
+    const allAccessRoles = ["admin", "super admin", "manager", "director", "head", "sub admin", "sub-admin", "hr", "team leader", "tl"];
     
-    if (allAccessRoles.includes(r) || allAccessRoles.includes(d) || d.includes("head") || d.includes("manager") || r.includes("admin")) {
+    if (
+      allAccessRoles.includes(r) || 
+      allAccessRoles.includes(d) || 
+      d.includes("head") || 
+      d.includes("manager") || 
+      d.includes("team leader") ||
+      d.includes("tl") ||
+      r.includes("admin") ||
+      r.includes("team leader") ||
+      r.includes("tl") ||
+      r.includes("head")
+    ) {
       return true;
     }
-    const isTL = d === 'team leader' || r === 'team leader';
-    const dept = (user.department || "").toLowerCase();
-    if (isTL && dept.includes('creative')) return true;
     
     return false;
   }, [user]);
 
   const [clients, setClients] = useState<any[]>([]);
+  const [calendarEntries, setCalendarEntries] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -492,6 +511,7 @@ export default function CreativeClientsPage() {
       let maxDatesLocal: Record<string, Date> = {};
       if (ccRes.ok) {
         const entries = await ccRes.json();
+        setCalendarEntries(entries);
         const counts: Record<string, number> = {};
         entries.forEach((entry: any) => {
           let pending = 0;
@@ -555,7 +575,7 @@ export default function CreativeClientsPage() {
         
         // Filter for Creative department AND must have a creative project
         const validClientIds = new Set(Object.keys(projectMap));
-        let filteredClients = clientsData.filter((c: any) => c.department?.includes("Creative") && validClientIds.has(c.id));
+        let filteredClients = clientsData.filter((c: any) => c.department?.includes("Creative") && (canViewAllClients || validClientIds.has(c.id)));
         filteredClients.sort((a: any, b: any) => {
           const dateA = maxDatesLocal[a.id] ? maxDatesLocal[a.id].getTime() : Infinity;
           const dateB = maxDatesLocal[b.id] ? maxDatesLocal[b.id].getTime() : Infinity;
@@ -840,6 +860,18 @@ export default function CreativeClientsPage() {
     return clientProjectRows.filter(({ client: c, project: p }: { client: any; project: any }) => {
       if (!canViewAllClients && user?.id) {
         const proj = p || {};
+        const hasAssignedCCEntry = calendarEntries.some((entry: any) => {
+          if (entry.clientId !== c.id) return false;
+          return entry.assignedScriptwriterId === user.id ||
+                 entry.assignedShooterId === user.id ||
+                 entry.assignedCaptionWriterId === user.id ||
+                 entry.assignedThumbnailDesignerId === user.id ||
+                 entry.assignedReelEditorId === user.id ||
+                 entry.assignedPostDesignerId === user.id ||
+                 entry.assignedApproverId === user.id ||
+                 entry.assignedPosterId === user.id;
+        });
+
         const isAssigned = (proj.assignedScriptwriterId || c.assignedScriptwriterId) === user.id || 
                            (proj.assignedReelEditorId || c.assignedReelEditorId) === user.id ||
                            (proj.assignedPostDesignerId || c.assignedPostDesignerId) === user.id ||
@@ -852,7 +884,8 @@ export default function CreativeClientsPage() {
                            (proj.assignedGreetingsMsgSenderId || c.assignedGreetingsMsgSenderId) === user.id ||
                            (proj.assignedMeetingsAssigneeId || c.assignedMeetingsAssigneeId) === user.id ||
                            (proj.assignedContentCalendarCreatorId || c.assignedContentCalendarCreatorId) === user.id ||
-                           (proj.assignedFollowUpId || c.assignedFollowUpId) === user.id;
+                           (proj.assignedFollowUpId || c.assignedFollowUpId) === user.id ||
+                           hasAssignedCCEntry;
         if (!isAssigned) return false;
       }
 
@@ -915,7 +948,7 @@ export default function CreativeClientsPage() {
 
       return true;
     });
-  }, [clientProjectRows, isEmployeeOrIntern, user, searchTerm, masterFilter, creativeFilter, calendarFilterStatus, pendingCounts, calendarSettings]);
+  }, [clientProjectRows, isEmployeeOrIntern, user, searchTerm, masterFilter, creativeFilter, calendarFilterStatus, pendingCounts, calendarSettings, calendarEntries]);
 
   return (
     <div className="space-y-6">
