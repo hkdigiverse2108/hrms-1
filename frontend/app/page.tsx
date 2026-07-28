@@ -2178,3 +2178,4 @@ function StatCard({ title, value, trend, trendLabel, icon, trendUp = true, color
     </div>
   );
 }
+
