@@ -1900,25 +1900,43 @@ function EventsSidebar({ user, leaves }: { user: any, leaves: any[] }) {
           <div className="rounded-xl overflow-hidden shadow-sm relative group w-full h-[380px]">
             <Carousel setApi={setCarouselApi} opts={{ loop: true }} className="w-full h-full">
               <CarouselContent className="h-full">
-                {activeBanners.map(banner => (
-                  <CarouselItem key={banner.id} className="h-full flex items-center justify-center">
-                    {banner.externalUrl ? (
-                      <a href={banner.externalUrl} target="_blank" rel="noreferrer" className="block w-full h-full cursor-pointer">
+                {activeBanners.map(banner => {
+                  let formattedUrl = banner.externalUrl ? banner.externalUrl.trim() : "";
+                  if (formattedUrl && !formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://') && !formattedUrl.startsWith('/')) {
+                    formattedUrl = 'https://' + formattedUrl;
+                  }
+                  const handleBannerClick = (e: React.MouseEvent) => {
+                    if (!formattedUrl) return;
+                    e.stopPropagation();
+                    window.open(formattedUrl, '_blank', 'noopener,noreferrer');
+                  };
+                  return (
+                    <CarouselItem key={banner.id} className="h-full flex items-center justify-center">
+                      {formattedUrl ? (
+                        <a 
+                          href={formattedUrl} 
+                          target="_blank" 
+                          rel="noreferrer" 
+                          onClick={handleBannerClick}
+                          className="block w-full h-full cursor-pointer hover:opacity-95 transition-opacity"
+                          title={`Click to open: ${formattedUrl}`}
+                        >
+                          <img 
+                            src={banner.imageUrl.startsWith('http') ? banner.imageUrl : `${API_URL}${banner.imageUrl}`} 
+                            alt="Banner" 
+                            className="w-full h-full object-cover rounded-xl"
+                          />
+                        </a>
+                      ) : (
                         <img 
                           src={banner.imageUrl.startsWith('http') ? banner.imageUrl : `${API_URL}${banner.imageUrl}`} 
                           alt="Banner" 
                           className="w-full h-full object-cover rounded-xl"
                         />
-                      </a>
-                    ) : (
-                      <img 
-                        src={banner.imageUrl.startsWith('http') ? banner.imageUrl : `${API_URL}${banner.imageUrl}`} 
-                        alt="Banner" 
-                        className="w-full h-full object-cover rounded-xl"
-                      />
-                    )}
-                  </CarouselItem>
-                ))}
+                      )}
+                    </CarouselItem>
+                  );
+                })}
               </CarouselContent>
               <CarouselPrevious className="absolute left-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 hover:bg-white text-brand-teal border-none" />
               <CarouselNext className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 hover:bg-white text-brand-teal border-none" />
