@@ -31,9 +31,12 @@ jobs:
           ssh root@31.97.206.171 << 'EOF'
             cd /root/HRMS/dev
 
-            git fetch origin
+            echo "=== FETCHING LATEST CODE FROM DEV ==="
+            git fetch origin dev
             git checkout dev
             git reset --hard origin/dev
+            echo "=== DEPLOYED COMMIT ==="
+            git log -1 --oneline
 
             # Install backend dependencies
             if [ -d ".venv" ]; then
@@ -59,9 +62,12 @@ jobs:
           ssh root@31.97.206.171 << 'EOF'
             cd /root/HRMS/live
 
-            git fetch origin
+            echo "=== FETCHING LATEST CODE FROM MAIN ==="
+            git fetch origin main
             git checkout main
             git reset --hard origin/main
+            echo "=== DEPLOYED COMMIT ==="
+            git log -1 --oneline
 
             # Install backend dependencies
             if [ -d ".venv" ]; then
