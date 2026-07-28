@@ -1897,7 +1897,7 @@ function EventsSidebar({ user, leaves }: { user: any, leaves: any[] }) {
           </h3>
         </div>
         {activeBanners.length > 0 ? (
-          <div className="rounded-xl overflow-hidden shadow-sm relative group w-full h-[380px]">
+          <div className="rounded-xl overflow-hidden shadow-sm relative group w-full aspect-[4/5] max-h-[550px]">
             <Carousel setApi={setCarouselApi} opts={{ loop: true }} className="w-full h-full">
               <CarouselContent className="h-full">
                 {activeBanners.map(banner => {
@@ -1924,14 +1924,14 @@ function EventsSidebar({ user, leaves }: { user: any, leaves: any[] }) {
                           <img 
                             src={banner.imageUrl.startsWith('http') ? banner.imageUrl : `${API_URL}${banner.imageUrl}`} 
                             alt="Banner" 
-                            className="w-full h-full object-cover rounded-xl"
+                            className="w-full h-full object-contain bg-white rounded-xl"
                           />
                         </a>
                       ) : (
                         <img 
                           src={banner.imageUrl.startsWith('http') ? banner.imageUrl : `${API_URL}${banner.imageUrl}`} 
                           alt="Banner" 
-                          className="w-full h-full object-cover rounded-xl"
+                          className="w-full h-full object-contain bg-white rounded-xl"
                         />
                       )}
                     </CarouselItem>
@@ -1943,7 +1943,7 @@ function EventsSidebar({ user, leaves }: { user: any, leaves: any[] }) {
             </Carousel>
           </div>
         ) : (
-          <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50/50 flex flex-col items-center justify-center p-6 h-[380px] text-gray-400">
+          <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50/50 flex flex-col items-center justify-center p-6 aspect-[4/5] max-h-[550px] text-gray-400">
             <ImageIcon className="w-8 h-8 mb-2 text-gray-300" />
             <span className="text-[12px] font-semibold">No Active Banners</span>
           </div>
