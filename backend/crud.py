@@ -9555,6 +9555,10 @@ async def respond_to_transfer_request(db, request_id: str, status: str):
                     update_field = "assignedScriptwriterId"
                 elif stage == "Shoot":
                     update_field = "assignedShooterId"
+                elif stage == "Caption":
+                    update_field = "assignedCaptionWriterId"
+                elif stage == "Thumbnail":
+                    update_field = "assignedThumbnailDesignerId"
                 elif stage == "Editing":
                     entry = await db.content_calendar_entries.find_one({"_id": ObjectId(task_id)})
                     if entry and entry.get("postReel") == "Post":
@@ -9567,6 +9571,27 @@ async def respond_to_transfer_request(db, request_id: str, status: str):
                     update_field = "assignedApproverId"
                 elif stage == "Posting":
                     update_field = "assignedPosterId"
+                elif stage == "Brand Person":
+                    entry = await db.content_calendar_entries.find_one({"_id": ObjectId(task_id)})
+                    if entry:
+                        bp_ids = entry.get("assignedBrandPersonIds", [])
+                        sender_id = req.get("senderId")
+                        if sender_id in bp_ids:
+                            bp_ids = [receiver_id if x == sender_id else x for x in bp_ids]
+                        else:
+                            if receiver_id not in bp_ids:
+                                bp_ids.append(receiver_id)
+                        logs = entry.get("logs", [])
+                        logs.append({
+                            "timestamp": datetime.now(IST).isoformat(),
+                            "action": "Task Transferred",
+                            "details": f"Stage '{stage}' transferred from {req.get('senderName')} to {req.get('receiverName')}.",
+                            "userName": "System"
+                        })
+                        await db.content_calendar_entries.update_one(
+                            {"_id": ObjectId(task_id)},
+                            {"$set": {"assignedBrandPersonIds": bp_ids, "logs": logs}}
+                        )
                 
                 if update_field:
                     entry = await db.content_calendar_entries.find_one({"_id": ObjectId(task_id)})
