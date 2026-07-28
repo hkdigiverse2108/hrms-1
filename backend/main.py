@@ -712,7 +712,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
 # CORS: read allowed origins from env (comma-separated), fallback to localhost for dev
-_default_origins = "http://localhost:3535,http://127.0.0.1:3535,http://localhost:3550,http://127.0.0.1:3550"
+_default_origins = "http://localhost:3535,http://127.0.0.1:3535,http://localhost:3550,http://127.0.0.1:3550,http://localhost:5151,http://127.0.0.1:5151"
 _allowed_origins = [
     o.strip()
     for o in os.getenv("ALLOWED_ORIGINS", _default_origins).split(",")
@@ -763,7 +763,10 @@ from jose import jwt
 EXEMPT_PATHS = [
     "/login", "/time", "/", "/docs", "/openapi.json", "/redoc",
     "/super-admin/login", "/super-admin/verify-otp", "/super-admin/public-purchase",
-    "/purchase/options", "/purchase/calculate", "/purchase/checkout"
+    "/purchase/options", "/purchase/calculate", "/purchase/checkout",
+    "/super-admin/public/landing/sections", "/super-admin/public/landing/modules",
+    "/super-admin/public/landing/stats", "/super-admin/public/landing/plans",
+    "/super-admin/public/landing/comparison", "/super-admin/public/landing/faqs"
 ]
 
 @app.middleware("http")

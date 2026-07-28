@@ -552,6 +552,14 @@ class LandingSectionUpdate(BaseModel):
     form_title: Optional[str] = None
     form_subtitle: Optional[str] = None
     employee_options: Optional[List[str]] = None
+    # Header & Footer section fields
+    logo_url: Optional[str] = None
+    company_name: Optional[str] = None
+    company_subtitle: Optional[str] = None
+    social_instagram: Optional[str] = None
+    social_linkedin: Optional[str] = None
+    social_facebook: Optional[str] = None
+    social_twitter: Optional[str] = None
 
 # --- Landing Page CRUD Endpoints ---
 
@@ -929,6 +937,20 @@ async def get_or_seed_section(section_key: str):
                 "500+ Enterprise"
             ],
             "map_url": "https://www.google.com/maps/embed?pb="
+        },
+        "header_footer": {
+            "logo_url": "",
+            "company_name": "HKHRMS",
+            "company_subtitle": "Digiverse Enterprise",
+            "social_instagram": "https://instagram.com",
+            "social_linkedin": "https://linkedin.com",
+            "social_facebook": "https://facebook.com",
+            "social_twitter": "https://twitter.com"
+        },
+        "modules_header": {
+            "badge_text": "HRMS Modules",
+            "headline": "24 modules, one connected platform",
+            "subheadline": "Enable only what you need today and switch on the rest as your organisation grows."
         }
     }
     
@@ -955,7 +977,7 @@ async def get_or_seed_section(section_key: str):
 
 @router.get("/landing/sections")
 async def list_landing_sections(token: dict = Depends(require_superadmin)):
-    keys = ["hero", "about", "why_us", "benefits", "final_cta", "contact"]
+    keys = ["hero", "about", "why_us", "benefits", "final_cta", "contact", "header_footer", "modules_header"]
     sections = {}
     for key in keys:
         sections[key] = await get_or_seed_section(key)
@@ -998,5 +1020,67 @@ async def update_landing_section(section_key: str, payload: LandingSectionUpdate
         result["stats"] = stats
         
     return result
+
+
+# --- Public Landing Page Endpoints ---
+
+@router.get("/public/landing/sections")
+async def public_list_landing_sections():
+    keys = ["hero", "about", "why_us", "benefits", "final_cta", "contact", "header_footer", "modules_header"]
+    sections = {}
+    for key in keys:
+        sections[key] = await get_or_seed_section(key)
+    return sections
+
+@router.get("/public/landing/modules")
+async def public_list_landing_modules():
+    cursor = db.modules.find({})
+    modules = []
+    async for doc in cursor:
+        doc["id"] = str(doc["_id"])
+        del doc["_id"]
+        modules.append(doc)
+    return modules
+
+@router.get("/public/landing/stats")
+async def public_list_landing_stats():
+    cursor = db.stats.find({})
+    stats = []
+    async for doc in cursor:
+        doc["id"] = str(doc["_id"])
+        del doc["_id"]
+        stats.append(doc)
+    return stats
+
+@router.get("/public/landing/plans")
+async def public_list_landing_plans():
+    cursor = db.plans.find({})
+    plans = []
+    async for doc in cursor:
+        doc["id"] = str(doc["_id"])
+        del doc["_id"]
+        plans.append(doc)
+    return plans
+
+@router.get("/public/landing/comparison")
+async def public_list_landing_comparison():
+    cursor = db.comparison.find({})
+    comparisons = []
+    async for doc in cursor:
+        doc["id"] = str(doc["_id"])
+        del doc["_id"]
+        comparisons.append(doc)
+    return comparisons
+
+@router.get("/public/landing/faqs")
+async def public_list_landing_faqs():
+    cursor = db.faqs.find({})
+    faqs = []
+    async for doc in cursor:
+        doc["id"] = str(doc["_id"])
+        del doc["_id"]
+        faqs.append(doc)
+    return faqs
+
 
 

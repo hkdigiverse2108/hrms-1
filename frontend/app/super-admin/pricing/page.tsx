@@ -86,8 +86,6 @@ export default function SuperAdminPricingPage() {
   const [planKey, setPlanKey] = useState("");
   const [planDisplayName, setPlanDisplayName] = useState("");
   const [planMonths, setPlanMonths] = useState(3);
-  const [planDiscount, setPlanDiscount] = useState(10);
-  const [planBadge, setPlanBadge] = useState("");
   const [planActive, setPlanActive] = useState(true);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -265,8 +263,6 @@ export default function SuperAdminPricingPage() {
     setPlanKey("");
     setPlanDisplayName("");
     setPlanMonths(3);
-    setPlanDiscount(10);
-    setPlanBadge("");
     setPlanActive(true);
     setIsPlanModalOpen(true);
   };
@@ -276,8 +272,6 @@ export default function SuperAdminPricingPage() {
     setPlanKey(plan.plan_key);
     setPlanDisplayName(plan.display_name);
     setPlanMonths(plan.months);
-    setPlanDiscount(plan.discount_percent);
-    setPlanBadge(plan.badge || "");
     setPlanActive(plan.is_active);
     setIsPlanModalOpen(true);
   };
@@ -301,8 +295,8 @@ export default function SuperAdminPricingPage() {
           body: JSON.stringify({
             display_name: planDisplayName,
             months: Number(planMonths),
-            discount_percent: Number(planDiscount),
-            badge: planBadge,
+            discount_percent: 0,
+            badge: "",
             is_active: planActive
           })
         });
@@ -322,8 +316,8 @@ export default function SuperAdminPricingPage() {
             plan_key: generatedKey,
             display_name: planDisplayName,
             months: Number(planMonths),
-            discount_percent: Number(planDiscount),
-            badge: planBadge,
+            discount_percent: 0,
+            badge: "",
             is_active: planActive
           })
         });
@@ -390,7 +384,7 @@ export default function SuperAdminPricingPage() {
                 Module Pricing & Plans Management
                 <Sparkles className="w-4 h-4 text-[#09A08A]" />
               </h1>
-              <p className="text-xs text-slate-500 font-medium">Configure individual module pricing and subscription duration discount plans</p>
+              <p className="text-xs text-slate-500 font-medium">Configure individual module pricing and subscription duration plans</p>
             </div>
           </div>
 
@@ -565,19 +559,10 @@ export default function SuperAdminPricingPage() {
                       {plan.months} Months
                     </span>
                   </div>
-                  {plan.badge && (
-                    <span className="inline-block mb-3 px-2 py-0.5 bg-emerald-50 text-emerald-700 font-bold text-[10px] rounded-md border border-emerald-200">
-                      {plan.badge}
-                    </span>
-                  )}
-                  <p className="text-xs text-slate-500">Discount percentage configured for {plan.months} months subscription billing.</p>
+                  <p className="text-xs text-slate-500">Subscription duration configured for {plan.months} months billing.</p>
                 </div>
 
                 <div className="space-y-4 border-t border-slate-100 pt-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-700">Discount Percentage:</span>
-                    <span className="text-lg font-black text-[#09A08A]">{plan.discount_percent}% OFF</span>
-                  </div>
 
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-slate-600">Active Status:</span>
@@ -738,7 +723,7 @@ export default function SuperAdminPricingPage() {
                   <Calendar className="w-5 h-5 text-[#09A08A]" />
                   {editingPlanKey ? "Edit Subscription Plan" : "Add New Duration Plan"}
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">Configure subscription duration and discount rates</p>
+                <p className="text-xs text-slate-500 mt-0.5">Configure subscription duration plans</p>
               </div>
               <button onClick={() => setIsPlanModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg">
                 <X className="w-5 h-5" />
@@ -758,46 +743,19 @@ export default function SuperAdminPricingPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Duration (Months) *</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={120}
-                    required
-                    placeholder="e.g. 12 or 0 for One Time"
-                    value={planMonths}
-                    onChange={(e) => setPlanMonths(Number(e.target.value))}
-                    className="w-full bg-[#F8FAFC] border border-slate-300 rounded-xl p-3 text-slate-900 font-bold focus:border-[#09A08A] focus:outline-none"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-1 font-medium">Use 0 for One-Time / Lifetime</p>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Discount % *</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    required
-                    placeholder="e.g. 28"
-                    value={planDiscount}
-                    onChange={(e) => setPlanDiscount(Number(e.target.value))}
-                    className="w-full bg-[#F8FAFC] border border-slate-300 rounded-xl p-3 text-slate-900 font-extrabold focus:border-[#09A08A] focus:outline-none"
-                  />
-                </div>
-              </div>
-
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Save Offer / Tag Text (Optional)</label>
+                <label className="block font-bold text-slate-700 mb-1">Duration (Months) *</label>
                 <input
-                  type="text"
-                  placeholder="e.g. Pay one time and save up to 28%"
-                  value={planBadge}
-                  onChange={(e) => setPlanBadge(e.target.value)}
-                  className="w-full bg-[#F8FAFC] border border-slate-300 rounded-xl p-3 text-slate-900 font-medium focus:border-[#09A08A] focus:outline-none"
+                  type="number"
+                  min={0}
+                  max={120}
+                  required
+                  placeholder="e.g. 12 or 0 for One Time"
+                  value={planMonths}
+                  onChange={(e) => setPlanMonths(Number(e.target.value))}
+                  className="w-full bg-[#F8FAFC] border border-slate-300 rounded-xl p-3 text-slate-900 font-bold focus:border-[#09A08A] focus:outline-none"
                 />
+                <p className="text-[10px] text-slate-400 mt-1 font-medium">Use 0 for One-Time / Lifetime</p>
               </div>
 
               <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl">

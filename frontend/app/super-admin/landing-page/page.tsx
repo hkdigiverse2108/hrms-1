@@ -25,6 +25,7 @@ import {
 import { API_URL } from "@/lib/config";
 import SuperAdminHeader from "@/components/layout/SuperAdminHeader";
 import { useConfirm } from "@/context/ConfirmContext";
+import { SIDEBAR_MAIN_TABS } from "@/lib/sidebarConfig";
 
 interface ModuleItem {
   id: string;
@@ -39,52 +40,39 @@ interface StatItem {
   label: string;
 }
 
-interface PlanItem {
-  id: string;
-  name: string;
-  description: string;
-  priceYearly: string;
-  priceOnetime: string;
-  limit: string;
-  isPopular: boolean;
-  features: string[];
-}
-
-interface ComparisonItem {
-  id: string;
-  category: string;
-  featureName: string;
-  lite: string | boolean;
-  starter: string | boolean;
-  pro: string | boolean;
-  elite: string | boolean;
-  hybrid: string | boolean;
-}
-
 interface FAQItem {
   id: string;
   question: string;
   answer: string;
 }
 
-type TabType = "modules" | "stats" | "plans" | "comparison" | "faqs";
+type TabType = "modules" | "stats" | "faqs" | "hero" | "about" | "why_us" | "benefits" | "final_cta" | "contact" | "header_footer";
 
 const POPULAR_ICONS = [
   "Users", "Clock", "CreditCard", "Calendar", "UserPlus", "ClipboardList", 
   "LogOut", "Gauge", "Award", "ListTodo", "ShieldCheck", "BarChart3", 
-  "MessageSquare", "Settings", "Activity", "HelpCircle", "Globe", "Layers"
+  "MessageSquare", "Settings", "Activity", "HelpCircle", "Globe", "Layers",
+  "FileText", "Briefcase", "DollarSign", "UserCheck", "AlertTriangle", "CheckCircle",
+  "FileCheck", "Folder", "PieChart", "TrendingUp", "Zap", "Lock",
+  "Mail", "Bell", "Database", "Search", "Sliders", "UserCog"
 ];
 
 export default function LandingPageCRUD() {
   const router = useRouter();
   const { confirm } = useConfirm();
-  const [activeTab, setActiveTab] = useState<TabType>("modules");
+  const [activeTab, setActiveTab] = useState<TabType>("hero");
   
   // Data lists state
   const [modules, setModules] = useState<ModuleItem[]>([]);
+  const availableModuleOptions = React.useMemo(() => {
+    const names = new Set<string>();
+    SIDEBAR_MAIN_TABS.forEach(t => names.add(t.name));
+    modules.forEach(m => {
+      if (m.name) names.add(m.name);
+    });
+    return Array.from(names);
+  }, [modules]);
   const [stats, setStats] = useState<StatItem[]>([]);
-  const [plans, setPlans] = useState<PlanItem[]>([]);
-  const [comparisons, setComparisons] = useState<ComparisonItem[]>([]);
   const [faqs, setFaqs] = useState<FAQItem[]>([]);
 
   // Section States
@@ -94,11 +82,16 @@ export default function LandingPageCRUD() {
     why_us: { headline: "", subheadline: "", cards: [] },
     benefits: { headline: "", subheadline: "", items: [] },
     final_cta: { title: "", subtitle: "", button_text: "", button_link: "" },
-    contact: { address: "", email: "", phone: "", map_url: "" }
+    contact: { address: "", email: "", phone: "", map_url: "" },
+    header_footer: { logo_url: "", company_name: "", company_subtitle: "", social_instagram: "", social_linkedin: "", social_facebook: "", social_twitter: "" },
+    modules_header: { badge_text: "", headline: "", subheadline: "" }
   });
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUploadingHeroImg, setIsUploadingHeroImg] = useState(false);
+  const [isUploadingAboutImg, setIsUploadingAboutImg] = useState(false);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
@@ -116,25 +109,7 @@ export default function LandingPageCRUD() {
   const [statValue, setStatValue] = useState("");
   const [statLabel, setStatLabel] = useState("");
 
-  // 3. Plan Form
-  const [planName, setPlanName] = useState("");
-  const [planDesc, setPlanDesc] = useState("");
-  const [planPriceYearly, setPlanPriceYearly] = useState("");
-  const [planPriceOnetime, setPlanPriceOnetime] = useState("");
-  const [planLimit, setPlanLimit] = useState("");
-  const [planIsPopular, setPlanIsPopular] = useState(false);
-  const [planFeaturesStr, setPlanFeaturesStr] = useState("");
-
-  // 4. Comparison Form
-  const [compCategory, setCompCategory] = useState("");
-  const [compFeatureName, setCompFeatureName] = useState("");
-  const [compLite, setCompLite] = useState<string | boolean>("");
-  const [compStarter, setCompStarter] = useState<string | boolean>("");
-  const [compPro, setCompPro] = useState<string | boolean>("");
-  const [compElite, setCompElite] = useState<string | boolean>("");
-  const [compHybrid, setCompHybrid] = useState<string | boolean>("");
-
-  // 5. FAQ Form
+  // 3. FAQ Form
   const [faqQuestion, setFaqQuestion] = useState("");
   const [faqAnswer, setFaqAnswer] = useState("");
 
@@ -199,7 +174,7 @@ export default function LandingPageCRUD() {
 
   // Fetch data on mount / tab change
   const fetchData = async () => {
-    const isSectionTab = ["hero", "about", "why_us", "benefits", "final_cta", "contact"].includes(activeTab);
+    const isSectionTab = ["hero", "about", "why_us", "benefits", "final_cta", "contact", "header_footer"].includes(activeTab);
     if (isSectionTab) {
       await fetchSections();
       return;
@@ -228,8 +203,6 @@ export default function LandingPageCRUD() {
       const data = await res.json();
       if (activeTab === "modules") setModules(data);
       else if (activeTab === "stats") setStats(data);
-      else if (activeTab === "plans") setPlans(data);
-      else if (activeTab === "comparison") setComparisons(data);
       else if (activeTab === "faqs") setFaqs(data);
     } catch (err: any) {
       setError(err.message || "Failed to load landing page data.");
@@ -268,22 +241,6 @@ export default function LandingPageCRUD() {
     } else if (activeTab === "stats") {
       setStatValue("");
       setStatLabel("");
-    } else if (activeTab === "plans") {
-      setPlanName("");
-      setPlanDesc("");
-      setPlanPriceYearly("");
-      setPlanPriceOnetime("");
-      setPlanLimit("");
-      setPlanIsPopular(false);
-      setPlanFeaturesStr("");
-    } else if (activeTab === "comparison") {
-      setCompCategory("");
-      setCompFeatureName("");
-      setCompLite("");
-      setCompStarter("");
-      setCompPro("");
-      setCompElite("");
-      setCompHybrid("");
     } else if (activeTab === "faqs") {
       setFaqQuestion("");
       setFaqAnswer("");
@@ -302,22 +259,6 @@ export default function LandingPageCRUD() {
     } else if (activeTab === "stats") {
       setStatValue(item.value || "");
       setStatLabel(item.label || "");
-    } else if (activeTab === "plans") {
-      setPlanName(item.name || "");
-      setPlanDesc(item.description || "");
-      setPlanPriceYearly(item.priceYearly || "");
-      setPlanPriceOnetime(item.priceOnetime || "");
-      setPlanLimit(item.limit || "");
-      setPlanIsPopular(item.isPopular || false);
-      setPlanFeaturesStr(Array.isArray(item.features) ? item.features.join("\n") : "");
-    } else if (activeTab === "comparison") {
-      setCompCategory(item.category || "");
-      setCompFeatureName(item.featureName || "");
-      setCompLite(item.lite !== undefined ? item.lite : "");
-      setCompStarter(item.starter !== undefined ? item.starter : "");
-      setCompPro(item.pro !== undefined ? item.pro : "");
-      setCompElite(item.elite !== undefined ? item.elite : "");
-      setCompHybrid(item.hybrid !== undefined ? item.hybrid : "");
     } else if (activeTab === "faqs") {
       setFaqQuestion(item.question || "");
       setFaqAnswer(item.answer || "");
@@ -379,36 +320,6 @@ export default function LandingPageCRUD() {
       } else if (activeTab === "stats") {
         if (!statValue || !statLabel) throw new Error("Please fill in all fields.");
         body = { value: statValue, label: statLabel };
-      } else if (activeTab === "plans") {
-        if (!planName || !planDesc || !planPriceYearly || !planPriceOnetime || !planLimit) {
-          throw new Error("Please fill in all standard fields.");
-        }
-        const features = planFeaturesStr
-          .split("\n")
-          .map(f => f.trim())
-          .filter(f => f !== "");
-        body = { 
-          name: planName, 
-          description: planDesc, 
-          priceYearly: planPriceYearly, 
-          priceOnetime: planPriceOnetime, 
-          limit: planLimit, 
-          isPopular: planIsPopular,
-          features 
-        };
-      } else if (activeTab === "comparison") {
-        if (!compCategory || !compFeatureName) {
-          throw new Error("Category and Feature Name are required.");
-        }
-        body = {
-          category: compCategory,
-          featureName: compFeatureName,
-          lite: compLite,
-          starter: compStarter,
-          pro: compPro,
-          elite: compElite,
-          hybrid: compHybrid
-        };
       } else if (activeTab === "faqs") {
         if (!faqQuestion || !faqAnswer) throw new Error("Please fill in question and answer.");
         body = { question: faqQuestion, answer: faqAnswer };
@@ -440,54 +351,6 @@ export default function LandingPageCRUD() {
     }
   };
 
-  // Helper for comparison matrix values
-  const renderComparisonFieldInput = (
-    label: string,
-    value: string | boolean,
-    onChange: (val: string | boolean) => void
-  ) => {
-    const isBool = typeof value === "boolean";
-    return (
-      <div className="space-y-1.5 bg-slate-50 p-3 rounded-xl border border-slate-100">
-        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">{label} Value</label>
-        <div className="flex gap-2 items-center">
-          <select
-            value={isBool ? "bool" : "text"}
-            onChange={(e) => {
-              if (e.target.value === "bool") {
-                onChange(true);
-              } else {
-                onChange("");
-              }
-            }}
-            className="text-xs bg-white border border-slate-200 rounded-lg p-2 focus:border-[#09A08A] focus:outline-none"
-          >
-            <option value="text">Custom Text</option>
-            <option value="bool">Check / Cross</option>
-          </select>
-          {isBool ? (
-            <select
-              value={value ? "true" : "false"}
-              onChange={(e) => onChange(e.target.value === "true")}
-              className="text-xs flex-1 bg-white border border-slate-200 rounded-lg p-2 focus:border-[#09A08A] focus:outline-none font-bold text-slate-700"
-            >
-              <option value="true">✅ Enabled (Check)</option>
-              <option value="false">❌ Disabled (Cross)</option>
-            </select>
-          ) : (
-            <input
-              type="text"
-              value={value as string}
-              onChange={(e) => onChange(e.target.value)}
-              placeholder="e.g. 1 Admin + 2 Users"
-              className="text-xs flex-1 bg-white border border-slate-200 rounded-lg p-2 focus:border-[#09A08A] focus:outline-none font-semibold text-slate-700"
-            />
-          )}
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col font-sans">
       <SuperAdminHeader onRefresh={fetchData} isLoading={isLoading} />
@@ -508,7 +371,7 @@ export default function LandingPageCRUD() {
               Landing Page Dynamic Content
             </h1>
             <p className="text-xs text-slate-500 font-semibold mt-1">
-              Configure modules, stats, plans, comparison columns, and FAQs displayed on the corporate home page.
+              Configure modules, stats, and FAQs displayed on the corporate home page.
             </p>
           </div>
           <button
@@ -627,6 +490,20 @@ export default function LandingPageCRUD() {
               </div>
             </button>
 
+            <button
+              onClick={() => setActiveTab("header_footer")}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === "header_footer"
+                  ? "bg-[#EAF7F6] text-[#09A08A] border border-[#09A08A]/20 shadow-sm"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent"
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Globe className="w-4 h-4 text-emerald-500" />
+                <span>Header & Footer</span>
+              </div>
+            </button>
+
             <div className="px-3 pt-4 py-2 text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
               Dynamic Collections
             </div>
@@ -650,43 +527,7 @@ export default function LandingPageCRUD() {
               </span>
             </button>
 
-            <button
-              onClick={() => setActiveTab("plans")}
-              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === "plans"
-                  ? "bg-[#EAF7F6] text-[#09A08A] border border-[#09A08A]/20 shadow-sm"
-                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent"
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Sparkles className="w-4 h-4" />
-                <span>Pricing Plans</span>
-              </div>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === "plans" ? "bg-[#09A08A] text-white" : "bg-slate-100 text-slate-500"
-              }`}>
-                {plans.length}
-              </span>
-            </button>
 
-            <button
-              onClick={() => setActiveTab("comparison")}
-              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === "comparison"
-                  ? "bg-[#EAF7F6] text-[#09A08A] border border-[#09A08A]/20 shadow-sm"
-                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent"
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Table className="w-4 h-4" />
-                <span>Comparison Matrix</span>
-              </div>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === "comparison" ? "bg-[#09A08A] text-white" : "bg-slate-100 text-slate-500"
-              }`}>
-                {comparisons.length}
-              </span>
-            </button>
 
             <button
               onClick={() => setActiveTab("faqs")}
@@ -720,25 +561,22 @@ export default function LandingPageCRUD() {
                   {activeTab === "benefits" && "Benefits Section"}
                   {activeTab === "final_cta" && "Final CTA Block"}
                   {activeTab === "contact" && "Contact Page Settings"}
+                  {activeTab === "header_footer" && "Header & Footer Settings"}
                   {activeTab === "modules" && "Modules List"}
                   {activeTab === "stats" && "About Stats"}
-                  {activeTab === "plans" && "Pricing Plans"}
-                  {activeTab === "comparison" && "Comparison Matrix"}
                   {activeTab === "faqs" && "FAQs List"}
                 </span>
-                {!["hero", "about", "why_us", "benefits", "final_cta", "contact"].includes(activeTab) && (
+                {!["hero", "about", "why_us", "benefits", "final_cta", "contact", "header_footer"].includes(activeTab) && (
                   <span className="text-xs text-slate-400 font-semibold">
                     (
                     {activeTab === "modules" && `${modules.length} items`}
                     {activeTab === "stats" && `${stats.length} items`}
-                    {activeTab === "plans" && `${plans.length} items`}
-                    {activeTab === "comparison" && `${comparisons.length} items`}
                     {activeTab === "faqs" && `${faqs.length} items`}
                     )
                   </span>
                 )}
               </div>
-              {!["hero", "about", "why_us", "benefits", "final_cta", "contact"].includes(activeTab) && (
+              {!["hero", "about", "why_us", "benefits", "final_cta", "contact", "header_footer"].includes(activeTab) && (
                 <button
                   onClick={handleOpenAddModal}
                   className="px-3.5 py-2 bg-[#09A08A] hover:bg-[#07806e] text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-[#09A08A]/10 transition-all cursor-pointer"
@@ -857,16 +695,112 @@ export default function LandingPageCRUD() {
                       </div>
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase">Image / Banner URL</label>
-                      <input
-                        type="text"
-                        value={sectionsData.hero?.image_url || ""}
-                        onChange={(e) => setSectionsData({
-                          ...sectionsData,
-                          hero: { ...sectionsData.hero, image_url: e.target.value }
-                        })}
-                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
-                      />
+                      <label className="text-xs font-bold text-slate-500 uppercase">Image / Banner</label>
+                      <div className="flex flex-col gap-3 p-4 bg-slate-50 border border-slate-200/80 rounded-xl">
+                        {sectionsData.hero?.image_url ? (
+                          <div className="flex items-center gap-4">
+                            <div className="relative shrink-0 w-32 h-20 group rounded-lg overflow-hidden border border-slate-200 shadow-sm">
+                              {/* Clickable Image to change */}
+                              <label htmlFor="hero-image-upload" className="cursor-pointer block w-full h-full">
+                                <img
+                                  src={sectionsData.hero.image_url.startsWith("http") ? sectionsData.hero.image_url : `${API_URL}${sectionsData.hero.image_url}`}
+                                  alt="Hero Preview"
+                                  className="w-full h-full object-cover group-hover:opacity-85 transition-all duration-200"
+                                />
+                                <div className="absolute inset-0 bg-black/40 text-white text-[9px] font-bold flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200">
+                                  Click to Change
+                                </div>
+                              </label>
+                              
+                              {/* Trash/Remove Icon in the top right corner */}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setSectionsData((prev: any) => ({
+                                    ...prev,
+                                    hero: { ...prev.hero, image_url: "" }
+                                  }));
+                                }}
+                                className="absolute top-1.5 right-1.5 w-6 h-6 bg-rose-500 hover:bg-rose-600 text-white rounded-full flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition-all duration-200 z-10"
+                                title="Remove Image"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+
+                            <div className="flex flex-col gap-1.5">
+                              <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
+                                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                                {isUploadingHeroImg ? "Uploading..." : "Image uploaded successfully"}
+                              </span>
+                              <input
+                                type="file"
+                                id="hero-image-upload"
+                                accept="image/*"
+                                className="hidden"
+                                disabled={isUploadingHeroImg}
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  setIsUploadingHeroImg(true);
+                                  const formData = new FormData();
+                                  formData.append("file", file);
+                                  try {
+                                    const res = await fetch(`${API_URL}/upload`, { method: "POST", body: formData });
+                                    if (res.ok) {
+                                      const data = await res.json();
+                                      setSectionsData((prev: any) => ({
+                                        ...prev,
+                                        hero: { ...prev.hero, image_url: data.url }
+                                      }));
+                                    }
+                                  } catch (err) {
+                                    console.error("Error uploading hero image:", err);
+                                  } finally {
+                                    setIsUploadingHeroImg(false);
+                                  }
+                                }}
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center py-4 border-2 border-dashed border-slate-200 rounded-lg bg-white">
+                            <span className="text-xs text-slate-400 mb-2">No image uploaded yet</span>
+                            <label className="px-4 py-2 bg-[#EAF7F6] text-[#09A08A] hover:bg-[#d5f0ed] border border-[#09A08A]/15 rounded-lg text-xs font-bold cursor-pointer transition-colors">
+                              {isUploadingHeroImg ? "Uploading..." : "Upload Image"}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                disabled={isUploadingHeroImg}
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  setIsUploadingHeroImg(true);
+                                  const formData = new FormData();
+                                  formData.append("file", file);
+                                  try {
+                                    const res = await fetch(`${API_URL}/upload`, { method: "POST", body: formData });
+                                    if (res.ok) {
+                                      const data = await res.json();
+                                      setSectionsData((prev: any) => ({
+                                        ...prev,
+                                        hero: { ...prev.hero, image_url: data.url }
+                                      }));
+                                    }
+                                  } catch (err) {
+                                    console.error("Error uploading hero image:", err);
+                                  } finally {
+                                    setIsUploadingHeroImg(false);
+                                  }
+                                }}
+                              />
+                            </label>
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div className="grid grid-cols-3 gap-4 pt-2 border-t border-slate-100">
                       <div className="space-y-1">
@@ -1062,16 +996,112 @@ export default function LandingPageCRUD() {
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase">Side Image URL</label>
-                      <input
-                        type="text"
-                        value={sectionsData.about?.image_url || ""}
-                        onChange={(e) => setSectionsData({
-                          ...sectionsData,
-                          about: { ...sectionsData.about, image_url: e.target.value }
-                        })}
-                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
-                      />
+                      <label className="text-xs font-bold text-slate-500 uppercase">Side Image</label>
+                      <div className="flex flex-col gap-3 p-4 bg-slate-50 border border-slate-200/80 rounded-xl">
+                        {sectionsData.about?.image_url ? (
+                          <div className="flex items-center gap-4">
+                            <div className="relative shrink-0 w-32 h-20 group rounded-lg overflow-hidden border border-slate-200 shadow-sm">
+                              {/* Clickable Image to change */}
+                              <label htmlFor="about-image-upload" className="cursor-pointer block w-full h-full">
+                                <img
+                                  src={sectionsData.about.image_url.startsWith("http") ? sectionsData.about.image_url : `${API_URL}${sectionsData.about.image_url}`}
+                                  alt="About Preview"
+                                  className="w-full h-full object-cover group-hover:opacity-85 transition-all duration-200"
+                                />
+                                <div className="absolute inset-0 bg-black/40 text-white text-[9px] font-bold flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200">
+                                  Click to Change
+                                </div>
+                              </label>
+                              
+                              {/* Trash/Remove Icon in the top right corner */}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setSectionsData((prev: any) => ({
+                                    ...prev,
+                                    about: { ...prev.about, image_url: "" }
+                                  }));
+                                }}
+                                className="absolute top-1.5 right-1.5 w-6 h-6 bg-rose-500 hover:bg-rose-600 text-white rounded-full flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition-all duration-200 z-10"
+                                title="Remove Image"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+
+                            <div className="flex flex-col gap-1.5">
+                              <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
+                                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                                {isUploadingAboutImg ? "Uploading..." : "Image uploaded successfully"}
+                              </span>
+                              <input
+                                type="file"
+                                id="about-image-upload"
+                                accept="image/*"
+                                className="hidden"
+                                disabled={isUploadingAboutImg}
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  setIsUploadingAboutImg(true);
+                                  const formData = new FormData();
+                                  formData.append("file", file);
+                                  try {
+                                    const res = await fetch(`${API_URL}/upload`, { method: "POST", body: formData });
+                                    if (res.ok) {
+                                      const data = await res.json();
+                                      setSectionsData((prev: any) => ({
+                                        ...prev,
+                                        about: { ...prev.about, image_url: data.url }
+                                      }));
+                                    }
+                                  } catch (err) {
+                                    console.error("Error uploading about image:", err);
+                                  } finally {
+                                    setIsUploadingAboutImg(false);
+                                  }
+                                }}
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center py-4 border-2 border-dashed border-slate-200 rounded-lg bg-white">
+                            <span className="text-xs text-slate-400 mb-2">No image uploaded yet</span>
+                            <label className="px-4 py-2 bg-[#EAF7F6] text-[#09A08A] hover:bg-[#d5f0ed] border border-[#09A08A]/15 rounded-lg text-xs font-bold cursor-pointer transition-colors">
+                              {isUploadingAboutImg ? "Uploading..." : "Upload Image"}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                disabled={isUploadingAboutImg}
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  setIsUploadingAboutImg(true);
+                                  const formData = new FormData();
+                                  formData.append("file", file);
+                                  try {
+                                    const res = await fetch(`${API_URL}/upload`, { method: "POST", body: formData });
+                                    if (res.ok) {
+                                      const data = await res.json();
+                                      setSectionsData((prev: any) => ({
+                                        ...prev,
+                                        about: { ...prev.about, image_url: data.url }
+                                      }));
+                                    }
+                                  } catch (err) {
+                                    console.error("Error uploading about image:", err);
+                                  } finally {
+                                    setIsUploadingAboutImg(false);
+                                  }
+                                }}
+                              />
+                            </label>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {/* Stats List */}
@@ -1658,41 +1688,303 @@ export default function LandingPageCRUD() {
                     >
                       {isSubmitting ? "Saving..." : "Save Contact Info"}
                     </button>
-                  </form>        )}
+                  </form>
+                )}
 
-                {/* Modules list */}
+                {/* 7. Header & Footer Form */}
+                {activeTab === "header_footer" && (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleSaveSection("header_footer", sectionsData.header_footer);
+                    }}
+                    className="space-y-4 max-w-2xl"
+                  >
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Brand Logo</label>
+                      <div className="flex flex-col gap-3 p-4 bg-slate-50 border border-slate-200/80 rounded-xl">
+                        {sectionsData.header_footer?.logo_url ? (
+                          <div className="flex items-center gap-4">
+                            <div className="relative shrink-0 w-32 h-20 group rounded-lg overflow-hidden border border-slate-200 shadow-sm bg-white p-2 flex items-center justify-center">
+                              {/* Clickable Image to change */}
+                              <label htmlFor="logo-image-upload" className="cursor-pointer block w-full h-full relative">
+                                <img
+                                  src={sectionsData.header_footer.logo_url.startsWith("http") ? sectionsData.header_footer.logo_url : `${API_URL}${sectionsData.header_footer.logo_url}`}
+                                  alt="Logo Preview"
+                                  className="w-full h-full object-contain group-hover:opacity-85 transition-all duration-200"
+                                />
+                                <div className="absolute inset-0 bg-black/40 text-white text-[9px] font-bold flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200">
+                                  Click to Change
+                                </div>
+                              </label>
+                              
+                              {/* Trash/Remove Icon in the top right corner */}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setSectionsData((prev: any) => ({
+                                    ...prev,
+                                    header_footer: { ...prev.header_footer, logo_url: "" }
+                                  }));
+                                }}
+                                className="absolute top-1.5 right-1.5 w-6 h-6 bg-rose-500 hover:bg-rose-600 text-white rounded-full flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition-all duration-200 z-10"
+                                title="Remove Logo"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+
+                            <div className="flex flex-col gap-1.5">
+                              <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
+                                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                                {isUploadingLogo ? "Uploading..." : "Logo uploaded successfully"}
+                              </span>
+                              <input
+                                type="file"
+                                id="logo-image-upload"
+                                accept="image/*"
+                                className="hidden"
+                                disabled={isUploadingLogo}
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  setIsUploadingLogo(true);
+                                  const formData = new FormData();
+                                  formData.append("file", file);
+                                  try {
+                                    const res = await fetch(`${API_URL}/upload`, { method: "POST", body: formData });
+                                    if (res.ok) {
+                                      const data = await res.json();
+                                      setSectionsData((prev: any) => ({
+                                        ...prev,
+                                        header_footer: { ...prev.header_footer, logo_url: data.url }
+                                      }));
+                                    }
+                                  } catch (err) {
+                                    console.error("Error uploading logo:", err);
+                                  } finally {
+                                    setIsUploadingLogo(false);
+                                  }
+                                }}
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center py-4 border-2 border-dashed border-slate-200 rounded-lg bg-white">
+                            <span className="text-xs text-slate-400 mb-2">No logo uploaded yet</span>
+                            <label className="px-4 py-2 bg-[#EAF7F6] text-[#09A08A] hover:bg-[#d5f0ed] border border-[#09A08A]/15 rounded-lg text-xs font-bold cursor-pointer transition-colors">
+                              {isUploadingLogo ? "Uploading..." : "Upload Logo Image"}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                disabled={isUploadingLogo}
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  setIsUploadingLogo(true);
+                                  const formData = new FormData();
+                                  formData.append("file", file);
+                                  try {
+                                    const res = await fetch(`${API_URL}/upload`, { method: "POST", body: formData });
+                                    if (res.ok) {
+                                      const data = await res.json();
+                                      setSectionsData((prev: any) => ({
+                                        ...prev,
+                                        header_footer: { ...prev.header_footer, logo_url: data.url }
+                                      }));
+                                    }
+                                  } catch (err) {
+                                    console.error("Error uploading logo:", err);
+                                  } finally {
+                                    setIsUploadingLogo(false);
+                                  }
+                                }}
+                              />
+                            </label>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Instagram Link</label>
+                        <input
+                          type="text"
+                          value={sectionsData.header_footer?.social_instagram || ""}
+                          onChange={(e) => setSectionsData({
+                            ...sectionsData,
+                            header_footer: { ...sectionsData.header_footer, social_instagram: e.target.value }
+                          })}
+                          placeholder="https://instagram.com/yourprofile"
+                          className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3 focus:outline-none"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase">LinkedIn Link</label>
+                        <input
+                          type="text"
+                          value={sectionsData.header_footer?.social_linkedin || ""}
+                          onChange={(e) => setSectionsData({
+                            ...sectionsData,
+                            header_footer: { ...sectionsData.header_footer, social_linkedin: e.target.value }
+                          })}
+                          placeholder="https://linkedin.com/in/yourprofile"
+                          className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Facebook Link</label>
+                        <input
+                          type="text"
+                          value={sectionsData.header_footer?.social_facebook || ""}
+                          onChange={(e) => setSectionsData({
+                            ...sectionsData,
+                            header_footer: { ...sectionsData.header_footer, social_facebook: e.target.value }
+                          })}
+                          placeholder="https://facebook.com/yourprofile"
+                          className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3 focus:outline-none"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Twitter / X Link</label>
+                        <input
+                          type="text"
+                          value={sectionsData.header_footer?.social_twitter || ""}
+                          onChange={(e) => setSectionsData({
+                            ...sectionsData,
+                            header_footer: { ...sectionsData.header_footer, social_twitter: e.target.value }
+                          })}
+                          placeholder="https://twitter.com/yourprofile"
+                          className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="px-5 py-2.5 bg-[#09A08A] hover:bg-[#07806e] disabled:bg-slate-300 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      {isSubmitting ? "Saving..." : "Save Header & Footer"}
+                    </button>
+                  </form>
+                )}
+
+                {/* Modules list and header config */}
                 {activeTab === "modules" && (
-                  <table className="w-full text-left text-xs text-slate-700">
-                    <thead className="bg-[#EAF7F6] text-xs font-bold text-slate-700 uppercase border-b border-[#09A08A]/15">
-                      <tr>
-                        <th className="py-3 px-4 rounded-l-xl w-12 text-center">Icon</th>
-                        <th className="py-3 px-4 w-52">Module Name</th>
-                        <th className="py-3 px-4">Description</th>
-                        <th className="py-3 px-4 text-right rounded-r-xl w-24">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                      {modules.length === 0 ? (
-                        <tr>
-                          <td colSpan={4} className="py-8 text-center text-slate-400">No modules found. Add one now!</td>
-                        </tr>
-                      ) : (
-                        modules.map((m) => (
-                          <tr key={m.id} className="hover:bg-slate-50 transition-colors">
-                            <td className="py-4 px-4 text-center">
-                              <span className="px-2.5 py-1.5 bg-[#EAF7F6] text-[#09A08A] rounded-lg border border-[#09A08A]/15 font-mono text-[11px]">{m.icon_name || "Layers"}</span>
-                            </td>
-                            <td className="py-4 px-4 font-bold text-slate-900">{m.name}</td>
-                            <td className="py-4 px-4 text-slate-500 font-medium">{m.description}</td>
-                            <td className="py-4 px-4 text-right space-x-2">
-                              <button onClick={() => handleOpenEditModal(m)} className="p-1.5 text-slate-500 hover:text-[#09A08A] hover:bg-[#EAF7F6] rounded-lg transition-colors cursor-pointer" title="Edit"><Edit2 className="w-4 h-4" /></button>
-                              <button onClick={() => handleDeleteItem(m)} className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer" title="Delete"><Trash2 className="w-4 h-4" /></button>
-                            </td>
+                  <div className="space-y-8">
+                    {/* Section Header Configuration */}
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        handleSaveSection("modules_header", sectionsData.modules_header);
+                      }}
+                      className="p-6 bg-slate-50/70 border border-slate-200/80 rounded-2xl space-y-4 max-w-3xl shadow-xs"
+                    >
+                      <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2 border-b border-slate-200 pb-3">
+                        <Sparkles className="w-4 h-4 text-[#09A08A]" />
+                        Modules Section Header Settings
+                      </h4>
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="space-y-1 col-span-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase">Badge / Tag</label>
+                          <input
+                            type="text"
+                            value={sectionsData.modules_header?.badge_text || ""}
+                            onChange={(e) => setSectionsData({
+                              ...sectionsData,
+                              modules_header: { ...sectionsData.modules_header, badge_text: e.target.value }
+                            })}
+                            placeholder="e.g. HRMS Modules"
+                            className="w-full text-xs bg-white border border-slate-200 rounded-xl p-3 focus:outline-none focus:border-[#09A08A]"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-1 col-span-2">
+                          <label className="text-xs font-bold text-slate-500 uppercase">Headline / Main Title</label>
+                          <input
+                            type="text"
+                            value={sectionsData.modules_header?.headline || ""}
+                            onChange={(e) => setSectionsData({
+                              ...sectionsData,
+                              modules_header: { ...sectionsData.modules_header, headline: e.target.value }
+                            })}
+                            placeholder="e.g. 24 modules, one connected platform"
+                            className="w-full text-xs bg-white border border-slate-200 rounded-xl p-3 focus:outline-none focus:border-[#09A08A]"
+                            required
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Subheadline / Description</label>
+                        <textarea
+                          value={sectionsData.modules_header?.subheadline || ""}
+                          onChange={(e) => setSectionsData({
+                            ...sectionsData,
+                            modules_header: { ...sectionsData.modules_header, subheadline: e.target.value }
+                          })}
+                          placeholder="e.g. Enable only what you need today and switch on the rest as your organisation grows."
+                          rows={2}
+                          className="w-full text-xs bg-white border border-slate-200 rounded-xl p-3 focus:outline-none focus:border-[#09A08A] resize-none"
+                          required
+                        />
+                      </div>
+                      <div className="flex justify-end pt-1">
+                        <button
+                          type="submit"
+                          disabled={isSubmitting}
+                          className="px-5 py-2.5 bg-[#09A08A] hover:bg-[#07806e] disabled:bg-slate-300 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                        >
+                          {isSubmitting ? "Saving..." : "Save Header Settings"}
+                        </button>
+                      </div>
+                    </form>
+
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                        <Layers className="w-4 h-4 text-[#09A08A]" />
+                        Modules List ({modules.length} items)
+                      </h4>
+                      <table className="w-full text-left text-xs text-slate-700 border border-slate-200/80 rounded-2xl overflow-hidden shadow-xs">
+                        <thead className="bg-[#EAF7F6] text-xs font-bold text-slate-700 uppercase border-b border-[#09A08A]/15">
+                          <tr>
+                            <th className="py-3 px-4 w-12 text-center">Icon</th>
+                            <th className="py-3 px-4 w-52">Module Name</th>
+                            <th className="py-3 px-4">Description</th>
+                            <th className="py-3 px-4 text-right w-24">Actions</th>
                           </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 font-semibold text-slate-700 bg-white">
+                          {modules.length === 0 ? (
+                            <tr>
+                              <td colSpan={4} className="py-8 text-center text-slate-400">No modules found. Add one now!</td>
+                            </tr>
+                          ) : (
+                            modules.map((m) => (
+                              <tr key={m.id} className="hover:bg-slate-50 transition-colors">
+                                <td className="py-4 px-4 text-center">
+                                  <span className="px-2.5 py-1.5 bg-[#EAF7F6] text-[#09A08A] rounded-lg border border-[#09A08A]/15 font-mono text-[11px]">{m.icon_name || "Layers"}</span>
+                                </td>
+                                <td className="py-4 px-4 font-bold text-slate-900">{m.name}</td>
+                                <td className="py-4 px-4 text-slate-500 font-medium">{m.description}</td>
+                                <td className="py-4 px-4 text-right space-x-2">
+                                  <button onClick={() => handleOpenEditModal(m)} className="p-1.5 text-slate-500 hover:text-[#09A08A] hover:bg-[#EAF7F6] rounded-lg transition-colors cursor-pointer" title="Edit"><Edit2 className="w-4 h-4" /></button>
+                                  <button onClick={() => handleDeleteItem(m)} className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer" title="Delete"><Trash2 className="w-4 h-4" /></button>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 )}
 
                 {/* About Stats */}
@@ -1721,106 +2013,6 @@ export default function LandingPageCRUD() {
                             </td>
                           </tr>
                         ))
-                      )}
-                    </tbody>
-                  </table>
-                )}
-
-                {/* Pricing Plans */}
-                {activeTab === "plans" && (
-                  <table className="w-full text-left text-xs text-slate-700">
-                    <thead className="bg-[#EAF7F6] text-xs font-bold text-slate-700 uppercase border-b border-[#09A08A]/15">
-                      <tr>
-                        <th className="py-3 px-4 rounded-l-xl w-36">Plan Name</th>
-                        <th className="py-3 px-4 w-44">Limit</th>
-                        <th className="py-3 px-4 w-28">Yearly (₹)</th>
-                        <th className="py-3 px-4 w-28">One-Time (₹)</th>
-                        <th className="py-3 px-4 w-20">Popular</th>
-                        <th className="py-3 px-4">Features</th>
-                        <th className="py-3 px-4 text-right rounded-r-xl w-24">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                      {plans.length === 0 ? (
-                        <tr>
-                          <td colSpan={7} className="py-8 text-center text-slate-400">No plans found. Add one now!</td>
-                        </tr>
-                      ) : (
-                        plans.map((p) => (
-                          <tr key={p.id} className="hover:bg-slate-50 transition-colors">
-                            <td className="py-4 px-4 font-bold text-slate-900">{p.name}</td>
-                            <td className="py-4 px-4 text-slate-600 font-mono text-[11px]">{p.limit}</td>
-                            <td className="py-4 px-4 font-mono">₹{p.priceYearly}</td>
-                            <td className="py-4 px-4 font-mono">₹{p.priceOnetime}</td>
-                            <td className="py-4 px-4">
-                              {p.isPopular ? (
-                                <span className="px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-[10px] font-bold">Yes</span>
-                              ) : (
-                                <span className="text-slate-400 text-[10px]">No</span>
-                              )}
-                            </td>
-                            <td className="py-4 px-4">
-                              <div className="flex flex-wrap gap-1 max-w-sm">
-                                {p.features?.map((f, i) => (
-                                  <span key={i} className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200/50">{f}</span>
-                                ))}
-                              </div>
-                            </td>
-                            <td className="py-4 px-4 text-right space-x-2">
-                              <button onClick={() => handleOpenEditModal(p)} className="p-1.5 text-slate-500 hover:text-[#09A08A] hover:bg-[#EAF7F6] rounded-lg transition-colors cursor-pointer" title="Edit"><Edit2 className="w-4 h-4" /></button>
-                              <button onClick={() => handleDeleteItem(p)} className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer" title="Delete"><Trash2 className="w-4 h-4" /></button>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                )}
-
-                {/* Comparison Matrix */}
-                {activeTab === "comparison" && (
-                  <table className="w-full text-left text-xs text-slate-700 min-w-[800px]">
-                    <thead className="bg-[#EAF7F6] text-xs font-bold text-slate-700 uppercase border-b border-[#09A08A]/15">
-                      <tr>
-                        <th className="py-3 px-4 rounded-l-xl w-44">Category</th>
-                        <th className="py-3 px-4 w-48">Feature</th>
-                        <th className="py-3 px-4 text-center">Lite</th>
-                        <th className="py-3 px-4 text-center">Starter</th>
-                        <th className="py-3 px-4 text-center">Pro</th>
-                        <th className="py-3 px-4 text-center">Elite</th>
-                        <th className="py-3 px-4 text-center">Hybrid</th>
-                        <th className="py-3 px-4 text-right rounded-r-xl w-24">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                      {comparisons.length === 0 ? (
-                        <tr>
-                          <td colSpan={8} className="py-8 text-center text-slate-400">No features mapped yet. Add one now!</td>
-                        </tr>
-                      ) : (
-                        comparisons.map((c) => {
-                          const renderVal = (v: string | boolean) => {
-                            if (typeof v === "boolean") {
-                              return v ? <Check className="w-4 h-4 mx-auto text-emerald-600 font-bold" /> : <CrossIcon className="w-4 h-4 mx-auto text-slate-300" />;
-                            }
-                            return <span className="text-[11px] font-medium text-slate-500">{v}</span>;
-                          };
-                          return (
-                            <tr key={c.id} className="hover:bg-slate-50 transition-colors">
-                              <td className="py-4 px-4 font-bold text-slate-900">{c.category}</td>
-                              <td className="py-4 px-4 text-slate-800">{c.featureName}</td>
-                              <td className="py-4 px-4 text-center">{renderVal(c.lite)}</td>
-                              <td className="py-4 px-4 text-center">{renderVal(c.starter)}</td>
-                              <td className="py-4 px-4 text-center">{renderVal(c.pro)}</td>
-                              <td className="py-4 px-4 text-center">{renderVal(c.elite)}</td>
-                              <td className="py-4 px-4 text-center">{renderVal(c.hybrid)}</td>
-                              <td className="py-4 px-4 text-right space-x-2">
-                                <button onClick={() => handleOpenEditModal(c)} className="p-1.5 text-slate-500 hover:text-[#09A08A] hover:bg-[#EAF7F6] rounded-lg transition-colors cursor-pointer" title="Edit"><Edit2 className="w-4 h-4" /></button>
-                                <button onClick={() => handleDeleteItem(c)} className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer" title="Delete"><Trash2 className="w-4 h-4" /></button>
-                              </td>
-                            </tr>
-                          );
-                        })
                       )}
                     </tbody>
                   </table>
@@ -1888,44 +2080,36 @@ export default function LandingPageCRUD() {
                 <>
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Select Module Icon</label>
-                    <div className="grid grid-cols-6 gap-2">
+                    <select
+                      value={modIcon}
+                      onChange={(e) => setModIcon(e.target.value)}
+                      className="w-full text-xs font-bold text-slate-800 bg-[#F8FAFC] border border-slate-200 rounded-xl p-3 mt-1.5 focus:border-[#09A08A] focus:outline-none cursor-pointer"
+                      required
+                    >
+                      <option value="">-- Select Module Icon --</option>
                       {POPULAR_ICONS.map((ico) => (
-                        <button
-                          key={ico}
-                          type="button"
-                          onClick={() => setModIcon(ico)}
-                          className={`p-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer flex flex-col items-center gap-1 ${
-                            modIcon === ico 
-                              ? "bg-[#EAF7F6] text-[#09A08A] border-[#09A08A]"
-                              : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                          }`}
-                        >
-                          <span className="font-mono text-[9px]">{ico.substring(0, 5)}</span>
-                        </button>
+                        <option key={ico} value={ico}>
+                          {ico} Icon
+                        </option>
                       ))}
-                    </div>
-                    <div className="pt-2">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Or Custom Icon Name</label>
-                      <input
-                        type="text"
-                        value={modIcon}
-                        onChange={(e) => setModIcon(e.target.value)}
-                        placeholder="e.g. Users"
-                        className="w-full text-xs bg-[#F8FAFC] border border-slate-200 rounded-xl p-3 mt-1.5 focus:border-[#09A08A] focus:outline-none"
-                      />
-                    </div>
+                    </select>
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Module Name</label>
-                    <input
-                      type="text"
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Module Name (Select Sidebar Item) *</label>
+                    <select
                       value={modName}
                       onChange={(e) => setModName(e.target.value)}
-                      placeholder="e.g. Attendance Management"
-                      className="w-full text-xs bg-[#F8FAFC] border border-slate-200 rounded-xl p-3 focus:border-[#09A08A] focus:outline-none"
+                      className="w-full text-xs font-bold text-slate-800 bg-[#F8FAFC] border border-slate-200 rounded-xl p-3 focus:border-[#09A08A] focus:outline-none cursor-pointer"
                       required
-                    />
+                    >
+                      <option value="">-- Select Sidebar Module --</option>
+                      {availableModuleOptions.map((optName) => (
+                        <option key={optName} value={optName}>
+                          {optName}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div className="space-y-1">
@@ -1967,138 +2151,6 @@ export default function LandingPageCRUD() {
                       className="w-full text-xs bg-[#F8FAFC] border border-slate-200 rounded-xl p-3 focus:border-[#09A08A] focus:outline-none"
                       required
                     />
-                  </div>
-                </>
-              )}
-
-              {/* Form 3: Plans */}
-              {activeTab === "plans" && (
-                <>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Plan Name</label>
-                      <input
-                        type="text"
-                        value={planName}
-                        onChange={(e) => setPlanName(e.target.value)}
-                        placeholder="e.g. Pro"
-                        className="w-full text-xs bg-[#F8FAFC] border border-slate-200 rounded-xl p-3 focus:border-[#09A08A] focus:outline-none"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Plan Limits</label>
-                      <input
-                        type="text"
-                        value={planLimit}
-                        onChange={(e) => setPlanLimit(e.target.value)}
-                        placeholder="e.g. 1 Admin + 10 Users"
-                        className="w-full text-xs bg-[#F8FAFC] border border-slate-200 rounded-xl p-3 focus:border-[#09A08A] focus:outline-none"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Short Sub-headline</label>
-                    <input
-                      type="text"
-                      value={planDesc}
-                      onChange={(e) => setPlanDesc(e.target.value)}
-                      placeholder="e.g. Try HK HRMS at minimum cost. Perfect for small teams."
-                      className="w-full text-xs bg-[#F8FAFC] border border-slate-200 rounded-xl p-3 focus:border-[#09A08A] focus:outline-none"
-                      required
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Yearly Price (INR, comma format)</label>
-                      <input
-                        type="text"
-                        value={planPriceYearly}
-                        onChange={(e) => setPlanPriceYearly(e.target.value)}
-                        placeholder="e.g. 29,999"
-                        className="w-full text-xs bg-[#F8FAFC] border border-slate-200 rounded-xl p-3 focus:border-[#09A08A] focus:outline-none"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">One-Time Price (INR, comma format)</label>
-                      <input
-                        type="text"
-                        value={planPriceOnetime}
-                        onChange={(e) => setPlanPriceOnetime(e.target.value)}
-                        placeholder="e.g. 54,999"
-                        className="w-full text-xs bg-[#F8FAFC] border border-slate-200 rounded-xl p-3 focus:border-[#09A08A] focus:outline-none"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2.5 p-3 bg-slate-50 border border-slate-200/50 rounded-xl">
-                    <input
-                      type="checkbox"
-                      id="planIsPopular"
-                      checked={planIsPopular}
-                      onChange={(e) => setPlanIsPopular(e.target.checked)}
-                      className="w-4 h-4 text-[#09A08A] rounded focus:ring-[#09A08A]"
-                    />
-                    <label htmlFor="planIsPopular" className="text-xs font-bold text-slate-700 cursor-pointer select-none">
-                      Mark as "Popular" Plan (Adds highlighted badge on landing page)
-                    </label>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Features Included (One feature per line)</label>
-                    <textarea
-                      value={planFeaturesStr}
-                      onChange={(e) => setPlanFeaturesStr(e.target.value)}
-                      placeholder="Standard Attendance Logs&#10;Basic Leave Requests&#10;Email Support"
-                      rows={5}
-                      className="w-full text-xs bg-[#F8FAFC] border border-slate-200 rounded-xl p-3 focus:border-[#09A08A] focus:outline-none font-mono"
-                      required
-                    />
-                  </div>
-                </>
-              )}
-
-              {/* Form 4: Comparison Matrix */}
-              {activeTab === "comparison" && (
-                <>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Feature Category</label>
-                      <input
-                        type="text"
-                        value={compCategory}
-                        onChange={(e) => setCompCategory(e.target.value)}
-                        placeholder="e.g. Core Features or Attendance"
-                        className="w-full text-xs bg-[#F8FAFC] border border-slate-200 rounded-xl p-3 focus:border-[#09A08A] focus:outline-none"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Feature Name</label>
-                      <input
-                        type="text"
-                        value={compFeatureName}
-                        onChange={(e) => setCompFeatureName(e.target.value)}
-                        placeholder="e.g. Employee Self Service Portal"
-                        className="w-full text-xs bg-[#F8FAFC] border border-slate-200 rounded-xl p-3 focus:border-[#09A08A] focus:outline-none"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4 pt-2">
-                    {renderComparisonFieldInput("Lite Plan", compLite, setCompLite)}
-                    {renderComparisonFieldInput("Starter Plan", compStarter, setCompStarter)}
-                    {renderComparisonFieldInput("Pro Plan", compPro, setCompPro)}
-                    {renderComparisonFieldInput("Elite Plan", compElite, setCompElite)}
-                  </div>
-                  <div className="grid grid-cols-2 gap-4 pt-1">
-                    {renderComparisonFieldInput("Hybrid Plan", compHybrid, setCompHybrid)}
                   </div>
                 </>
               )}
