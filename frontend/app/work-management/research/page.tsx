@@ -76,37 +76,27 @@ export default function ResearchPage() {
   const fetchData = async () => {
     try {
       setIsLoading(true);
-      const [resData, empData, projData, attData] = await Promise.all([
-        fetch(`${API_URL}/research`, {
-          headers: {
-            "user-id": (user?.id || user?._id) || "",
-            "role": user?.role || "",
-          }
-        }),
-        fetch(`${API_URL}/employees`),
-        fetch(`${API_URL}/projects`),
-        fetch(`${API_URL}/attendance/status/${user?.id || user?._id}`)
-      ]);
+      const roleParam = user?.role || "";
+      const res = await fetch(`${API_URL}/research-page-data?userId=${user?.id || user?._id || ''}&role=${roleParam}`, { cache: 'no-store' });
 
-      if (resData.ok) {
-        setResearchList(await resData.json());
-      }
-      if (empData.ok) {
-        setEmployees(await empData.json());
-      }
-      if (projData.ok) {
-        let allProjects = await projData.json();
+      if (res.ok) {
+        const data = await res.json();
+        setResearchList(data.research || []);
+        setEmployees(data.employees || []);
+        
+        let allProjects = data.projects || [];
         if (!isAdmin && user?.department) {
           allProjects = allProjects.filter((p: any) => p.department === user.department);
         }
         setProjects(allProjects);
-      }
-      if (attData.ok) {
-        const serverDateStr = attData.headers.get("Date");
-        if (serverDateStr) {
-           setServerTimeOffset(new Date(serverDateStr).getTime() - Date.now());
+        
+        if (data.attendanceStatus) {
+          const serverDateStr = res.headers.get("Date");
+          if (serverDateStr) {
+             setServerTimeOffset(new Date(serverDateStr).getTime() - Date.now());
+          }
+          setAttendanceStatus(data.attendanceStatus);
         }
-        setAttendanceStatus(await attData.json());
       }
     } catch (error) {
       console.error("Error fetching data:", error);

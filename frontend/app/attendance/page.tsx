@@ -167,12 +167,41 @@ export default function AttendancePage() {
  
   useEffect(() => {
     if (user && !permissionsLoading) {
-      // Fetch employees first so adminIdsRef is populated before attendance
-      fetchEmployees().then(() => fetchAttendance());
-      fetchSysSettings();
-      fetchRecoveryRequests();
+      fetchPageData();
     }
   }, [user, canManageAttendance, permissionsLoading]);
+
+  const fetchPageData = async () => {
+    setIsLoading(true);
+    try {
+      const isHRRole = user?.designation?.toLowerCase() === 'hr' || user?.role?.toLowerCase() === 'hr';
+      const roleParam = isAdmin || isHRRole ? 'Admin' : (user?.role || '');
+      const res = await fetch(`${API_URL}/attendance-page-data?userId=${user?.id || ''}&role=${roleParam}`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        const emps = data.employees || [];
+        setAllEmployees(emps);
+        // Build admin IDs ref for attendance filtering
+        adminIdsRef.current = new Set(
+          emps.filter((e: any) => e.role === 'Admin' || e.role === 'Super Admin').map((e: any) => e.id)
+        );
+        setAttendance(data.attendance || []);
+        if (data.systemSettings) {
+          setSysSettings(data.systemSettings);
+          setCreateForm((prev: any) => ({
+            ...prev,
+            checkIn: data.systemSettings.officeStartTime ? `${data.systemSettings.officeStartTime}:00` : "09:30:00",
+            checkOut: data.systemSettings.officeEndTime ? `${data.systemSettings.officeEndTime}:00` : "18:30:00"
+          }));
+        }
+        setRecoveryRequests(data.recoveryRequests || []);
+      }
+    } catch (err) {
+      console.error("Error fetching attendance page data:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Update form defaults when time synchronization is complete
   useEffect(() => {

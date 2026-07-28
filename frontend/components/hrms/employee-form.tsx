@@ -52,6 +52,7 @@ export interface EmployeeFormData {
   aadharCard: string
   panCard: string
   department: string
+  sub_department?: string
   designation: string
   startTime: string
   endTime: string
@@ -91,7 +92,7 @@ const defaultFormData: EmployeeFormData = {
   dob: '',
   joinDate: '',
   salary: '',
-  role: '',
+  role: 'Employee',
   upiId: '',
   accountNumber: '',
   ifscCode: '',
@@ -161,12 +162,7 @@ const calculateResignationDate = (startDateStr: string, daysCountStr: string, ho
 
 export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: EmployeeFormProps) {
   const { user } = useUser()
-  const { data, mutate, isLoading } = useApi<{ 
-    departments: any[], 
-    subDepartments: any[],
-    designations: any[], 
-    roles: any[] 
-  }>('/api/company-settings')
+  const { data, isLoading } = useApi()
   
   const departments = data?.departments || []
   const subDepartments = (data as any)?.subDepartments || []
@@ -900,11 +896,11 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
 
 function FormField({ label, id, required, value, onChange, placeholder, type = 'text', className = "", rightElement }: any) {
   return (
-    <div className={`flex items-center gap-4 ${className}`}>
-      <Label htmlFor={id} className="w-44 text-left font-medium text-gray-700 whitespace-nowrap">
-        {label}{required && <span className="text-red-500 ml-1 text-lg font-bold">*</span>}:
+    <div className={`flex flex-col gap-1.5 ${className}`}>
+      <Label htmlFor={id} className="font-semibold text-gray-700 text-xs uppercase tracking-wider">
+        {label}{required && <span className="text-red-500 ml-0.5 font-bold">*</span>}
       </Label>
-      <div className="relative flex-1">
+      <div className="relative w-full">
         <Input
           id={id}
           type={type}
@@ -912,7 +908,7 @@ function FormField({ label, id, required, value, onChange, placeholder, type = '
           value={value || ''}
           onChange={(e) => onChange(e.target.value)}
           required={required}
-          className="w-full bg-white border-gray-200 focus-visible:ring-brand-teal h-10 shadow-sm pr-10"
+          className="w-full bg-white border-gray-200 focus-visible:ring-brand-teal h-10 shadow-sm pr-10 text-sm"
         />
         {rightElement}
       </div>
@@ -922,9 +918,9 @@ function FormField({ label, id, required, value, onChange, placeholder, type = '
 
 function FormSelect({ label, id, required, value, onValueChange, options, placeholder, className = "" }: any) {
   return (
-    <div className={`flex items-center gap-4 ${className}`}>
-      <Label htmlFor={id} className="w-44 text-left font-medium text-gray-700 whitespace-nowrap">
-        {label}{required && <span className="text-red-500 ml-1 text-lg font-bold">*</span>}:
+    <div className={`flex flex-col gap-1.5 ${className}`}>
+      <Label htmlFor={id} className="font-semibold text-gray-700 text-xs uppercase tracking-wider">
+        {label}{required && <span className="text-red-500 ml-0.5 font-bold">*</span>}
       </Label>
       <Select 
         key={`${id}-${value}-${options.length}`} 
@@ -932,7 +928,7 @@ function FormSelect({ label, id, required, value, onValueChange, options, placeh
         onValueChange={onValueChange} 
         required={required}
       >
-        <SelectTrigger className="flex-1 bg-white border-gray-200 focus:ring-brand-teal h-10 shadow-sm">
+        <SelectTrigger className="w-full bg-white border-gray-200 focus:ring-brand-teal h-10 shadow-sm text-sm">
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
@@ -945,7 +941,6 @@ function FormSelect({ label, id, required, value, onValueChange, options, placeh
           )}
         </SelectContent>
       </Select>
-
     </div>
   )
 }

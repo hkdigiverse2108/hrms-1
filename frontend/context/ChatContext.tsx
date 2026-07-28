@@ -446,6 +446,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                                    if (typeof window !== "undefined") {
                                      localStorage.setItem("selectedChatIdOnMount", messageChatId);
                                      localStorage.setItem("selectedChatTypeOnMount", isGroupMsg ? 'group' : 'personal');
+                                     
                                      if ((window as any).electronAPI && (window as any).electronAPI.focusWindow) {
                                        (window as any).electronAPI.focusWindow();
                                      } else {

@@ -47,6 +47,53 @@ const parseLocalDate = (dateStr: string) => {
   return d;
 };
 
+const formatDateToDDMMYYYY = (dateInput: string | Date | undefined): string => {
+  if (!dateInput) return '';
+  try {
+    let dateObj: Date;
+    if (dateInput instanceof Date) {
+      dateObj = dateInput;
+    } else {
+      const cleanStr = dateInput.trim();
+      if (!cleanStr) return '';
+      
+      if (cleanStr.includes('T')) {
+        dateObj = new Date(cleanStr);
+      } else {
+        const delimiter = cleanStr.includes('-') ? '-' : '/';
+        const parts = cleanStr.split(delimiter);
+        if (parts.length === 3) {
+          if (parts[0].length === 4) {
+            const y = parseInt(parts[0]);
+            const m = parseInt(parts[1]);
+            const d = parseInt(parts[2]);
+            const dd = String(d).padStart(2, '0');
+            const mm = String(m).padStart(2, '0');
+            return `${dd}-${mm}-${y}`;
+          }
+          if (parts[2].length === 4) {
+            const d = parseInt(parts[0]);
+            const m = parseInt(parts[1]);
+            const y = parseInt(parts[2]);
+            const dd = String(d).padStart(2, '0');
+            const mm = String(m).padStart(2, '0');
+            return `${dd}-${mm}-${y}`;
+          }
+        }
+        dateObj = new Date(cleanStr);
+      }
+    }
+
+    if (isNaN(dateObj.getTime())) return '';
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const year = dateObj.getFullYear();
+    return `${day}-${month}-${year}`;
+  } catch (e) {
+    return '';
+  }
+};
+
 export function PendingWorkEmbedded({ 
   type = "pending-work",
   defaultTaskType = "all",
@@ -316,25 +363,13 @@ export function PendingWorkEmbedded({
       const storedUser = localStorage.getItem('user');
       const user = storedUser ? JSON.parse(storedUser) : null;
       
-      const res = await fetch(`${API_URL}/all-tasks-data`);
-      if (res.ok) {
-        const data = await res.json();
-        setEntries(data.contentCalendar || []);
-        setClients(data.clients || []);
-        
-        const fetchedProjects = data.projects || [];
-        setProjects(fetchedProjects);
-        const projectMap: Record<string, any> = {};
-        fetchedProjects.forEach((p: any) => {
-          if (p.clientId && p.department === 'Creative') {
-            projectMap[p.clientId] = p;
-          }
-        });
-        setClientProjects(projectMap);
-        
-        setOtherWorkEntries(data.otherWork || []);
-        setEmployees(data.employees || []);
-      }
+      const [entriesRes, clientsRes, pRes, otherWorkRes, employeesRes] = await Promise.all([
+        fetch(`${API_URL}/content-calendar/all`),
+        fetch(`${API_URL}/clients`),
+        fetch(`${API_URL}/projects`),
+        fetch(`${API_URL}/other-work/all`),
+        fetch(`${API_URL}/employees`)
+      ]);
 
       if (user?.id) {
         const isUserAdminOrTL = (user.designation?.toLowerCase() === 'team leader' || user.designation?.toLowerCase() === 'head') || user.designation?.toLowerCase() === 'hr' || user.role?.toLowerCase() === 'admin' || user.name === 'Admin Admin';
@@ -362,6 +397,35 @@ export function PendingWorkEmbedded({
             setOutgoingRequests(await outgoingRes.json());
           }
         }
+      }
+      
+      if (entriesRes.ok && clientsRes.ok) {
+        const fetchedEntries = await entriesRes.json();
+        const fetchedClients = await clientsRes.json();
+        setEntries(fetchedEntries);
+        setClients(fetchedClients);
+      }
+      
+      if (otherWorkRes.ok) {
+        const fetchedOtherWork = await otherWorkRes.json();
+        setOtherWorkEntries(fetchedOtherWork);
+      }
+      
+      if (employeesRes.ok) {
+        const fetchedEmployees = await employeesRes.json();
+        setEmployees(fetchedEmployees);
+      }
+      
+      if (pRes.ok) {
+        const fetchedProjects = await pRes.json();
+        setProjects(fetchedProjects);
+        const projectMap: Record<string, any> = {};
+        fetchedProjects.forEach((p: any) => {
+          if (p.clientId && p.department === 'Creative') {
+            projectMap[p.clientId] = p;
+          }
+        });
+        setClientProjects(projectMap);
       }
     } catch (error) {
       console.error('Failed to fetch dashboard data', error);
@@ -439,7 +503,13 @@ export function PendingWorkEmbedded({
         const uId = user?.id;
         if (!uId) return false;
         
-        const transfer = incomingRequests.find(r => r.taskId === (entry.id || entry._id) && r.stage === (stage === 'Editing' && entry.postReel === 'Post' ? 'Post/Graphics' : stage) && r.status === 'Accepted');
+        const finalStageName = (stage === 'Editing' && entry.postReel === 'Post') ? 'Post/Graphics' : stage;
+        
+        // Hide task if the current user has sent a transfer request that has been accepted
+        const outgoingTransfer = outgoingRequests.find(r => r.taskId === (entry.id || entry._id) && r.stage === finalStageName && r.status === 'Accepted');
+        if (outgoingTransfer && workScope === 'my') return false;
+
+        const transfer = incomingRequests.find(r => r.taskId === (entry.id || entry._id) && r.stage === finalStageName && r.status === 'Accepted');
         
         let isAssignedToMe = false;
         if (stage === 'Script') isAssignedToMe = String(transfer ? transfer.receiverId : (entry.assignedScriptwriterId || project.assignedScriptwriterId || client?.assignedScriptwriterId)) === String(uId);
@@ -814,8 +884,8 @@ export function PendingWorkEmbedded({
           
           const deadlineDate = parseLocalDate(t.deadline);
           
-          if (type === 'todays-work') return (deadlineDate <= today || t.isTransferredToMe) && t.status !== 'Approved';
-          if (type === 'upcoming-work') return (deadlineDate > today && !t.isTransferredToMe) && t.status !== 'Approved';
+          if (type === 'todays-work') return deadlineDate <= today && t.status !== 'Approved';
+          if (type === 'upcoming-work') return deadlineDate > today && t.status !== 'Approved';
           return true;
         }
 
@@ -838,8 +908,8 @@ export function PendingWorkEmbedded({
         
         const deadlineDate = parseLocalDate(t.deadline);
         
-        if (type === 'todays-work') return deadlineDate <= today || t.isTransferredToMe;
-        if (type === 'upcoming-work') return deadlineDate > today && !t.isTransferredToMe;
+        if (type === 'todays-work') return deadlineDate <= today;
+        if (type === 'upcoming-work') return deadlineDate > today;
         return true;
       });
     }
@@ -867,6 +937,40 @@ export function PendingWorkEmbedded({
     return defaultStages.filter(s => stages.has(s));
   }, [preFilteredTasks, isAdminOrTL]);
 
+  const getTaskDueDate = (req: any) => {
+    if (req.taskType === 'content-calendar') {
+      const entry = entries.find(e => e.id === req.taskId || e._id === req.taskId);
+      if (!entry) return '';
+      let dueDate = '';
+      const stage = req.stage;
+      if (stage === 'Script') dueDate = entry.scriptDate;
+      else if (stage === 'Shoot') dueDate = entry.shootDate;
+      else if (stage === 'Caption') dueDate = entry.captionDate || entry.editingStart;
+      else if (stage === 'Thumbnail') dueDate = entry.thumbnailDate || entry.editingStart;
+      else if (stage === 'Editing' || stage === 'Post/Graphics') dueDate = entry.editingStart;
+      else if (stage === 'Approval') dueDate = entry.approval;
+      else if (stage === 'Posting') dueDate = entry.postingDate;
+      else if (stage === 'Brand Person') dueDate = entry.shootDate || entry.postingDate;
+
+      if (!dueDate) {
+        dueDate = entry.postingDate || entry.scriptDate || entry.shootDate || entry.editingStart || entry.approval || '';
+      }
+
+      if (dueDate && dueDate.includes('T')) {
+        dueDate = dueDate.split('T')[0];
+      }
+      return dueDate;
+    } else {
+      const ow = otherWorkEntries.find(e => e.id === req.taskId || e._id === req.taskId);
+      if (!ow) return '';
+      let dueDate = ow.deadline || '';
+      if (dueDate && dueDate.includes('T')) {
+        dueDate = dueDate.split('T')[0];
+      }
+      return dueDate;
+    }
+  };
+
   const renderTaskDetails = (req: any) => {
     if (req.taskType === 'content-calendar') {
       const entry = entries.find(e => e.id === req.taskId || e._id === req.taskId);
@@ -876,11 +980,7 @@ export function PendingWorkEmbedded({
       return (
         <div className="flex flex-col gap-0.5 mt-1.5 p-2 bg-slate-50 rounded border border-slate-100 text-[10px] font-normal text-slate-500 max-w-sm">
           {cName && <div><span className="font-semibold text-slate-600">Client:</span> {cName}</div>}
-          {entry.platform && <div><span className="font-semibold text-slate-600">Platform:</span> {entry.platform}</div>}
           {entry.postReel && <div><span className="font-semibold text-slate-600">Format:</span> {entry.postReel}</div>}
-          {entry.concept && <div><span className="font-semibold text-slate-600">Concept:</span> {entry.concept}</div>}
-          {entry.topic && <div><span className="font-semibold text-slate-600">Topic:</span> {entry.topic}</div>}
-          {entry.caption && <div><span className="font-semibold text-slate-600">Caption:</span> {entry.caption}</div>}
         </div>
       );
     } else {
@@ -888,8 +988,7 @@ export function PendingWorkEmbedded({
       if (!ow) return null;
       return (
         <div className="flex flex-col gap-0.5 mt-1.5 p-2 bg-slate-50 rounded border border-slate-100 text-[10px] font-normal text-slate-500 max-w-sm">
-          {ow.clientDisplayName && <div><span className="font-semibold text-slate-600">Context:</span> {ow.clientDisplayName}</div>}
-          {ow.description && <div><span className="font-semibold text-slate-600">Description:</span> {ow.description}</div>}
+          {ow.clientDisplayName && <div><span className="font-semibold text-slate-600">Client:</span> {ow.clientDisplayName}</div>}
         </div>
       );
     }
@@ -956,7 +1055,8 @@ export function PendingWorkEmbedded({
                 <table className="w-full text-left text-sm text-slate-600">
                   <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider font-semibold">
                     <tr>
-                      <th className="px-6 py-4 whitespace-nowrap">Date</th>
+                      <th className="px-6 py-4 whitespace-nowrap">Transfer Date</th>
+                      <th className="px-6 py-4 whitespace-nowrap">Due Date</th>
                       <th className="px-6 py-4 whitespace-nowrap">Task Name</th>
                       <th className="px-6 py-4 whitespace-nowrap">Stage</th>
                       <th className="px-6 py-4 whitespace-nowrap">From</th>
@@ -969,7 +1069,10 @@ export function PendingWorkEmbedded({
                     {filteredIncoming.map(req => (
                       <tr key={req.id} className="hover:bg-slate-50/50 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500">
-                          {new Date(req.createdDate).toLocaleDateString()}
+                          {formatDateToDDMMYYYY(req.createdDate) || '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500 font-semibold">
+                          {formatDateToDDMMYYYY(getTaskDueDate(req)) || '-'}
                         </td>
                         <td className="px-6 py-4 font-semibold text-slate-800">
                           {req.taskName}
@@ -1040,7 +1143,8 @@ export function PendingWorkEmbedded({
                 <table className="w-full text-left text-sm text-slate-600">
                   <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider font-semibold">
                     <tr>
-                      <th className="px-6 py-4 whitespace-nowrap">Date</th>
+                      <th className="px-6 py-4 whitespace-nowrap">Transfer Date</th>
+                      <th className="px-6 py-4 whitespace-nowrap">Due Date</th>
                       <th className="px-6 py-4 whitespace-nowrap">Task Name</th>
                       <th className="px-6 py-4 whitespace-nowrap">Stage</th>
                       <th className="px-6 py-4 whitespace-nowrap">To</th>
@@ -1051,7 +1155,10 @@ export function PendingWorkEmbedded({
                     {filteredOutgoing.map(req => (
                       <tr key={req.id} className="hover:bg-slate-50/50 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500">
-                          {new Date(req.createdDate).toLocaleDateString()}
+                          {formatDateToDDMMYYYY(req.createdDate) || '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500 font-semibold">
+                          {formatDateToDDMMYYYY(getTaskDueDate(req)) || '-'}
                         </td>
                         <td className="px-6 py-4 font-semibold text-slate-800">
                           {req.taskName}
@@ -1315,7 +1422,7 @@ export function PendingWorkEmbedded({
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <Badge variant={isOverdue ? "destructive" : "secondary"} className="text-xs px-2.5 py-1">
-                        {item.deadline}
+                        {formatDateToDDMMYYYY(item.deadline) || '-'}
                       </Badge>
                     </td>
                     <td className="px-6 py-4 font-medium text-slate-800">
@@ -1704,23 +1811,7 @@ export function PendingWorkEmbedded({
 
                     return employees
                       .filter((emp: any) => {
-                        if (emp.id === currentUser?.id) return false;
-                        if (!targetDept) return true;
-                        
-                        const empDept = emp.department?.trim().toLowerCase();
-                        if (!empDept) return false;
-                        
-                        if (isCreativeDept) {
-                          return empDept === 'creative' || empDept === 'smm' || empDept === 'social media marketing' || empDept === 'graphics';
-                        }
-                        if (isDMDept) {
-                          return empDept === 'digital-marketing' || empDept === 'digital marketing' || empDept === 'dm';
-                        }
-                        if (isDevDept) {
-                          return empDept === 'development' || empDept === 'dev';
-                        }
-                        
-                        return empDept === targetDept.trim().toLowerCase();
+                        return emp.id !== currentUser?.id;
                       })
                       .map((emp: any) => {
                         const name = `${emp.firstName} ${emp.lastName || ''}`.trim();

@@ -57,7 +57,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
       
       if (isUpdateMode && initialActivityType) {
         if (initialActivityType === "Work") {
-          if (['sales'].includes(userDept)) {
+          if (userDept.includes('sales')) {
             initialTab = "hr_sales_work";
           } else {
             initialTab = isDigitalMarketing ? "assigned_brands" : "today_work";
@@ -68,7 +68,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
           initialTab = `other_${initialActivitySubtype}`;
         }
       } else {
-        if (['sales'].includes(userDept)) initialTab = "hr_sales_work";
+        if (userDept.includes('sales')) initialTab = "hr_sales_work";
         else if (isDigitalMarketing) initialTab = "assigned_brands";
       }
       
@@ -85,11 +85,17 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [tasksRes, settingsRes, attRes] = await Promise.all([
+      const [tasksRes, settingsRes, attRes, globalProjRes] = await Promise.all([
         fetch(`${API_URL}/wm-tasks`),
         fetch(`${API_URL}/system-settings`),
-        fetch(`${API_URL}/attendance`)
+        fetch(`${API_URL}/attendance`),
+        fetch(`${API_URL}/projects`)
       ]);
+
+      let allProjects: any[] = [];
+      if (globalProjRes.ok) {
+        allProjects = await globalProjRes.json();
+      }
 
       if (settingsRes.ok) {
         setSettings(await settingsRes.json());
@@ -137,6 +143,14 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
           if (!isAssigned) return false;
           const statusLower = (t.status || "").toLowerCase().trim();
           if (statusLower === "completed" || statusLower === "onhold" || statusLower === "on hold" || statusLower === "approved") return false;
+          
+          if (t.projectId) {
+            const project = allProjects.find((p: any) => String(p.id || p._id) === String(t.projectId));
+            if (project) {
+              const pStatus = (project.status || "").toLowerCase().trim();
+              if (pStatus === "onhold" || pStatus === "on-hold" || pStatus === "on hold") return false;
+            }
+          }
           return true;
         });
 
@@ -149,18 +163,16 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
           const isDigitalMarketingUser = ['digital marketing', 'dm'].includes(userDept);
 
           if (isCreativeUser || isDigitalMarketingUser) {
-            const [allTasksRes, transferRes] = await Promise.all([
-              fetch(`${API_URL}/all-tasks-data`),
+            const [ccRes, owRes, clientRes, transferRes] = await Promise.all([
+              fetch(`${API_URL}/content-calendar/all`),
+              fetch(`${API_URL}/other-work/all`),
+              fetch(`${API_URL}/clients`),
               fetch(`${API_URL}/work-transfer-requests`)
             ]);
             
-            if (allTasksRes.ok) {
-              const allData = await allTasksRes.json();
-              const transferListRaw = transferRes.ok ? await transferRes.json() : [];
-              const ccList = allData.contentCalendar || [];
-              const owList = allData.otherWork || [];
-              const projList = allData.projects || [];
-              const clientList = allData.clients || [];
+            if (ccRes.ok && owRes.ok && clientRes.ok) {
+              const [ccList, owList, clientList, transferListRaw] = await Promise.all([ccRes.json(), owRes.json(), clientRes.json(), transferRes.ok ? transferRes.json() : []]);
+              const projList = allProjects;
               const acceptedTransfers = (Array.isArray(transferListRaw) ? transferListRaw : []).filter((r: any) => r.status === 'Accepted');
               const smmTasks: any[] = [];
               if (isCreativeUser) {
@@ -170,8 +182,12 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                   return String(currentAssigneeId).trim() === String(userId).trim() && o.status !== 'Approved';
                 });
                 myOw.forEach((o: any) => {
-                  const client = clientList.find((c: any) => String(c.id || c._id).trim() === String(o.clientId).trim());
                   const project = projList.find((p: any) => String(p.id || p._id).trim() === String(o.projectId).trim());
+                  if (project) {
+                    const pStatus = (project.status || "").toLowerCase().trim();
+                    if (pStatus === "onhold" || pStatus === "on-hold" || pStatus === "on hold") return;
+                  }
+                  const client = clientList.find((c: any) => String(c.id || c._id).trim() === String(o.clientId).trim());
                   let displayName = "Other Work";
                   if (o.taskType === 'digital-marketing') displayName = 'Digital Marketing';
                   else if (client) displayName = project ? `${client.companyName || client.clientName} (${project.projectName})` : (client.companyName || client.clientName);
@@ -187,7 +203,14 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
               }
               
               if (isDigitalMarketingUser) {
-                const dmProjects = projList.filter((p: any) => p.department && p.department.trim().toLowerCase() === 'digital marketing' && p.status !== 'on-hold' && p.status !== 'Completed');
+                const dmProjects = projList.filter((p: any) => {
+                  if (p.department && p.department.trim().toLowerCase() === 'digital marketing') {
+                    const pStatus = (p.status || "").toLowerCase().trim();
+                    if (pStatus === "onhold" || pStatus === "on-hold" || pStatus === "on hold" || pStatus === "completed") return false;
+                    return true;
+                  }
+                  return false;
+                });
                 const myProjects = dmProjects.filter((p: any) => {
                   const isOriginalAssignee = String(p.assignedEmployeeId).trim() === String(userId).trim();
                   const isTransferredToMe = acceptedTransfers.some((t: any) => String(t.taskId) === String(p.id || p._id) && String(t.receiverId) === String(userId));
@@ -212,6 +235,11 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                   return String(currentAssigneeId).trim() === String(userId).trim() && o.status !== 'Approved' && o.taskType === 'dm-other-work';
                 });
                 myOw.forEach((o: any) => {
+                  const project = projList.find((p: any) => String(p.id || p._id).trim() === String(o.projectId).trim());
+                  if (project) {
+                    const pStatus = (project.status || "").toLowerCase().trim();
+                    if (pStatus === "onhold" || pStatus === "on-hold" || pStatus === "on hold") return;
+                  }
                   smmTasks.push({
                     id: o.id || o._id,
                     title: o.title || o.taskName || 'Other Work Task',
@@ -229,6 +257,8 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                   // In SMM, CC tasks use the client's Creative project
                   const project = projList.find((p: any) => String(p.clientId).trim() === String(entry.clientId).trim() && p.department?.toLowerCase().trim() === 'creative');
                   if (!project) return; // Only show if active creative project (matching SMM)
+                  const pStatus = (project.status || "").toLowerCase().trim();
+                  if (pStatus === "onhold" || pStatus === "on-hold" || pStatus === "on hold") return;
                   
                   const cName = client?.companyName || client?.clientName || "Unknown Client";
                   
@@ -351,8 +381,8 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
             taskType: (isDM || selectedTab === "dm_other_work") ? "dm-other-work" : "other-work"
           };
           
-          const isDev = userDept === 'development';
-          const isSales = userDept === 'sales';
+          const isDev = userDept.includes('development');
+          const isSales = userDept.includes('sales');
           let url = isDev && selectedTab !== "dm_other_work" ? `${API_URL}/wm-tasks` : `${API_URL}/other-work`;
           if (isSales && selectedTab === "hr_sales_work") {
             url = `${API_URL}/tasks`;
@@ -525,7 +555,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
               setIsNewWorkTask(false);
             }} className="w-full">
               <TabsList className="w-full flex flex-wrap h-auto gap-1 p-1 bg-muted/50 rounded-lg justify-start">
-                {userDept !== 'sales' && !['digital marketing', 'dm'].includes(userDept) && (
+                {!userDept.includes('sales') && !['digital marketing', 'dm'].includes(userDept) && (
                   <>
                     <TabsTrigger value="today_work" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Today's Work</TabsTrigger>
                     <TabsTrigger value="upcoming_work" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Upcoming Work</TabsTrigger>
@@ -540,7 +570,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                     <TabsTrigger value="dm_other_work" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Work</TabsTrigger>
                   </>
                 )}
-                {['sales'].includes(userDept) && (
+                {userDept.includes('sales') && (
                   <TabsTrigger value="hr_sales_work" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Work</TabsTrigger>
                 )}
                 <TabsTrigger value="research" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Research</TabsTrigger>

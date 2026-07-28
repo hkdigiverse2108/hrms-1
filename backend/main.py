@@ -1852,144 +1852,7 @@ async def add_module_comment(project_id: str, payload: schemas.ModuleCommentCrea
 
 # WM Task Endpoints
 # General Task Endpoints
-
-@app.get("/all-tasks-data")
-async def get_all_tasks_data(
-    userId: Optional[str] = None, 
-    role: Optional[str] = None,
-    db=Depends(get_db)
-):
-    import asyncio
-    
-    tasks_coro = crud.get_tasks(db, userId, role, skip=0, limit=10000)
-    wm_tasks_coro = crud.get_wm_tasks(db, userId, role, skip=0, limit=10000)
-    content_calendar_coro = crud.get_all_content_calendar_entries(db)
-    other_work_coro = crud.get_all_other_work(db)
-    projects_coro = crud.get_projects(db, userId, role, skip=0, limit=10000)
-    user_info = {"sub": userId, "role": role} if userId else None
-    clients_coro = crud.get_clients(db, skip=0, limit=10000, user_info=user_info)
-    employees_coro = crud.get_employees(db, skip=0, limit=10000, include_inactive=False)
-    leads_coro = crud.get_leads(db, skip=0, limit=10000)
-    
-    results = await asyncio.gather(
-        tasks_coro,
-        wm_tasks_coro,
-        content_calendar_coro,
-        other_work_coro,
-        projects_coro,
-        clients_coro,
-        employees_coro,
-        leads_coro
-    )
-    
-    return {
-        "tasks": results[0],
-        "wmTasks": results[1],
-        "contentCalendar": results[2],
-        "otherWork": results[3],
-        "projects": results[4],
-        "clients": results[5],
-        "employees": results[6],
-        "leads": results[7]
-    }
-
-
-@app.get("/all-attendance-data")
-async def get_all_attendance_data(db=Depends(get_db)):
-    import asyncio
-    att_coro = crud.get_attendance(db, skip=0, limit=10000)
-    emp_coro = crud.get_employees(db, skip=0, limit=10000)
-    dept_coro = crud.get_departments(db, skip=0, limit=10000)
-    sys_coro = crud.get_system_settings(db)
-    rec_coro = crud.get_time_recoveries(db, skip=0, limit=10000)
-    leave_coro = crud.get_leave_requests(db, skip=0, limit=10000)
-    
-    results = await asyncio.gather(att_coro, emp_coro, dept_coro, sys_coro, rec_coro, leave_coro)
-    return {
-        "attendance": results[0],
-        "employees": results[1],
-        "departments": results[2],
-        "systemSettings": results[3],
-        "timeRecoveries": results[4],
-        "leaves": results[5]
-    }
-
-@app.get("/all-payroll-data")
-async def get_all_payroll_data(db=Depends(get_db)):
-    import asyncio
-    pay_coro = crud.get_payroll(db, skip=0, limit=10000)
-    emp_coro = crud.get_employees(db, skip=0, limit=10000)
-    doc_coro = crud.get_employee_documents(db)
-    sys_coro = crud.get_system_settings(db)
-    
-    results = await asyncio.gather(pay_coro, emp_coro, doc_coro, sys_coro)
-    return {
-        "payroll": results[0],
-        "employees": results[1],
-        "documents": results[2],
-        "systemSettings": results[3]
-    }
-
-@app.get("/all-finance-data")
-async def get_all_finance_data(db=Depends(get_db)):
-    import asyncio
-    tx_coro = crud.get_finance_transactions(db)
-    bal_coro = crud.get_finance_balances(db)
-    sys_coro = crud.get_system_settings(db)
-    client_tx_coro = crud.get_client_transactions(db)
-    clients_coro = crud.get_clients(db, skip=0, limit=10000)
-    emp_coro = crud.get_employees(db, skip=0, limit=10000)
-    ast_coro = crud.get_assets(db, skip=0, limit=10000)
-    jobs_coro = crud.get_job_openings(db, skip=0, limit=10000)
-    
-    results = await asyncio.gather(tx_coro, bal_coro, sys_coro, client_tx_coro, clients_coro, emp_coro, ast_coro, jobs_coro)
-    return {
-        "transactions": results[0],
-        "balances": results[1],
-        "systemSettings": results[2],
-        "clientTransactions": results[3],
-        "clients": results[4],
-        "employees": results[5],
-        "assets": results[6],
-        "jobOpenings": results[7]
-    }
-
-@app.get("/all-hr-review-data")
-async def get_all_hr_review_data(employeeId: Optional[str] = None, db=Depends(get_db)):
-    import asyncio
-    rem_coro = crud.get_remarks(db, skip=0, limit=10000)
-    emp_coro = crud.get_employees(db, skip=0, limit=10000)
-    type_coro = crud.get_penalty_types(db, skip=0, limit=10000)
-    rev_coro = crud.get_reviews(db, employee_id=employeeId, skip=0, limit=10000)
-    sys_coro = crud.get_system_settings(db)
-    
-    results = await asyncio.gather(rem_coro, emp_coro, type_coro, rev_coro, sys_coro)
-    return {
-        "remarks": results[0],
-        "employees": results[1],
-        "penaltyTypes": results[2],
-        "reviews": results[3],
-        "systemSettings": results[4]
-    }
-
-@app.get("/all-sales-data")
-async def get_all_sales_data(db=Depends(get_db)):
-    import asyncio
-    leads_coro = crud.get_leads(db, skip=0, limit=10000)
-    emp_coro = crud.get_employees(db, skip=0, limit=10000)
-    targets_coro = crud.get_sales_targets(db)
-    sys_coro = crud.get_system_settings(db)
-    
-    results = await asyncio.gather(leads_coro, emp_coro, targets_coro, sys_coro)
-    return {
-        "leads": results[0],
-        "employees": results[1],
-        "targets": results[2],
-        "systemSettings": results[3]
-    }
-
 @app.get("/tasks", response_model=List[schemas.Task])
-
 async def get_tasks_api(userId: str = None, role: str = None, skip: int = 0, limit: int = 100, db=Depends(get_db)):
     return await crud.get_tasks(db, userId, role, skip, limit)
 
@@ -2018,6 +1881,407 @@ async def delete_task_api(task_id: str, db=Depends(get_db)):
 @app.get("/tasks/{task_id}/activities")
 async def read_task_activities(task_id: str, db=Depends(get_db)):
     return await crud.get_task_activities(db, task_id)
+
+@app.get("/dev-board-data")
+async def get_dev_board_data(
+    userId: Optional[str] = None, 
+    role: Optional[str] = None,
+    db=Depends(get_db)
+):
+    import asyncio
+    wm_tasks_coro = crud.get_wm_tasks(db, userId, role, skip=0, limit=10000)
+    projects_coro = crud.get_projects(db, userId, role, skip=0, limit=10000)
+    employees_coro = crud.get_employees(db, skip=0, limit=10000, include_inactive=False)
+    
+    transfer_all_coro = crud.get_all_transfer_requests(db, None, "wm-task")
+    transfer_out_coro = crud.get_outgoing_transfer_requests(db, userId or "", "wm-task")
+    
+    results = await asyncio.gather(
+        wm_tasks_coro,
+        projects_coro,
+        employees_coro,
+        transfer_all_coro,
+        transfer_out_coro
+    )
+    
+    projects = [
+        {
+            "id": p.get("id"),
+            "title": p.get("title"),
+            "department": p.get("department"),
+            "status": p.get("status"),
+            "teamLeaderId": p.get("teamLeaderId"),
+            "isPhaseWise": p.get("isPhaseWise"),
+            "phases": p.get("phases")
+        } for p in results[1]
+    ]
+    
+    employees = [
+        {
+            "id": e.get("id"),
+            "firstName": e.get("firstName"),
+            "lastName": e.get("lastName"),
+            "name": e.get("name"),
+            "department": e.get("department")
+        } for e in results[2]
+    ]
+    
+    return {
+        "wmTasks": results[0],
+        "projects": projects,
+        "employees": employees,
+        "transferRequestsAll": results[3],
+        "transferRequestsOutgoing": results[4]
+    }
+
+# --- Clubbed Page Data Endpoints ---
+# These endpoints reduce multiple frontend API calls into a single request per page.
+
+@app.get("/dashboard-data")
+async def get_dashboard_data(
+    userId: Optional[str] = None,
+    role: Optional[str] = None,
+    db=Depends(get_db)
+):
+    """Clubbed endpoint for the main Dashboard page. Replaces 7 separate calls."""
+    import asyncio
+    is_admin = role and role.lower() in ["admin", "super admin", "hr"]
+    
+    coros = [
+        crud.get_system_settings(db),
+        crud.get_all_leave_requests(db, skip=0, limit=10000),
+    ]
+    
+    # Admin-only data
+    if is_admin:
+        coros.extend([
+            crud.get_employees(db, skip=0, limit=10000),
+            crud.get_interns(db, skip=0, limit=10000),
+            crud.get_attendance(db, skip=0, limit=10000),
+            crud.get_applications(db, skip=0, limit=10000),
+            crud.get_assets(db, skip=0, limit=10000),
+        ])
+    
+    results = await asyncio.gather(*coros)
+    
+    response = {
+        "systemSettings": results[0],
+        "leaves": results[1],
+    }
+    
+    if is_admin:
+        employees = [
+            {"id": e.get("id"), "firstName": e.get("firstName"), "lastName": e.get("lastName"),
+             "name": e.get("name"), "department": e.get("department"), "designation": e.get("designation"),
+             "role": e.get("role"), "email": e.get("email"), "photoUrl": e.get("photoUrl"),
+             "status": e.get("status"), "joiningDate": e.get("joiningDate")}
+            for e in results[2]
+        ]
+        response["employees"] = employees
+        response["interns"] = results[3]
+        response["attendance"] = results[4]
+        response["applications"] = results[5]
+        response["assets"] = results[6]
+    
+    return response
+
+@app.get("/attendance-page-data")
+async def get_attendance_page_data(
+    userId: Optional[str] = None,
+    role: Optional[str] = None,
+    db=Depends(get_db)
+):
+    """Clubbed endpoint for the Attendance page. Replaces 4 separate calls."""
+    import asyncio
+    is_admin = role and role.lower() in ["admin", "super admin", "hr"]
+    
+    coros = [
+        crud.get_employees(db, skip=0, limit=10000),
+        crud.get_attendance(db, skip=0, limit=10000),
+        crud.get_system_settings(db),
+    ]
+    
+    if is_admin:
+        coros.append(crud.get_time_recoveries(db, skip=0, limit=10000))
+    elif userId:
+        coros.append(crud.get_employee_time_recoveries(db, userId))
+    
+    results = await asyncio.gather(*coros)
+    
+    employees = [
+        {"id": e.get("id"), "firstName": e.get("firstName"), "lastName": e.get("lastName"),
+         "name": e.get("name"), "department": e.get("department"), "designation": e.get("designation"),
+         "role": e.get("role"), "email": e.get("email"), "photoUrl": e.get("photoUrl"),
+         "status": e.get("status")}
+        for e in results[0]
+    ]
+    
+    return {
+        "employees": employees,
+        "attendance": results[1],
+        "systemSettings": results[2],
+        "recoveryRequests": results[3] if len(results) > 3 else [],
+    }
+
+@app.get("/hr-tasks-data")
+async def get_hr_tasks_data(db=Depends(get_db)):
+    """Clubbed endpoint for the HR Tasks page. Replaces 4 separate calls."""
+    import asyncio
+    results = await asyncio.gather(
+        crud.get_employees(db, skip=0, limit=10000),
+        crud.get_tasks(db, skip=0, limit=10000),
+        crud.get_all_leave_requests(db, skip=0, limit=10000),
+        crud.get_document_requests(db),
+    )
+    
+    employees = [
+        {"id": e.get("id"), "firstName": e.get("firstName"), "lastName": e.get("lastName"),
+         "name": e.get("name"), "department": e.get("department"), "designation": e.get("designation"),
+         "role": e.get("role")}
+        for e in results[0]
+    ]
+    
+    return {
+        "employees": employees,
+        "tasks": results[1],
+        "leaves": results[2],
+        "documentRequests": results[3],
+    }
+
+@app.get("/leave-page-data")
+async def get_leave_page_data(
+    userId: Optional[str] = None,
+    db=Depends(get_db)
+):
+    """Clubbed endpoint for the Leave page. Replaces 4 separate calls."""
+    import asyncio
+    
+    leaves_coro = crud.get_user_leave_requests(db, userId, skip=0, limit=10000) if userId else crud.get_all_leave_requests(db, skip=0, limit=10000)
+    
+    results = await asyncio.gather(
+        leaves_coro,
+        crud.get_holidays(db, skip=0, limit=10000),
+        crud.get_companies(db, skip=0, limit=10000),
+        crud.get_system_settings(db),
+    )
+    
+    return {
+        "leaves": results[0],
+        "holidays": results[1],
+        "companies": results[2],
+        "systemSettings": results[3],
+    }
+
+@app.get("/sales-page-data")
+async def get_sales_page_data(db=Depends(get_db)):
+    """Clubbed endpoint for the Sales page. Replaces 5 separate calls."""
+    import asyncio
+    results = await asyncio.gather(
+        crud.get_leads(db, skip=0, limit=10000),
+        crud.get_employees(db, skip=0, limit=10000),
+        crud.get_sales_targets(db),
+        crud.get_incentive_slabs(db),
+        crud.get_system_settings(db),
+    )
+    
+    employees = [
+        {"id": e.get("id"), "firstName": e.get("firstName"), "lastName": e.get("lastName"),
+         "name": e.get("name"), "department": e.get("department"), "designation": e.get("designation"),
+         "role": e.get("role"), "photoUrl": e.get("photoUrl")}
+        for e in results[1]
+    ]
+    
+    return {
+        "leads": results[0],
+        "employees": employees,
+        "salesTargets": results[2],
+        "incentiveSlabs": results[3],
+        "systemSettings": results[4],
+    }
+
+@app.get("/work-logs-data")
+async def get_work_logs_data(db=Depends(get_db)):
+    """Clubbed endpoint for the Work Logs page. Replaces 3 separate calls."""
+    import asyncio
+    results = await asyncio.gather(
+        crud.get_attendance(db, skip=0, limit=10000),
+        crud.get_wm_tasks(db, skip=0, limit=10000),
+        crud.get_employees(db, skip=0, limit=10000),
+    )
+    
+    employees = [
+        {"id": e.get("id"), "firstName": e.get("firstName"), "lastName": e.get("lastName"),
+         "name": e.get("name"), "department": e.get("department"), "designation": e.get("designation"),
+         "role": e.get("role")}
+        for e in results[2]
+    ]
+    
+    return {
+        "attendance": results[0],
+        "wmTasks": results[1],
+        "employees": employees,
+    }
+
+@app.get("/research-page-data")
+async def get_research_page_data(
+    userId: Optional[str] = None,
+    role: Optional[str] = None,
+    db=Depends(get_db)
+):
+    """Clubbed endpoint for the Research page. Replaces 4 separate calls."""
+    import asyncio
+    is_admin = role and role.lower() in ["admin", "super admin"]
+    
+    coros = [
+        crud.get_research(db, userId or "", is_admin),
+        crud.get_employees(db, skip=0, limit=10000),
+        crud.get_projects(db, userId, role, skip=0, limit=10000),
+    ]
+    
+    if userId:
+        coros.append(crud.get_attendance_status(db, userId))
+    
+    results = await asyncio.gather(*coros)
+    
+    employees = [
+        {"id": e.get("id"), "firstName": e.get("firstName"), "lastName": e.get("lastName"),
+         "name": e.get("name"), "department": e.get("department")}
+        for e in results[1]
+    ]
+    
+    projects = [
+        {"id": p.get("id"), "title": p.get("title"), "department": p.get("department"),
+         "status": p.get("status")}
+        for p in results[2]
+    ]
+    
+    return {
+        "research": results[0],
+        "employees": employees,
+        "projects": projects,
+        "attendanceStatus": results[3] if len(results) > 3 else None,
+    }
+
+@app.get("/projects-page-data")
+async def get_projects_page_data(
+    userId: Optional[str] = None,
+    role: Optional[str] = None,
+    db=Depends(get_db)
+):
+    """Clubbed endpoint for the Projects page. Replaces 5 separate calls."""
+    import asyncio
+    results = await asyncio.gather(
+        crud.get_projects(db, userId, role, skip=0, limit=10000),
+        crud.get_wm_tasks(db, userId, role, skip=0, limit=10000),
+        crud.get_leads(db, skip=0, limit=10000),
+        crud.get_clients(db, skip=0, limit=10000),
+        crud.get_employees(db, skip=0, limit=10000),
+    )
+    
+    employees = [
+        {"id": e.get("id"), "firstName": e.get("firstName"), "lastName": e.get("lastName"),
+         "name": e.get("name"), "department": e.get("department"), "designation": e.get("designation"),
+         "role": e.get("role")}
+        for e in results[4]
+    ]
+    
+    return {
+        "projects": results[0],
+        "wmTasks": results[1],
+        "leads": results[2],
+        "clients": results[3],
+        "employees": employees,
+    }
+
+@app.get("/my-tasks-page-data")
+async def get_my_tasks_page_data(
+    userId: Optional[str] = None,
+    role: Optional[str] = None,
+    db=Depends(get_db)
+):
+    """Clubbed endpoint for the My Tasks page. Replaces 3 separate calls."""
+    import asyncio
+    results = await asyncio.gather(
+        crud.get_tasks(db, userId, role, skip=0, limit=10000, exclude_department="HR"),
+        crud.get_employees(db, skip=0, limit=10000),
+        crud.get_departments(db, skip=0, limit=10000)
+    )
+    
+    employees = [
+        {"id": e.get("id"), "firstName": e.get("firstName"), "lastName": e.get("lastName"),
+         "name": e.get("name"), "email": e.get("email"), "department": e.get("department"), 
+         "designation": e.get("designation")}
+        for e in results[1]
+    ]
+    
+    return {
+        "tasks": results[0],
+        "employees": employees,
+        "departments": results[2]
+    }
+
+@app.get("/employee-attendance-page-data")
+async def get_employee_attendance_page_data(db=Depends(get_db)):
+    """Clubbed endpoint for the Employee Attendance page. Replaces 6 separate calls."""
+    import asyncio
+    results = await asyncio.gather(
+        crud.get_attendance(db, skip=0, limit=10000),
+        crud.get_employees(db, skip=0, limit=10000),
+        crud.get_departments(db, skip=0, limit=10000),
+        crud.get_system_settings(db),
+        crud.get_time_recoveries(db, skip=0, limit=10000),
+        crud.get_all_leave_requests(db, skip=0, limit=10000)
+    )
+    
+    employees = [
+        {"id": e.get("id"), "firstName": e.get("firstName"), "lastName": e.get("lastName"),
+         "name": e.get("name"), "department": e.get("department"), "designation": e.get("designation"),
+         "role": e.get("role"), "email": e.get("email"), "photoUrl": e.get("photoUrl"),
+         "joiningDate": e.get("joiningDate"), "status": e.get("status")}
+        for e in results[1]
+    ]
+    
+    return {
+        "attendance": results[0],
+        "employees": employees,
+        "departments": results[2],
+        "systemSettings": results[3],
+        "timeRecovery": results[4],
+        "leaves": results[5]
+    }
+
+@app.get("/my-tasks-view-data")
+async def get_my_tasks_view_data(userId: Optional[str] = None, role: Optional[str] = None, db=Depends(get_db)):
+    """Clubbed endpoint for the MyTasksView component. Replaces 8 separate calls."""
+    import asyncio
+    results = await asyncio.gather(
+        crud.get_tasks(db, userId, role, skip=0, limit=10000),
+        crud.get_wm_tasks(db, userId, role, skip=0, limit=10000),
+        crud.get_all_content_calendar_entries(db),
+        crud.get_all_other_work(db),
+        crud.get_projects(db, skip=0, limit=10000),
+        crud.get_clients(db, skip=0, limit=10000),
+        crud.get_employees(db, skip=0, limit=10000),
+        crud.get_leads(db, skip=0, limit=10000)
+    )
+    
+    employees = [
+        {"id": e.get("id"), "firstName": e.get("firstName"), "lastName": e.get("lastName"),
+         "name": e.get("name"), "department": e.get("department"), "designation": e.get("designation"),
+         "role": e.get("role"), "email": e.get("email")}
+        for e in results[6]
+    ]
+    
+    return {
+        "tasks": results[0],
+        "wmTasks": results[1],
+        "contentCalendar": results[2],
+        "otherWork": results[3],
+        "projects": results[4],
+        "clients": results[5],
+        "employees": employees,
+        "leads": results[7]
+    }
 
 @app.get("/wm-tasks", response_model=List[schemas.WMTask])
 async def read_wm_tasks(userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 10000, db=Depends(get_db)):

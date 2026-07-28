@@ -44,6 +44,16 @@ const STAGES = [
   { id: "completed", label: "Completed", color: "text-green-700 bg-transparent", lineColor: "bg-emerald-500" },
 ];
 
+const formatReqDate = (dateStr: string) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  return `${dd}-${mm}-${yyyy}`;
+};
+
 const formatDate = (dateStr?: string) => {
   if (!dateStr) return '-';
   const d = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
@@ -291,11 +301,14 @@ export default function TasksPage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_URL}/all-tasks-data`, { cache: 'no-store' });
+      const endpoint = user?.id ? `${API_URL}/dev-board-data?userId=${user.id}&role=${user.role || ''}` : `${API_URL}/dev-board-data`;
+      const res = await fetch(endpoint, { cache: 'no-store' });
+      
       if (res.ok) {
         const data = await res.json();
         setTasks(data.wmTasks || []);
         setProjects(data.projects || []);
+        
         let emps = data.employees || [];
         if (user && !emps.some((e: any) => e.id === user.id)) {
           emps.unshift({
@@ -309,9 +322,20 @@ export default function TasksPage() {
           });
         }
         setEmployees(emps);
-      }
-      if (user?.id) {
-        fetchTransferRequests();
+
+        if (user?.id) {
+          const isUserAdminOrTL = isUserAdmin || isTeamLeader || (user.designation?.toLowerCase() === 'team leader' || user.designation?.toLowerCase() === 'head') || user.designation?.toLowerCase() === 'hr' || user.role?.toLowerCase() === 'admin' || user.name === 'Admin Admin';
+          if (isUserAdminOrTL) {
+            setIncomingRequests((data.transferRequestsAll || []).filter((r: any) => r.taskType === 'wm-task' || r.taskType === 'wm-tasks'));
+            setOutgoingRequests((data.transferRequestsOutgoing || []).filter((r: any) => r.taskType === 'wm-task' || r.taskType === 'wm-tasks'));
+          } else {
+            const myIncoming = (data.transferRequestsAll || []).filter((r: any) => 
+              (r.taskType === 'wm-task' || r.taskType === 'wm-tasks') && r.receiverId === user.id
+            );
+            setIncomingRequests(myIncoming);
+            setOutgoingRequests((data.transferRequestsOutgoing || []).filter((r: any) => r.taskType === 'wm-task' || r.taskType === 'wm-tasks'));
+          }
+        }
       }
     } catch (err) {
       console.error("Error fetching tasks:", err);
@@ -1098,7 +1122,7 @@ export default function TasksPage() {
                   <table className="w-full text-left text-sm text-slate-600">
                     <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider font-semibold">
                       <tr>
-                        <th className="px-6 py-4 whitespace-nowrap">Date</th>
+                        <th className="px-6 py-4 whitespace-nowrap">Transfer Date</th>
                         <th className="px-6 py-4 whitespace-nowrap">Task Name</th>
                         <th className="px-6 py-4 whitespace-nowrap">Stage</th>
                         <th className="px-6 py-4 whitespace-nowrap">From</th>
@@ -1111,7 +1135,7 @@ export default function TasksPage() {
                       {incomingRequests.map(req => (
                         <tr key={req.id} className="hover:bg-slate-50/50 transition-colors">
                           <td className="px-6 py-4 whitespace-nowrap text-slate-500">
-                            {new Date(req.createdDate).toLocaleDateString()}
+                            {formatReqDate(req.createdDate) || '-'}
                           </td>
                           <td className="px-6 py-4 font-semibold text-slate-800">
                             {req.taskName}
@@ -1181,7 +1205,7 @@ export default function TasksPage() {
                   <table className="w-full text-left text-sm text-slate-600">
                     <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider font-semibold">
                       <tr>
-                        <th className="px-6 py-4 whitespace-nowrap">Date</th>
+                        <th className="px-6 py-4 whitespace-nowrap">Transfer Date</th>
                         <th className="px-6 py-4 whitespace-nowrap">Task Name</th>
                         <th className="px-6 py-4 whitespace-nowrap">Stage</th>
                         <th className="px-6 py-4 whitespace-nowrap">To</th>
@@ -1192,7 +1216,7 @@ export default function TasksPage() {
                       {outgoingRequests.map(req => (
                         <tr key={req.id} className="hover:bg-slate-50/50 transition-colors">
                           <td className="px-6 py-4 whitespace-nowrap text-slate-500">
-                            {new Date(req.createdDate).toLocaleDateString()}
+                            {formatReqDate(req.createdDate) || '-'}
                           </td>
                           <td className="px-6 py-4 font-semibold text-slate-800">
                             {req.taskName}
@@ -1245,6 +1269,10 @@ export default function TasksPage() {
             const activeProjects = projects.filter(p => {
               const isNotCompleted = p.status?.toLowerCase() !== "completed" && p.status?.toLowerCase() !== "cancelled";
               if (!isNotCompleted) return false;
+              
+              const isDevDept = p.department?.toLowerCase().trim() === 'development';
+              if (!isDevDept) return false;
+
               if (selectedDepartment !== "all") {
                 return p.department?.toLowerCase() === selectedDepartment.toLowerCase();
               }
@@ -1588,7 +1616,7 @@ export default function TasksPage() {
                         ))}
                   {filteredTasks.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="px-4 py-20 text-center text-slate-400 italic">No creative tasks found.</td>
+                      <td colSpan={7} className="px-4 py-20 text-center text-slate-400 italic">No tasks found.</td>
                     </tr>
                   )}
                 </tbody>
@@ -1933,8 +1961,7 @@ export default function TasksPage() {
                 <SelectContent>
                   {employees
                     .filter((emp: any) => {
-                      if (emp.id === user?.id) return false;
-                      return emp.department?.trim().toLowerCase() === 'development';
+                      return emp.id !== user?.id;
                     })
                     .map((emp: any) => {
                       const name = `${emp.firstName} ${emp.lastName || ''}`.trim();

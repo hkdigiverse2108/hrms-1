@@ -393,11 +393,17 @@ export default function SettingsPage() {
       return;
     }
     
+    let normalizedUrl = newBanner.externalUrl ? newBanner.externalUrl.trim() : "";
+    if (normalizedUrl && !normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://') && !normalizedUrl.startsWith('/')) {
+      normalizedUrl = 'https://' + normalizedUrl;
+    }
+    const bannerToSave = { ...newBanner, externalUrl: normalizedUrl };
+
     let updatedBanners;
     if (editingBannerId) {
-      updatedBanners = (settings?.dashboardBanners || []).map((b: any) => b.id === editingBannerId ? { ...newBanner, id: editingBannerId } : b);
+      updatedBanners = (settings?.dashboardBanners || []).map((b: any) => b.id === editingBannerId ? { ...bannerToSave, id: editingBannerId } : b);
     } else {
-      const banner = { ...newBanner, id: Date.now().toString() };
+      const banner = { ...bannerToSave, id: Date.now().toString() };
       updatedBanners = [...(settings?.dashboardBanners || []), banner];
     }
     
@@ -1736,10 +1742,15 @@ export default function SettingsPage() {
                           </span>
                         </div>
                         {banner.externalUrl && (
-                          <div className="flex items-center gap-2 text-xs text-brand-teal">
+                          <a 
+                            href={banner.externalUrl.startsWith('http') || banner.externalUrl.startsWith('/') ? banner.externalUrl : `https://${banner.externalUrl}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-2 text-xs text-brand-teal hover:underline cursor-pointer"
+                          >
                             <LinkIcon className="w-3 h-3" />
                             <span className="truncate max-w-[200px] block">{banner.externalUrl}</span>
-                          </div>
+                          </a>
                         )}
                         {banner.employeeId && (
                           <div className="flex items-center gap-2 text-xs text-brand-teal">

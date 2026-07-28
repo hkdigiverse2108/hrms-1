@@ -159,14 +159,27 @@ export default function EmployeeAttendanceListPage() {
   async function fetchData() {
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_URL}/all-attendance-data`);
+      const res = await fetch(`${API_URL}/employee-attendance-page-data`, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setAttendance(data.attendance || []);
-        setEmployees(data.employees || []);
+        
+        const emps = data.employees || [];
+        setEmployees(emps);
+        adminIdsRef.current = new Set(
+          emps.filter((e: any) => e.role === 'Admin' || e.role === 'Super Admin').map((e: any) => e.id)
+        );
+        
         setDepartments(data.departments || []);
-        setSysSettings(data.systemSettings || {});
-        setRecoveryRequests(data.timeRecoveries || []);
+        if (data.systemSettings) {
+          setSysSettings(data.systemSettings);
+          setCreateForm((prev: any) => ({
+            ...prev,
+            checkIn: data.systemSettings.officeStartTime ? `${data.systemSettings.officeStartTime}:00` : "09:30:00",
+            checkOut: data.systemSettings.officeEndTime ? `${data.systemSettings.officeEndTime}:00` : "18:30:00"
+          }));
+        }
+        setRecoveryRequests(data.timeRecovery || []);
         setLeaveRequests(data.leaves || []);
       }
     } catch (err) {

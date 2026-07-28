@@ -109,7 +109,7 @@ export default function RemarksPage() {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [penaltyTypes, setPenaltyTypes] = useState<any[]>([]);
   const [manageTypesOpen, setManageTypesOpen] = useState(false);
-  const [newType, setNewType] = useState({ name: "", amount: 0, warningLimit: 3 });
+  const [newType, setNewType] = useState({ name: "", amount: 0, warningLimit: 0 });
   const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
 
   const getPenaltyAmount = (type: string) => {
@@ -161,18 +161,11 @@ export default function RemarksPage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_URL}/all-hr-review-data`);
-      
-      let remRes = { ok: false, json: async () => ({}) };
-      let empRes = { ok: false, json: async () => ({}) };
-      let typeRes = { ok: false, json: async () => ({}) };
-      
-      if (res.ok) {
-        const data = await res.json();
-        remRes = { ok: true, json: async () => (data.remarks || []) };
-        empRes = { ok: true, json: async () => (data.employees || []) };
-        typeRes = { ok: true, json: async () => (data.penaltyTypes || []) };
-      }
+      const [remRes, empRes, typeRes] = await Promise.all([
+        fetch(`${API_URL}/remarks`),
+        fetch(`${API_URL}/employees`),
+        fetch(`${API_URL}/penalty-types`)
+      ]);
       if (remRes.ok) setRemarks(await remRes.json());
       if (empRes.ok) setEmployees(await empRes.json());
       if (typeRes.ok) {
@@ -205,7 +198,7 @@ export default function RemarksPage() {
     if (!newType.name || newType.amount <= 0) return;
     const bodyData = {
       ...newType,
-      warningLimit: parseInt(String(newType.warningLimit)) !== undefined && !isNaN(parseInt(String(newType.warningLimit))) ? parseInt(String(newType.warningLimit)) : 3
+      warningLimit: parseInt(String(newType.warningLimit)) !== undefined && !isNaN(parseInt(String(newType.warningLimit))) ? parseInt(String(newType.warningLimit)) : 0
     };
     try {
       if (editingTypeId && !editingTypeId.startsWith('fallback-')) {
@@ -215,7 +208,7 @@ export default function RemarksPage() {
           body: JSON.stringify(bodyData)
         });
         if (res.ok) {
-          setNewType({ name: "", amount: 0, warningLimit: 3 });
+          setNewType({ name: "", amount: 0, warningLimit: 0 });
           setEditingTypeId(null);
           fetchData();
         }
@@ -226,7 +219,7 @@ export default function RemarksPage() {
           body: JSON.stringify(bodyData)
         });
         if (res.ok) {
-          setNewType({ name: "", amount: 0, warningLimit: 3 });
+          setNewType({ name: "", amount: 0, warningLimit: 0 });
           fetchData();
         }
       }
@@ -752,7 +745,7 @@ export default function RemarksPage() {
                   </div>
                   
                   <div className="font-extrabold text-slate-800 text-[14px] mt-3 leading-snug truncate w-full group-hover:text-brand-teal transition-colors duration-200">{item.name}</div>
-                  <div className="text-[11px] text-muted-foreground font-bold uppercase tracking-wider mt-0.5 truncate w-full">{getEmployeeRoleSubtitle(item.employeeId || item.name, item.role)}</div>
+                  <div className="text-[11px] text-muted-foreground font-bold uppercase tracking-wider mt-0.5 truncate w-full">{getEmployeeRoleSubtitle((item as any).employeeId || item.name, item.role)}</div>
                   
                   <div className="mt-4 flex items-center justify-between w-full pt-3 border-t border-slate-100 text-xs">
                     <div className="text-left">
@@ -1133,7 +1126,7 @@ export default function RemarksPage() {
                   {editingTypeId ? 'Update' : 'Add'}
                 </Button>
                 {editingTypeId && (
-                  <Button variant="ghost" onClick={() => { setNewType({ name: "", amount: 0, warningLimit: 3 }); setEditingTypeId(null); }} className="shrink-0 text-muted-foreground">
+                  <Button variant="ghost" onClick={() => { setNewType({ name: "", amount: 0, warningLimit: 0 }); setEditingTypeId(null); }} className="shrink-0 text-muted-foreground">
                     Cancel
                   </Button>
                 )}

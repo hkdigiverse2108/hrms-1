@@ -142,14 +142,15 @@ export default function HiringBoardPage() {
   const fetchData = async () => {
     setIsLoading(true)
     try {
-      const res = await fetch(`${API_URL}/all-finance-data`); // Contains job-openings and employees
-      if (res.ok) {
-        const data = await res.json();
-        setJobs(data.jobOpenings || []);
-        setEmployees(data.employees || []);
-      }
-      const appRes = await fetch(`${API_URL}/applications`);
-      if (appRes.ok) setApplications(await appRes.json());
+      const [appRes, jobRes, empRes] = await Promise.all([
+        fetch(`${API_URL}/applications`),
+        fetch(`${API_URL}/job-openings`),
+        fetch(`${API_URL}/employees`)
+      ])
+      
+      if (appRes.ok) setApplications(await appRes.json())
+      if (jobRes.ok) setJobs(await jobRes.json())
+      if (empRes.ok) setEmployees(await empRes.json())
     } catch (err) {
       console.error("Fetch error:", err)
       toast.error("Failed to load data")

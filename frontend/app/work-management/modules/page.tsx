@@ -565,18 +565,11 @@ export default function ModulesPage() {
 
   const fetchData = async () => {
     try {
-      const res = await fetch(`${API_URL}/all-tasks-data`);
-      let pRes = { ok: false, json: async () => ({}) };
-      let tRes = { ok: false, json: async () => ({}) };
-      
-      if (res.ok) {
-        const data = await res.json();
-        pRes = { ok: true, json: async () => (data.projects || []) };
-        tRes = { ok: true, json: async () => (data.wmTasks || []) };
-        
-        const emps = data.employees || [];
-        setEmployees(emps.filter((e: any) => e.department === "Development"));
-      }
+      const [pRes, eRes, tRes] = await Promise.all([
+        fetch(`${API_URL}/projects?department=Development`),
+        fetch(`${API_URL}/employees`),
+        fetch(`${API_URL}/wm-tasks`)
+      ]);
       
       if (pRes.ok) {
         const data = await pRes.json();
@@ -587,6 +580,11 @@ export default function ModulesPage() {
             setSelectedProjectId(devProjects[0].id);
           }
         }
+      }
+      
+      if (eRes.ok) {
+        const emps = await eRes.json();
+        setEmployees(emps.filter((e: any) => e.department === "Development"));
       }
 
       if (tRes.ok) {

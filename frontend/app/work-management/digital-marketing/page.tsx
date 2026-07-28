@@ -622,7 +622,7 @@ export default function MarketingReportsPage() {
   }, [dailyMetricsStandalone.date, dailyMetricsStandalone.projectId, projects, selectedClientFilter]);
 
   useEffect(() => {
-    if (dateRange?.from) {
+    if (dateRange && dateRange.from) {
       setDailyMetricsStandalone(prev => ({ ...prev, date: format(dateRange.from as Date, 'yyyy-MM-dd') }));
     }
   }, [dateRange?.from]);
@@ -1313,9 +1313,6 @@ export default function MarketingReportsPage() {
         toast.success("Daily report added successfully");
         setQuickAddData(prev => ({
           ...prev,
-          date: quickAddData.date,
-          projectId: quickAddData.projectId,
-          projectName: quickAddData.projectName,
           campaignName: "",
           reach: 0,
           impression: 0,
@@ -2391,15 +2388,7 @@ export default function MarketingReportsPage() {
                 <SelectContent>
                   {employees
                     .filter((emp: any) => {
-                      if (emp.id === user?.id) return false;
-                      const empDept = emp.department?.trim().toLowerCase();
-                      if (!empDept) return false;
-                      
-                      if (transferringProject?.department) {
-                        const projDepts = transferringProject.department.toLowerCase().split(',').map((d: string) => d.trim());
-                        return projDepts.includes(empDept);
-                      }
-                      return empDept === 'digital marketing';
+                      return emp.id !== user?.id;
                     })
                     .map((emp: any) => {
                       const name = `${emp.firstName} ${emp.lastName || ''}`.trim();

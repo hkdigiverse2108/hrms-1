@@ -59,11 +59,8 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
     to: new Date()
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [verifyRecord, setVerifyRecord] = useState<any>(null)
-  const [verifyNote, setVerifyNote] = useState('')
-  const [verifyRating, setVerifyRating] = useState<string>('')
-  const [pendingTasks, setPendingTasks] = useState<any[]>([])
-  const [isLoadingPendingTasks, setIsLoadingPendingTasks] = useState(false)
+  const [noteRecord, setNoteRecord] = useState<any>(null)
+  const [noteText, setNoteText] = useState('')
   const [logsOpen, setLogsOpen] = useState(false)
   const [reportLogs, setReportLogs] = useState<any[]>([])
   const [isLoadingLogs, setIsLoadingLogs] = useState(false)
@@ -77,6 +74,14 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
   const [ratingFilter, setRatingFilter] = useState<'yesterday' | 'this_week' | 'all'>('all')
   const [ratingsModalOpen, setRatingsModalOpen] = useState(false)
   const [ratingDateFilter, setRatingDateFilter] = useState<'yesterday' | 'this_week' | 'all'>('all')
+
+  const [verifyRecord, setVerifyRecord] = useState<any>(null)
+  const [verifyNote, setVerifyNote] = useState('')
+  const [verifyRating, setVerifyRating] = useState('')
+  const [pendingTasks, setPendingTasks] = useState<any[]>([])
+  const [isLoadingPendingTasks, setIsLoadingPendingTasks] = useState(false)
+  const [approveRecord, setApproveRecord] = useState<any>(null)
+  const [approveRating, setApproveRating] = useState<number | ''>('')
 
   const availableDepartments = useMemo(() => {
     if (!employees || employees.length === 0) return []
@@ -357,7 +362,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
     if (!isAdmin && !isTeamLeader && !isHRUser) {
        filteredEmployees = filteredEmployees.filter((e: any) => e.id === user?.id)
     } else {
-       const deptToFilter = (isTeamLeader && !isAdmin && !isHRUser) ? user?.department : activeDeptTab
+       const deptToFilter = (isTeamLeader && !isAdmin && !isHRUser) ? user?.department : (isAdmin || isHRUser ? '' : activeDeptTab)
        if (deptToFilter) {
          filteredEmployees = filteredEmployees.filter((e: any) => e.department?.toLowerCase() === deptToFilter.toLowerCase())
        }
@@ -454,10 +459,6 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
           status: isFullDayLeave ? 'On Leave' : (report?.status || 'Pending Verification'),
           reportId: report?.id,
           note: report?.note || '',
-          rating: report?.rating || '',
-          avgRating: avgRatingStr,
-          tasksCompleted: report?.tasksCompleted || [],
-          tasksInProgress: report?.tasksInProgress || [],
           verifiedBy: report?.userName || '',
           responsiblePerson
         }
@@ -479,64 +480,53 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
     return resultList
   }, [employees, allReports, leaveRequests, dateRange, user, isAdmin, isTeamLeader, activeDeptTab, activeRoleTab, selectedStatusFilter])
 
-  const allRatingsData = useMemo(() => {
-    if (!ratingsModalOpen) return [];
-    
-    let filteredReports = allReports.filter((r: any) => r.rating);
-    
-    const today = new Date();
-    if (ratingDateFilter === 'yesterday') {
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yStr = format(yesterday, "yyyy-MM-dd");
-      filteredReports = filteredReports.filter((r: any) => r.date === yStr);
-    } else if (ratingDateFilter === 'this_week') {
-      const day = today.getDay() || 7;
-      const startOfWeek = new Date(today);
-      startOfWeek.setDate(today.getDate() - day + 1);
-      const startStr = format(startOfWeek, "yyyy-MM-dd");
-      filteredReports = filteredReports.filter((r: any) => r.date >= startStr);
-    }
+  const handleStatusUpdate = async (emp: any, newStatus: string) => {
+    setIsSubmitting(true)
+    try {
+      const method = emp.reportId ? 'PUT' : 'POST'
+      const url = emp.reportId 
+        ? `${API_URL}/employee-daily-reports/${emp.reportId}` 
+        : `${API_URL}/employee-daily-reports`
 
-    const employeeMap = new Map();
-    employees.filter((e: any) => e.status?.trim()?.toLowerCase() === 'active').forEach((e: any) => {
-      employeeMap.set(e.id, {
-        id: e.id,
-        name: e.name || `${e.firstName} ${e.lastName}`,
-        department: e.department,
-        totalRating: 0,
-        count: 0
-      });
-    });
+      const payload = emp.reportId 
+        ? { 
+            status: newStatus,
+            performedBy: user?.id,
+            userName: user?.name || `${user?.firstName} ${user?.lastName}`
+          }
+        : {
+            employeeId: emp.employeeId,
+            employeeName: emp.employeeName,
+            department: emp.department,
+            date: emp.date,
+            status: newStatus,
+            tasksCompleted: ["Work verified by TL"],
+            tasksInProgress: [],
+            hoursWorked: 8.0,
+            performedBy: user?.id,
+            userName: user?.name || `${user?.firstName} ${user?.lastName}`
+          }
 
-    filteredReports.forEach((r: any) => {
-      const emp = employeeMap.get(r.employeeId);
-      if (emp) {
-        emp.totalRating += Number(r.rating);
-        emp.count += 1;
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      if (response.ok) {
+        toast.success(`Work ${newStatus.toLowerCase()} successfully`)
+        refreshItem('employeeDailyReports')
       }
-    });
+    } catch (error) {
+      console.error('Error updating status:', error)
+      toast.error('Failed to update status')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
-    return Array.from(employeeMap.values())
-      .filter(e => e.count > 0)
-      .map(e => ({
-        ...e,
-        avgRating: (e.totalRating / e.count).toFixed(1)
-      }))
-      .sort((a, b) => Number(b.avgRating) - Number(a.avgRating));
-  }, [allReports, employees, ratingDateFilter, ratingsModalOpen]);
-
-  const handleVerify = async (status: 'Approved' | 'Rejected') => {
+  const handleVerify = async (status: string) => {
     if (!verifyRecord) return
-    if (!verifyNote.trim() || !verifyRating) {
-      toast.error('Note and Rating are compulsory')
-      return
-    }
-    if (Number(verifyRating) < 1 || Number(verifyRating) > 10) {
-      toast.error('Rating must be between 1 and 10')
-      return
-    }
-    
     setIsSubmitting(true)
     try {
       const method = verifyRecord.reportId ? 'PUT' : 'POST'
@@ -634,7 +624,6 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
       <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-tight ${
         record.status === 'Approved' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 
         record.status === 'Rejected' ? 'bg-rose-50 text-rose-600 border border-rose-100' : 
-        record.status === 'On Leave' ? 'bg-blue-50 text-blue-600 border border-blue-100' :
         'bg-amber-50 text-amber-600 border border-amber-100'
       }`}>
         {record.status}
@@ -655,6 +644,15 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
           <span className="text-[10px] text-slate-400 italic">No note added</span>
         )}
       </div>
+    )},
+    { key: 'rating' as const, header: 'Rating', render: (record: any) => (
+      record.status === 'Approved' && record.rating ? (
+        <span className="text-[10px] font-bold text-amber-500 bg-amber-50 px-2 py-1 rounded border border-amber-100 inline-flex items-center gap-1 w-max shadow-sm">
+          ⭐ {record.rating}/10
+        </span>
+      ) : (
+        <span className="text-[10px] text-slate-400 italic">-</span>
+      )
     )},
     { key: 'verifiedBy' as const, header: 'Verified By / Responsible', render: (record: any) => (
       record.status === 'Pending Verification' ? (
@@ -700,7 +698,25 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
         <Button 
           size="sm" 
           variant="outline"
-          className="h-7 px-3 text-[10px] font-bold border-brand-teal text-brand-teal hover:bg-brand-teal/10"
+          className="h-7 px-3 text-[10px] font-bold border-emerald-200 text-emerald-600 hover:bg-emerald-50"
+          onClick={() => handleStatusUpdate(record, 'Approved')}
+          disabled={isSubmitting || record.status === 'Approved'}
+        >
+          <CheckCircle2 className="w-3 h-3 mr-1" /> Approve
+        </Button>
+        <Button 
+          size="sm" 
+          variant="outline"
+          className="h-7 px-3 text-[10px] font-bold border-rose-200 text-rose-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200"
+          onClick={() => handleStatusUpdate(record, 'Rejected')}
+          disabled={isSubmitting || record.status === 'Rejected'}
+        >
+          <XCircle className="w-3 h-3 mr-1" /> Reject
+        </Button>
+        <Button 
+          size="sm" 
+          variant="outline"
+          className="h-7 px-3 text-[10px] font-bold border-slate-200 text-slate-600 hover:bg-slate-50"
           onClick={() => {
             setVerifyRecord(record)
             setVerifyNote(record.note || '')
@@ -1000,8 +1016,8 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {allRatingsData.length > 0 ? (
-                  allRatingsData.map((emp, i) => (
+                {ratingData.length > 0 ? (
+                  ratingData.map((emp: any, i: number) => (
                     <tr key={i} className="hover:bg-slate-50/50 transition-colors">
                       <td className="px-4 py-3 font-bold text-slate-700 text-xs">{emp.name}</td>
                       <td className="px-4 py-3">
@@ -1038,52 +1054,6 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
         logs={reportLogs}
         isLoading={isLoadingLogs}
       />
-
-      <Dialog open={ratingDialogOpen} onOpenChange={setRatingDialogOpen}>
-        <DialogContent className="sm:max-w-[600px] bg-white rounded-2xl shadow-xl border border-slate-100 p-6 max-h-[85vh] flex flex-col">
-          <DialogHeader className="flex-shrink-0">
-            <DialogTitle className="text-base font-bold text-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Star className="w-5 h-5 text-amber-500 fill-amber-500" />
-                <span>Employee Ratings</span>
-              </div>
-              <Select value={ratingFilter} onValueChange={(v: any) => setRatingFilter(v)}>
-                <SelectTrigger className="w-[140px] h-8 text-xs font-semibold bg-slate-50 border-slate-200">
-                  <SelectValue placeholder="Filter" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Time</SelectItem>
-                  <SelectItem value="this_week">This Week</SelectItem>
-                  <SelectItem value="yesterday">Yesterday</SelectItem>
-                </SelectContent>
-              </Select>
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="flex-1 overflow-y-auto mt-4 pr-2">
-            {ratingData.length > 0 ? (
-              <div className="space-y-2">
-                {ratingData.map((d, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors">
-                    <div>
-                      <div className="font-bold text-slate-800 text-sm">{d.employeeName}</div>
-                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{d.department}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm font-black text-amber-600">{d.avgRating} <span className="text-xs text-amber-400 font-bold">/10</span></div>
-                      <div className="text-[10px] text-slate-400 font-semibold">{d.count} Report{d.count !== 1 ? 's' : ''}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="flex items-center justify-center h-32 text-slate-500 text-sm italic">
-                No ratings found for the selected period.
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
