@@ -535,13 +535,16 @@ export default function ReviewPage() {
                     className="h-32 resize-none bg-white"
                   />
                 </div>
-                <div className="flex items-center space-x-2 sm:col-span-2 pt-2">
-                  <Checkbox 
+
+                <div className="flex items-center space-x-2 pt-2 border-t border-slate-100">
+                  <input 
+                    type="checkbox"
                     id="showNameToAdminCreate" 
-                    checked={newReview.showNameToAdmin}
-                    onCheckedChange={(checked) => setNewReview(prev => ({ ...prev, showNameToAdmin: checked === true }))}
+                    checked={newReview.showNameToAdmin || false}
+                    onChange={(e) => setNewReview(prev => ({ ...prev, showNameToAdmin: e.target.checked }))}
+                    className="w-4 h-4 rounded border-gray-300 text-brand-teal focus:ring-brand-teal cursor-pointer"
                   />
-                  <label htmlFor="showNameToAdminCreate" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                  <label htmlFor="showNameToAdminCreate" className="text-sm font-medium text-slate-700 cursor-pointer select-none">
                     Show my name to Admins
                   </label>
                 </div>
@@ -831,13 +834,15 @@ export default function ReviewPage() {
                 </div>
               )}
 
-              <div className="flex items-center space-x-2 sm:col-span-2 pt-2">
-                <Checkbox 
+              <div className="flex items-center space-x-2 pt-2 border-t border-slate-100">
+                <input 
+                  type="checkbox"
                   id="showNameToAdminEdit" 
                   checked={selectedReview.showNameToAdmin || false}
-                  onCheckedChange={(checked) => setSelectedReview((prev: any) => ({ ...prev, showNameToAdmin: checked === true }))}
+                  onChange={(e) => setSelectedReview((prev: any) => ({ ...prev, showNameToAdmin: e.target.checked }))}
+                  className="w-4 h-4 rounded border-gray-300 text-brand-teal focus:ring-brand-teal cursor-pointer"
                 />
-                <label htmlFor="showNameToAdminEdit" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                <label htmlFor="showNameToAdminEdit" className="text-sm font-medium text-slate-700 cursor-pointer select-none">
                   Force show my name to Admins
                 </label>
               </div>
