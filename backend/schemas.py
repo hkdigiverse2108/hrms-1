@@ -826,6 +826,7 @@ class ReviewBase(BaseModel):
     summary: str
     rating: int
     date: Optional[RobustDate] = None
+    showNameToAdmin: Optional[bool] = False
     logs: Optional[List[dict]] = None
     updatedBy: Optional[str] = None
     query: Optional[str] = None
@@ -839,6 +840,7 @@ class ReviewCreate(ReviewBase):
 class ReviewUpdate(BaseModel):
     summary: Optional[str] = None
     rating: Optional[int] = None
+    showNameToAdmin: Optional[bool] = None
     updatedBy: Optional[str] = None
     query: Optional[str] = None
     adminReply: Optional[str] = None
