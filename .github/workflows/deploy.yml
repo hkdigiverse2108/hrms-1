@@ -33,7 +33,7 @@ jobs:
 
             git fetch origin
             git checkout dev
-            git pull origin dev
+            git reset --hard origin/dev
 
             # Install backend dependencies
             if [ -d ".venv" ]; then
@@ -61,7 +61,7 @@ jobs:
 
             git fetch origin
             git checkout main
-            git pull origin main
+            git reset --hard origin/main
 
             # Install backend dependencies
             if [ -d ".venv" ]; then
