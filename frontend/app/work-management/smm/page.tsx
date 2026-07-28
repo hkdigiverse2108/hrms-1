@@ -221,6 +221,7 @@ export default function CreativeClientsPage() {
 
   const [clients, setClients] = useState<any[]>([]);
   const [calendarEntries, setCalendarEntries] = useState<any[]>([]);
+  const [incomingTransfers, setIncomingTransfers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -506,6 +507,17 @@ export default function CreativeClientsPage() {
       let clientsData = [];
       if (res.ok) {
         clientsData = await res.json();
+      }
+
+      if (user?.id) {
+        try {
+          const transRes = await fetch(`${API_URL}/work-transfer-requests/incoming/${user.id}?taskType=smm`);
+          if (transRes.ok) {
+            setIncomingTransfers(await transRes.json());
+          }
+        } catch (err) {
+          console.error("Error fetching transfer requests in SMM client list:", err);
+        }
       }
 
       let maxDatesLocal: Record<string, Date> = {};
@@ -872,6 +884,13 @@ export default function CreativeClientsPage() {
                  entry.assignedPosterId === user.id;
         });
 
+        const hasAcceptedTransfer = incomingTransfers.some((r: any) => {
+          if (r.status !== 'Accepted') return false;
+          return calendarEntries.some((entry: any) => {
+            return String(entry.id || entry._id) === String(r.taskId) && String(entry.clientId) === String(c.id);
+          });
+        });
+
         const isAssigned = (proj.assignedScriptwriterId || c.assignedScriptwriterId) === user.id || 
                            (proj.assignedReelEditorId || c.assignedReelEditorId) === user.id ||
                            (proj.assignedPostDesignerId || c.assignedPostDesignerId) === user.id ||
@@ -885,7 +904,8 @@ export default function CreativeClientsPage() {
                            (proj.assignedMeetingsAssigneeId || c.assignedMeetingsAssigneeId) === user.id ||
                            (proj.assignedContentCalendarCreatorId || c.assignedContentCalendarCreatorId) === user.id ||
                            (proj.assignedFollowUpId || c.assignedFollowUpId) === user.id ||
-                           hasAssignedCCEntry;
+                           hasAssignedCCEntry ||
+                           hasAcceptedTransfer;
         if (!isAssigned) return false;
       }
 
@@ -948,7 +968,7 @@ export default function CreativeClientsPage() {
 
       return true;
     });
-  }, [clientProjectRows, isEmployeeOrIntern, user, searchTerm, masterFilter, creativeFilter, calendarFilterStatus, pendingCounts, calendarSettings, calendarEntries]);
+  }, [clientProjectRows, isEmployeeOrIntern, user, searchTerm, masterFilter, creativeFilter, calendarFilterStatus, pendingCounts, calendarSettings, calendarEntries, incomingTransfers]);
 
   return (
     <div className="space-y-6">
