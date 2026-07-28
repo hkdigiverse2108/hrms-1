@@ -743,16 +743,6 @@ export default function ReviewPage() {
                       disabled={!isAdmin && !checkPermission('review', 'canEdit')}
                     />
                   </div>
-                  <div className="flex items-center space-x-2 sm:col-span-2 pt-2">
-                    <Checkbox 
-                      id="showNameToAdminEdit" 
-                      checked={selectedReview.showNameToAdmin || false}
-                      onCheckedChange={(checked) => setSelectedReview((prev: any) => ({ ...prev, showNameToAdmin: checked === true }))}
-                    />
-                    <label htmlFor="showNameToAdminEdit" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                      Force show my name to Admins
-                    </label>
-                  </div>
                 </>
               )}
 
@@ -840,6 +830,17 @@ export default function ReviewPage() {
                   )}
                 </div>
               )}
+
+              <div className="flex items-center space-x-2 sm:col-span-2 pt-2">
+                <Checkbox 
+                  id="showNameToAdminEdit" 
+                  checked={selectedReview.showNameToAdmin || false}
+                  onCheckedChange={(checked) => setSelectedReview((prev: any) => ({ ...prev, showNameToAdmin: checked === true }))}
+                />
+                <label htmlFor="showNameToAdminEdit" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                  Force show my name to Admins
+                </label>
+              </div>
               </div>
             </div>
           )}
