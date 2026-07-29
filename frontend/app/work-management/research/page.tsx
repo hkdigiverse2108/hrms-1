@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
-import { Plus, Loader2, Link as LinkIcon, BookOpen, Trash2, Edit2, History } from "lucide-react";
+import { Plus, Loader2, Link as LinkIcon, BookOpen, Trash2, Edit2, History, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -46,6 +46,23 @@ export default function ResearchPage() {
   const [selectedLogs, setSelectedLogs] = useState<any[]>([]);
   const [selectedResearchTitle, setSelectedResearchTitle] = useState("");
   const [serverTimeOffset, setServerTimeOffset] = useState(0);
+
+  // Links Popup State
+  const [linksModalOpen, setLinksModalOpen] = useState(false);
+  const [selectedReferences, setSelectedReferences] = useState<{ concept: string; link: string }[]>([]);
+  const [selectedResearchLinksTitle, setSelectedResearchLinksTitle] = useState("");
+
+  const openLinksModal = (research: any) => {
+    let refs = [];
+    if (research.references && research.references.length > 0) {
+      refs = research.references;
+    } else if (research.link) {
+      refs = [{ concept: "Reference", link: research.link }];
+    }
+    setSelectedReferences(refs);
+    setSelectedResearchLinksTitle(research.title || "Research");
+    setLinksModalOpen(true);
+  };
   
   // Filter State
   const [filterEmployee, setFilterEmployee] = useState("all");
@@ -55,6 +72,7 @@ export default function ResearchPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [link, setLink] = useState("");
+  const [references, setReferences] = useState<{ concept: string; link: string }[]>([{ concept: "", link: "" }]);
   const [sharedWith, setSharedWith] = useState<string[]>([]);
   const [projectId, setProjectId] = useState("");
   const [attendanceStatus, setAttendanceStatus] = useState<any>(null);
@@ -83,12 +101,7 @@ export default function ResearchPage() {
         const data = await res.json();
         setResearchList(data.research || []);
         setEmployees(data.employees || []);
-        
-        let allProjects = data.projects || [];
-        if (!isAdmin && user?.department) {
-          allProjects = allProjects.filter((p: any) => p.department === user.department);
-        }
-        setProjects(allProjects);
+        setProjects(data.projects || []);
         
         if (data.attendanceStatus) {
           const serverDateStr = res.headers.get("Date");
@@ -116,6 +129,13 @@ export default function ResearchPage() {
       setTitle(research.title || "");
       setDescription(research.description || "");
       setLink(research.link || "");
+      if (research.references && research.references.length > 0) {
+        setReferences(research.references);
+      } else if (research.link) {
+        setReferences([{ concept: "Reference", link: research.link }]);
+      } else {
+        setReferences([{ concept: "", link: "" }]);
+      }
       setSharedWith(research.sharedWith || []);
       setProjectId(research.projectId || "");
     } else {
@@ -123,6 +143,7 @@ export default function ResearchPage() {
       setTitle("");
       setDescription("");
       setLink("");
+      setReferences([{ concept: "", link: "" }]);
       setSharedWith([]);
       setProjectId("");
     }
@@ -138,10 +159,12 @@ export default function ResearchPage() {
 
     setIsSubmitting(true);
     try {
+      const validReferences = references.filter(r => r.concept.trim() !== "" || r.link.trim() !== "");
       const payload = {
         title,
         description,
-        link,
+        link: validReferences[0]?.link || link,
+        references: validReferences,
         sharedWith,
         projectId,
         ...(editingResearch ? {
@@ -279,7 +302,7 @@ export default function ResearchPage() {
                   <TableHead className="text-slate-600 font-semibold h-11">Date</TableHead>
                   <TableHead className="text-slate-600 font-semibold h-11">Created By</TableHead>
                   <TableHead className="text-slate-600 font-semibold h-11">Shared With</TableHead>
-                  <TableHead className="text-slate-600 font-semibold h-11">Link</TableHead>
+                  <TableHead className="text-slate-600 font-semibold h-11">Concept & Links</TableHead>
                   <TableHead className="text-right text-slate-600 font-semibold h-11 pr-4">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -372,19 +395,25 @@ export default function ResearchPage() {
                         )}
                       </TableCell>
                       <TableCell className="align-top py-4">
-                        {research.link ? (
-                          <a 
-                            href={research.link.startsWith('http') ? research.link : `https://${research.link}`} 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
-                            className="inline-flex items-center gap-1.5 text-[11px] font-medium text-brand-teal hover:underline bg-brand-teal/5 hover:bg-brand-teal/10 px-2.5 py-1 rounded border border-brand-teal/10 transition-colors max-w-[150px]"
-                          >
-                            <LinkIcon className="w-3 h-3 shrink-0 text-brand-teal/70" />
-                            <span className="truncate">{research.link.replace(/^https?:\/\//, '')}</span>
-                          </a>
-                        ) : (
-                          <span className="text-[11px] text-slate-400 italic">No link</span>
-                        )}
+                        {(() => {
+                          const refCount = research.references?.length || (research.link ? 1 : 0);
+                          if (refCount === 0) {
+                            return <span className="text-[11px] text-slate-400 italic">No links</span>;
+                          }
+                          return (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openLinksModal(research)}
+                              className="h-8 px-3 text-[12px] font-bold text-brand-teal border-brand-teal/20 bg-brand-teal/10 hover:bg-brand-teal hover:text-white transition-all shadow-sm flex items-center gap-1.5 rounded-lg group/btn"
+                            >
+                              <LinkIcon className="w-3.5 h-3.5 text-brand-teal group-hover/btn:text-white transition-colors" />
+                              <span>Links</span>
+                              {refCount > 1 && <span className="text-[10px] px-1.5 py-0.5 bg-brand-teal/20 group-hover/btn:bg-white/20 rounded-full font-extrabold">{refCount}</span>}
+                            </Button>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell className="align-top py-4 text-right pr-4">
                         <div className="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
@@ -461,13 +490,80 @@ export default function ResearchPage() {
                 className="min-h-[300px]"
               />
             </div>
-            <div className="space-y-2">
-              <Label>Link / Reference URL</Label>
-              <Input 
-                value={link}
-                onChange={(e) => setLink(e.target.value)}
-                placeholder="https://..."
-              />
+            <div className="space-y-2 p-3 rounded-xl bg-slate-50 border border-slate-200 shadow-inner">
+              <div className="flex items-center justify-between pb-1">
+                <div>
+                  <Label className="text-slate-800 font-bold text-xs">Concept & Reference Links</Label>
+                  <p className="text-[11px] text-slate-500">Add multiple concepts and test redirection for their attached reference links.</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setReferences([...references, { concept: "", link: "" }])}
+                  className="h-7 px-2.5 text-xs font-bold text-brand-teal border-brand-teal/20 bg-brand-teal/10 hover:bg-brand-teal hover:text-white transition-all shadow-sm"
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1" />
+                  Add Another
+                </Button>
+              </div>
+
+              <div className="space-y-1.5 max-h-[260px] overflow-y-auto overflow-x-hidden pr-1">
+                {references.map((item, index) => (
+                  <div key={index} className="flex items-center gap-2 bg-white p-1.5 px-2.5 rounded-lg border border-slate-200/80 shadow-sm transition-all hover:border-brand-teal/30 overflow-hidden">
+                    <div className="w-1/3 min-w-0 shrink-0">
+                      <Input
+                        value={item.concept}
+                        onChange={(e) => {
+                          const newRefs = [...references];
+                          newRefs[index].concept = e.target.value;
+                          setReferences(newRefs);
+                        }}
+                        placeholder="Concept Name"
+                        className="h-8 text-xs font-medium bg-slate-50/50 focus:bg-white w-full"
+                      />
+                    </div>
+                    <div className="flex-1 flex items-center gap-1.5 min-w-0">
+                      <Input
+                        value={item.link}
+                        onChange={(e) => {
+                          const newRefs = [...references];
+                          newRefs[index].link = e.target.value;
+                          setReferences(newRefs);
+                        }}
+                        placeholder="https://example.com/doc..."
+                        className="h-8 text-xs flex-1 font-medium bg-slate-50/50 focus:bg-white min-w-0"
+                      />
+                      <button
+                        type="button"
+                        disabled={!item.link.trim()}
+                        onClick={() => {
+                          const url = item.link.startsWith("http") ? item.link : `https://${item.link}`;
+                          window.open(url, "_blank", "noopener,noreferrer");
+                        }}
+                        className={`p-1.5 rounded border transition-all shrink-0 ${
+                          item.link.trim() 
+                            ? "bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-600 hover:text-white cursor-pointer" 
+                            : "bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed"
+                        }`}
+                        title="Redirect / Open Link in New Tab"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                      </button>
+                      {references.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setReferences(references.filter((_, i) => i !== index))}
+                          className="p-1.5 text-rose-500 hover:bg-rose-50 rounded transition-colors shrink-0"
+                          title="Remove Row"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Share With (Employees)</Label>
@@ -518,6 +614,77 @@ export default function ResearchPage() {
             ) : (
               <p className="text-slate-500 text-center py-4">No activity logs found.</p>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={linksModalOpen} onOpenChange={setLinksModalOpen}>
+        <DialogContent className="sm:max-w-4xl max-h-[85vh] overflow-y-auto overflow-x-hidden">
+          <DialogHeader>
+            <DialogTitle className="text-brand-dark-blue flex items-center gap-2 text-lg font-bold">
+              <LinkIcon className="w-5 h-5 text-brand-teal shrink-0" />
+              <span>Concept & Reference Links</span>
+            </DialogTitle>
+            <p className="text-sm text-slate-500">Attached references for: <span className="font-bold text-slate-800">{selectedResearchLinksTitle}</span></p>
+          </DialogHeader>
+          <div className="pt-2 space-y-3">
+            {selectedReferences.length > 0 ? (
+              <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
+                <div className="grid grid-cols-12 gap-3 items-center bg-slate-50/90 px-4 py-2 border-b border-slate-200/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  <div className="col-span-5 min-w-0 overflow-hidden">Concept / Subject</div>
+                  <div className="col-span-6 min-w-0 overflow-hidden">Reference Link (URL)</div>
+                  <div className="col-span-1 text-right">Open</div>
+                </div>
+                <div className="divide-y divide-slate-100 max-h-[55vh] overflow-y-auto overflow-x-hidden">
+                  {selectedReferences.map((item: any, idx: number) => {
+                    const conceptStr = item.concept || "General Reference";
+                    const linkStr = item.link || "No link specified";
+                    const shortConcept = conceptStr.length > 35 ? conceptStr.substring(0, 35) + "..." : conceptStr;
+                    const shortLink = linkStr.length > 45 ? linkStr.substring(0, 45) + "..." : linkStr;
+
+                    return (
+                      <div key={idx} className="grid grid-cols-12 gap-3 items-center px-4 py-2 hover:bg-brand-teal/[0.03] transition-colors group">
+                        <div className="col-span-5 min-w-0 overflow-hidden">
+                          <span className="text-xs font-bold text-slate-800 block truncate cursor-help" title={conceptStr}>
+                            {shortConcept}
+                          </span>
+                        </div>
+                        <div className="col-span-6 min-w-0 overflow-hidden">
+                          <span className="text-xs font-medium text-slate-600 font-mono block truncate select-all cursor-help" title={linkStr}>
+                            {shortLink}
+                          </span>
+                        </div>
+                        <div className="col-span-1 flex justify-end">
+                          <button
+                            type="button"
+                            disabled={!item.link}
+                            onClick={() => {
+                              if (item.link) {
+                                const url = item.link.startsWith("http") ? item.link : `https://${item.link}`;
+                                window.open(url, "_blank", "noopener,noreferrer");
+                              }
+                            }}
+                            className={`p-1.5 rounded-lg border transition-all ${
+                              item.link
+                                ? "bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-600 hover:text-white cursor-pointer shadow-sm active:scale-95"
+                                : "bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed"
+                            }`}
+                            title="Redirect / Open Link in New Tab"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <p className="text-slate-500 text-center py-8">No links or concepts added for this research.</p>
+            )}
+            <div className="flex justify-end pt-1 border-t border-slate-100">
+              <Button variant="outline" onClick={() => setLinksModalOpen(false)} className="px-6 font-semibold">Close</Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

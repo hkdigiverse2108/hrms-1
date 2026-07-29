@@ -2155,7 +2155,7 @@ async def get_research_page_data(
     coros = [
         crud.get_research(db, userId or "", is_admin),
         crud.get_employees(db, skip=0, limit=10000),
-        crud.get_projects(db, userId, role, skip=0, limit=10000),
+        crud.get_projects(db, skip=0, limit=10000),
     ]
     
     if userId:
