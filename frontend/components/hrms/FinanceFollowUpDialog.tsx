@@ -32,6 +32,7 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
   const [nextDate, setNextDate] = useState("");
   const [amountReceived, setAmountReceived] = useState("");
   const [isPaymentReceived, setIsPaymentReceived] = useState(false);
+  const [paymentTouched, setPaymentTouched] = useState(false);
   const [nextPaymentDate, setNextPaymentDate] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
@@ -40,18 +41,20 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
     if (!note.trim()) return;
     setIsSubmitting(true);
     try {
+      const payload: any = {
+        note: note,
+        date: new Date().toISOString().split('T')[0] + " " + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        performedBy: userName,
+      };
+      if (nextDate) payload.nextFollowUpDate = new Date(nextDate).toISOString();
+      if (amountReceived) payload.amountReceived = parseFloat(amountReceived);
+      if (paymentTouched) payload.isPaymentReceived = isPaymentReceived;
+      if (nextPaymentDate) payload.nextPaymentDate = nextPaymentDate;
+
       const res = await fetch(`${API_URL}/projects/${project.id}/finance-follow-ups?performedBy=${userId}&userName=${userName}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          note: note,
-          date: new Date().toISOString().split('T')[0] + " " + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          performedBy: userName,
-          nextFollowUpDate: nextDate ? new Date(nextDate).toISOString() : null,
-          amountReceived: amountReceived ? parseFloat(amountReceived) : null,
-          isPaymentReceived: isPaymentReceived,
-          nextPaymentDate: nextPaymentDate || null,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {
@@ -60,6 +63,7 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
         setNextDate("");
         setAmountReceived("");
         setIsPaymentReceived(false);
+        setPaymentTouched(false);
         setNextPaymentDate("");
         onUpdate();
       } else {
@@ -96,7 +100,9 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
         <div className="space-y-5 py-2">
           {/* Add New Follow-up */}
           <div className="space-y-3 bg-emerald-50/50 p-4 rounded-xl border border-emerald-100">
-            <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">New Finance Follow-up</Label>
+            <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">
+              New Finance Follow-up <span className="text-red-500">*</span>
+            </Label>
             <Textarea 
               placeholder="Payment status update, client communication notes, next steps..." 
               value={note}
@@ -131,7 +137,7 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
               <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 cursor-pointer">Payment Received?</Label>
               <Switch 
                 checked={isPaymentReceived} 
-                onCheckedChange={setIsPaymentReceived}
+                onCheckedChange={(checked) => { setIsPaymentReceived(checked); setPaymentTouched(true); }}
               />
             </div>
 

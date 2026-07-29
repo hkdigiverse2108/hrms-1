@@ -1119,12 +1119,7 @@ export default function ProjectsPage() {
                             </>
                           );
                         })()}
-                        {project.projectFeedback && (
-                          <div className="flex flex-col gap-0.5 text-xs mt-1">
-                            <span className="text-slate-500 font-medium">Feedback / Notes:</span>
-                            <span className="text-slate-700 italic bg-white p-1.5 rounded border border-emerald-100">{project.projectFeedback}</span>
-                          </div>
-                        )}
+
                       </div>
                     )}
 
