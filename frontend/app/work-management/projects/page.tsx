@@ -6,6 +6,7 @@ import { Building2, Plus, Pencil, Trash2, Calendar, Shield, Loader2, Search, Ale
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ProjectForm, ProjectFormData } from "@/components/hrms/ProjectForm";
+import { FinanceFollowUpDialog } from "@/components/hrms/FinanceFollowUpDialog";
 import { API_URL } from "@/lib/config";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -774,7 +775,7 @@ export default function ProjectsPage() {
               Clear Filters
             </Button>
           )}
-          {isAdmin && (
+          {(isAdmin || projects.some(p => p.assignedFinanceManagerId === user?.id || p.assignedEmployeeId === user?.id)) && (
             <div className="flex items-center space-x-2 pl-4 border-l border-slate-200">
               <Switch id="show-finance" checked={showFinanceDetails} onCheckedChange={setShowFinanceDetails} />
               <Label htmlFor="show-finance" className="text-xs font-bold text-emerald-700 cursor-pointer uppercase tracking-wider">Finance Details</Label>
@@ -1050,11 +1051,19 @@ export default function ProjectsPage() {
 
 
                     {/* Finance & Feedback Details */}
-                    {(isAdmin || project.assignedFinanceManagerId === user?.id) && showFinanceDetails && (project.amountReceived !== undefined || project.projectFeedback || project.nextPaymentDate || project.isPaymentReceived !== undefined) && (
+                    {(isAdmin || project.assignedFinanceManagerId === user?.id || project.assignedEmployeeId === user?.id) && showFinanceDetails && (
                       <div className="pt-3 border-t border-dashed border-emerald-200/60 bg-emerald-50/30 p-3 rounded-lg space-y-2 mt-2 mb-2">
-                        <div className="flex items-center gap-1.5 mb-1 text-emerald-700">
-                          <Banknote className="w-3.5 h-3.5" />
-                          <span className="text-[10px] font-bold uppercase tracking-wider">Finance & Feedback</span>
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-1.5 text-emerald-700">
+                            <Banknote className="w-3.5 h-3.5" />
+                            <span className="text-[10px] font-bold uppercase tracking-wider">Finance & Feedback</span>
+                          </div>
+                          <FinanceFollowUpDialog 
+                            project={project} 
+                            onUpdate={() => fetchData(false)} 
+                            userId={user?.id} 
+                            userName={`${user?.firstName || ""} ${user?.lastName || ""}`.trim()}
+                          />
                         </div>
                         {project.assignedFinanceManagerName && (
                           <div className="flex justify-between items-center text-xs">
@@ -1062,30 +1071,75 @@ export default function ProjectsPage() {
                             <span className="font-bold text-slate-700">{project.assignedFinanceManagerName}</span>
                           </div>
                         )}
-                        {project.amountReceived !== undefined && project.amountReceived > 0 && (
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-slate-500 font-medium">Amount Received:</span>
-                            <span className="font-bold text-emerald-600">₹{project.amountReceived}</span>
-                          </div>
-                        )}
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="text-slate-500 font-medium">Next Payment Date:</span>
-                          <span className="font-bold text-slate-700">{project.nextPaymentDate || "Not Set"}</span>
-                        </div>
-                        {project.isPaymentReceived !== undefined && (
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-slate-500 font-medium">Payment Received:</span>
-                            <Badge variant={project.isPaymentReceived ? "success" : "destructive"} className="text-[10px] h-5 uppercase">
-                              {project.isPaymentReceived ? "Yes" : "No"}
-                            </Badge>
-                          </div>
-                        )}
-                        {project.projectFeedback && (
-                          <div className="flex flex-col gap-0.5 text-xs mt-1">
-                            <span className="text-slate-500 font-medium">Feedback / Notes:</span>
-                            <span className="text-slate-700 italic bg-white p-1.5 rounded border border-emerald-100">{project.projectFeedback}</span>
-                          </div>
-                        )}
+                        {(() => {
+                          const latestFollowUp = project.financeFollowUps?.length > 0 
+                            ? project.financeFollowUps[project.financeFollowUps.length - 1] 
+                            : null;
+                          
+                          const todayStr = new Date().toISOString().split('T')[0];
+                          const hasOverdueFollowup = latestFollowUp?.nextFollowUpDate && latestFollowUp.nextFollowUpDate.split('T')[0] <= todayStr;
+                          const hasOverduePayment = (latestFollowUp?.nextPaymentDate || project.nextPaymentDate) && (latestFollowUp?.nextPaymentDate || project.nextPaymentDate) <= todayStr && !latestFollowUp?.isPaymentReceived;
+
+                          return (
+                            <>
+                              {(hasOverdueFollowup || hasOverduePayment) && (
+                                <div className="flex items-center gap-1.5 p-1.5 bg-amber-100 border border-amber-300 rounded text-amber-800 text-[10.5px] font-bold animate-pulse mb-1.5">
+                                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                  <span>
+                                    {hasOverdueFollowup && hasOverduePayment ? "Follow-up & Payment Due Today!" : hasOverdueFollowup ? "Follow-up Reminder Due!" : "Payment Due Today!"}
+                                  </span>
+                                </div>
+                              )}
+                              
+                              {latestFollowUp ? (
+                                <>
+                                  {latestFollowUp.amountReceived != null && latestFollowUp.amountReceived > 0 && (
+                                    <div className="flex justify-between items-center text-xs">
+                                      <span className="text-slate-500 font-medium">Amount Received:</span>
+                                      <span className="font-bold text-emerald-600">₹{latestFollowUp.amountReceived}</span>
+                                    </div>
+                                  )}
+                                  <div className="flex justify-between items-center text-xs">
+                                    <span className="text-slate-500 font-medium">Next Payment Date:</span>
+                                    <span className={`font-bold ${latestFollowUp.nextPaymentDate && latestFollowUp.nextPaymentDate <= todayStr && !latestFollowUp.isPaymentReceived ? "text-red-600 font-extrabold" : "text-slate-700"}`}>
+                                      {latestFollowUp.nextPaymentDate || "Not Set"}
+                                    </span>
+                                  </div>
+                                  {latestFollowUp.isPaymentReceived != null && (
+                                    <div className="flex justify-between items-center text-xs">
+                                      <span className="text-slate-500 font-medium">Payment Received:</span>
+                                      <Badge variant={latestFollowUp.isPaymentReceived ? "success" : "destructive"} className="text-[10px] h-5 uppercase">
+                                        {latestFollowUp.isPaymentReceived ? "Yes" : "No"}
+                                      </Badge>
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                <>
+                                  {project.amountReceived !== undefined && project.amountReceived > 0 && (
+                                    <div className="flex justify-between items-center text-xs">
+                                      <span className="text-slate-500 font-medium">Amount Received:</span>
+                                      <span className="font-bold text-emerald-600">₹{project.amountReceived}</span>
+                                    </div>
+                                  )}
+                                  <div className="flex justify-between items-center text-xs">
+                                    <span className="text-slate-500 font-medium">Next Payment Date:</span>
+                                    <span className="font-bold text-slate-700">{project.nextPaymentDate || "Not Set"}</span>
+                                  </div>
+                                  {project.isPaymentReceived !== undefined && (
+                                    <div className="flex justify-between items-center text-xs">
+                                      <span className="text-slate-500 font-medium">Payment Received:</span>
+                                      <Badge variant={project.isPaymentReceived ? "success" : "destructive"} className="text-[10px] h-5 uppercase">
+                                        {project.isPaymentReceived ? "Yes" : "No"}
+                                      </Badge>
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </>
+                          );
+                        })()}
+
                       </div>
                     )}
 
@@ -1121,7 +1175,7 @@ export default function ProjectsPage() {
                             <CalendarClock className="w-3.5 h-3.5 shrink-0" />
                             Team Deadline: {project.teamDeadline || project.endDate || project.startDate || "-"}
                           </div>
-                          {project.assignedFinanceManagerId === user?.id && showFinanceDetails && (
+                          {(project.assignedFinanceManagerId === user?.id || project.assignedEmployeeId === user?.id) && showFinanceDetails && (
                             <div className="flex items-center gap-1.5 text-emerald-600 font-bold text-[11px]">
                               <Banknote className="w-3.5 h-3.5 shrink-0" />
                               Next Payment: {project.nextPaymentDate || "Not Set"}

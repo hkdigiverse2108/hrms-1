@@ -698,24 +698,6 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
         <Button 
           size="sm" 
           variant="outline"
-          className="h-7 px-3 text-[10px] font-bold border-emerald-200 text-emerald-600 hover:bg-emerald-50"
-          onClick={() => handleStatusUpdate(record, 'Approved')}
-          disabled={isSubmitting || record.status === 'Approved'}
-        >
-          <CheckCircle2 className="w-3 h-3 mr-1" /> Approve
-        </Button>
-        <Button 
-          size="sm" 
-          variant="outline"
-          className="h-7 px-3 text-[10px] font-bold border-rose-200 text-rose-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200"
-          onClick={() => handleStatusUpdate(record, 'Rejected')}
-          disabled={isSubmitting || record.status === 'Rejected'}
-        >
-          <XCircle className="w-3 h-3 mr-1" /> Reject
-        </Button>
-        <Button 
-          size="sm" 
-          variant="outline"
           className="h-7 px-3 text-[10px] font-bold border-slate-200 text-slate-600 hover:bg-slate-50"
           onClick={() => {
             setVerifyRecord(record)
