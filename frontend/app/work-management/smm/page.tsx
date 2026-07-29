@@ -517,24 +517,33 @@ export default function CreativeClientsPage() {
           let pending = 0;
           const isPost = entry.postReel === 'Post';
           
-          if (!isPost && entry.scriptDate && !entry.scriptLink) pending++;
-          if (!isPost && entry.shootDate && !entry.shootLink) pending++;
+          const isUserAssigned = (stageAssigneeId: string | null | undefined) => {
+            if (!isEmployeeOrIntern || !user?.id) return true;
+            return stageAssigneeId === user.id;
+          };
+
+          if (!isPost && entry.scriptDate && !entry.scriptLink && isUserAssigned(entry.assignedScriptwriterId)) pending++;
+          if (!isPost && entry.shootDate && (!entry.shootLink || entry.shootLink === '-') && isUserAssigned(entry.assignedShooterId)) pending++;
           
           const captionDate = entry.captionDate || entry.editingStart;
-          if (captionDate && !entry.caption) pending++;
+          if (captionDate && !entry.caption && isUserAssigned(entry.assignedCaptionWriterId)) pending++;
           
           const thumbnailDate = entry.thumbnailDate || entry.editingStart;
-          if (!isPost && thumbnailDate && !entry.thumbnailLink) pending++;
+          if (!isPost && thumbnailDate && !entry.thumbnailLink && isUserAssigned(entry.assignedThumbnailDesignerId)) pending++;
           
           const isEditingPending = entry.editingStart && (isPost ? !entry.finalPostLink : !entry.finalReelLink);
-          if (isEditingPending) pending++;
+          const editorId = isPost ? entry.assignedPostDesignerId : entry.assignedReelEditorId;
+          if (isEditingPending && isUserAssigned(editorId)) pending++;
           
-          if (entry.approval && entry.isApproved !== 'Yes') pending++;
-          if (entry.postingDate && !entry.postingLinkOfIg) pending++;
+          if (entry.approval && entry.isApproved !== 'Yes' && isUserAssigned(entry.assignedApproverId)) pending++;
+          if (entry.postingDate && !entry.postingLinkOfIg && isUserAssigned(entry.assignedPosterId)) pending++;
 
           if (pending > 0) {
             const key = entry.projectId || entry.clientId;
             counts[key] = (counts[key] || 0) + pending;
+            if (entry.clientId && entry.projectId && entry.clientId !== entry.projectId) {
+              counts[entry.clientId] = (counts[entry.clientId] || 0) + pending;
+            }
           }
 
           if (entry.postingDate) {
