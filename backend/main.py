@@ -3933,66 +3933,6 @@ async def resolve_security_alert(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-
-
-# --- Content Calendar API ---
-@app.get("/content-calendar/all")
-async def get_all_content_calendar_entries(db=Depends(get_db)):
-    try:
-        return await crud.get_all_content_calendar_entries(db)
-    except Exception as e:
-        import traceback
-        print(traceback.format_exc())
-        return {"error": str(e), "trace": traceback.format_exc()}
-
-@app.get("/content-calendar")
-async def get_content_calendar_entries(clientId: str, projectId: Optional[str] = None, monthYear: Optional[str] = None, db=Depends(get_db)):
-    try:
-        return await crud.get_content_calendar_entries(db, client_id=clientId, project_id=projectId, month_year=monthYear)
-    except Exception as e:
-        import traceback
-        print(traceback.format_exc())
-        return {"error": str(e), "trace": traceback.format_exc()}
-
-@app.post("/content-calendar", response_model=schemas.ContentCalendarEntry)
-async def create_content_calendar_entry(entry: schemas.ContentCalendarEntryCreate, db=Depends(get_db)):
-    return await crud.create_content_calendar_entry(db, entry.model_dump())
-
-@app.put("/content-calendar/{entry_id}", response_model=schemas.ContentCalendarEntry)
-async def update_content_calendar_entry(entry_id: str, entry: schemas.ContentCalendarEntryUpdate, db=Depends(get_db)):
-    updated = await crud.update_content_calendar_entry(db, entry_id, entry.model_dump(exclude_unset=True))
-    if not updated:
-        raise HTTPException(status_code=404, detail="Entry not found")
-    return updated
-
-@app.delete("/content-calendar/{entry_id}")
-async def delete_content_calendar_entry(entry_id: str, db=Depends(get_db)):
-    success = await crud.delete_content_calendar_entry(db, entry_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Entry not found")
-    return {"message": "Entry deleted successfully"}
-
-@app.get("/content-calendar-settings", response_model=schemas.ContentCalendarSettingsBase)
-async def get_content_calendar_settings(clientId: str, monthYear: str, projectId: Optional[str] = None, db=Depends(get_db)):
-    settings = await crud.get_content_calendar_settings(db, clientId, monthYear, projectId)
-    if settings:
-        return settings
-    # Return empty if not found
-    return {
-        "clientId": clientId,
-        "monthYear": monthYear
-    }
-
-@app.get("/content-calendar-settings/all", response_model=List[schemas.ContentCalendarSettingsBase])
-async def get_all_content_calendar_settings(monthYear: str, db=Depends(get_db)):
-    return await crud.get_all_content_calendar_settings(db, monthYear)
-
-@app.post("/content-calendar-settings", response_model=schemas.ContentCalendarSettings)
-async def upsert_content_calendar_settings(settings: schemas.ContentCalendarSettingsBase, db=Depends(get_db)):
-    return await crud.upsert_content_calendar_settings(
-        db, settings.clientId, settings.monthYear, settings.projectId, settings.model_dump()
-    )
-
 # Dynamic Feedback Forms
 
 @app.post("/forms", response_model=schemas.FeedbackForm)
