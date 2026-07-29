@@ -260,33 +260,37 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
       }
     })
 
-    // 3. SMM Creative Entries
     entries.forEach(entry => {
       const client = clients.find(c => c.id === entry.clientId)
-      const assocProject = projects.find(p => 
-        p.clientId === entry.clientId && 
-        (p.department === 'Creative' || p.department?.toLowerCase() === 'smm') &&
-        p.status !== 'on-hold' && 
-        p.status !== 'onhold' && 
-        p.status?.toLowerCase() !== 'on-hold'
-      )
+      let assocProject = null;
+      if (entry.projectId) {
+        assocProject = projects.find(p => p.id === entry.projectId);
+      }
+      if (!assocProject) {
+        assocProject = projects.find(p => 
+          p.clientId === entry.clientId && 
+          (p.department === 'Creative' || p.department?.toLowerCase() === 'smm' || p.department?.toLowerCase() === 'social media management')
+        );
+      }
+
+      const isProjectOnHold = assocProject && (assocProject.status === 'on-hold' || assocProject.status === 'onhold' || assocProject.status?.toLowerCase() === 'on-hold');
       
-      if (assocProject) {
+      if (!isProjectOnHold) {
         const checkAndAddCreativeTask = (stageName: string, deadline: string, isDone: boolean) => {
           let assigneeId = null
-          if (stageName === 'Script') assigneeId = entry.assignedScriptwriterId || assocProject.assignedScriptwriterId || client?.assignedScriptwriterId
-          if (stageName === 'Shoot') assigneeId = entry.assignedShooterId || assocProject.assignedShooterId || client?.assignedShooterId
-          if (stageName === 'Caption') assigneeId = entry.assignedCaptionWriterId || assocProject.assignedCaptionWriterId || client?.assignedCaptionWriterId
-          if (stageName === 'Thumbnail') assigneeId = entry.assignedThumbnailDesignerId || assocProject.assignedThumbnailDesignerId || client?.assignedThumbnailDesignerId
+          if (stageName === 'Script') assigneeId = entry.assignedScriptwriterId || assocProject?.assignedScriptwriterId || client?.assignedScriptwriterId
+          if (stageName === 'Shoot') assigneeId = entry.assignedShooterId || assocProject?.assignedShooterId || client?.assignedShooterId
+          if (stageName === 'Caption') assigneeId = entry.assignedCaptionWriterId || assocProject?.assignedCaptionWriterId || client?.assignedCaptionWriterId
+          if (stageName === 'Thumbnail') assigneeId = entry.assignedThumbnailDesignerId || assocProject?.assignedThumbnailDesignerId || client?.assignedThumbnailDesignerId
           if (stageName === 'Editing') {
             if (entry.postReel === 'Post') {
-              assigneeId = entry.assignedPostDesignerId || assocProject.assignedPostDesignerId || client?.assignedPostDesignerId
+              assigneeId = entry.assignedPostDesignerId || assocProject?.assignedPostDesignerId || client?.assignedPostDesignerId
             } else {
-              assigneeId = entry.assignedReelEditorId || assocProject.assignedReelEditorId || client?.assignedReelEditorId
+              assigneeId = entry.assignedReelEditorId || assocProject?.assignedReelEditorId || client?.assignedReelEditorId
             }
           }
-          if (stageName === 'Approval') assigneeId = entry.assignedApproverId || assocProject.assignedApproverId || client?.assignedApproverId
-          if (stageName === 'Posting') assigneeId = entry.assignedPosterId || assocProject.assignedPosterId || client?.assignedPosterId
+          if (stageName === 'Approval') assigneeId = entry.assignedApproverId || assocProject?.assignedApproverId || client?.assignedApproverId
+          if (stageName === 'Posting') assigneeId = entry.assignedPosterId || assocProject?.assignedPosterId || client?.assignedPosterId
 
           if (assigneeId === uId && !isDone && deadline) {
             const creatorName = entry.logs?.[0]?.userName || 'Admin'
@@ -296,7 +300,7 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
             consolidated.push({
               id: `${entry.id}-${stageName}`,
               title: entry.concept || entry.topic || (entry.postReel ? `${entry.postReel} Content` : 'SMM Task'),
-              clientDisplayName: client ? `${client.companyName || client.clientName || 'Client'} (${assocProject.title})` : 'Unknown Client',
+              clientDisplayName: client ? `${client.companyName || client.clientName || 'Client'}${assocProject?.title ? ` (${assocProject.title})` : ''}` : 'Unknown Client',
               stage: stageName,
               dueDate: deadline.includes('T') ? deadline.split('T')[0] : deadline,
               priority: 'medium',
