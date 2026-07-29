@@ -48,6 +48,13 @@ export interface ProjectFormData {
   assignedTeamIds?: string[];
   testingLinks?: Array<{ title: string; url: string; notes?: string }>;
   testingBugs?: Array<{ id: string; title: string; description: string; reportedBy: string; reportedByName: string; date: string; status: "open" | "fixed" }>;
+  // Finance and Feedback fields
+  assignedFinanceManagerId?: string;
+  assignedFinanceManagerName?: string;
+  amountReceived?: number;
+  projectFeedback?: string;
+  nextPaymentDate?: string;
+  isPaymentReceived?: boolean;
 }
 
 const defaultFormData: ProjectFormData = {
@@ -75,6 +82,12 @@ const defaultFormData: ProjectFormData = {
   thirdPartyIntegrations: [],
   testingLinks: [],
   testingBugs: [],
+  assignedFinanceManagerId: "",
+  assignedFinanceManagerName: "",
+  amountReceived: 0,
+  projectFeedback: "",
+  nextPaymentDate: "",
+  isPaymentReceived: false,
 };
 
 interface ProjectFormProps {
@@ -271,10 +284,15 @@ function SingleEmployeeSelectWithSearch({
 
 export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = true, currentUser }: ProjectFormProps) {
   const isTeamLeader = currentUser?.role === "Team Leader" || currentUser?.designation?.toLowerCase() === "team leader";
+  
   const [formData, setFormData] = useState<ProjectFormData>({
     ...defaultFormData,
     ...initialData,
   });
+
+  const isFinanceManager = initialData?.assignedFinanceManagerId === currentUser?.id || formData?.assignedFinanceManagerId === currentUser?.id;
+  const isAssignedMember = initialData?.assignedEmployeeId === currentUser?.id || formData?.assignedEmployeeId === currentUser?.id;
+  const canSeeFinance = isAdmin || isFinanceManager || isAssignedMember;
 
   useEffect(() => {
     if (initialData) {
@@ -462,6 +480,21 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
                 placeholder={isLoadingMeta ? "Loading..." : "Search Team Leader..."}
               />
             </div>
+            {canSeeFinance && (
+              <div className="space-y-2">
+                <Label>Assigned Finance Manager</Label>
+                <SingleEmployeeSelectWithSearch
+                  employees={allEmployees}
+                  selectedId={formData.assignedFinanceManagerId || ""}
+                  onChange={(id) => {
+                    const emp = allEmployees.find(e => e.id === id);
+                    handleChange("assignedFinanceManagerId", id);
+                    handleChange("assignedFinanceManagerName", emp ? `${emp.firstName || ""} ${emp.lastName || ""}`.trim() : "");
+                  }}
+                  placeholder="Select Finance Manager..."
+                />
+              </div>
+            )}
             {formData.department === "Digital Marketing" && (
               <div className="space-y-2">
                 <Label htmlFor="assignedEmployeeId">Assign Employee</Label>
@@ -976,6 +1009,8 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
           </div>
         </div>
       )}
+
+
 
         </div>
       </ScrollArea>

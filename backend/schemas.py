@@ -1213,6 +1213,7 @@ class ProjectBase(BaseModel):
     paymentEndDate: Optional[RobustDate] = None
     paymentReminderDays: Optional[int] = None
     isPaymentReceived: Optional[bool] = False
+    nextPaymentDate: Optional[RobustDate] = None
     
     # Feedback Collection Fields
     feedbackType: Optional[str] = "Interval" # 'Interval', 'Weekly', 'Monthly'
@@ -1267,6 +1268,13 @@ class ProjectBase(BaseModel):
     thirdPartyIntegrations: Optional[List[dict]] = []
     testingLinks: Optional[List[dict]] = []
     testingBugs: Optional[List[dict]] = []
+    
+    # Finance and Feedback Fields
+    assignedFinanceManagerId: Optional[str] = None
+    assignedFinanceManagerName: Optional[str] = None
+    amountReceived: Optional[float] = 0.0
+    projectFeedback: Optional[str] = None
+    financeFollowUps: Optional[List[dict]] = []
 
 class ProjectCreate(ProjectBase):
     performedBy: Optional[str] = None
@@ -1307,6 +1315,7 @@ class ProjectUpdate(BaseModel):
     paymentEndDate: Optional[RobustDate] = None
     paymentReminderDays: Optional[int] = None
     isPaymentReceived: Optional[bool] = None
+    nextPaymentDate: Optional[RobustDate] = None
     
     feedbackType: Optional[str] = None
     feedbackIntervalDays: Optional[int] = None
@@ -1362,6 +1371,13 @@ class ProjectUpdate(BaseModel):
     thirdPartyIntegrations: Optional[List[dict]] = None
     testingLinks: Optional[List[dict]] = None
     testingBugs: Optional[List[dict]] = None
+    
+    # Finance and Feedback Fields
+    assignedFinanceManagerId: Optional[str] = None
+    assignedFinanceManagerName: Optional[str] = None
+    amountReceived: Optional[float] = None
+    projectFeedback: Optional[str] = None
+    financeFollowUps: Optional[List[dict]] = None
 
 class Project(ProjectBase):
     id: str
@@ -1578,6 +1594,16 @@ class FollowUp(BaseModel):
     note: str
     performedBy: Optional[str] = None
     nextFollowUpDate: Optional[RobustDatetime] = None
+
+class FinanceFollowUp(BaseModel):
+    date: RobustDate
+    note: str
+    performedBy: Optional[str] = None
+    nextFollowUpDate: Optional[RobustDatetime] = None
+    amountReceived: Optional[float] = None
+    isPaymentReceived: Optional[bool] = None
+    nextPaymentDate: Optional[str] = None
+    projectStatus: Optional[str] = None
 
 class Meeting(BaseModel):
     date: str
