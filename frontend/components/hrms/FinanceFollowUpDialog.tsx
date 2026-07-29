@@ -38,8 +38,14 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
 
+  const isCancelled = projectStatus === "cancelled";
+
   const handleAddFollowUp = async () => {
-    if (!note.trim() || !amountReceived.trim() || !nextPaymentDate.trim() || !projectStatus || !nextDate.trim()) {
+    if (!note.trim() || !amountReceived.trim() || !projectStatus) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+    if (!isCancelled && (!nextPaymentDate.trim() || !nextDate.trim())) {
       toast.error("Please fill in all required fields");
       return;
     }
@@ -49,12 +55,12 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
         note: note,
         date: new Date().toISOString().split('T')[0] + " " + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         performedBy: userName,
-        nextFollowUpDate: new Date(nextDate).toISOString(),
         amountReceived: parseFloat(amountReceived),
         isPaymentReceived: isPaymentReceived,
-        nextPaymentDate: nextPaymentDate,
         projectStatus: projectStatus,
       };
+      if (nextDate) payload.nextFollowUpDate = new Date(nextDate).toISOString();
+      if (!isCancelled && nextPaymentDate) payload.nextPaymentDate = nextPaymentDate;
 
       const res = await fetch(`${API_URL}/projects/${project.id}/finance-follow-ups?performedBy=${userId}&userName=${userName}`, {
         method: "POST",
@@ -86,9 +92,8 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
   const isFormValid = Boolean(
     note.trim() && 
     amountReceived.trim() && 
-    nextPaymentDate.trim() && 
-    projectStatus && 
-    nextDate.trim()
+    projectStatus &&
+    (isCancelled || (nextPaymentDate.trim() && nextDate.trim()))
   );
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -126,44 +131,6 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
               className="min-h-[70px] bg-white border-emerald-200 focus-visible:ring-emerald-500 text-xs"
             />
 
-            {/* Payment Fields */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">
-                  Amount Received (₹) <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  type="number"
-                  placeholder="0.00"
-                  value={amountReceived}
-                  onChange={(e) => setAmountReceived(e.target.value)}
-                  className="bg-white border-emerald-200 focus-visible:ring-emerald-500 text-xs h-9"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">
-                  Next Payment Date <span className="text-red-500">*</span>
-                </Label>
-                <input 
-                  type="date"
-                  min={todayStr}
-                  value={nextPaymentDate}
-                  onChange={(e) => setNextPaymentDate(e.target.value)}
-                  className="w-full border border-emerald-200 rounded-lg p-2 text-xs focus:ring-emerald-500 focus:border-emerald-500 bg-white h-9"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-emerald-100">
-              <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 cursor-pointer">
-                Payment Received? <span className="text-red-500">*</span>
-              </Label>
-              <Switch 
-                checked={isPaymentReceived} 
-                onCheckedChange={(checked) => { setIsPaymentReceived(checked); setPaymentTouched(true); }}
-              />
-            </div>
-
             <div className="space-y-1.5">
               <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">
                 Update Project Status <span className="text-red-500">*</span>
@@ -180,9 +147,49 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
               </select>
             </div>
 
+            {/* Payment Fields */}
+            <div className={`grid ${isCancelled ? 'grid-cols-1' : 'grid-cols-2'} gap-3`}>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">
+                  Amount Received (₹) <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  type="number"
+                  placeholder="0.00"
+                  value={amountReceived}
+                  onChange={(e) => setAmountReceived(e.target.value)}
+                  className="bg-white border-emerald-200 focus-visible:ring-emerald-500 text-xs h-9"
+                />
+              </div>
+              {!isCancelled && (
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">
+                    Next Payment Date <span className="text-red-500">*</span>
+                  </Label>
+                  <input 
+                    type="date"
+                    min={todayStr}
+                    value={nextPaymentDate}
+                    onChange={(e) => setNextPaymentDate(e.target.value)}
+                    className="w-full border border-emerald-200 rounded-lg p-2 text-xs focus:ring-emerald-500 focus:border-emerald-500 bg-white h-9"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-emerald-100">
+              <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 cursor-pointer">
+                Payment Received? <span className="text-red-500">*</span>
+              </Label>
+              <Switch 
+                checked={isPaymentReceived} 
+                onCheckedChange={(checked) => { setIsPaymentReceived(checked); setPaymentTouched(true); }}
+              />
+            </div>
+
             <div className="space-y-1.5">
               <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">
-                Next Follow-up Date <span className="text-red-500">*</span>
+                Next Follow-up Date {isCancelled ? "(Optional)" : <span className="text-red-500">*</span>}
               </Label>
               <input 
                 type="date"
