@@ -1849,6 +1849,10 @@ async def add_module_comment(project_id: str, payload: schemas.ModuleCommentCrea
         raise HTTPException(status_code=404, detail="Project or module not found")
     return updated
 
+@app.post("/projects/{project_id}/finance-follow-ups", response_model=schemas.Project)
+async def add_project_finance_follow_up(project_id: str, follow_up: schemas.FollowUp, performedBy: Optional[str] = None, userName: Optional[str] = None, db=Depends(get_db)):
+    return await crud.add_project_finance_follow_up(db, project_id, follow_up, performedBy=performedBy, userName=userName)
+
 
 # WM Task Endpoints
 # General Task Endpoints

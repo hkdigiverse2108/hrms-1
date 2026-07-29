@@ -6,6 +6,7 @@ import { Building2, Plus, Pencil, Trash2, Calendar, Shield, Loader2, Search, Ale
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ProjectForm, ProjectFormData } from "@/components/hrms/ProjectForm";
+import { FinanceFollowUpDialog } from "@/components/hrms/FinanceFollowUpDialog";
 import { API_URL } from "@/lib/config";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -1050,7 +1051,7 @@ export default function ProjectsPage() {
 
 
                     {/* Finance & Feedback Details */}
-                    {(isAdmin || project.assignedFinanceManagerId === user?.id || project.assignedEmployeeId === user?.id) && showFinanceDetails && (project.amountReceived !== undefined || project.projectFeedback || project.nextPaymentDate || project.isPaymentReceived !== undefined) && (
+                    {(isAdmin || project.assignedFinanceManagerId === user?.id || project.assignedEmployeeId === user?.id) && showFinanceDetails && (project.amountReceived !== undefined || project.projectFeedback || project.nextPaymentDate || project.isPaymentReceived !== undefined || (project.financeFollowUps && project.financeFollowUps.length > 0)) && (
                       <div className="pt-3 border-t border-dashed border-emerald-200/60 bg-emerald-50/30 p-3 rounded-lg space-y-2 mt-2 mb-2">
                         <div className="flex items-center gap-1.5 mb-1 text-emerald-700">
                           <Banknote className="w-3.5 h-3.5" />
@@ -1086,6 +1087,14 @@ export default function ProjectsPage() {
                             <span className="text-slate-700 italic bg-white p-1.5 rounded border border-emerald-100">{project.projectFeedback}</span>
                           </div>
                         )}
+                        <div className="pt-2 border-t border-emerald-100 mt-2">
+                          <FinanceFollowUpDialog 
+                            project={project} 
+                            onUpdate={() => fetchData(false)} 
+                            userId={user?.id} 
+                            userName={`${user?.firstName || ""} ${user?.lastName || ""}`.trim()}
+                          />
+                        </div>
                       </div>
                     )}
 

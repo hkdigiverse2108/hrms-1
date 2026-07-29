@@ -1274,6 +1274,7 @@ class ProjectBase(BaseModel):
     assignedFinanceManagerName: Optional[str] = None
     amountReceived: Optional[float] = 0.0
     projectFeedback: Optional[str] = None
+    financeFollowUps: Optional[List[FollowUp]] = []
 
 class ProjectCreate(ProjectBase):
     performedBy: Optional[str] = None
@@ -1376,6 +1377,7 @@ class ProjectUpdate(BaseModel):
     assignedFinanceManagerName: Optional[str] = None
     amountReceived: Optional[float] = None
     projectFeedback: Optional[str] = None
+    financeFollowUps: Optional[List[dict]] = None
 
 class Project(ProjectBase):
     id: str

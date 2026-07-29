@@ -5397,6 +5397,33 @@ async def update_lead_follow_up(db, lead_id: str, follow_up_idx: int, follow_up:
     doc = await db.leads.find_one({"_id": ObjectId(lead_id)})
     return fix_id(doc)
 
+# Project Finance Follow-ups
+async def add_project_finance_follow_up(db, project_id: str, follow_up: schemas.FollowUp, performedBy: str = "Unknown", userName: str = "Unknown User"):
+    follow_up_dict = follow_up.dict()
+    next_follow_up_date = follow_up_dict.get("nextFollowUpDate", None)
+    if not follow_up_dict.get("date"):
+        follow_up_dict["date"] = get_now().strftime("%Y-%m-%d %H:%M")
+        
+    await db.projects.update_one(
+        {"_id": ObjectId(project_id)},
+        {
+            "$push": {"financeFollowUps": follow_up_dict},
+        }
+    )
+    
+    # Log activity
+    log_detail = f"Added finance follow-up: {follow_up_dict.get('note', 'No notes provided')}"
+    if next_follow_up_date:
+        try:
+            date_str = next_follow_up_date.strftime("%Y-%m-%d")
+        except AttributeError:
+            date_str = str(next_follow_up_date)
+        log_detail += f" (Next follow-up date: {date_str})"
+    await log_activity(db, "Finance Follow-up Added", performedBy, userName, log_detail, projectId=project_id)
+    
+    doc = await db.projects.find_one({"_id": ObjectId(project_id)})
+    return fix_id(doc)
+
 # System Settings CRUD
 async def get_system_settings(db):
     settings = await db.system_settings.find_one({})
