@@ -39,19 +39,22 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
   const [isOpen, setIsOpen] = useState(false);
 
   const handleAddFollowUp = async () => {
-    if (!note.trim()) return;
+    if (!note.trim() || !amountReceived.trim() || !nextPaymentDate.trim() || !projectStatus || !nextDate.trim()) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
     setIsSubmitting(true);
     try {
       const payload: any = {
         note: note,
         date: new Date().toISOString().split('T')[0] + " " + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         performedBy: userName,
+        nextFollowUpDate: new Date(nextDate).toISOString(),
+        amountReceived: parseFloat(amountReceived),
+        isPaymentReceived: isPaymentReceived,
+        nextPaymentDate: nextPaymentDate,
+        projectStatus: projectStatus,
       };
-      if (nextDate) payload.nextFollowUpDate = new Date(nextDate).toISOString();
-      if (amountReceived) payload.amountReceived = parseFloat(amountReceived);
-      if (paymentTouched) payload.isPaymentReceived = isPaymentReceived;
-      if (nextPaymentDate) payload.nextPaymentDate = nextPaymentDate;
-      if (projectStatus && projectStatus !== "none") payload.projectStatus = projectStatus;
 
       const res = await fetch(`${API_URL}/projects/${project.id}/finance-follow-ups?performedBy=${userId}&userName=${userName}`, {
         method: "POST",
@@ -80,6 +83,14 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
     }
   };
 
+  const isFormValid = Boolean(
+    note.trim() && 
+    amountReceived.trim() && 
+    nextPaymentDate.trim() && 
+    projectStatus && 
+    nextDate.trim()
+  );
+
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
@@ -93,14 +104,14 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
           Follow-ups ({project.financeFollowUps?.length || 0})
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-lg" onClick={(e) => e.stopPropagation()}>
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-[16px] font-bold">
             Finance Follow-ups: <span className="text-emerald-600">{project.title}</span>
           </DialogTitle>
         </DialogHeader>
         
-        <div className="space-y-5 py-2">
+        <div className="space-y-4 py-1">
           {/* Add New Follow-up */}
           <div className="space-y-3 bg-emerald-50/50 p-4 rounded-xl border border-emerald-100">
             <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">
@@ -116,7 +127,9 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
             {/* Payment Fields */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">Amount Received (₹)</Label>
+                <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">
+                  Amount Received (₹) <span className="text-red-500">*</span>
+                </Label>
                 <Input
                   type="number"
                   placeholder="0.00"
@@ -126,7 +139,9 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">Next Payment Date</Label>
+                <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">
+                  Next Payment Date <span className="text-red-500">*</span>
+                </Label>
                 <input 
                   type="date"
                   value={nextPaymentDate}
@@ -137,7 +152,9 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
             </div>
 
             <div className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-emerald-100">
-              <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 cursor-pointer">Payment Received?</Label>
+              <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 cursor-pointer">
+                Payment Received? <span className="text-red-500">*</span>
+              </Label>
               <Switch 
                 checked={isPaymentReceived} 
                 onCheckedChange={(checked) => { setIsPaymentReceived(checked); setPaymentTouched(true); }}
@@ -145,24 +162,27 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">Update Project Status (Optional)</Label>
+              <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">
+                Update Project Status <span className="text-red-500">*</span>
+              </Label>
               <select
                 value={projectStatus}
                 onChange={(e) => setProjectStatus(e.target.value)}
                 className="w-full border border-emerald-200 rounded-lg p-2 text-xs focus:ring-emerald-500 focus:border-emerald-500 bg-white h-9"
               >
-                <option value="">-- Leave Unchanged --</option>
+                <option value="">-- Select Status --</option>
                 <option value="completed">Completed (Payment Received / Finished)</option>
-                <option value="on-hold">On Hold (Client Not Continuing)</option>
+                <option value="on-hold">Payment Promised (Pending Payment in Few Days)</option>
                 <option value="cancelled">Cancelled</option>
-                <option value="in-progress">In Progress</option>
               </select>
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">Next Follow-up Date & Time (Optional)</Label>
+              <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">
+                Next Follow-up Date <span className="text-red-500">*</span>
+              </Label>
               <input 
-                type="datetime-local"
+                type="date"
                 value={nextDate}
                 onChange={(e) => setNextDate(e.target.value)}
                 className="w-full border border-emerald-200 rounded-lg p-2 text-xs focus:ring-emerald-500 focus:border-emerald-500 bg-white h-9"
@@ -172,7 +192,7 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
             <Button 
               className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9 text-xs"
               onClick={handleAddFollowUp}
-              disabled={isSubmitting || !note.trim()}
+              disabled={isSubmitting || !isFormValid}
             >
               {isSubmitting ? "Saving..." : "Add Follow-up"}
             </Button>
@@ -185,7 +205,7 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
               Finance Follow-up History
             </Label>
 
-            <ScrollArea className="h-[280px] pr-4">
+            <ScrollArea className="max-h-[180px] pr-4">
               {project.financeFollowUps && project.financeFollowUps.length > 0 ? (
                 <div className="space-y-3 relative before:absolute before:left-2 before:top-2 before:bottom-2 before:w-[1px] before:bg-emerald-200">
                   {project.financeFollowUps.slice().reverse().map((f: any, revIdx: number) => (
@@ -239,7 +259,7 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
                           {f.nextFollowUpDate && (
                             <div className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-100 rounded px-1.5 py-0.5 text-[9.5px] font-bold">
                               <Calendar className="w-2.5 h-2.5 text-amber-600" />
-                              Next Follow-up: {dayjs(f.nextFollowUpDate).format("DD/MM/YYYY, hh:mm A")}
+                              Next Follow-up: {dayjs(f.nextFollowUpDate).format("DD/MM/YYYY")}
                             </div>
                           )}
                         </div>
