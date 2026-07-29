@@ -2822,6 +2822,7 @@ class ResearchBase(BaseModel):
     title: str
     description: str
     link: Optional[str] = ''
+    references: Optional[List[dict]] = []
     createdBy: str
     createdByName: str
     sharedWith: List[str] = []
@@ -2835,6 +2836,7 @@ class ResearchUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     link: Optional[str] = None
+    references: Optional[List[dict]] = None
     sharedWith: Optional[List[str]] = None
     projectId: Optional[str] = None
     updatedBy: Optional[str] = None
