@@ -2334,17 +2334,19 @@ async def authenticate_user(db, login_data: schemas.LoginRequest):
         # Generate JWT token
         token = auth.create_access_token(data={"sub": user_id, "role": user.get("role", ""), "company_id": user.get("company_id") or user.get("company_code") or "hk_digiverse_default"})
         
-        # Look up company info for tenant branding
+        # Look up company info for tenant branding and module subscriptions
         c_code = user.get("company_id") or user.get("company_code") or "hk_digiverse_default"
         company = await db.companies.find_one({"$or": [{"company_code": c_code}, {"_id": c_code}]})
         if company:
             user_fixed["company_id"] = c_code
             user_fixed["company_name"] = company.get("company_name", user.get("company_name", "HK DigiVerse"))
             user_fixed["company_logo"] = company.get("logo_url", "")
+            user_fixed["subscribed_modules"] = company.get("subscribed_modules", user.get("subscribed_modules", []))
         else:
             user_fixed["company_id"] = c_code
             user_fixed["company_name"] = user.get("company_name", "HK DigiVerse")
             user_fixed["company_logo"] = ""
+            user_fixed["subscribed_modules"] = user.get("subscribed_modules", [])
 
         user_fixed["token"] = token
             

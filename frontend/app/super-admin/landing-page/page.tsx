@@ -1681,6 +1681,54 @@ export default function LandingPageCRUD() {
                       />
                     </div>
 
+                    {/* Success Modal Text CRUD */}
+                    <div className="pt-4 border-t border-slate-200">
+                      <h4 className="text-sm font-bold text-slate-800 mb-3">
+                        Success Modal Settings (After Demo/Contact Form Submission)
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase">Success Modal Title</label>
+                          <input
+                            type="text"
+                            value={sectionsData.contact?.success_title || ""}
+                            onChange={(e) => setSectionsData({
+                              ...sectionsData,
+                              contact: { ...sectionsData.contact, success_title: e.target.value }
+                            })}
+                            placeholder="Demo Scheduled Successfully!"
+                            className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase">Success Modal Button Text</label>
+                          <input
+                            type="text"
+                            value={sectionsData.contact?.success_button_text || ""}
+                            onChange={(e) => setSectionsData({
+                              ...sectionsData,
+                              contact: { ...sectionsData.contact, success_button_text: e.target.value }
+                            })}
+                            placeholder="Schedule Another Demo"
+                            className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1 mt-4">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Success Modal Message</label>
+                        <textarea
+                          value={sectionsData.contact?.success_message || ""}
+                          onChange={(e) => setSectionsData({
+                            ...sectionsData,
+                            contact: { ...sectionsData.contact, success_message: e.target.value }
+                          })}
+                          rows={3}
+                          placeholder="Thank you for booking a demo with us. Your requirements have been persisted. An HR specialist from HK Digiverse will review and reach out within one business day."
+                          className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
                     <button
                       type="submit"
                       disabled={isSubmitting}

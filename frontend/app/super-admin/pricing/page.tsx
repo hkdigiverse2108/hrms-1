@@ -32,6 +32,7 @@ interface ModulePrice {
   display_name: string;
   category: string;
   price_per_month: number;
+  plan_prices?: Record<string, number>;
   is_enabled: boolean;
   description: string;
 }
@@ -76,7 +77,7 @@ export default function SuperAdminPricingPage() {
   const [modKey, setModKey] = useState("");
   const [modDisplayName, setModDisplayName] = useState("");
   const [modCategory, setModCategory] = useState("Core HR & Attendance");
-  const [modPrice, setModPrice] = useState<number | "">("");
+  const [modPlanPrices, setModPlanPrices] = useState<Record<string, number>>({});
   const [modDesc, setModDesc] = useState("");
   const [modEnabled, setModEnabled] = useState(true);
 
@@ -157,7 +158,11 @@ export default function SuperAdminPricingPage() {
     setModKey("");
     setModDisplayName("");
     setModCategory("Core HR & Attendance");
-    setModPrice("");
+    const initialPlanPrices: Record<string, number> = {};
+    plans.forEach(p => {
+      initialPlanPrices[p.plan_key] = 0;
+    });
+    setModPlanPrices(initialPlanPrices);
     setModDesc("");
     setModEnabled(true);
     setIsModuleModalOpen(true);
@@ -168,7 +173,25 @@ export default function SuperAdminPricingPage() {
     setModKey(mod.module_key);
     setModDisplayName(mod.display_name);
     setModCategory(mod.category || "Core HR & Attendance");
-    setModPrice(mod.price_per_month);
+    const initialPlanPrices: Record<string, number> = {};
+    plans.forEach(p => {
+      const normKey = p.plan_key.toLowerCase().replace(/[^a-z0-9]/g, "");
+      let val = mod.price_per_month || 0;
+      if (mod.plan_prices) {
+        if (mod.plan_prices[p.plan_key] !== undefined) {
+          val = mod.plan_prices[p.plan_key];
+        } else {
+          for (const [k, v] of Object.entries(mod.plan_prices)) {
+            if (k.toLowerCase().replace(/[^a-z0-9]/g, "") === normKey) {
+              val = v;
+              break;
+            }
+          }
+        }
+      }
+      initialPlanPrices[p.plan_key] = val;
+    });
+    setModPlanPrices(initialPlanPrices);
     setModDesc(mod.description || "");
     setModEnabled(mod.is_enabled);
     setIsModuleModalOpen(true);
@@ -182,6 +205,11 @@ export default function SuperAdminPricingPage() {
       setSuccessMsg("");
       const token = localStorage.getItem("token");
 
+      const firstPlanKey = plans.length > 0 ? plans[0].plan_key : "";
+      const defaultPrice = firstPlanKey && modPlanPrices[firstPlanKey] !== undefined
+        ? Number(modPlanPrices[firstPlanKey])
+        : (Object.values(modPlanPrices)[0] || 0);
+
       if (editingModuleKey) {
         // Update Module
         const res = await fetch(`${API_URL}/super-admin/pricing/modules/${editingModuleKey}`, {
@@ -193,7 +221,8 @@ export default function SuperAdminPricingPage() {
           body: JSON.stringify({
             display_name: modDisplayName,
             category: modCategory,
-            price_per_month: Number(modPrice),
+            price_per_month: Number(defaultPrice),
+            plan_prices: modPlanPrices,
             description: modDesc,
             is_enabled: modEnabled
           })
@@ -213,7 +242,8 @@ export default function SuperAdminPricingPage() {
             module_key: modKey || modDisplayName.toLowerCase().replace(/[^a-z0-9]/g, "-"),
             display_name: modDisplayName,
             category: modCategory,
-            price_per_month: Number(modPrice),
+            price_per_month: Number(defaultPrice),
+            plan_prices: modPlanPrices,
             description: modDesc,
             is_enabled: modEnabled
           })
@@ -387,15 +417,6 @@ export default function SuperAdminPricingPage() {
               <p className="text-xs text-slate-500 font-medium">Configure individual module pricing and subscription duration plans</p>
             </div>
           </div>
-
-          <Link
-            href="/purchase"
-            target="_blank"
-            className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-sm transition-all"
-          >
-            <ExternalLink className="w-4 h-4 text-[#09A08A]" />
-            <span>Preview Client Landing Page</span>
-          </Link>
         </div>
         {/* Floating Top-Right Toast Notifications */}
         <div className="fixed top-6 right-6 z-50 space-y-3 pointer-events-none max-w-sm w-full">
@@ -491,7 +512,7 @@ export default function SuperAdminPricingPage() {
                     <tr className="bg-[#F8FAFC] border-b border-slate-200/80 text-slate-600 font-extrabold uppercase tracking-wider text-[11px]">
                       <th className="py-4 px-6">Module Name</th>
                       <th className="py-4 px-6">Unique Key (Slug)</th>
-                      <th className="py-4 px-6">Price (₹)</th>
+                      <th className="py-4 px-6">Price Per Plan (₹)</th>
                       <th className="py-4 px-6">Description</th>
                       <th className="py-4 px-6">Status</th>
                       <th className="py-4 px-6 text-center">Actions</th>
@@ -510,7 +531,22 @@ export default function SuperAdminPricingPage() {
                           {mod.module_key}
                         </td>
                         <td className="py-4 px-6">
-                          <span className="font-extrabold text-sm text-[#09A08A]">₹{mod.price_per_month}</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {plans.length > 0 ? (
+                              plans.map((plan) => {
+                                const priceVal = mod.plan_prices && mod.plan_prices[plan.plan_key] !== undefined
+                                  ? mod.plan_prices[plan.plan_key]
+                                  : mod.price_per_month;
+                                return (
+                                  <span key={plan.plan_key} className="text-xs font-extrabold text-[#09A08A] bg-[#EAF7F6] px-2.5 py-1 rounded-lg border border-[#09A08A]/30">
+                                    {plan.display_name}: ₹{priceVal}
+                                  </span>
+                                );
+                              })
+                            ) : (
+                              <span className="text-xs font-extrabold text-[#09A08A]">₹{mod.price_per_month}</span>
+                            )}
+                          </div>
                         </td>
                         <td className="py-4 px-6 text-slate-500 max-w-md truncate">
                           {mod.description || "—"}
@@ -654,17 +690,47 @@ export default function SuperAdminPricingPage() {
                 </div>
               )}
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Price (₹) *</label>
-                <input
-                  type="number"
-                  min={0}
-                  required
-                  placeholder="Enter module price (e.g. 500)"
-                  value={modPrice}
-                  onChange={(e) => setModPrice(e.target.value === "" ? "" : Number(e.target.value))}
-                  className="w-full bg-[#F8FAFC] border border-slate-300 rounded-xl p-3 text-slate-900 font-extrabold focus:border-[#09A08A] focus:outline-none"
-                />
+              <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-700">Price Per Duration Plan (₹) *</span>
+                  <span className="text-[10px] font-semibold text-slate-500">Configure price for each duration plan</span>
+                </div>
+                {plans.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {plans.map((plan) => {
+                      const currentVal = modPlanPrices[plan.plan_key] !== undefined ? modPlanPrices[plan.plan_key] : "";
+                      return (
+                        <div key={plan.plan_key} className="space-y-1">
+                          <label className="block text-xs font-bold text-slate-700">
+                            {plan.display_name} ({plan.months}m) *
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            required
+                            placeholder="e.g. 300"
+                            value={currentVal}
+                            onChange={(e) => {
+                              const val = e.target.value === "" ? undefined : Number(e.target.value);
+                              setModPlanPrices((prev) => {
+                                const copy = { ...prev };
+                                if (val === undefined) {
+                                  delete copy[plan.plan_key];
+                                } else {
+                                  copy[plan.plan_key] = val;
+                                }
+                                return copy;
+                              });
+                            }}
+                            className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-sm text-slate-900 font-bold focus:border-[#09A08A] focus:outline-none"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-amber-600 font-medium">No duration plans added yet. Please add duration plans first.</p>
+                )}
               </div>
 
               <div>

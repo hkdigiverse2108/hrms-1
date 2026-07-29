@@ -17,9 +17,9 @@ import {
   Sparkles,
   ExternalLink,
   Activity,
-  Key,
   X,
-  RefreshCw
+  RefreshCw,
+  MessageSquare
 } from "lucide-react";
 import { useUser } from "@/hooks/useUser";
 import { API_URL } from "@/lib/config";
@@ -45,14 +45,11 @@ interface DashboardStats {
   suspended_companies: number;
   total_employees: number;
   total_revenue: number;
-  total_activity_logs: number;
-  plan_distribution: Record<string, number>;
-  top_modules: Array<{ module_key: string; display_name: string; count: number }>;
+  total_inquiries: number;
 }
 
 export default function SuperAdminDashboard() {
   const router = useRouter();
-  const { logout } = useUser();
 
   const [companies, setCompanies] = useState<Company[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -190,99 +187,40 @@ export default function SuperAdminDashboard() {
             </div>
           </div>
 
-          {/* Card 4: System Health & Activity */}
+          {/* Card 4: Website Inquiries */}
           <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-4">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">System Operational</span>
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Website Inquiries</span>
               <div className="w-10 h-10 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center border border-amber-200">
-                <ShieldCheck className="w-5 h-5" />
+                <MessageSquare className="w-5 h-5" />
               </div>
             </div>
             <div>
-              <div className="text-3xl font-black text-slate-900 mb-1 flex items-center gap-2">
-                100%
-                <span className="text-xs px-2 py-0.5 bg-emerald-50 text-emerald-700 font-bold rounded-full border border-emerald-200">Healthy</span>
+              <div className="text-3xl font-black text-slate-900 mb-1">
+                {stats?.total_inquiries ?? 0}
               </div>
-              <p className="text-[11px] text-slate-500 font-medium">{stats?.total_activity_logs ?? 0} Activity Logs Tracked</p>
+              <p className="text-[11px] text-slate-500 font-medium">Lead Submissions & Demo Requests</p>
             </div>
           </div>
         </div>
 
-        {/* ANALYTICS & POPULAR MODULES SECTION */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Top Purchased Modules */}
-          <div className="lg:col-span-2 bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-[#09A08A]" />
-                  Top Purchased Sidebar Modules
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">Most selected tabs by client companies</p>
-              </div>
-              <Link href="/super-admin/pricing" className="text-xs text-[#09A08A] font-bold hover:underline">
-                Manage Prices &rarr;
-              </Link>
-            </div>
-
-            {stats?.top_modules && stats.top_modules.length > 0 ? (
-              <div className="space-y-4 pt-2">
-                {stats.top_modules.map((mod, idx) => {
-                  const maxCount = Math.max(...stats.top_modules.map(m => m.count), 1);
-                  const percentage = Math.round((mod.count / maxCount) * 100);
-                  return (
-                    <div key={mod.module_key} className="space-y-1.5">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold text-slate-800">{idx + 1}. {mod.display_name}</span>
-                        <span className="text-slate-500 font-semibold">{mod.count} Companies</span>
-                      </div>
-                      <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-[#09A08A] rounded-full transition-all duration-500"
-                          style={{ width: `${percentage}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="py-8 text-center text-xs text-slate-400 font-medium">
-                No custom module usage statistics available yet.
-              </div>
-            )}
+        {/* WEBSITE INQUIRIES & DEMO REQUESTS QUICK ACCESS */}
+        <div className="bg-gradient-to-r from-[#EAF7F6] to-white border border-[#09A08A]/20 rounded-2xl p-6 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#09A08A] animate-pulse" />
+              Website Inquiries &amp; Demo Requests
+            </h3>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Review lead submissions, selected plans, custom module pricing calculations, and messages from the landing page.
+            </p>
           </div>
-
-          {/* Plan Distribution */}
-          <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-4">
-            <div className="border-b border-slate-100 pb-3">
-              <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-[#09A08A]" />
-                Subscription Plans
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">Tenant billing cycle distribution</p>
-            </div>
-
-            {stats?.plan_distribution ? (
-              <div className="space-y-3 pt-2">
-                {Object.entries(stats.plan_distribution).map(([planName, count]) => (
-                  <div key={planName} className="p-3 bg-[#F8FAFC] border border-slate-200 rounded-xl flex items-center justify-between">
-                    <div>
-                      <p className="font-bold text-xs text-slate-900">{planName}</p>
-                      <p className="text-[10px] text-slate-400 font-medium">Active Tenants</p>
-                    </div>
-                    <span className="px-3 py-1 bg-[#EAF7F6] text-[#09A08A] font-extrabold text-xs rounded-full border border-[#09A08A]/20">
-                      {count}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="py-8 text-center text-xs text-slate-400 font-medium">
-                No active plans data available.
-              </div>
-            )}
-          </div>
+          <Link
+            href="/super-admin/inquiries"
+            className="px-5 py-2.5 bg-[#09A08A] hover:bg-[#07806e] text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-md shadow-[#09A08A]/20 transition-all"
+          >
+            Open Inquiries Dashboard &rarr;
+          </Link>
         </div>
 
         {/* REGISTERED HRMS COMPANIES TABLE */}

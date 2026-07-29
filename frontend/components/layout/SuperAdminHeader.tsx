@@ -9,19 +9,20 @@ import {
   Sparkles, 
   Plus, 
   LogOut,
-  Globe
+  Globe,
+  MessageSquare,
+  Building2,
+  LayoutDashboard
 } from "lucide-react";
 
 interface SuperAdminHeaderProps {
   onRefresh?: () => void;
   isLoading?: boolean;
-  onOpenOnboardModal?: () => void;
 }
 
 export default function SuperAdminHeader({
   onRefresh,
-  isLoading = false,
-  onOpenOnboardModal
+  isLoading = false
 }: SuperAdminHeaderProps) {
   const router = useRouter();
 
@@ -29,14 +30,6 @@ export default function SuperAdminHeader({
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     router.push("/super-admin/login");
-  };
-
-  const handleOnboardClick = () => {
-    if (onOpenOnboardModal) {
-      onOpenOnboardModal();
-    } else {
-      router.push("/super-admin/companies?openOnboard=true");
-    }
   };
 
   return (
@@ -60,6 +53,30 @@ export default function SuperAdminHeader({
           )}
 
           <Link
+            href="/super-admin/dashboard"
+            className="px-4 py-2.5 bg-white hover:bg-slate-50 text-[#09A08A] font-bold rounded-xl text-xs flex items-center gap-2 border border-[#09A08A]/30 shadow-sm transition-all"
+          >
+            <LayoutDashboard className="w-4 h-4" />
+            Dashboard
+          </Link>
+
+          <Link
+            href="/super-admin/companies"
+            className="px-4 py-2.5 bg-[#09A08A] hover:bg-[#07806e] text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-sm transition-all"
+          >
+            <Building2 className="w-4 h-4" />
+            Companies
+          </Link>
+
+          <Link
+            href="/super-admin/inquiries"
+            className="px-4 py-2.5 bg-white hover:bg-slate-50 text-[#09A08A] font-bold rounded-xl text-xs flex items-center gap-2 border border-[#09A08A]/30 shadow-sm transition-all"
+          >
+            <MessageSquare className="w-4 h-4" />
+            Website Inquiries
+          </Link>
+
+          <Link
             href="/super-admin/pricing"
             className="px-4 py-2.5 bg-white hover:bg-slate-50 text-[#09A08A] font-bold rounded-xl text-xs flex items-center gap-2 border border-[#09A08A]/30 shadow-sm transition-all"
           >
@@ -74,23 +91,6 @@ export default function SuperAdminHeader({
             <Globe className="w-4 h-4" />
             Landing Page CRUD
           </Link>
-
-          <Link
-            href="/purchase"
-            target="_blank"
-            className="px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-xs flex items-center gap-2 border border-slate-200 shadow-sm transition-all"
-          >
-            <Sparkles className="w-4 h-4 text-amber-500" />
-            Purchase Wizard Preview
-          </Link>
-
-          <button
-            onClick={handleOnboardClick}
-            className="px-4 py-2.5 bg-[#09A08A] hover:bg-[#07806e] text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-md shadow-[#09A08A]/20 transition-all cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            Onboard New Company
-          </button>
 
           <button
             onClick={handleLogout}

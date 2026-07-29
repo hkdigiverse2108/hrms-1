@@ -18,6 +18,7 @@ interface ConfirmOptions {
   confirmText?: string;
   cancelText?: string;
   destructive?: boolean;
+  variant?: "danger" | "warning" | "info" | string;
   secondaryActionText?: string;
   onSecondaryAction?: () => void;
 }

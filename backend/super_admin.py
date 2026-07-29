@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, status, Request
 from pydantic import BaseModel, EmailStr
-from typing import Optional, List, Union
+from typing import Optional, List, Union, Dict
 import os
 import random
 from datetime import datetime, timedelta
@@ -155,40 +155,8 @@ async def get_superadmin_me(token: dict = Depends(require_superadmin)):
         "company_name": "HK DigiVerse Master"
     }
 
-async def ensure_default_company_exists():
-    count = await db.companies.count_documents({})
-    if count == 0:
-        now = get_current_time()
-        default_company = {
-            "company_name": "HariKrushn DigiVerse",
-            "company_code": "HK-DIGIVERSE",
-            "logo_url": "/logo.png",
-            "contact_email": "contact@hkdigiverse.com",
-            "contact_phone": "+91 98765 43210",
-            "address": "Surat, Gujarat, India",
-            "subscription_plan": "Enterprise",
-            "status": "active",
-            "max_employees": 100,
-            "total_paid": 15000,
-            "enabled_modules": [
-                "employee-list", "org-structure", "attendance", "leave", "employee-documents",
-                "payroll-processing", "company-finance-transactions", "invoice",
-                "projects", "tasks", "daily-progress", "sales", "clients", "marketing",
-                "chat", "activity-tracker", "hirings", "training", "remarks"
-            ],
-            "created_at": now,
-            "updated_at": now
-        }
-        await db.companies.insert_one(default_company)
-        
-        await db.employees.update_many(
-            {"$or": [{"company_code": {"$exists": False}}, {"company_code": ""}, {"company_code": None}]},
-            {"$set": {"company_code": "HK-DIGIVERSE", "company_id": "HK-DIGIVERSE", "company_name": "HariKrushn DigiVerse"}}
-        )
-
 @router.get("/companies")
 async def list_companies(token: dict = Depends(require_superadmin)):
-    await ensure_default_company_exists()
     companies = await db.companies.find({}).to_list(length=1000)
     
     # Calculate employee counts for each company
@@ -236,109 +204,6 @@ async def list_companies(token: dict = Depends(require_superadmin)):
         result.append(c_data)
         
     return result
-
-@router.post("/companies")
-async def create_company(payload: CompanyCreateRequest, token: dict = Depends(require_superadmin)):
-    return await provision_new_company(payload)
-
-@router.post("/public-purchase")
-async def public_purchase_company(payload: CompanyCreateRequest):
-    """Public API for companies to purchase/register HRMS"""
-    return await provision_new_company(payload)
-
-async def provision_new_company(payload: CompanyCreateRequest):
-    code = payload.company_code.strip().lower().replace(" ", "-")
-    
-    # Check if code already exists
-    existing = await db.companies.find_one({"company_code": code})
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Company code '{code}' already exists. Please choose a different code."
-        )
-
-    # Check if admin email already exists in employees
-    existing_emp = await db.employees.find_one({"email": payload.admin_email.strip().lower()})
-    if existing_emp:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Employee email '{payload.admin_email}' is already registered."
-        )
-
-    now = get_current_time()
-    
-    # 1. Create Company
-    company_doc = {
-        "company_name": payload.company_name.strip(),
-        "company_code": code,
-        "logo_url": payload.logo_url.strip() if payload.logo_url else "",
-        "contact_email": payload.contact_email.strip().lower(),
-        "contact_phone": payload.contact_phone.strip() if payload.contact_phone else "",
-        "address": payload.address.strip() if payload.address else "",
-        "subscription_plan": payload.subscription_plan or "Standard",
-        "status": "active",
-        "max_employees": payload.max_employees or 50,
-        "created_at": now,
-        "updated_at": now
-    }
-    comp_res = await db.companies.insert_one(company_doc)
-    company_id = str(comp_res.inserted_id)
-
-    # 2. Create Initial Company Admin Employee
-    hashed_pwd = get_password_hash(payload.admin_password)
-    admin_emp_doc = {
-        "name": payload.admin_name.strip(),
-        "email": payload.admin_email.strip().lower(),
-        "password": hashed_pwd,
-        "role": "Admin",
-        "designation": "Administrator",
-        "department": "Management",
-        "company_id": code,
-        "company_code": code,
-        "company_name": payload.company_name.strip(),
-        "status": "active",
-        "created_at": now,
-        "updated_at": now
-    }
-    admin_res = await db.employees.insert_one(admin_emp_doc)
-    admin_id = str(admin_res.inserted_id)
-
-    # 3. Provision Default Departments & Designations for this tenant
-    default_depts = ["Management", "Engineering", "Human Resources", "Sales & Marketing", "Finance"]
-    for d in default_depts:
-        await db.departments.insert_one({
-            "name": d,
-            "company_id": code,
-            "created_at": now
-        })
-
-    default_desigs = ["Administrator", "Manager", "Senior Developer", "HR Manager", "Executive"]
-    for des in default_desigs:
-        await db.designations.insert_one({
-            "title": des,
-            "company_id": code,
-            "created_at": now
-        })
-
-    return {
-        "success": True,
-        "message": f"Company '{payload.company_name}' provisioned successfully!",
-        "company": {
-            "id": company_id,
-            "company_name": payload.company_name,
-            "company_code": code,
-            "logo_url": payload.logo_url,
-            "contact_email": payload.contact_email,
-            "subscription_plan": payload.subscription_plan,
-            "status": "active"
-        },
-        "admin": {
-            "id": admin_id,
-            "name": payload.admin_name,
-            "email": payload.admin_email,
-            "role": "Admin"
-        }
-    }
 
 @router.get("/companies/{company_id}")
 async def get_company_detail(company_id: str, token: dict = Depends(require_superadmin)):
@@ -440,7 +305,6 @@ async def reset_company_admin_password(company_id: str, payload: AdminResetPassw
 
 @router.get("/stats")
 async def get_superadmin_dashboard_stats(token: dict = Depends(require_superadmin)):
-    await ensure_default_company_exists()
     companies = await db.companies.find({}).to_list(length=1000)
 
     # Filter out invalid empty docs
@@ -453,31 +317,26 @@ async def get_superadmin_dashboard_stats(token: dict = Depends(require_superadmi
     # Count total system employees across all tenant companies
     total_employees = await db.employees.count_documents({})
 
-    # Calculate total revenue dynamically from company payments & tenant purchases
-    total_revenue = sum(c.get("total_paid", 0) for c in valid_companies)
+    # Calculate total revenue dynamically from active companies' pricing plans
+    pricing_plans = await db.pricing_plans.find({}).to_list(100)
+    plan_price_map = {}
+    for p in pricing_plans:
+        p_name = p.get("name", "").strip().lower()
+        try:
+            val = float(str(p.get("pricePerPlan", 0)).replace("₹", "").replace(",", "").strip())
+        except Exception:
+            val = 0
+        if p_name:
+            plan_price_map[p_name] = val
 
-    # Plan distribution
-    plan_distribution = {}
+    total_revenue = 0
     for c in valid_companies:
-        plan = c.get("subscription_plan", "Standard")
-        plan_distribution[plan] = plan_distribution.get(plan, 0) + 1
+        if c.get("status", "active") == "active":
+            c_plan = c.get("subscription_plan", "").strip().lower()
+            total_revenue += plan_price_map.get(c_plan, 0)
 
-    # Top enabled modules
-    module_counts = {}
-    for c in valid_companies:
-        enabled_mods = c.get("enabled_modules", [])
-        for mod in enabled_mods:
-            module_counts[mod] = module_counts.get(mod, 0) + 1
-
-    # Sort top modules
-    sorted_modules = sorted(
-        [{"module_key": k, "display_name": k.replace("-", " ").title(), "count": v} for k, v in module_counts.items()],
-        key=lambda x: x["count"],
-        reverse=True
-    )
-
-    # Activity logs count directly from db.activity_logs
-    total_activity_logs = await db.activity_logs.count_documents({})
+    # Count real website inquiries from landing page contact submissions
+    total_inquiries = await db.contact_submissions.count_documents({})
 
     return {
         "total_companies": total_companies,
@@ -485,9 +344,7 @@ async def get_superadmin_dashboard_stats(token: dict = Depends(require_superadmi
         "suspended_companies": suspended_companies,
         "total_employees": total_employees,
         "total_revenue": total_revenue,
-        "total_activity_logs": total_activity_logs,
-        "plan_distribution": plan_distribution,
-        "top_modules": sorted_modules[:6]
+        "total_inquiries": total_inquiries
     }
 
 # --- Landing Page CRUD Models ---
@@ -560,6 +417,9 @@ class LandingSectionUpdate(BaseModel):
     social_linkedin: Optional[str] = None
     social_facebook: Optional[str] = None
     social_twitter: Optional[str] = None
+    success_title: Optional[str] = None
+    success_message: Optional[str] = None
+    success_button_text: Optional[str] = None
 
 # --- Landing Page CRUD Endpoints ---
 
@@ -811,6 +671,23 @@ async def get_or_seed_section(section_key: str):
                 del doc["_id"]
                 stats.append(doc)
             section["stats"] = stats
+        elif section_key == "contact":
+            updated = False
+            if "success_title" not in section or not section.get("success_title"):
+                section["success_title"] = "Demo Scheduled Successfully!"
+                updated = True
+            if "success_message" not in section or not section.get("success_message"):
+                section["success_message"] = "Thank you for booking a demo with us. Your requirements have been persisted. An HR specialist from HK Digiverse will review and reach out within one business day."
+                updated = True
+            if "success_button_text" not in section or not section.get("success_button_text"):
+                section["success_button_text"] = "Schedule Another Demo"
+                updated = True
+            if updated:
+                await db.landing_sections.update_one({"key": "contact"}, {"$set": {
+                    "success_title": section["success_title"],
+                    "success_message": section["success_message"],
+                    "success_button_text": section["success_button_text"]
+                }})
         return section
     
     if section_key == "about":
@@ -936,7 +813,10 @@ async def get_or_seed_section(section_key: str):
                 "201 - 500 Employees",
                 "500+ Enterprise"
             ],
-            "map_url": "https://www.google.com/maps/embed?pb="
+            "map_url": "https://www.google.com/maps/embed?pb=",
+            "success_title": "Demo Scheduled Successfully!",
+            "success_message": "Thank you for booking a demo with us. Your requirements have been persisted. An HR specialist from HK Digiverse will review and reach out within one business day.",
+            "success_button_text": "Schedule Another Demo"
         },
         "header_footer": {
             "logo_url": "",
@@ -1082,5 +962,249 @@ async def public_list_landing_faqs():
         faqs.append(doc)
     return faqs
 
+# --- Website Inquiries & Demo Requests ---
+@router.get("/inquiries", dependencies=[Depends(require_superadmin)])
+async def list_website_inquiries():
+    cursor = db.contact_submissions.find({}).sort("createdAt", -1)
+    inquiries = []
+    async for doc in cursor:
+        doc["id"] = str(doc.get("_id"))
+        if "_id" in doc:
+            del doc["_id"]
+        if "createdAt" in doc and hasattr(doc["createdAt"], "isoformat"):
+            doc["createdAt"] = doc["createdAt"].isoformat()
+        inquiries.append(doc)
+    return inquiries
+
+@router.delete("/inquiries/{inquiry_id}", dependencies=[Depends(require_superadmin)])
+async def delete_website_inquiry(inquiry_id: str):
+    try:
+        oid = ObjectId(inquiry_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid inquiry ID")
+    result = await db.contact_submissions.delete_one({"_id": oid})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Inquiry not found")
+    return {"message": "Inquiry deleted successfully"}
+
+# --- Default Seed Data for Pricing ---
+DEFAULT_MODULES = [
+    {"module_key": "employee-list", "display_name": "Employee Directory", "category": "Core HR & Attendance", "price_per_month": 300, "is_enabled": True, "description": "Manage employee profiles, onboarding, and directory."},
+    {"module_key": "org-structure", "display_name": "Org Structure", "category": "Core HR & Attendance", "price_per_month": 200, "is_enabled": True, "description": "Departments, designations, and hierarchy structure."},
+    {"module_key": "attendance", "display_name": "Attendance Tracking", "category": "Core HR & Attendance", "price_per_month": 400, "is_enabled": True, "description": "Daily attendance punch-in/out, shifts, late penalties."},
+    {"module_key": "leave", "display_name": "Leave Management", "category": "Core HR & Attendance", "price_per_month": 300, "is_enabled": True, "description": "Leave requests, approvals, and balance tracking."},
+    {"module_key": "employee-documents", "display_name": "Employee Documents", "category": "Core HR & Attendance", "price_per_month": 250, "is_enabled": True, "description": "Document management & auto document generator."},
+    {"module_key": "payroll-processing", "display_name": "Payroll Processing & Payslips", "category": "Payroll & Finance", "price_per_month": 600, "is_enabled": True, "description": "Monthly salary calculation, bonuses, deductions, and payslips."},
+    {"module_key": "company-finance-transactions", "display_name": "Company Finance & Audit", "category": "Payroll & Finance", "price_per_month": 500, "is_enabled": True, "description": "Income/expense transactions, audit logs, financial planning."},
+    {"module_key": "invoice", "display_name": "Invoicing & Billing", "category": "Payroll & Finance", "price_per_month": 400, "is_enabled": True, "description": "Create proforma & tax invoices, client ledgers."},
+    {"module_key": "projects", "display_name": "Project Management", "category": "Work & Project Management", "price_per_month": 500, "is_enabled": True, "description": "Projects, milestones, client feedback, and team assignment."},
+    {"module_key": "tasks", "display_name": "Development & Tasks", "category": "Work & Project Management", "price_per_month": 400, "is_enabled": True, "description": "Sprint tasks, my tasks, and task logs."},
+    {"module_key": "daily-progress", "display_name": "Daily Progress Logs", "category": "Work & Project Management", "price_per_month": 300, "is_enabled": True, "description": "Daily work submission and HR progress tracking."},
+    {"module_key": "sales", "display_name": "Sales & Leads Management", "category": "Work & Project Management", "price_per_month": 400, "is_enabled": True, "description": "Sales pipeline, lead tracking, and deal analytics."},
+    {"module_key": "clients", "display_name": "Client Directory", "category": "Work & Project Management", "price_per_month": 300, "is_enabled": True, "description": "Client profiles, transactions, and feedback."},
+    {"module_key": "marketing", "display_name": "Digital Marketing & SMM", "category": "Work & Project Management", "price_per_month": 400, "is_enabled": True, "description": "Content calendar, social media management, daily remarks."},
+    {"module_key": "chat", "display_name": "Team Chat", "category": "Collaboration & Productivity", "price_per_month": 300, "is_enabled": True, "description": "Real-time group & direct messaging."},
+    {"module_key": "activity-tracker", "display_name": "Activity Tracker", "category": "Collaboration & Productivity", "price_per_month": 300, "is_enabled": True, "description": "Native PC input activity and app monitoring."},
+    {"module_key": "hirings", "display_name": "Recruitment & Hiring Board", "category": "Collaboration & Productivity", "price_per_month": 400, "is_enabled": True, "description": "Job postings, applicant hiring board, and interviews."},
+    {"module_key": "training", "display_name": "Course & Training Library", "category": "Collaboration & Productivity", "price_per_month": 300, "is_enabled": True, "description": "Internal employee courses, lessons, and quizzes."},
+    {"module_key": "remarks", "display_name": "Penalty & Remarks", "category": "Collaboration & Productivity", "price_per_month": 200, "is_enabled": True, "description": "Disciplinary penalty points and manager remarks."}
+]
+
+DEFAULT_PLANS = [
+    {"plan_key": "3_months", "display_name": "3 Months Plan", "months": 3, "discount_percent": 0, "is_active": True, "badge": "Standard"},
+    {"plan_key": "6_months", "display_name": "6 Months Plan", "months": 6, "discount_percent": 10, "is_active": True, "badge": "Save 10%"},
+    {"plan_key": "1_year", "display_name": "1 Year (12 Months)", "months": 12, "discount_percent": 20, "is_active": True, "badge": "Best Value (Save 20%)"}
+]
+
+async def seed_pricing_if_empty():
+    mod_count = await db.system_module_prices.count_documents({})
+    if mod_count == 0:
+        for mod in DEFAULT_MODULES:
+            mod_doc = {**mod, "created_at": get_current_time(), "updated_at": get_current_time()}
+            await db.system_module_prices.insert_one(mod_doc)
+    plan_count = await db.system_duration_plans.count_documents({})
+    if plan_count == 0:
+        for p in DEFAULT_PLANS:
+            p_doc = {**p, "created_at": get_current_time(), "updated_at": get_current_time()}
+            await db.system_duration_plans.insert_one(p_doc)
+
+class ModuleCreate(BaseModel):
+    module_key: str
+    display_name: str
+    category: Optional[str] = "General"
+    price_per_month: float
+    plan_prices: Optional[Dict[str, float]] = {}
+    description: Optional[str] = ""
+    is_enabled: Optional[bool] = True
+
+class ModulePriceUpdate(BaseModel):
+    display_name: Optional[str] = None
+    category: Optional[str] = None
+    price_per_month: float
+    plan_prices: Optional[Dict[str, float]] = None
+    description: Optional[str] = None
+    is_enabled: Optional[bool] = True
+
+class PlanCreate(BaseModel):
+    plan_key: str
+    display_name: str
+    months: int
+    discount_percent: float
+    badge: Optional[str] = ""
+    is_active: Optional[bool] = True
+
+class PlanUpdate(BaseModel):
+    display_name: Optional[str] = None
+    months: Optional[int] = None
+    discount_percent: float
+    badge: Optional[str] = None
+    is_active: Optional[bool] = True
+
+@router.get("/pricing/modules")
+async def get_all_module_prices(token: dict = Depends(require_superadmin)):
+    await seed_pricing_if_empty()
+    modules = await db.system_module_prices.find({}).to_list(length=200)
+    result = []
+    for m in modules:
+        result.append({
+            "id": str(m.get("_id")),
+            "module_key": m.get("module_key"),
+            "display_name": m.get("display_name"),
+            "category": m.get("category", "General"),
+            "price_per_month": m.get("price_per_month", 0),
+            "plan_prices": m.get("plan_prices", {}),
+            "is_enabled": m.get("is_enabled", True),
+            "description": m.get("description", "")
+        })
+    return result
+
+@router.post("/pricing/modules")
+async def create_module_price(payload: ModuleCreate, token: dict = Depends(require_superadmin)):
+    await seed_pricing_if_empty()
+    key = payload.module_key.strip().lower().replace(" ", "-")
+    existing = await db.system_module_prices.find_one({"module_key": key})
+    if existing:
+        update_data = {
+            "display_name": payload.display_name.strip(),
+            "category": payload.category.strip() if payload.category else "General",
+            "price_per_month": payload.price_per_month,
+            "plan_prices": payload.plan_prices or {},
+            "description": payload.description.strip() if payload.description else "",
+            "is_enabled": payload.is_enabled if payload.is_enabled is not None else True,
+            "updated_at": get_current_time()
+        }
+        await db.system_module_prices.update_one({"module_key": key}, {"$set": update_data})
+        updated = await db.system_module_prices.find_one({"module_key": key})
+        updated["id"] = str(updated.get("_id"))
+        updated.pop("_id", None)
+        return updated
+    doc = {
+        "module_key": key,
+        "display_name": payload.display_name.strip(),
+        "category": payload.category.strip() if payload.category else "General",
+        "price_per_month": payload.price_per_month,
+        "plan_prices": payload.plan_prices or {},
+        "description": payload.description.strip() if payload.description else "",
+        "is_enabled": payload.is_enabled if payload.is_enabled is not None else True,
+        "created_at": get_current_time(),
+        "updated_at": get_current_time()
+    }
+    res = await db.system_module_prices.insert_one(doc)
+    doc["id"] = str(res.inserted_id)
+    doc.pop("_id", None)
+    return doc
+
+@router.put("/pricing/modules/{module_key}")
+async def update_module_price(module_key: str, payload: ModulePriceUpdate, token: dict = Depends(require_superadmin)):
+    await seed_pricing_if_empty()
+    update_data = {
+        "price_per_month": payload.price_per_month,
+        "is_enabled": payload.is_enabled if payload.is_enabled is not None else True,
+        "updated_at": get_current_time()
+    }
+    if payload.display_name:
+        update_data["display_name"] = payload.display_name.strip()
+    if payload.category:
+        update_data["category"] = payload.category.strip()
+    if payload.description is not None:
+        update_data["description"] = payload.description.strip()
+    if payload.plan_prices is not None:
+        update_data["plan_prices"] = payload.plan_prices
+    res = await db.system_module_prices.update_one({"module_key": module_key}, {"$set": update_data})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Module not found")
+    return {"success": True, "message": f"Pricing for module '{module_key}' updated"}
+
+@router.delete("/pricing/modules/{module_key}")
+async def delete_module_price(module_key: str, token: dict = Depends(require_superadmin)):
+    res = await db.system_module_prices.delete_one({"module_key": module_key})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Module not found")
+    return {"success": True, "message": f"Module '{module_key}' deleted successfully"}
+
+@router.get("/pricing/plans")
+async def get_all_duration_plans(token: dict = Depends(require_superadmin)):
+    await seed_pricing_if_empty()
+    plans = await db.system_duration_plans.find({}).to_list(length=50)
+    result = []
+    for p in plans:
+        result.append({
+            "id": str(p.get("_id")),
+            "plan_key": p.get("plan_key"),
+            "display_name": p.get("display_name"),
+            "months": p.get("months", 1),
+            "discount_percent": p.get("discount_percent", 0),
+            "badge": p.get("badge", ""),
+            "is_active": p.get("is_active", True)
+        })
+    return result
+
+@router.post("/pricing/plans")
+async def create_duration_plan(payload: PlanCreate, token: dict = Depends(require_superadmin)):
+    await seed_pricing_if_empty()
+    key = payload.plan_key.strip().lower().replace(" ", "_")
+    existing = await db.system_duration_plans.find_one({"plan_key": key})
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Plan with key '{key}' already exists.")
+    doc = {
+        "plan_key": key,
+        "display_name": payload.display_name.strip(),
+        "months": payload.months,
+        "discount_percent": payload.discount_percent,
+        "badge": payload.badge.strip() if payload.badge else "",
+        "is_active": payload.is_active if payload.is_active is not None else True,
+        "created_at": get_current_time(),
+        "updated_at": get_current_time()
+    }
+    res = await db.system_duration_plans.insert_one(doc)
+    doc["id"] = str(res.inserted_id)
+    doc.pop("_id", None)
+    return doc
+
+@router.put("/pricing/plans/{plan_key}")
+async def update_duration_plan(plan_key: str, payload: PlanUpdate, token: dict = Depends(require_superadmin)):
+    await seed_pricing_if_empty()
+    update_data = {
+        "discount_percent": payload.discount_percent,
+        "is_active": payload.is_active if payload.is_active is not None else True,
+        "updated_at": get_current_time()
+    }
+    if payload.display_name:
+        update_data["display_name"] = payload.display_name.strip()
+    if payload.months:
+        update_data["months"] = payload.months
+    if payload.badge is not None:
+        update_data["badge"] = payload.badge.strip()
+    res = await db.system_duration_plans.update_one({"plan_key": plan_key}, {"$set": update_data})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    return {"success": True, "message": f"Plan '{plan_key}' updated"}
+
+@router.delete("/pricing/plans/{plan_key}")
+async def delete_duration_plan(plan_key: str, token: dict = Depends(require_superadmin)):
+    res = await db.system_duration_plans.delete_one({"plan_key": plan_key})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    return {"success": True, "message": f"Plan '{plan_key}' deleted successfully"}
 
 

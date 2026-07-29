@@ -114,6 +114,12 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
 
 
   const isModuleEnabled = (moduleKey: string) => {
+    // Restrict access strictly to subscribed modules purchased during SaaS checkout
+    if (user?.subscribed_modules && Array.isArray(user.subscribed_modules) && user.subscribed_modules.length > 0) {
+      if (!user.subscribed_modules.includes(moduleKey) && moduleKey !== "settings") {
+        return false;
+      }
+    }
     if (isAdmin) return true;
     if (!settings) return true;
     if (!settings.enabledModules) return true;

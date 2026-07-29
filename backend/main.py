@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 from contextlib import asynccontextmanager
-import crud, schemas, database, auth, super_admin, purchase
+import crud, schemas, database, auth, super_admin
 import uvicorn
 import os
 import uuid
@@ -676,7 +676,6 @@ async def lifespan(app):
 
 app = FastAPI(title="HRMS API", lifespan=lifespan)
 app.include_router(super_admin.router)
-app.include_router(purchase.router)
 
 from fastapi.exceptions import RequestValidationError
 @app.exception_handler(RequestValidationError)
@@ -762,8 +761,7 @@ from jose import jwt
 
 EXEMPT_PATHS = [
     "/login", "/time", "/", "/docs", "/openapi.json", "/redoc",
-    "/super-admin/login", "/super-admin/verify-otp", "/super-admin/public-purchase",
-    "/purchase/options", "/purchase/calculate", "/purchase/checkout",
+    "/super-admin/login", "/super-admin/verify-otp",
     "/super-admin/public/landing/sections", "/super-admin/public/landing/modules",
     "/super-admin/public/landing/stats", "/super-admin/public/landing/plans",
     "/super-admin/public/landing/comparison", "/super-admin/public/landing/faqs"
@@ -1005,10 +1003,12 @@ async def verify_otp(otp_data: schemas.VerifyOTPRequest, db=Depends(get_db)):
         user_fixed["company_id"] = c_code
         user_fixed["company_name"] = company.get("company_name", user.get("company_name", "HK DigiVerse"))
         user_fixed["company_logo"] = company.get("logo_url", "")
+        user_fixed["subscribed_modules"] = company.get("subscribed_modules", user.get("subscribed_modules", []))
     else:
         user_fixed["company_id"] = c_code
         user_fixed["company_name"] = user.get("company_name", "HK DigiVerse")
         user_fixed["company_logo"] = ""
+        user_fixed["subscribed_modules"] = user.get("subscribed_modules", [])
 
     token = auth.create_access_token(data={"sub": user_id, "role": user.get("role", ""), "company_id": c_code})
     user_fixed["token"] = token
