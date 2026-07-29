@@ -291,7 +291,8 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
   });
 
   const isFinanceManager = initialData?.assignedFinanceManagerId === currentUser?.id || formData?.assignedFinanceManagerId === currentUser?.id;
-  const canSeeFinance = isAdmin || isFinanceManager;
+  const isAssignedMember = initialData?.assignedEmployeeId === currentUser?.id || formData?.assignedEmployeeId === currentUser?.id;
+  const canSeeFinance = isAdmin || isFinanceManager || isAssignedMember;
 
   useEffect(() => {
     if (initialData) {
