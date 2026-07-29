@@ -93,14 +93,14 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
           Follow-ups ({project.financeFollowUps?.length || 0})
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-lg" onClick={(e) => e.stopPropagation()}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-[16px] font-bold">
             Finance Follow-ups: <span className="text-emerald-600">{project.title}</span>
           </DialogTitle>
         </DialogHeader>
         
-        <div className="space-y-5 py-2">
+        <div className="space-y-4 py-1">
           {/* Add New Follow-up */}
           <div className="space-y-3 bg-emerald-50/50 p-4 rounded-xl border border-emerald-100">
             <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">
@@ -160,9 +160,9 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">Next Follow-up Date & Time (Optional)</Label>
+              <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">Next Follow-up Date (Optional)</Label>
               <input 
-                type="datetime-local"
+                type="date"
                 value={nextDate}
                 onChange={(e) => setNextDate(e.target.value)}
                 className="w-full border border-emerald-200 rounded-lg p-2 text-xs focus:ring-emerald-500 focus:border-emerald-500 bg-white h-9"
@@ -185,7 +185,7 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
               Finance Follow-up History
             </Label>
 
-            <ScrollArea className="h-[280px] pr-4">
+            <ScrollArea className="max-h-[200px] pr-4">
               {project.financeFollowUps && project.financeFollowUps.length > 0 ? (
                 <div className="space-y-3 relative before:absolute before:left-2 before:top-2 before:bottom-2 before:w-[1px] before:bg-emerald-200">
                   {project.financeFollowUps.slice().reverse().map((f: any, revIdx: number) => (
@@ -239,7 +239,7 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
                           {f.nextFollowUpDate && (
                             <div className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-100 rounded px-1.5 py-0.5 text-[9.5px] font-bold">
                               <Calendar className="w-2.5 h-2.5 text-amber-600" />
-                              Next Follow-up: {dayjs(f.nextFollowUpDate).format("DD/MM/YYYY, hh:mm A")}
+                              Next Follow-up: {dayjs(f.nextFollowUpDate).format("DD/MM/YYYY")}
                             </div>
                           )}
                         </div>
