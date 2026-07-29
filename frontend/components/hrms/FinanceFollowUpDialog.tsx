@@ -34,6 +34,7 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
   const [isPaymentReceived, setIsPaymentReceived] = useState(false);
   const [paymentTouched, setPaymentTouched] = useState(false);
   const [nextPaymentDate, setNextPaymentDate] = useState("");
+  const [projectStatus, setProjectStatus] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
 
@@ -50,6 +51,7 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
       if (amountReceived) payload.amountReceived = parseFloat(amountReceived);
       if (paymentTouched) payload.isPaymentReceived = isPaymentReceived;
       if (nextPaymentDate) payload.nextPaymentDate = nextPaymentDate;
+      if (projectStatus && projectStatus !== "none") payload.projectStatus = projectStatus;
 
       const res = await fetch(`${API_URL}/projects/${project.id}/finance-follow-ups?performedBy=${userId}&userName=${userName}`, {
         method: "POST",
@@ -65,6 +67,7 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
         setIsPaymentReceived(false);
         setPaymentTouched(false);
         setNextPaymentDate("");
+        setProjectStatus("");
         onUpdate();
       } else {
         toast.error("Failed to add follow-up");
@@ -142,6 +145,21 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
             </div>
 
             <div className="space-y-1.5">
+              <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">Update Project Status (Optional)</Label>
+              <select
+                value={projectStatus}
+                onChange={(e) => setProjectStatus(e.target.value)}
+                className="w-full border border-emerald-200 rounded-lg p-2 text-xs focus:ring-emerald-500 focus:border-emerald-500 bg-white h-9"
+              >
+                <option value="">-- Leave Unchanged --</option>
+                <option value="completed">Completed (Payment Received / Finished)</option>
+                <option value="on-hold">On Hold (Client Not Continuing)</option>
+                <option value="cancelled">Cancelled</option>
+                <option value="in-progress">In Progress</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
               <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">Next Follow-up Date & Time (Optional)</Label>
               <input 
                 type="datetime-local"
@@ -209,6 +227,11 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
                               <div className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-100 rounded px-1.5 py-0.5 text-[9.5px] font-bold">
                                 <Calendar className="w-2.5 h-2.5" />
                                 Next Payment: {f.nextPaymentDate}
+                              </div>
+                            )}
+                            {f.projectStatus && (
+                              <div className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 border border-purple-100 rounded px-1.5 py-0.5 text-[9.5px] font-bold uppercase">
+                                Status Changed: {f.projectStatus}
                               </div>
                             )}
                           </div>

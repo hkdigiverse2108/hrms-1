@@ -1075,46 +1075,66 @@ export default function ProjectsPage() {
                           const latestFollowUp = project.financeFollowUps?.length > 0 
                             ? project.financeFollowUps[project.financeFollowUps.length - 1] 
                             : null;
-                          return latestFollowUp ? (
+                          
+                          const todayStr = new Date().toISOString().split('T')[0];
+                          const hasOverdueFollowup = latestFollowUp?.nextFollowUpDate && latestFollowUp.nextFollowUpDate.split('T')[0] <= todayStr;
+                          const hasOverduePayment = (latestFollowUp?.nextPaymentDate || project.nextPaymentDate) && (latestFollowUp?.nextPaymentDate || project.nextPaymentDate) <= todayStr && !latestFollowUp?.isPaymentReceived;
+
+                          return (
                             <>
-                              {latestFollowUp.amountReceived != null && latestFollowUp.amountReceived > 0 && (
-                                <div className="flex justify-between items-center text-xs">
-                                  <span className="text-slate-500 font-medium">Amount Received:</span>
-                                  <span className="font-bold text-emerald-600">₹{latestFollowUp.amountReceived}</span>
+                              {(hasOverdueFollowup || hasOverduePayment) && (
+                                <div className="flex items-center gap-1.5 p-1.5 bg-amber-100 border border-amber-300 rounded text-amber-800 text-[10.5px] font-bold animate-pulse mb-1.5">
+                                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                  <span>
+                                    {hasOverdueFollowup && hasOverduePayment ? "Follow-up & Payment Due Today!" : hasOverdueFollowup ? "Follow-up Reminder Due!" : "Payment Due Today!"}
+                                  </span>
                                 </div>
                               )}
-                              <div className="flex justify-between items-center text-xs">
-                                <span className="text-slate-500 font-medium">Next Payment Date:</span>
-                                <span className="font-bold text-slate-700">{latestFollowUp.nextPaymentDate || "Not Set"}</span>
-                              </div>
-                              {latestFollowUp.isPaymentReceived != null && (
-                                <div className="flex justify-between items-center text-xs">
-                                  <span className="text-slate-500 font-medium">Payment Received:</span>
-                                  <Badge variant={latestFollowUp.isPaymentReceived ? "success" : "destructive"} className="text-[10px] h-5 uppercase">
-                                    {latestFollowUp.isPaymentReceived ? "Yes" : "No"}
-                                  </Badge>
-                                </div>
-                              )}
-                            </>
-                          ) : (
-                            <>
-                              {project.amountReceived !== undefined && project.amountReceived > 0 && (
-                                <div className="flex justify-between items-center text-xs">
-                                  <span className="text-slate-500 font-medium">Amount Received:</span>
-                                  <span className="font-bold text-emerald-600">₹{project.amountReceived}</span>
-                                </div>
-                              )}
-                              <div className="flex justify-between items-center text-xs">
-                                <span className="text-slate-500 font-medium">Next Payment Date:</span>
-                                <span className="font-bold text-slate-700">{project.nextPaymentDate || "Not Set"}</span>
-                              </div>
-                              {project.isPaymentReceived !== undefined && (
-                                <div className="flex justify-between items-center text-xs">
-                                  <span className="text-slate-500 font-medium">Payment Received:</span>
-                                  <Badge variant={project.isPaymentReceived ? "success" : "destructive"} className="text-[10px] h-5 uppercase">
-                                    {project.isPaymentReceived ? "Yes" : "No"}
-                                  </Badge>
-                                </div>
+                              
+                              {latestFollowUp ? (
+                                <>
+                                  {latestFollowUp.amountReceived != null && latestFollowUp.amountReceived > 0 && (
+                                    <div className="flex justify-between items-center text-xs">
+                                      <span className="text-slate-500 font-medium">Amount Received:</span>
+                                      <span className="font-bold text-emerald-600">₹{latestFollowUp.amountReceived}</span>
+                                    </div>
+                                  )}
+                                  <div className="flex justify-between items-center text-xs">
+                                    <span className="text-slate-500 font-medium">Next Payment Date:</span>
+                                    <span className={`font-bold ${latestFollowUp.nextPaymentDate && latestFollowUp.nextPaymentDate <= todayStr && !latestFollowUp.isPaymentReceived ? "text-red-600 font-extrabold" : "text-slate-700"}`}>
+                                      {latestFollowUp.nextPaymentDate || "Not Set"}
+                                    </span>
+                                  </div>
+                                  {latestFollowUp.isPaymentReceived != null && (
+                                    <div className="flex justify-between items-center text-xs">
+                                      <span className="text-slate-500 font-medium">Payment Received:</span>
+                                      <Badge variant={latestFollowUp.isPaymentReceived ? "success" : "destructive"} className="text-[10px] h-5 uppercase">
+                                        {latestFollowUp.isPaymentReceived ? "Yes" : "No"}
+                                      </Badge>
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                <>
+                                  {project.amountReceived !== undefined && project.amountReceived > 0 && (
+                                    <div className="flex justify-between items-center text-xs">
+                                      <span className="text-slate-500 font-medium">Amount Received:</span>
+                                      <span className="font-bold text-emerald-600">₹{project.amountReceived}</span>
+                                    </div>
+                                  )}
+                                  <div className="flex justify-between items-center text-xs">
+                                    <span className="text-slate-500 font-medium">Next Payment Date:</span>
+                                    <span className="font-bold text-slate-700">{project.nextPaymentDate || "Not Set"}</span>
+                                  </div>
+                                  {project.isPaymentReceived !== undefined && (
+                                    <div className="flex justify-between items-center text-xs">
+                                      <span className="text-slate-500 font-medium">Payment Received:</span>
+                                      <Badge variant={project.isPaymentReceived ? "success" : "destructive"} className="text-[10px] h-5 uppercase">
+                                        {project.isPaymentReceived ? "Yes" : "No"}
+                                      </Badge>
+                                    </div>
+                                  )}
+                                </>
                               )}
                             </>
                           );

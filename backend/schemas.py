@@ -1603,6 +1603,7 @@ class FinanceFollowUp(BaseModel):
     amountReceived: Optional[float] = None
     isPaymentReceived: Optional[bool] = None
     nextPaymentDate: Optional[str] = None
+    projectStatus: Optional[str] = None
 
 class Meeting(BaseModel):
     date: str
