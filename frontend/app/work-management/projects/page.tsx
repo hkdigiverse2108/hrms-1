@@ -775,7 +775,7 @@ export default function ProjectsPage() {
               Clear Filters
             </Button>
           )}
-          {(isAdmin || projects.some(p => p.assignedFinanceManagerId === user?.id || p.assignedEmployeeId === user?.id)) && (
+          {(isAdmin || projects.some(p => p.assignedFinanceManagerId === user?.id)) && (
             <div className="flex items-center space-x-2 pl-4 border-l border-slate-200">
               <Switch id="show-finance" checked={showFinanceDetails} onCheckedChange={setShowFinanceDetails} />
               <Label htmlFor="show-finance" className="text-xs font-bold text-emerald-700 cursor-pointer uppercase tracking-wider">Finance Details</Label>
@@ -1051,7 +1051,7 @@ export default function ProjectsPage() {
 
 
                     {/* Finance & Feedback Details */}
-                    {(isAdmin || project.assignedFinanceManagerId === user?.id || project.assignedEmployeeId === user?.id) && showFinanceDetails && (
+                    {(isAdmin || project.assignedFinanceManagerId === user?.id) && showFinanceDetails && (
                       <div className="pt-3 border-t border-dashed border-emerald-200/60 bg-emerald-50/30 p-3 rounded-lg space-y-2 mt-2 mb-2">
                         <div className="flex items-center justify-between mb-1">
                           <div className="flex items-center gap-1.5 text-emerald-700">
