@@ -11,8 +11,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Calendar, MessageSquare, User, Clock } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Calendar, MessageSquare, User, Clock, Banknote, CheckCircle2, XCircle } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
 import dayjs from "dayjs";
@@ -27,6 +30,9 @@ interface FinanceFollowUpDialogProps {
 export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: FinanceFollowUpDialogProps) {
   const [note, setNote] = useState("");
   const [nextDate, setNextDate] = useState("");
+  const [amountReceived, setAmountReceived] = useState("");
+  const [isPaymentReceived, setIsPaymentReceived] = useState(false);
+  const [nextPaymentDate, setNextPaymentDate] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
 
@@ -41,7 +47,10 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
           note: note,
           date: new Date().toISOString().split('T')[0] + " " + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           performedBy: userName,
-          nextFollowUpDate: nextDate ? new Date(nextDate).toISOString() : null
+          nextFollowUpDate: nextDate ? new Date(nextDate).toISOString() : null,
+          amountReceived: amountReceived ? parseFloat(amountReceived) : null,
+          isPaymentReceived: isPaymentReceived,
+          nextPaymentDate: nextPaymentDate || null,
         }),
       });
 
@@ -49,6 +58,9 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
         toast.success("Finance follow-up added");
         setNote("");
         setNextDate("");
+        setAmountReceived("");
+        setIsPaymentReceived(false);
+        setNextPaymentDate("");
         onUpdate();
       } else {
         toast.error("Failed to add follow-up");
@@ -74,7 +86,7 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
           Follow-ups ({project.financeFollowUps?.length || 0})
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-md" onClick={(e) => e.stopPropagation()}>
+      <DialogContent className="max-w-lg" onClick={(e) => e.stopPropagation()}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-[16px] font-bold">
             Finance Follow-ups: <span className="text-emerald-600">{project.title}</span>
@@ -89,18 +101,50 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
               placeholder="Payment status update, client communication notes, next steps..." 
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              className="min-h-[80px] bg-white border-emerald-200 focus-visible:ring-emerald-500 text-xs"
+              className="min-h-[70px] bg-white border-emerald-200 focus-visible:ring-emerald-500 text-xs"
             />
-            <div className="space-y-1.5">
-              <Label htmlFor="nextFinanceFollowUpDate" className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">Next Follow-up Date & Time (Optional)</Label>
-              <input 
-                type="datetime-local"
-                id="nextFinanceFollowUpDate"
-                value={nextDate}
-                onChange={(e) => setNextDate(e.target.value)}
-                className="w-full border border-emerald-200 rounded-lg p-2 text-xs focus:ring-emerald-500 focus:border-emerald-500 bg-white"
+
+            {/* Payment Fields */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">Amount Received (₹)</Label>
+                <Input
+                  type="number"
+                  placeholder="0.00"
+                  value={amountReceived}
+                  onChange={(e) => setAmountReceived(e.target.value)}
+                  className="bg-white border-emerald-200 focus-visible:ring-emerald-500 text-xs h-9"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">Next Payment Date</Label>
+                <input 
+                  type="date"
+                  value={nextPaymentDate}
+                  onChange={(e) => setNextPaymentDate(e.target.value)}
+                  className="w-full border border-emerald-200 rounded-lg p-2 text-xs focus:ring-emerald-500 focus:border-emerald-500 bg-white h-9"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-emerald-100">
+              <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 cursor-pointer">Payment Received?</Label>
+              <Switch 
+                checked={isPaymentReceived} 
+                onCheckedChange={setIsPaymentReceived}
               />
             </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">Next Follow-up Date & Time (Optional)</Label>
+              <input 
+                type="datetime-local"
+                value={nextDate}
+                onChange={(e) => setNextDate(e.target.value)}
+                className="w-full border border-emerald-200 rounded-lg p-2 text-xs focus:ring-emerald-500 focus:border-emerald-500 bg-white h-9"
+              />
+            </div>
+
             <Button 
               className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9 text-xs"
               onClick={handleAddFollowUp}
@@ -117,7 +161,7 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
               Finance Follow-up History
             </Label>
 
-            <ScrollArea className="h-[250px] pr-4">
+            <ScrollArea className="h-[280px] pr-4">
               {project.financeFollowUps && project.financeFollowUps.length > 0 ? (
                 <div className="space-y-3 relative before:absolute before:left-2 before:top-2 before:bottom-2 before:w-[1px] before:bg-emerald-200">
                   {project.financeFollowUps.slice().reverse().map((f: any, revIdx: number) => (
@@ -136,6 +180,33 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
                           <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap font-medium">
                             {f.note}
                           </p>
+
+                          {/* Payment Info */}
+                          <div className="flex flex-wrap gap-1.5 mt-1">
+                            {f.amountReceived != null && f.amountReceived > 0 && (
+                              <div className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded px-1.5 py-0.5 text-[9.5px] font-bold">
+                                <Banknote className="w-2.5 h-2.5" />
+                                ₹{f.amountReceived}
+                              </div>
+                            )}
+                            {f.isPaymentReceived != null && (
+                              <div className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9.5px] font-bold border ${
+                                f.isPaymentReceived 
+                                  ? 'bg-green-50 text-green-700 border-green-100' 
+                                  : 'bg-red-50 text-red-600 border-red-100'
+                              }`}>
+                                {f.isPaymentReceived ? <CheckCircle2 className="w-2.5 h-2.5" /> : <XCircle className="w-2.5 h-2.5" />}
+                                {f.isPaymentReceived ? "Paid" : "Not Paid"}
+                              </div>
+                            )}
+                            {f.nextPaymentDate && (
+                              <div className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-100 rounded px-1.5 py-0.5 text-[9.5px] font-bold">
+                                <Calendar className="w-2.5 h-2.5" />
+                                Next Payment: {f.nextPaymentDate}
+                              </div>
+                            )}
+                          </div>
+
                           {f.nextFollowUpDate && (
                             <div className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-100 rounded px-1.5 py-0.5 text-[9.5px] font-bold">
                               <Calendar className="w-2.5 h-2.5 text-amber-600" />

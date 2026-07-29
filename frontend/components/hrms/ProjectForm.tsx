@@ -480,6 +480,21 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
                 placeholder={isLoadingMeta ? "Loading..." : "Search Team Leader..."}
               />
             </div>
+            {canSeeFinance && (
+              <div className="space-y-2">
+                <Label>Assigned Finance Manager</Label>
+                <SingleEmployeeSelectWithSearch
+                  employees={allEmployees}
+                  selectedId={formData.assignedFinanceManagerId || ""}
+                  onChange={(id) => {
+                    const emp = allEmployees.find(e => e.id === id);
+                    handleChange("assignedFinanceManagerId", id);
+                    handleChange("assignedFinanceManagerName", emp ? `${emp.firstName || ""} ${emp.lastName || ""}`.trim() : "");
+                  }}
+                  placeholder="Select Finance Manager..."
+                />
+              </div>
+            )}
             {formData.department === "Digital Marketing" && (
               <div className="space-y-2">
                 <Label htmlFor="assignedEmployeeId">Assign Employee</Label>
@@ -995,63 +1010,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
         </div>
       )}
 
-      {canSeeFinance && (
-        <div className="space-y-4 pt-4 border-t border-slate-200 mt-4 bg-slate-50 p-4 rounded-xl">
-          <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-            Finance & Feedback
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Assigned Finance Manager</Label>
-              <SingleEmployeeSelectWithSearch
-                employees={allEmployees}
-                selectedId={formData.assignedFinanceManagerId || ""}
-                onChange={(id) => {
-                  const emp = allEmployees.find(e => e.id === id);
-                  handleChange("assignedFinanceManagerId", id);
-                  handleChange("assignedFinanceManagerName", emp ? `${emp.firstName || ""} ${emp.lastName || ""}`.trim() : "");
-                }}
-                placeholder="Select Finance Manager..."
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Amount Received</Label>
-              <Input
-                type="number"
-                min="0"
-                step="any"
-                value={formData.amountReceived || ""}
-                onChange={(e) => handleChange("amountReceived", parseFloat(e.target.value) || 0)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Next Payment Date</Label>
-              <Input
-                type="date"
-                value={formData.nextPaymentDate || ""}
-                onChange={(e) => handleChange("nextPaymentDate", e.target.value)}
-              />
-            </div>
-            <div className="space-y-2 flex flex-col justify-center">
-              <div className="flex items-center gap-2 mt-4">
-                <Switch 
-                  checked={formData.isPaymentReceived || false}
-                  onCheckedChange={(checked) => handleChange("isPaymentReceived", checked)}
-                />
-                <Label>Payment Received</Label>
-              </div>
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label>Project Feedback / Notes</Label>
-              <Input
-                placeholder="Feedback or important notes regarding this project..."
-                value={formData.projectFeedback || ""}
-                onChange={(e) => handleChange("projectFeedback", e.target.value)}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+
 
         </div>
       </ScrollArea>

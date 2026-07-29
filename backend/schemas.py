@@ -1274,7 +1274,7 @@ class ProjectBase(BaseModel):
     assignedFinanceManagerName: Optional[str] = None
     amountReceived: Optional[float] = 0.0
     projectFeedback: Optional[str] = None
-    financeFollowUps: Optional[List[FollowUp]] = []
+    financeFollowUps: Optional[List[dict]] = []
 
 class ProjectCreate(ProjectBase):
     performedBy: Optional[str] = None
@@ -1594,6 +1594,15 @@ class FollowUp(BaseModel):
     note: str
     performedBy: Optional[str] = None
     nextFollowUpDate: Optional[RobustDatetime] = None
+
+class FinanceFollowUp(BaseModel):
+    date: RobustDate
+    note: str
+    performedBy: Optional[str] = None
+    nextFollowUpDate: Optional[RobustDatetime] = None
+    amountReceived: Optional[float] = None
+    isPaymentReceived: Optional[bool] = None
+    nextPaymentDate: Optional[str] = None
 
 class Meeting(BaseModel):
     date: str

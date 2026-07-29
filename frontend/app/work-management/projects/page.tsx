@@ -1051,43 +1051,13 @@ export default function ProjectsPage() {
 
 
                     {/* Finance & Feedback Details */}
-                    {(isAdmin || project.assignedFinanceManagerId === user?.id || project.assignedEmployeeId === user?.id) && showFinanceDetails && (project.amountReceived !== undefined || project.projectFeedback || project.nextPaymentDate || project.isPaymentReceived !== undefined || (project.financeFollowUps && project.financeFollowUps.length > 0)) && (
+                    {(isAdmin || project.assignedFinanceManagerId === user?.id || project.assignedEmployeeId === user?.id) && showFinanceDetails && (
                       <div className="pt-3 border-t border-dashed border-emerald-200/60 bg-emerald-50/30 p-3 rounded-lg space-y-2 mt-2 mb-2">
-                        <div className="flex items-center gap-1.5 mb-1 text-emerald-700">
-                          <Banknote className="w-3.5 h-3.5" />
-                          <span className="text-[10px] font-bold uppercase tracking-wider">Finance & Feedback</span>
-                        </div>
-                        {project.assignedFinanceManagerName && (
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-slate-500 font-medium">Finance Manager:</span>
-                            <span className="font-bold text-slate-700">{project.assignedFinanceManagerName}</span>
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-1.5 text-emerald-700">
+                            <Banknote className="w-3.5 h-3.5" />
+                            <span className="text-[10px] font-bold uppercase tracking-wider">Finance & Feedback</span>
                           </div>
-                        )}
-                        {project.amountReceived !== undefined && project.amountReceived > 0 && (
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-slate-500 font-medium">Amount Received:</span>
-                            <span className="font-bold text-emerald-600">₹{project.amountReceived}</span>
-                          </div>
-                        )}
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="text-slate-500 font-medium">Next Payment Date:</span>
-                          <span className="font-bold text-slate-700">{project.nextPaymentDate || "Not Set"}</span>
-                        </div>
-                        {project.isPaymentReceived !== undefined && (
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-slate-500 font-medium">Payment Received:</span>
-                            <Badge variant={project.isPaymentReceived ? "success" : "destructive"} className="text-[10px] h-5 uppercase">
-                              {project.isPaymentReceived ? "Yes" : "No"}
-                            </Badge>
-                          </div>
-                        )}
-                        {project.projectFeedback && (
-                          <div className="flex flex-col gap-0.5 text-xs mt-1">
-                            <span className="text-slate-500 font-medium">Feedback / Notes:</span>
-                            <span className="text-slate-700 italic bg-white p-1.5 rounded border border-emerald-100">{project.projectFeedback}</span>
-                          </div>
-                        )}
-                        <div className="pt-2 border-t border-emerald-100 mt-2">
                           <FinanceFollowUpDialog 
                             project={project} 
                             onUpdate={() => fetchData(false)} 
@@ -1095,6 +1065,66 @@ export default function ProjectsPage() {
                             userName={`${user?.firstName || ""} ${user?.lastName || ""}`.trim()}
                           />
                         </div>
+                        {project.assignedFinanceManagerName && (
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-slate-500 font-medium">Finance Manager:</span>
+                            <span className="font-bold text-slate-700">{project.assignedFinanceManagerName}</span>
+                          </div>
+                        )}
+                        {(() => {
+                          const latestFollowUp = project.financeFollowUps?.length > 0 
+                            ? project.financeFollowUps[project.financeFollowUps.length - 1] 
+                            : null;
+                          return latestFollowUp ? (
+                            <>
+                              {latestFollowUp.amountReceived != null && latestFollowUp.amountReceived > 0 && (
+                                <div className="flex justify-between items-center text-xs">
+                                  <span className="text-slate-500 font-medium">Amount Received:</span>
+                                  <span className="font-bold text-emerald-600">₹{latestFollowUp.amountReceived}</span>
+                                </div>
+                              )}
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="text-slate-500 font-medium">Next Payment Date:</span>
+                                <span className="font-bold text-slate-700">{latestFollowUp.nextPaymentDate || "Not Set"}</span>
+                              </div>
+                              {latestFollowUp.isPaymentReceived != null && (
+                                <div className="flex justify-between items-center text-xs">
+                                  <span className="text-slate-500 font-medium">Payment Received:</span>
+                                  <Badge variant={latestFollowUp.isPaymentReceived ? "success" : "destructive"} className="text-[10px] h-5 uppercase">
+                                    {latestFollowUp.isPaymentReceived ? "Yes" : "No"}
+                                  </Badge>
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              {project.amountReceived !== undefined && project.amountReceived > 0 && (
+                                <div className="flex justify-between items-center text-xs">
+                                  <span className="text-slate-500 font-medium">Amount Received:</span>
+                                  <span className="font-bold text-emerald-600">₹{project.amountReceived}</span>
+                                </div>
+                              )}
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="text-slate-500 font-medium">Next Payment Date:</span>
+                                <span className="font-bold text-slate-700">{project.nextPaymentDate || "Not Set"}</span>
+                              </div>
+                              {project.isPaymentReceived !== undefined && (
+                                <div className="flex justify-between items-center text-xs">
+                                  <span className="text-slate-500 font-medium">Payment Received:</span>
+                                  <Badge variant={project.isPaymentReceived ? "success" : "destructive"} className="text-[10px] h-5 uppercase">
+                                    {project.isPaymentReceived ? "Yes" : "No"}
+                                  </Badge>
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
+                        {project.projectFeedback && (
+                          <div className="flex flex-col gap-0.5 text-xs mt-1">
+                            <span className="text-slate-500 font-medium">Feedback / Notes:</span>
+                            <span className="text-slate-700 italic bg-white p-1.5 rounded border border-emerald-100">{project.projectFeedback}</span>
+                          </div>
+                        )}
                       </div>
                     )}
 
