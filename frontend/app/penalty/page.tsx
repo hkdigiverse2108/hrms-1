@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/common/PageHeader";
 import { TablePagination } from "@/components/common/TablePagination";
@@ -108,7 +109,7 @@ export default function RemarksPage() {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [penaltyTypes, setPenaltyTypes] = useState<any[]>([]);
   const [manageTypesOpen, setManageTypesOpen] = useState(false);
-  const [newType, setNewType] = useState({ name: "", amount: 0, warningLimit: 3 });
+  const [newType, setNewType] = useState({ name: "", amount: 0, warningLimit: 0 });
   const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
 
   const getPenaltyAmount = (type: string) => {
@@ -197,7 +198,7 @@ export default function RemarksPage() {
     if (!newType.name || newType.amount <= 0) return;
     const bodyData = {
       ...newType,
-      warningLimit: parseInt(String(newType.warningLimit)) !== undefined && !isNaN(parseInt(String(newType.warningLimit))) ? parseInt(String(newType.warningLimit)) : 3
+      warningLimit: parseInt(String(newType.warningLimit)) !== undefined && !isNaN(parseInt(String(newType.warningLimit))) ? parseInt(String(newType.warningLimit)) : 0
     };
     try {
       if (editingTypeId && !editingTypeId.startsWith('fallback-')) {
@@ -207,7 +208,7 @@ export default function RemarksPage() {
           body: JSON.stringify(bodyData)
         });
         if (res.ok) {
-          setNewType({ name: "", amount: 0, warningLimit: 3 });
+          setNewType({ name: "", amount: 0, warningLimit: 0 });
           setEditingTypeId(null);
           fetchData();
         }
@@ -218,7 +219,7 @@ export default function RemarksPage() {
           body: JSON.stringify(bodyData)
         });
         if (res.ok) {
-          setNewType({ name: "", amount: 0, warningLimit: 3 });
+          setNewType({ name: "", amount: 0, warningLimit: 0 });
           fetchData();
         }
       }
@@ -744,7 +745,7 @@ export default function RemarksPage() {
                   </div>
                   
                   <div className="font-extrabold text-slate-800 text-[14px] mt-3 leading-snug truncate w-full group-hover:text-brand-teal transition-colors duration-200">{item.name}</div>
-                  <div className="text-[11px] text-muted-foreground font-bold uppercase tracking-wider mt-0.5 truncate w-full">{getEmployeeRoleSubtitle(item.employeeId || item.name, item.role)}</div>
+                  <div className="text-[11px] text-muted-foreground font-bold uppercase tracking-wider mt-0.5 truncate w-full">{getEmployeeRoleSubtitle((item as any).employeeId || item.name, item.role)}</div>
                   
                   <div className="mt-4 flex items-center justify-between w-full pt-3 border-t border-slate-100 text-xs">
                     <div className="text-left">
@@ -865,17 +866,19 @@ export default function RemarksPage() {
           <div className="flex flex-col sm:flex-row items-center gap-4">
             {canManageRemarks && (
               <div className="w-full sm:w-auto">
-                <Select value={employeeFilter} onValueChange={(v) => { setEmployeeFilter(v); setCurrentPage(1); }}>
-                  <SelectTrigger className="w-full sm:w-[180px] font-medium border-border shadow-sm">
-                    <SelectValue placeholder="All Employees" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="All">All Employees</SelectItem>
-                    {employees.map(emp => (
-                      <SelectItem key={emp.id} value={emp.id || emp.name}>{emp.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  options={[
+                    { value: "All", label: "All Employees" },
+                    ...employees.map(emp => ({
+                      value: emp.id || emp.name,
+                      label: emp.name
+                    }))
+                  ]}
+                  value={employeeFilter}
+                  onValueChange={(v) => { setEmployeeFilter(v); setCurrentPage(1); }}
+                  placeholder="All Employees"
+                  triggerClassName="w-full sm:w-[180px] font-medium border-border shadow-sm bg-white"
+                />
               </div>
             )}
             
@@ -1123,7 +1126,7 @@ export default function RemarksPage() {
                   {editingTypeId ? 'Update' : 'Add'}
                 </Button>
                 {editingTypeId && (
-                  <Button variant="ghost" onClick={() => { setNewType({ name: "", amount: 0, warningLimit: 3 }); setEditingTypeId(null); }} className="shrink-0 text-muted-foreground">
+                  <Button variant="ghost" onClick={() => { setNewType({ name: "", amount: 0, warningLimit: 0 }); setEditingTypeId(null); }} className="shrink-0 text-muted-foreground">
                     Cancel
                   </Button>
                 )}

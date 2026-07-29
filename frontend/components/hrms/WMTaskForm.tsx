@@ -24,6 +24,8 @@ export interface WMTaskFormData {
   remarks?: string;
   reasonForPending?: string;
   createdDate?: string;
+  assignedToName?: string;
+  rejectReason?: string;
   
   // Graphics fields
   postingDate?: string;

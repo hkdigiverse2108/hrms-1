@@ -176,12 +176,38 @@ export default function LeavePage() {
 
   useEffect(() => {
     if (user?.id) {
-      fetchLeaves();
-      fetchHolidays();
-      fetchCompanies();
-      fetchSysSettings();
+      fetchPageData();
     }
   }, [user?.id]);
+
+  const fetchPageData = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/leave-page-data?userId=${user?.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        
+        // Process leaves
+        if (data.leaves) {
+          const parseDDMMYYYY = (dateStr: string) => {
+            if (!dateStr) return 0;
+            const [d, m, y] = dateStr.split("-").map(Number);
+            return new Date(y, m - 1, d).getTime();
+          };
+          const sorted = data.leaves.sort((a: any, b: any) => parseDDMMYYYY(b.appliedOn) - parseDDMMYYYY(a.appliedOn));
+          setLeaves(sorted);
+        }
+        
+        setHolidays(data.holidays || []);
+        setCompanies(data.companies || []);
+        setSysSettings(data.systemSettings || null);
+      }
+    } catch (err) {
+      console.error("Error fetching leave page data:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const fetchSysSettings = async () => {
     try {

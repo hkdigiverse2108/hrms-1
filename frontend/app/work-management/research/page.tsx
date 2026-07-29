@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { LiveTimer } from "@/components/common/LiveTimer";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -75,37 +76,27 @@ export default function ResearchPage() {
   const fetchData = async () => {
     try {
       setIsLoading(true);
-      const [resData, empData, projData, attData] = await Promise.all([
-        fetch(`${API_URL}/research`, {
-          headers: {
-            "user-id": (user?.id || user?._id) || "",
-            "role": user?.role || "",
-          }
-        }),
-        fetch(`${API_URL}/employees`),
-        fetch(`${API_URL}/projects`),
-        fetch(`${API_URL}/attendance/status/${user?.id || user?._id}`)
-      ]);
+      const roleParam = user?.role || "";
+      const res = await fetch(`${API_URL}/research-page-data?userId=${user?.id || user?._id || ''}&role=${roleParam}`, { cache: 'no-store' });
 
-      if (resData.ok) {
-        setResearchList(await resData.json());
-      }
-      if (empData.ok) {
-        setEmployees(await empData.json());
-      }
-      if (projData.ok) {
-        let allProjects = await projData.json();
+      if (res.ok) {
+        const data = await res.json();
+        setResearchList(data.research || []);
+        setEmployees(data.employees || []);
+        
+        let allProjects = data.projects || [];
         if (!isAdmin && user?.department) {
           allProjects = allProjects.filter((p: any) => p.department === user.department);
         }
         setProjects(allProjects);
-      }
-      if (attData.ok) {
-        const serverDateStr = attData.headers.get("Date");
-        if (serverDateStr) {
-           setServerTimeOffset(new Date(serverDateStr).getTime() - Date.now());
+        
+        if (data.attendanceStatus) {
+          const serverDateStr = res.headers.get("Date");
+          if (serverDateStr) {
+             setServerTimeOffset(new Date(serverDateStr).getTime() - Date.now());
+          }
+          setAttendanceStatus(data.attendanceStatus);
         }
-        setAttendanceStatus(await attData.json());
       }
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -230,19 +221,19 @@ export default function ResearchPage() {
       >
         <div className="flex items-center gap-3 flex-wrap">
           {isAdmin && (
-            <Select value={filterEmployee} onValueChange={setFilterEmployee}>
-              <SelectTrigger className="w-[170px] bg-white border-slate-200 text-sm">
-                <SelectValue placeholder="All Employees" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Employees</SelectItem>
-                {employees.map(emp => (
-                  <SelectItem key={emp.id || emp._id} value={emp.id || emp._id}>
-                    {formatName(`${emp.firstName} ${emp.lastName}`)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              options={[
+                { value: "all", label: "All Employees" },
+                ...employees.map(emp => ({
+                  value: emp.id || emp._id,
+                  label: formatName(`${emp.firstName} ${emp.lastName}`)
+                }))
+              ]}
+              value={filterEmployee}
+              onValueChange={setFilterEmployee}
+              placeholder="All Employees"
+              triggerClassName="w-[170px] bg-white border-slate-200 text-sm"
+            />
           )}
           <Input
             type="date"

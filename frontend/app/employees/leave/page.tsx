@@ -34,6 +34,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TablePagination } from "@/components/common/TablePagination";
 import { DatePicker } from "antd";
@@ -403,19 +404,19 @@ export default function LeaveRequestsPage() {
         <div className={`grid grid-cols-1 ${tabFilter === "all" ? "md:grid-cols-5" : "md:grid-cols-4"} gap-4 items-end`}>
           <div className="space-y-2">
             <label className="text-xs font-bold text-slate-700">Filter Employee</label>
-            <Select value={selectedEmployee} onValueChange={(val) => { setSelectedEmployee(val); setCurrentPage(1); }}>
-              <SelectTrigger className="h-10 bg-slate-50/50 border-slate-200 rounded-xl text-xs font-sans">
-                <SelectValue placeholder="All Employees" />
-              </SelectTrigger>
-              <SelectContent className="font-sans max-h-60 overflow-y-auto">
-                <SelectItem value="all">All Employees</SelectItem>
-                {uniqueEmployees.map((emp: any) => (
-                  <SelectItem key={emp.id} value={emp.id}>
-                    {emp.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              options={[
+                { value: "all", label: "All Employees" },
+                ...uniqueEmployees.map((emp: any) => ({
+                  value: emp.id,
+                  label: emp.name
+                }))
+              ]}
+              value={selectedEmployee}
+              onValueChange={(val) => { setSelectedEmployee(val); setCurrentPage(1); }}
+              placeholder="All Employees"
+              triggerClassName="h-10 bg-slate-50/50 border-slate-200 rounded-xl text-xs font-sans w-full"
+            />
           </div>
 
           <div className="space-y-2">

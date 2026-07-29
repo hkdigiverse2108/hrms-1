@@ -41,7 +41,7 @@ export function FollowUpDialog({ lead, onUpdate, userId, userName }: FollowUpDia
           note: note,
           date: new Date().toISOString().split('T')[0] + " " + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           performedBy: userName,
-          nextFollowUpDate: nextDate || null
+          nextFollowUpDate: nextDate ? new Date(nextDate).toISOString() : null
         }),
       });
 

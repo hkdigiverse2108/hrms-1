@@ -121,7 +121,12 @@ def serialize_robust_datetime_standard(v: Optional[datetime], info: Serializatio
     if v is None:
         return None
     if info.mode == 'json':
-        return v.isoformat()
+        # If the datetime is naive, it came from MongoDB, which stores as UTC.
+        # Append 'Z' so the frontend dayjs correctly interprets it as UTC and converts to local time.
+        iso_str = v.isoformat()
+        if v.tzinfo is None and not iso_str.endswith('Z') and '+' not in iso_str:
+            return iso_str + 'Z'
+        return iso_str
     return v
 
 def serialize_robust_datetime_dmy(v: Optional[datetime], info: SerializationInfo) -> Any:
@@ -821,6 +826,7 @@ class ReviewBase(BaseModel):
     summary: str
     rating: int
     date: Optional[RobustDate] = None
+    showNameToAdmin: Optional[bool] = False
     logs: Optional[List[dict]] = None
     updatedBy: Optional[str] = None
     query: Optional[str] = None
@@ -834,6 +840,7 @@ class ReviewCreate(ReviewBase):
 class ReviewUpdate(BaseModel):
     summary: Optional[str] = None
     rating: Optional[int] = None
+    showNameToAdmin: Optional[bool] = None
     updatedBy: Optional[str] = None
     query: Optional[str] = None
     adminReply: Optional[str] = None
@@ -2565,7 +2572,9 @@ class ContentCalendarEntryBase(BaseModel):
     finalPostLink: Optional[str] = None
     approval: Optional[str] = None
     isApproved: Optional[str] = None
+    thumbnailDate: Optional[str] = None
     thumbnailLink: Optional[str] = None
+    captionDate: Optional[str] = None
     caption: Optional[str] = None
     postingLinkOfIg: Optional[str] = None
     actualPostingDate: Optional[str] = None
@@ -2602,7 +2611,9 @@ class ContentCalendarEntryUpdate(BaseModel):
     finalPostLink: Optional[str] = None
     approval: Optional[str] = None
     isApproved: Optional[str] = None
+    thumbnailDate: Optional[str] = None
     thumbnailLink: Optional[str] = None
+    captionDate: Optional[str] = None
     caption: Optional[str] = None
     postingLinkOfIg: Optional[str] = None
     actualPostingDate: Optional[str] = None

@@ -14,6 +14,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { SearchableSelect } from '@/components/ui/searchable-select'
 import { Plus, Loader2, Save, Trash2, FileText, Download, ExternalLink, Calendar, Search, Pencil, Eye, CheckCircle2, History, IndianRupee, ShieldCheck } from 'lucide-react'
 import { useApi } from '@/hooks/useApi'
 import { usePermissions } from '@/hooks/usePermissions'
@@ -1468,17 +1469,19 @@ export default function EmployeeDocumentsPage() {
               extraFilters={
                 isAdminOrHR ? (
                   <>
-                    <Select value={filterEmployee} onValueChange={setFilterEmployee}>
-                      <SelectTrigger className="h-10 w-[200px] border-slate-200 bg-slate-50/50 font-semibold">
-                        <SelectValue placeholder="All Employees" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Employees</SelectItem>
-                        {employees.map((emp: any) => (
-                          <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.employeeId})</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      options={[
+                        { value: "all", label: "All Employees" },
+                        ...employees.map((emp: any) => ({
+                          value: emp.id,
+                          label: `${emp.name} (${emp.employeeId})`
+                        }))
+                      ]}
+                      value={filterEmployee}
+                      onValueChange={setFilterEmployee}
+                      placeholder="All Employees"
+                      triggerClassName="h-10 w-[200px] border-slate-200 bg-slate-50/50 font-semibold"
+                    />
                     <Select value={filterType} onValueChange={setFilterType}>
                       <SelectTrigger className="h-10 w-[160px] border-slate-200 bg-slate-50/50 font-semibold">
                         <SelectValue placeholder="All Types" />
@@ -1608,17 +1611,19 @@ export default function EmployeeDocumentsPage() {
               <div className="flex flex-wrap items-center gap-4">
                 <div className="w-64">
                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Filter by Employee</span>
-                  <Select value={contractEmployeeFilter} onValueChange={setContractEmployeeFilter}>
-                    <SelectTrigger className="h-10 border-slate-200 bg-slate-50/50 font-semibold">
-                      <SelectValue placeholder="All Employees" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Employees</SelectItem>
-                      {employees.map((emp: any) => (
-                        <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.employeeId})</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    options={[
+                      { value: "all", label: "All Employees" },
+                      ...employees.map((emp: any) => ({
+                        value: emp.id,
+                        label: `${emp.name} (${emp.employeeId})`
+                      }))
+                    ]}
+                    value={contractEmployeeFilter}
+                    onValueChange={setContractEmployeeFilter}
+                    placeholder="All Employees"
+                    triggerClassName="h-10 border-slate-200 bg-slate-50/50 font-semibold w-full"
+                  />
                 </div>
                 <div className="w-64">
                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Filter by Term Type</span>
@@ -1700,17 +1705,19 @@ export default function EmployeeDocumentsPage() {
               <DataTable
                 extraFilters={
                   <>
-                    <Select value={signatureEmployeeFilter} onValueChange={setSignatureEmployeeFilter}>
-                      <SelectTrigger className="h-10 w-[200px] border-slate-200 bg-slate-50/50 font-semibold">
-                        <SelectValue placeholder="All Employees" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Employees</SelectItem>
-                        {employees.map((emp: any) => (
-                          <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.employeeId})</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      options={[
+                        { value: "all", label: "All Employees" },
+                        ...employees.map((emp: any) => ({
+                          value: emp.id,
+                          label: `${emp.name} (${emp.employeeId})`
+                        }))
+                      ]}
+                      value={signatureEmployeeFilter}
+                      onValueChange={setSignatureEmployeeFilter}
+                      placeholder="All Employees"
+                      triggerClassName="h-10 w-[200px] border-slate-200 bg-slate-50/50 font-semibold"
+                    />
                     <Select value={signatureStatusFilter} onValueChange={setSignatureStatusFilter}>
                       <SelectTrigger className="h-10 w-[160px] border-slate-200 bg-slate-50/50 font-semibold">
                         <SelectValue placeholder="All Status" />

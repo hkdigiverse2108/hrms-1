@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { TablePagination } from "@/components/common/TablePagination";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker, TimePicker } from "antd";
@@ -166,12 +167,41 @@ export default function AttendancePage() {
  
   useEffect(() => {
     if (user && !permissionsLoading) {
-      // Fetch employees first so adminIdsRef is populated before attendance
-      fetchEmployees().then(() => fetchAttendance());
-      fetchSysSettings();
-      fetchRecoveryRequests();
+      fetchPageData();
     }
   }, [user, canManageAttendance, permissionsLoading]);
+
+  const fetchPageData = async () => {
+    setIsLoading(true);
+    try {
+      const isHRRole = user?.designation?.toLowerCase() === 'hr' || user?.role?.toLowerCase() === 'hr';
+      const roleParam = isAdmin || isHRRole ? 'Admin' : (user?.role || '');
+      const res = await fetch(`${API_URL}/attendance-page-data?userId=${user?.id || ''}&role=${roleParam}`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        const emps = data.employees || [];
+        setAllEmployees(emps);
+        // Build admin IDs ref for attendance filtering
+        adminIdsRef.current = new Set(
+          emps.filter((e: any) => e.role === 'Admin' || e.role === 'Super Admin').map((e: any) => e.id)
+        );
+        setAttendance(data.attendance || []);
+        if (data.systemSettings) {
+          setSysSettings(data.systemSettings);
+          setCreateForm((prev: any) => ({
+            ...prev,
+            checkIn: data.systemSettings.officeStartTime ? `${data.systemSettings.officeStartTime}:00` : "09:30:00",
+            checkOut: data.systemSettings.officeEndTime ? `${data.systemSettings.officeEndTime}:00` : "18:30:00"
+          }));
+        }
+        setRecoveryRequests(data.recoveryRequests || []);
+      }
+    } catch (err) {
+      console.error("Error fetching attendance page data:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Update form defaults when time synchronization is complete
   useEffect(() => {
@@ -901,17 +931,19 @@ export default function AttendancePage() {
               <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
                 {canManageAttendance && (
                   <div className="w-full md:w-[240px]">
-                    <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId}>
-                      <SelectTrigger className="w-full bg-white h-9 border-border focus:ring-brand-teal focus:border-brand-teal">
-                        <SelectValue placeholder="Filter by Employee" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Employees</SelectItem>
-                        {allEmployees.map(emp => (
-                          <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      options={[
+                        { value: "all", label: "All Employees" },
+                        ...allEmployees.map(emp => ({
+                          value: emp.id,
+                          label: emp.name
+                        }))
+                      ]}
+                      value={selectedEmployeeId}
+                      onValueChange={setSelectedEmployeeId}
+                      placeholder="Filter by Employee"
+                      triggerClassName="w-full bg-white h-9 border-border focus:ring-brand-teal focus:border-brand-teal"
+                    />
                   </div>
                 )}
                 {selectedDate && (

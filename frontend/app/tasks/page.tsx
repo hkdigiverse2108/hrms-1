@@ -36,6 +36,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUser } from "@/hooks/useUser";
 import { usePermissions } from "@/hooks/usePermissions";
 import { API_URL } from "@/lib/config";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 
 // Helper to get status pill style
 const getStatusBadge = (status: string) => {
@@ -113,6 +114,13 @@ export default function TaskManagementPage() {
   const [rejectingTaskId, setRejectingTaskId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
 
+  // Quick Task Assign states
+  const [quickTasks, setQuickTasks] = useState<Array<{ title: string; assigneeId: string; dueDate: string }>>([
+    { title: "", assigneeId: "", dueDate: "" }
+  ]);
+  const [isQuickSubmitting, setIsQuickSubmitting] = useState(false);
+  const [showQuickAssign, setShowQuickAssign] = useState(false);
+
   // Form State
   const [newTask, setNewTask] = useState<{
     title: string;
@@ -149,16 +157,13 @@ export default function TaskManagementPage() {
     if (!user) return;
     setIsLoading(true);
     try {
-      const [tRes, eRes, dRes] = await Promise.all([
-        fetch(`${API_URL}/tasks?userId=${user.id}&role=${user.role}`),
-        fetch(`${API_URL}/employees`),
-        fetch(`${API_URL}/departments`)
-      ]);
-      
-      if (tRes.ok) setTasks(await tRes.json());
-      if (dRes.ok) setDepartments(await dRes.json());
-      if (eRes.ok) {
-        let emps = await eRes.json();
+      const res = await fetch(`${API_URL}/my-tasks-page-data?userId=${user.id}&role=${user.role || ''}`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        setTasks(data.tasks || []);
+        setDepartments(data.departments || []);
+        
+        let emps = data.employees || [];
         if (user && !emps.some((e: any) => e.id === user.id)) {
           emps.unshift({
             id: user.id,
@@ -181,6 +186,10 @@ export default function TaskManagementPage() {
 
   const handleCreateTask = async () => {
     if (!newTask.title) return;
+    if (!newTask.dueDate) {
+      toast.error("Due Date is required.");
+      return;
+    }
     setIsSubmitting(true);
     try {
       const idsToAssign = newTask.assignedToIds.length > 0 ? newTask.assignedToIds : [user?.id].filter(Boolean);
@@ -215,6 +224,90 @@ export default function TaskManagementPage() {
       toast.error("An error occurred while creating task.");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const addQuickTaskRow = () => {
+    setQuickTasks(prev => {
+      const last = prev[prev.length - 1];
+      return [
+        ...prev,
+        {
+          title: "",
+          assigneeId: last ? last.assigneeId : "",
+          dueDate: last ? last.dueDate : ""
+        }
+      ];
+    });
+  };
+
+  const updateQuickTaskField = (index: number, field: 'title' | 'assigneeId' | 'dueDate', value: string) => {
+    setQuickTasks(prev => {
+      const updated = prev.map(t => ({ ...t }));
+      if (field === 'title') {
+        updated[index].title = value;
+      } else {
+        for (let i = index; i < updated.length; i++) {
+          updated[i][field] = value;
+        }
+      }
+      return updated;
+    });
+  };
+
+  const removeQuickTaskRow = (index: number) => {
+    setQuickTasks(prev => {
+      if (prev.length <= 1) return [{ title: "", assigneeId: "", dueDate: "" }];
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
+  const handleTitleKeyDown = (e: React.KeyboardEvent, index: number) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (index === quickTasks.length - 1) {
+        addQuickTaskRow();
+      }
+      setTimeout(() => {
+        const nextInput = document.getElementById(`quick-task-title-${index + 1}`);
+        if (nextInput) nextInput.focus();
+      }, 50);
+    }
+  };
+
+  const handleBulkQuickAssign = async () => {
+    const validTasks = quickTasks.filter(t => t.title.trim() && t.assigneeId);
+    if (validTasks.length === 0) {
+      toast.error("Please add at least one task with a title and assignee.");
+      return;
+    }
+    setIsQuickSubmitting(true);
+    try {
+      await Promise.all(validTasks.map(t => 
+        fetch(`${API_URL}/tasks`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: t.title,
+            description: "Quick task created from tasks board",
+            dueDate: t.dueDate || undefined,
+            status: "todo",
+            priority: "medium",
+            assignedToIds: [t.assigneeId],
+            performedBy: user?.id,
+            userName: user?.name,
+          })
+        })
+      ));
+      toast.success(`Successfully assigned ${validTasks.length} task(s)!`);
+      setQuickTasks([{ title: "", assigneeId: "", dueDate: "" }]);
+      setShowQuickAssign(false);
+      fetchTasks();
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to assign some tasks.");
+    } finally {
+      setIsQuickSubmitting(false);
     }
   };
 
@@ -563,14 +656,22 @@ export default function TaskManagementPage() {
     
     let ownershipMatch = true;
     
-    // Non-admin users: always show only tasks assigned to them or created by them
-    if (!isAdmin) {
-      ownershipMatch = isAssignedToMe || isCreatedByMe;
-    }
-
-    // Admin users: respect the "My Tasks" / "All Users" toggle
-    if (isAdmin && !adminViewAllUsers) {
-      ownershipMatch = isAssignedToMe || isCreatedByMe;
+    const isTrueAdmin = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'super admin' || user?.role?.toLowerCase() === 'superadmin';
+    
+    if (isTrueAdmin) {
+      if (!adminViewAllUsers) {
+        ownershipMatch = isAssignedToMe || isCreatedByMe;
+      }
+    } else {
+      if (isAdmin) {
+        if (!adminViewAllUsers) {
+          ownershipMatch = isAssignedToMe || isCreatedByMe;
+        } else {
+          ownershipMatch = (task.department && user?.department && task.department.toLowerCase() === user.department.toLowerCase()) || isAssignedToMe || isCreatedByMe;
+        }
+      } else {
+        ownershipMatch = isAssignedToMe || isCreatedByMe;
+      }
     }
 
     // If double owned option is checked AND My Filter is active, restrict ownershipMatch to BOTH assigned to me AND created by me
@@ -610,7 +711,7 @@ export default function TaskManagementPage() {
   const tabFilteredTasks = sortedTasks.filter(task => {
     switch (viewTab) {
       case 'today':
-        return task.dueDate === todayStr;
+        return task.dueDate && task.dueDate <= todayStr && task.status !== 'completed' && task.status !== 'rejected';
       case 'pending':
         return task.status !== 'completed' && task.status !== 'rejected';
       case 'upcoming':
@@ -622,18 +723,29 @@ export default function TaskManagementPage() {
     }
   });
 
+  const finalFilteredTasks = viewTab === 'today' 
+    ? [...tabFilteredTasks].sort((a, b) => {
+        const isAOverdue = a.dueDate && a.dueDate < todayStr;
+        const isBOverdue = b.dueDate && b.dueDate < todayStr;
+        if (isAOverdue && !isBOverdue) return -1;
+        if (!isAOverdue && isBOverdue) return 1;
+        const pOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
+        return (pOrder[a.priority as keyof typeof pOrder] ?? 99) - (pOrder[b.priority as keyof typeof pOrder] ?? 99);
+      })
+    : tabFilteredTasks;
+
   // Tab counts (computed from sortedTasks before tab filter)
   const tabCounts = {
     all: sortedTasks.length,
-    today: sortedTasks.filter(t => t.dueDate === todayStr).length,
+    today: sortedTasks.filter(t => t.dueDate && t.dueDate <= todayStr && t.status !== 'completed' && t.status !== 'rejected').length,
     pending: sortedTasks.filter(t => t.status !== 'completed' && t.status !== 'rejected').length,
     upcoming: sortedTasks.filter(t => t.dueDate && t.dueDate > todayStr && t.status !== 'completed' && t.status !== 'rejected').length,
     completed: sortedTasks.filter(t => t.status === 'completed').length,
   };
   
   const [itemsPerPage, setItemsPerPage] = useState(10);
-  const totalPages = Math.max(1, Math.ceil(tabFilteredTasks.length / itemsPerPage));
-  const currentTasks = tabFilteredTasks.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const totalPages = Math.max(1, Math.ceil(finalFilteredTasks.length / itemsPerPage));
+  const currentTasks = finalFilteredTasks.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
     <div className="space-y-6 pb-10">
@@ -778,6 +890,99 @@ export default function TaskManagementPage() {
             )}
           </Button>
 
+          {canAdd && (
+            <Dialog open={showQuickAssign} onOpenChange={setShowQuickAssign}>
+              <DialogTrigger asChild>
+                <Button className="bg-brand-teal hover:bg-brand-teal/90 text-white font-medium shadow-sm">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Quick Assign
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-5xl w-full" style={{ maxWidth: '1050px', width: '95vw' }}>
+                <DialogHeader>
+                  <DialogTitle className="text-xl font-bold">Quick Assign Tasks</DialogTitle>
+                  <p className="text-sm text-muted-foreground mt-1">Press <kbd className="bg-slate-100 px-1 py-0.5 rounded border text-[10px]">Enter</kbd> in the task title field to quickly add a new row. Assignee and Due Date will automatically propagate down.</p>
+                </DialogHeader>
+
+                <div className="space-y-4 py-3 max-h-[60vh] overflow-y-auto pr-2">
+                  <div className="grid grid-cols-12 gap-3 mb-1 text-[11px] font-bold text-slate-500 uppercase tracking-wider px-2">
+                    <div className="col-span-5">Task Title *</div>
+                    <div className="col-span-4">Assignee *</div>
+                    <div className="col-span-2">Due Date</div>
+                    <div className="col-span-1 text-center">Action</div>
+                  </div>
+
+                  <div className="space-y-1">
+                    {quickTasks.map((task, idx) => (
+                      <div key={idx} className="grid grid-cols-12 gap-2 items-center hover:bg-slate-50/50 p-1 px-2 rounded-lg transition-colors border border-dashed border-slate-100">
+                        <div className="col-span-5">
+                          <Input 
+                            id={`quick-task-title-${idx}`}
+                            placeholder="Enter task name..."
+                            value={task.title}
+                            onChange={(e) => updateQuickTaskField(idx, 'title', e.target.value)}
+                            onKeyDown={(e) => handleTitleKeyDown(e, idx)}
+                            className="h-9 bg-white"
+                          />
+                        </div>
+                        <div className="col-span-4">
+                          <SearchableSelect
+                            options={employees.map(emp => {
+                              const empName = `${emp.firstName} ${emp.lastName}`;
+                              return { value: emp.id, label: empName };
+                            })}
+                            value={task.assigneeId}
+                            onValueChange={(val) => updateQuickTaskField(idx, 'assigneeId', val)}
+                            placeholder="Select Assignee"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <Input 
+                            type="date"
+                            value={task.dueDate}
+                            onChange={(e) => updateQuickTaskField(idx, 'dueDate', e.target.value)}
+                            className="h-9 bg-white text-xs px-2"
+                          />
+                        </div>
+                        <div className="col-span-1 text-center">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeQuickTaskRow(idx)}
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 h-8 w-8 rounded-full"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <Button 
+                    type="button"
+                    variant="outline"
+                    onClick={addQuickTaskRow}
+                    className="border-dashed border-brand-teal text-brand-teal hover:bg-brand-light/10 w-full h-9 rounded-lg"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Task Row
+                  </Button>
+                </div>
+
+                <DialogFooter className="mt-4 border-t pt-4">
+                  <Button 
+                    onClick={handleBulkQuickAssign} 
+                    disabled={isQuickSubmitting}
+                    className="bg-brand-teal hover:bg-brand-teal/90 text-white font-semibold px-6 h-9 rounded-lg shadow-sm ml-auto"
+                  >
+                    {isQuickSubmitting ? "Assigning..." : `Assign ${quickTasks.filter(t => t.title.trim() && t.assigneeId).length} Task(s)`}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
+
           {/* Create Task Modal */}
           {canAdd && (
           <Dialog open={createModalOpen} onOpenChange={(val) => {
@@ -807,6 +1012,65 @@ export default function TaskManagementPage() {
                     value={newTask.title}
                     onChange={(e) => setNewTask({...newTask, title: e.target.value})}
                   />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-foreground">Due date <span className="text-red-500">*</span></label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant={"outline"}
+                          className={cn(
+                            "w-full justify-start text-left font-normal bg-white h-10",
+                            !newTask.dueDate && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {newTask.dueDate ? format(new Date(newTask.dueDate), "PPP") : <span>Pick a date</span>}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={newTask.dueDate ? new Date(newTask.dueDate) : undefined}
+                          onSelect={(date) => setNewTask({...newTask, dueDate: date ? format(date, "yyyy-MM-dd") : ""})}
+                          initialFocus
+                          disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
+                        />
+                        {newTask.dueDate && (
+                          <div className="p-2 border-t border-border">
+                            <Button 
+                              variant="ghost" 
+                              className="w-full text-xs text-red-600 hover:text-red-700 hover:bg-red-50 h-8"
+                              onClick={() => setNewTask({...newTask, dueDate: ""})}
+                            >
+                              Clear date
+                            </Button>
+                          </div>
+                        )}
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-foreground">Department (optional)</label>
+                    <Select value={newTask.department || ""} onValueChange={(val) => setNewTask({...newTask, department: val})}>
+                      <SelectTrigger className="bg-white w-full">
+                        <SelectValue placeholder="Select department" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sortedDepartmentsList.map((dept: any) => {
+                          const deptName = typeof dept === 'string' ? dept : dept.name;
+                          return (
+                            <SelectItem key={deptName} value={deptName}>
+                              {deptName}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -940,44 +1204,6 @@ export default function TaskManagementPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-sm font-semibold text-foreground">Due date</label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant={"outline"}
-                            className={cn(
-                              "w-full justify-start text-left font-normal bg-white h-10",
-                              !newTask.dueDate && "text-muted-foreground"
-                            )}
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {newTask.dueDate ? format(new Date(newTask.dueDate), "PPP") : <span>Pick a date</span>}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={newTask.dueDate ? new Date(newTask.dueDate) : undefined}
-                            onSelect={(date) => setNewTask({...newTask, dueDate: date ? format(date, "yyyy-MM-dd") : ""})}
-                            initialFocus
-                            disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
-                          />
-                          {newTask.dueDate && (
-                            <div className="p-2 border-t border-border">
-                              <Button 
-                                variant="ghost" 
-                                className="w-full text-xs text-red-600 hover:text-red-700 hover:bg-red-50 h-8"
-                                onClick={() => setNewTask({...newTask, dueDate: ""})}
-                              >
-                                Clear date
-                              </Button>
-                            </div>
-                          )}
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                    
-                    <div className="space-y-2">
                       <label className="text-sm font-semibold text-foreground">Priority</label>
                       <Select value={newTask.priority} onValueChange={(val) => setNewTask({...newTask, priority: val})}>
                         <SelectTrigger className="bg-white w-full">
@@ -1011,25 +1237,6 @@ export default function TaskManagementPage() {
                         </SelectContent>
                       </Select>
                     </div>
-
-                    <div className="space-y-2">
-                      <label className="text-sm font-semibold text-foreground">Department (optional)</label>
-                      <Select value={newTask.department || ""} onValueChange={(val) => setNewTask({...newTask, department: val})}>
-                        <SelectTrigger className="bg-white w-full">
-                          <SelectValue placeholder="Select department" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {sortedDepartmentsList.map((dept: any) => {
-                            const deptName = typeof dept === 'string' ? dept : dept.name;
-                            return (
-                              <SelectItem key={deptName} value={deptName}>
-                                {deptName}
-                              </SelectItem>
-                            );
-                          })}
-                        </SelectContent>
-                      </Select>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -1039,7 +1246,7 @@ export default function TaskManagementPage() {
                 <Button 
                   className="bg-brand-teal hover:bg-brand-teal-light text-white" 
                   onClick={handleCreateTask}
-                  disabled={isSubmitting || !newTask.title}
+                  disabled={isSubmitting || !newTask.title || !newTask.dueDate}
                 >
                   {isSubmitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
                   Create task
@@ -1228,11 +1435,10 @@ export default function TaskManagementPage() {
         {/* Tab Navigation */}
         <div className="p-4 border-b border-border">
           <Tabs value={viewTab} onValueChange={(val: any) => { setViewTab(val); setCurrentPage(1); }} className="w-full">
-            <TabsList className="grid w-full grid-cols-5 sm:w-auto sm:inline-grid h-auto p-1 bg-muted/60">
+            <TabsList className="grid w-full grid-cols-4 sm:w-auto sm:inline-grid h-auto p-1 bg-muted/60">
               {[
                 { value: 'all', label: 'All Tasks', count: tabCounts.all },
                 { value: 'today', label: "Today's Tasks", count: tabCounts.today },
-                { value: 'pending', label: 'Pending Tasks', count: tabCounts.pending },
                 { value: 'upcoming', label: 'Upcoming Tasks', count: tabCounts.upcoming },
                 { value: 'completed', label: 'Completed', count: tabCounts.completed },
               ].map(tab => (
@@ -1254,6 +1460,8 @@ export default function TaskManagementPage() {
             </TabsList>
           </Tabs>
         </div>
+
+
 
         <div className="p-6 border-b border-border bg-gray-50/30">
           {/* Inline Filters */}
@@ -1566,6 +1774,11 @@ export default function TaskManagementPage() {
                           }}
                         >
                           {task.title}
+                          {task.dueDate && task.dueDate < todayStr && task.status !== 'completed' && task.status !== 'rejected' && (
+                            <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700 uppercase tracking-wider">
+                              Overdue
+                            </span>
+                          )}
                         </div>
                       )}
                       

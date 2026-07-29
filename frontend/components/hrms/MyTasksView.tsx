@@ -13,7 +13,8 @@ import {
   X,
   Plus,
   CheckCircle2,
-  Clock
+  Clock,
+  ExternalLink
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -21,6 +22,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { SearchableSelect } from '@/components/ui/searchable-select'
 import { Calendar as DayCalendar } from '@/components/ui/calendar'
 import { format } from 'date-fns'
 import { API_URL } from '@/lib/config'
@@ -87,35 +89,33 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
   const fetchData = async () => {
     setLoading(true)
     try {
-      const [tasksRes, wmTasksRes, entriesRes, otherWorkRes, projectsRes, clientsRes, employeesRes, leadsRes] = await Promise.all([
-        fetch(`${API_URL}/tasks`, { cache: 'no-store' }),
-        fetch(`${API_URL}/wm-tasks`, { cache: 'no-store' }),
-        fetch(`${API_URL}/content-calendar/all`, { cache: 'no-store' }),
-        fetch(`${API_URL}/other-work/all`, { cache: 'no-store' }),
-        fetch(`${API_URL}/projects`, { cache: 'no-store' }),
-        fetch(`${API_URL}/clients`, { cache: 'no-store' }),
-        fetch(`${API_URL}/employees`, { cache: 'no-store' }),
-        fetch(`${API_URL}/leads`, { cache: 'no-store' })
-      ])
-
-      if (tasksRes.ok) setTasks(await tasksRes.json())
-      if (wmTasksRes.ok) setWmTasks(await wmTasksRes.json())
-      if (entriesRes.ok) setEntries(await entriesRes.json())
-      if (otherWorkRes.ok) setOtherWork(await otherWorkRes.json())
-      if (projectsRes.ok) setProjects(await projectsRes.json())
-      if (clientsRes.ok) setClients(await clientsRes.json())
-      if (employeesRes.ok) setEmployees(await employeesRes.json())
-      if (leadsRes.ok) setLeads(await leadsRes.json())
+      const uId = targetUserId || currentUser?.id || '';
+      const role = currentUser?.role || '';
+      const res = await fetch(`${API_URL}/my-tasks-view-data?userId=${uId}&role=${role}`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        setTasks(data.tasks || []);
+        setWmTasks(data.wmTasks || []);
+        setEntries(data.contentCalendar || []);
+        setOtherWork(data.otherWork || []);
+        setProjects(data.projects || []);
+        setClients(data.clients || []);
+        setEmployees(data.employees || []);
+        setLeads(data.leads || []);
+      }
     } catch (err) {
-      console.error('Error fetching dashboard tasks:', err)
+      console.error('Error fetching data:', err)
+      toast.error('Failed to load tasks')
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    fetchData()
-  }, [])
+    if (currentUser || targetUserId) {
+      fetchData();
+    }
+  }, [currentUser, targetUserId]);
 
   const handleMarkComplete = async (task: any) => {
     try {
@@ -165,6 +165,29 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
     }
   }
 
+  const getRedirectUrl = (task: any) => {
+    if (task.sourceType === 'wm-task') {
+      return '/work-management/development';
+    }
+    if (task.sourceType === 'smm-creative') {
+      return '/work-management/smm';
+    }
+    if (task.sourceType === 'smm-other') {
+      if (task.department?.toLowerCase() === 'digital marketing' || task.originalTask?.taskType === 'digital-marketing') {
+        return '/work-management/digital-marketing';
+      }
+      return '/work-management/smm';
+    }
+    if (task.sourceType === 'general-task') {
+      const dept = task.originalTask?.department;
+      if (task.department === 'HR Tasks' || (dept && dept.toUpperCase() === 'HR')) {
+        return '/work-management/hr-tasks';
+      }
+      return '/tasks';
+    }
+    return null;
+  };
+
   // Process all tasks assigned to the current user
   const effectiveUserId = targetUserId || (selectedEmployeeId !== 'all' ? selectedEmployeeId : currentUser?.id);
   const allConsolidatedTasks = useMemo(() => {
@@ -180,42 +203,36 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
         assIds = t.assignedToIds
       } else if (typeof t.assignedToIds === 'string') {
         try {
-          assIds = JSON.parse(t.assignedToIds)
+          assIds = t.assignedToIds.split(',').map((id: string) => id.trim()).filter(Boolean)
         } catch (e) {
           assIds = t.assignedToIds.split(',').map((id: string) => id.trim()).filter(Boolean)
         }
       }
 
-      const targetEmployee = employees.find(e => e.id === uId) || currentUser
-      const userDept = targetEmployee?.department?.toLowerCase() || ''
-      const userRole = targetEmployee?.role?.toLowerCase() || ''
-      const isHRUser = userDept === 'hr' || userDept === 'human resources' || userRole === 'hr'
-
-      const taskDept = t.department?.toLowerCase() || ''
-      const isDeptMatched = taskDept !== '' && (
-        taskDept === userDept ||
-        (userDept === 'creative' && taskDept === 'smm') ||
-        (userDept === 'smm' && taskDept === 'creative')
-      )
-
-      const isHRTask = isHRUser && (taskDept === 'hr' || t.assignedToName?.toLowerCase().includes('hr'))
-
-      const isAssigned = t.assignedToId === uId || assIds.includes(uId) || isDeptMatched || isHRTask
+      const isAssigned = t.assignedToId === uId || assIds.includes(uId);
 
       if (isAssigned) {
-        const isHR = t.department === 'HR' || t.assignedToName?.toLowerCase().includes('hr')
-        consolidated.push({
-          id: t.id,
-          title: t.title,
-          description: t.description,
-          dueDate: t.dueDate ? (t.dueDate.includes('T') ? t.dueDate.split('T')[0] : t.dueDate) : '',
-          priority: t.priority || 'medium',
-          status: t.status,
-          frequency: t.frequency || 'one-time',
-          department: isHR ? 'HR Tasks' : 'General Tasks',
-          sourceType: 'general-task',
-          originalTask: t
-        })
+        let isProjectOnHold = false;
+        if (t.projectId) {
+          const assocProject = projects.find(p => p.id === t.projectId);
+          isProjectOnHold = assocProject && (assocProject.status === 'on-hold' || assocProject.status === 'onhold' || assocProject.status?.toLowerCase() === 'on-hold');
+        }
+        
+        if (!isProjectOnHold) {
+          const isHR = t.department === 'HR' || t.department?.toUpperCase() === 'HR';
+          consolidated.push({
+            id: t.id,
+            title: t.title,
+            description: t.description,
+            dueDate: t.dueDate ? (t.dueDate.includes('T') ? t.dueDate.split('T')[0] : t.dueDate) : '',
+            priority: t.priority || 'medium',
+            status: t.status,
+            frequency: t.frequency || 'one-time',
+            department: isHR ? 'HR Tasks' : 'General Tasks',
+            sourceType: 'general-task',
+            originalTask: t
+          });
+        }
       }
     })
 
@@ -272,6 +289,10 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
           if (stageName === 'Posting') assigneeId = entry.assignedPosterId || assocProject.assignedPosterId || client?.assignedPosterId
 
           if (assigneeId === uId && !isDone && deadline) {
+            const creatorName = entry.logs?.[0]?.userName || 'Admin'
+            const empName = employees.find(e => e.id === assigneeId)?.name || currentUser?.name || 'User'
+            const enrichedEntry = { ...entry, assignerName: creatorName, assigneeName: empName }
+
             consolidated.push({
               id: `${entry.id}-${stageName}`,
               title: entry.concept || entry.topic || (entry.postReel ? `${entry.postReel} Content` : 'SMM Task'),
@@ -282,7 +303,7 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
               status: 'todo',
               department: 'Social Media Management',
               sourceType: 'smm-creative',
-              originalTask: entry
+              originalTask: enrichedEntry
             })
           }
         }
@@ -301,6 +322,11 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
           bpIds.forEach((bpId: string) => {
             if (bpId === uId) {
               const taskDeadline = entry.shootDate || entry.postingDate || (entry.monthYear ? `${entry.monthYear}-28` : new Date().toISOString().split('T')[0]);
+              
+              const creatorName = entry.logs?.[0]?.userName || 'Admin'
+              const empName = employees.find(e => e.id === bpId)?.name || currentUser?.name || 'User'
+              const enrichedEntry = { ...entry, assignerName: creatorName, assigneeName: empName }
+              
               consolidated.push({
                 id: `${entry.id}-BrandPerson`,
                 title: entry.concept || entry.topic || (entry.postReel ? `${entry.postReel} Content` : 'SMM Task'),
@@ -311,7 +337,7 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                 status: 'todo',
                 department: 'Social Media Management',
                 sourceType: 'smm-creative',
-                originalTask: entry
+                originalTask: enrichedEntry
               })
             }
           })
@@ -341,18 +367,30 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
     otherWork.forEach(ow => {
       const isAssignee = ow.assigneeId === uId
       if (isAssignee && ow.status !== 'Approved') {
-        consolidated.push({
-          id: ow.id,
-          title: ow.title,
-          description: ow.description || 'SMM other work task',
-          dueDate: ow.deadline ? (ow.deadline.includes('T') ? ow.deadline.split('T')[0] : ow.deadline) : '',
-          priority: ow.priority || 'medium',
-          status: ow.status,
-          stage: ow.status,
-          department: ow.taskType === 'digital-marketing' ? 'Digital Marketing' : 'Social Media Management',
-          sourceType: 'smm-other',
-          originalTask: ow
-        })
+        let isProjectOnHold = false;
+        if (ow.projectId) {
+          const assocProject = projects.find(p => p.id === ow.projectId);
+          isProjectOnHold = assocProject && (assocProject.status === 'on-hold' || assocProject.status === 'onhold' || assocProject.status?.toLowerCase() === 'on-hold');
+        }
+        
+        if (!isProjectOnHold) {
+          const creatorName = ow.logs?.[0]?.userName || 'Manager';
+          const empName = employees.find(e => e.id === ow.assigneeId)?.name || currentUser?.name || 'User';
+          const enrichedOw = { ...ow, assignerName: creatorName, assigneeName: empName };
+
+          consolidated.push({
+            id: ow.id,
+            title: ow.title,
+            description: ow.description || 'SMM other work task',
+            dueDate: ow.deadline ? (ow.deadline.includes('T') ? ow.deadline.split('T')[0] : ow.deadline) : '',
+            priority: ow.priority || 'medium',
+            status: ow.status,
+            stage: ow.status,
+            department: ow.taskType === 'digital-marketing' ? 'Digital Marketing' : 'Social Media Management',
+            sourceType: 'smm-other',
+            originalTask: enrichedOw
+          })
+        }
       }
     })
     
@@ -366,6 +404,11 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
           const followUpAssigneeId = project.assignedFollowUpId || client?.assignedFollowUpId || project.teamLeaderId
           if (followUpAssigneeId === uId) {
             const nextDate = project.nextFollowupDate.split("T")[0].split(" ")[0]
+            
+            const empName = employees.find(e => e.id === followUpAssigneeId)?.name || currentUser?.name || 'User';
+            const tlName = employees.find(e => e.id === project.teamLeaderId)?.name || 'Manager';
+            const enrichedProject = { ...project, assignerName: tlName, assigneeName: empName };
+
             consolidated.push({
               id: `${project.id}-Followup`,
               title: `Follow-up: ${project.title || client?.companyName || 'Project'}`,
@@ -376,7 +419,7 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
               status: 'todo',
               department: 'Social Media Management',
               sourceType: 'smm-followup',
-              originalTask: project
+              originalTask: enrichedProject
             })
           }
         }
@@ -493,6 +536,14 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
         return
       }
 
+      const isClientIssue = (t.status && t.status.toLowerCase() === 'client issue') || 
+                            (t.originalTask?.remark && typeof t.originalTask.remark === 'string' && t.originalTask.remark.startsWith('[CLIENT ISSUE]'));
+
+      if (isClientIssue) {
+        pendingList.push(t);
+        return; // Don't process further, it belongs exclusively in pending
+      }
+
       if (t.sourceType.startsWith('smm-')) {
         // SMM Task Categorization
         if (t.sourceType === 'smm-other') {
@@ -512,11 +563,6 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
             todayList.push(t)
           } else {
             upcomingList.push(t)
-          }
-          // Check Pending (Client Issues)
-          const isClientIssue = t.originalTask.remark && t.originalTask.remark.trim() !== '' && t.originalTask.remark.startsWith('[CLIENT ISSUE]')
-          if (isClientIssue) {
-            pendingList.push(t)
           }
         } else if (t.sourceType === 'smm-followup') {
           if (deadlineDate <= today) {
@@ -759,19 +805,19 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                   {!isEmbedded && currentUser && ['admin', 'superadmin', 'head'].includes(currentUser.role?.toLowerCase()) && (
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold text-slate-500 hidden sm:inline-block">Employee:</span>
-                      <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId}>
-                        <SelectTrigger className="h-9 w-[200px] text-xs font-semibold bg-white border-slate-200 rounded-lg outline-none shadow-sm text-slate-700">
-                          <SelectValue placeholder="All Employees" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-[300px]">
-                          <SelectItem value="all">My Tasks Only</SelectItem>
-                          {employees.map(emp => (
-                            <SelectItem key={emp.id} value={emp.id}>
-                              {emp.name || `${emp.firstName} ${emp.lastName}`}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <SearchableSelect
+                        options={[
+                          { value: "all", label: "My Tasks Only" },
+                          ...employees.map(emp => ({
+                            value: emp.id,
+                            label: emp.name || `${emp.firstName} ${emp.lastName}`
+                          }))
+                        ]}
+                        value={selectedEmployeeId}
+                        onValueChange={setSelectedEmployeeId}
+                        placeholder="All Employees"
+                        triggerClassName="h-9 w-[200px]"
+                      />
                     </div>
                   )}
                 </div>
@@ -818,8 +864,18 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                                   {grouped[deptName].map(task => {
                                     const todayStr = new Date().toISOString().split('T')[0]
                                     const isOverdue = task.dueDate && task.dueDate < todayStr
+                                    const isCustomTask = task.description === "Custom task created from Punch-In" || task.originalTask?.description === "Custom task created from Punch-In"
                                     return (
-                                      <tr key={task.id} className="hover:bg-slate-50/50 transition-colors group">
+                                      <tr 
+                                        key={task.id} 
+                                        onClick={() => {
+                                          if (!isCustomTask) {
+                                            const url = getRedirectUrl(task);
+                                            if (url) router.push(url);
+                                          }
+                                        }}
+                                        className={`hover:bg-slate-50/50 transition-colors group ${!isCustomTask && getRedirectUrl(task) ? 'cursor-pointer' : ''}`}
+                                      >
                                         <td className="p-4">
                                           <span className={`font-bold text-[10px] rounded px-2.5 py-1 ${isOverdue ? 'bg-red-800 text-white' : 'bg-slate-100 text-slate-700'}`}>
                                             {task.dueDate ? format(new Date(task.dueDate), 'dd/MM/yyyy') : '-'}
@@ -848,24 +904,43 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                                           {task.originalTask?.remark || '-'}
                                         </td>
                                         <td className="p-4 text-right">
-                                          {task.status !== 'completed' && task.status !== 'Approved' && task.status?.toLowerCase() !== 'completed' ? (
-                                            <Button
-                                              variant="ghost"
-                                              size="icon"
-                                              className="h-8 w-8 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleMarkComplete(task);
-                                              }}
-                                              title="Mark Complete"
-                                            >
-                                              <CheckCircle2 className="w-4 h-4" />
-                                            </Button>
-                                          ) : (
-                                            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-                                              Completed
-                                            </Badge>
-                                          )}
+                                          <div className="flex items-center justify-end gap-1.5">
+                                            {task.status !== 'completed' && task.status !== 'Approved' && task.status?.toLowerCase() !== 'completed' ? (
+                                              isCustomTask && (
+                                                <Button
+                                                  variant="ghost"
+                                                  size="icon"
+                                                  className="h-8 w-8 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleMarkComplete(task);
+                                                  }}
+                                                  title="Mark Complete"
+                                                >
+                                                  <CheckCircle2 className="w-4 h-4" />
+                                                </Button>
+                                              )
+                                            ) : (
+                                              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                                                Completed
+                                              </Badge>
+                                            )}
+                                            {getRedirectUrl(task) && (
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  const url = getRedirectUrl(task);
+                                                  if (url) router.push(url);
+                                                }}
+                                                title="Go to Task Section"
+                                              >
+                                                <ExternalLink className="w-4 h-4" />
+                                              </Button>
+                                            )}
+                                          </div>
                                         </td>
                                       </tr>
                                     )
@@ -883,49 +958,84 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                                     <th className="p-4 w-[120px] text-right">Actions</th>
                                   </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-100 text-xs">
-                                  {grouped[deptName].map(task => (
-                                    <tr key={task.id} className="hover:bg-slate-50/50 transition-colors group">
-                                      <td className="p-4 font-semibold text-slate-700">
-                                        <div className="flex items-center gap-1.5">
-                                          <CalendarIcon className="w-3.5 h-3.5 text-slate-400" />
-                                          <span>{task.dueDate ? format(new Date(task.dueDate), 'dd/MM/yyyy') : 'No Date'}</span>
-                                        </div>
-                                      </td>
-                                      <td className="p-4 font-bold text-slate-800">
-                                        {task.projectName || '-'}
-                                      </td>
-                                      <td className="p-4" title={`${task.title}${task.description ? '\n' + task.description : ''}`}>
-                                        <div className="font-semibold text-slate-700 truncate max-w-[400px]">{task.title}</div>
-                                        {task.description && <div className="text-[10px] text-slate-400 mt-0.5 truncate max-w-[400px]">{task.description}</div>}
-                                      </td>
-                                      <td className="p-4">
-                                        <Badge className={`${getPriorityColor(task.priority)} border font-bold text-[9px] uppercase shadow-none`}>
-                                          {task.priority}
-                                        </Badge>
-                                      </td>
-                                      <td className="p-4 text-right">
-                                          {task.status !== 'completed' && task.status !== 'Approved' && task.status?.toLowerCase() !== 'completed' ? (
-                                            <Button
-                                              variant="ghost"
-                                              size="icon"
-                                              className="h-8 w-8 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleMarkComplete(task);
-                                              }}
-                                              title="Mark Complete"
-                                            >
-                                              <CheckCircle2 className="w-4 h-4" />
-                                            </Button>
-                                          ) : (
-                                            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-                                              Completed
-                                            </Badge>
-                                          )}
-                                      </td>
+                                  <tbody className="divide-y divide-slate-100 text-xs">
+                                    {grouped[deptName].map(task => {
+                                      const todayStr = new Date().toISOString().split('T')[0]
+                                      const isOverdue = task.dueDate && task.dueDate < todayStr
+                                      const isCustomTask = task.description === "Custom task created from Punch-In" || task.originalTask?.description === "Custom task created from Punch-In"
+                                        return (
+                                          <tr 
+                                            key={task.id} 
+                                            onClick={() => {
+                                              if (!isCustomTask) {
+                                                const url = getRedirectUrl(task);
+                                                if (url) router.push(url);
+                                              }
+                                            }}
+                                            className={`hover:bg-slate-50/50 transition-colors group ${!isCustomTask && getRedirectUrl(task) ? 'cursor-pointer' : ''}`}
+                                          >
+                                            <td className="p-4 font-semibold text-slate-700">
+                                              <div className={`flex items-center gap-1.5 ${isOverdue ? 'text-red-600 font-bold' : ''}`}>
+                                                {isOverdue ? <AlertCircle className="w-3.5 h-3.5 text-red-600" /> : <CalendarIcon className="w-3.5 h-3.5 text-slate-400" />}
+                                                <span className={isOverdue ? 'bg-red-100 px-2 py-0.5 rounded text-[10px]' : ''}>
+                                                  {task.dueDate ? format(new Date(task.dueDate), 'dd/MM/yyyy') : 'No Date'}
+                                                </span>
+                                              </div>
+                                            </td>
+                                        <td className="p-4 font-bold text-slate-800">
+                                          {task.projectName || '-'}
+                                        </td>
+                                        <td className="p-4" title={`${task.title}${task.description ? '\n' + task.description : ''}`}>
+                                          <div className="font-semibold text-slate-700 truncate max-w-[400px]">{task.title}</div>
+                                          {task.description && <div className="text-[10px] text-slate-400 mt-0.5 truncate max-w-[400px]">{task.description}</div>}
+                                        </td>
+                                        <td className="p-4">
+                                          <Badge className={`${getPriorityColor(task.priority)} border font-bold text-[9px] uppercase shadow-none`}>
+                                            {task.priority}
+                                          </Badge>
+                                        </td>
+                                        <td className="p-4 text-right">
+                                          <div className="flex items-center justify-end gap-1.5">
+                                            {task.status !== 'completed' && task.status !== 'Approved' && task.status?.toLowerCase() !== 'completed' ? (
+                                              isCustomTask && (
+                                                <Button
+                                                  variant="ghost"
+                                                  size="icon"
+                                                  className="h-8 w-8 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleMarkComplete(task);
+                                                  }}
+                                                  title="Mark Complete"
+                                                >
+                                                  <CheckCircle2 className="w-4 h-4" />
+                                                </Button>
+                                              )
+                                            ) : (
+                                              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                                                Completed
+                                              </Badge>
+                                            )}
+                                            {getRedirectUrl(task) && (
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  const url = getRedirectUrl(task);
+                                                  if (url) router.push(url);
+                                                }}
+                                                title="Go to Task Section"
+                                              >
+                                                <ExternalLink className="w-4 h-4" />
+                                              </Button>
+                                            )}
+                                          </div>
+                                        </td>
                                     </tr>
-                                  ))}
+                                      )
+                                    })}
                                 </tbody>
                               </table>
                             )}

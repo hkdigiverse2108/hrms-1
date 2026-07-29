@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { TablePagination } from "@/components/common/TablePagination";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -158,21 +159,29 @@ export default function EmployeeAttendanceListPage() {
   async function fetchData() {
     setIsLoading(true);
     try {
-      const [attRes, empRes, deptRes, sysRes, recRes, leaveRes] = await Promise.all([
-        fetch(`${API_URL}/attendance`),
-        fetch(`${API_URL}/employees`),
-        fetch(`${API_URL}/departments`),
-        fetch(`${API_URL}/system-settings`),
-        fetch(`${API_URL}/time-recovery`),
-        fetch(`${API_URL}/leaves`)
-      ]);
-      
-      if (attRes.ok) setAttendance(await attRes.json());
-      if (empRes.ok) setEmployees(await empRes.json());
-      if (deptRes.ok) setDepartments(await deptRes.json());
-      if (sysRes.ok) setSysSettings(await sysRes.json());
-      if (recRes.ok) setRecoveryRequests(await recRes.json());
-      if (leaveRes.ok) setLeaveRequests(await leaveRes.json());
+      const res = await fetch(`${API_URL}/employee-attendance-page-data`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        setAttendance(data.attendance || []);
+        
+        const emps = data.employees || [];
+        setEmployees(emps);
+        adminIdsRef.current = new Set(
+          emps.filter((e: any) => e.role === 'Admin' || e.role === 'Super Admin').map((e: any) => e.id)
+        );
+        
+        setDepartments(data.departments || []);
+        if (data.systemSettings) {
+          setSysSettings(data.systemSettings);
+          setCreateForm((prev: any) => ({
+            ...prev,
+            checkIn: data.systemSettings.officeStartTime ? `${data.systemSettings.officeStartTime}:00` : "09:30:00",
+            checkOut: data.systemSettings.officeEndTime ? `${data.systemSettings.officeEndTime}:00` : "18:30:00"
+          }));
+        }
+        setRecoveryRequests(data.timeRecovery || []);
+        setLeaveRequests(data.leaves || []);
+      }
     } catch (err) {
       console.error("Error fetching data:", err);
     } finally {
@@ -740,19 +749,19 @@ export default function EmployeeAttendanceListPage() {
             </button>
           </div>
 
-          <Select value={searchQuery || "all"} onValueChange={(v) => setSearchQuery(v === "all" ? "" : v)}>
-            <SelectTrigger className="w-full md:w-[240px] h-9 bg-white border-border shadow-sm text-xs">
-              <SelectValue placeholder="All Employees" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Employees</SelectItem>
-              {nonAdminEmployees.map(emp => (
-                <SelectItem key={emp.id} value={emp.id}>
-                  {emp.name} {emp.employeeId ? `(${emp.employeeId})` : ""}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SearchableSelect
+            options={[
+              { value: "all", label: "All Employees" },
+              ...nonAdminEmployees.map(emp => ({
+                value: emp.id,
+                label: `${emp.name} ${emp.employeeId ? `(${emp.employeeId})` : ""}`
+              }))
+            ]}
+            value={searchQuery || "all"}
+            onValueChange={(v) => setSearchQuery(v === "all" ? "" : v)}
+            placeholder="All Employees"
+            triggerClassName="w-full md:w-[240px] h-9 bg-white border-border shadow-sm text-xs"
+          />
         </div>
       </div>
 

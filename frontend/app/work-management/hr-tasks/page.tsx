@@ -63,11 +63,34 @@ export default function HRTasksPage() {
   const isAdminOrHR = user?.role === "Admin" || user?.role === "Super Admin" || user?.role === "HR" || user?.department?.toLowerCase() === "hr";
 
   useEffect(() => {
-    fetchEmployees();
-    fetchTasks();
-    fetchLeaves();
-    fetchDocRequests();
+    fetchPageData();
   }, [user]);
+
+  const fetchPageData = async () => {
+    setLoadingTasks(true);
+    setLoadingLeaves(true);
+    setLoadingDocs(true);
+    try {
+      const res = await fetch(`${API_URL}/hr-tasks-data`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        setEmployees(data.employees || []);
+        setTasks(data.tasks || []);
+        setLeaves(data.leaves || []);
+        setDocRequests(data.documentRequests || []);
+      }
+    } catch (err) {
+      console.error("Error fetching HR tasks data:", err);
+    } finally {
+      setLoadingTasks(false);
+      setLoadingLeaves(false);
+      setLoadingDocs(false);
+    }
+  };
+
+  const hrTasks = useMemo(() => {
+    return tasks.filter((t: any) => t.department === "HR" || t.department?.toUpperCase() === "HR");
+  }, [tasks]);
 
   const fetchEmployees = async () => {
     try {
@@ -77,65 +100,6 @@ export default function HRTasksPage() {
       }
     } catch (err) {
       console.error("Error fetching employees:", err);
-    }
-  };
-
-  const hrTasks = useMemo(() => {
-    const hrEmployeeIds = new Set(
-      employees
-        .filter(e => e.role === "HR" || e.department?.toLowerCase() === "hr" || e.department?.toLowerCase() === "human resources")
-        .map(e => e.id || e._id)
-    );
-
-    return tasks.filter((t: any) => {
-      const isAssignedToHREmployee = (t.assignedToId && hrEmployeeIds.has(t.assignedToId)) || 
-                                     (t.assignedToIds && t.assignedToIds.some((id: string) => hrEmployeeIds.has(id)));
-      return t.department === "HR" || 
-             t.assignedToName?.toLowerCase().includes("hr") ||
-             isAssignedToHREmployee ||
-             (user && (t.assignedToId === user.id || t.assignedToIds?.includes(user.id)));
-    });
-  }, [tasks, employees, user]);
-
-  const fetchTasks = async () => {
-    setLoadingTasks(true);
-    try {
-      const res = await fetch(`${API_URL}/tasks`);
-      if (res.ok) {
-        setTasks(await res.json());
-      }
-    } catch (err) {
-      console.error("Error fetching tasks:", err);
-    } finally {
-      setLoadingTasks(false);
-    }
-  };
-
-  const fetchLeaves = async () => {
-    setLoadingLeaves(true);
-    try {
-      const res = await fetch(`${API_URL}/leaves`);
-      if (res.ok) {
-        setLeaves(await res.json());
-      }
-    } catch (err) {
-      console.error("Error fetching leaves:", err);
-    } finally {
-      setLoadingLeaves(false);
-    }
-  };
-
-  const fetchDocRequests = async () => {
-    setLoadingDocs(true);
-    try {
-      const res = await fetch(`${API_URL}/document-requests`);
-      if (res.ok) {
-        setDocRequests(await res.json());
-      }
-    } catch (err) {
-      console.error("Error fetching doc requests:", err);
-    } finally {
-      setLoadingDocs(false);
     }
   };
 
@@ -184,7 +148,7 @@ export default function HRTasksPage() {
           frequency: "one-time",
           remarks: ""
         });
-        fetchTasks();
+        fetchPageData();
       } else {
         toast.error("Failed to save task");
       }
@@ -207,7 +171,7 @@ export default function HRTasksPage() {
       const res = await fetch(`${API_URL}/tasks/${id}`, { method: "DELETE" });
       if (res.ok) {
         toast.success("Task deleted");
-        fetchTasks();
+        fetchPageData();
       }
     } catch (err) {
       console.error(err);
@@ -254,7 +218,7 @@ export default function HRTasksPage() {
           ? `Task completed and scheduled for next occurrence on ${nextDueDate}` 
           : "Task marked as completed"
         );
-        fetchTasks();
+        fetchPageData();
       } else {
         toast.error("Failed to update task status");
       }
@@ -482,7 +446,7 @@ export default function HRTasksPage() {
               if (taskSubTab === "upcoming" && task.frequency && task.frequency !== "one-time" && eff === todayStr) {
                 return getNextOccurrenceDate(task);
               }
-              if (taskSubTab === "today" || eff === todayStr) {
+              if (eff === todayStr) {
                 return todayStr;
               }
               return task.dueDate || task.createdDate || eff;
@@ -490,11 +454,7 @@ export default function HRTasksPage() {
 
             const countToday = freqTasks.filter(t => {
               const eff = getEffectiveDueDate(t);
-              return t.status !== "completed" && eff && eff === todayStr;
-            }).length;
-            const countPending = freqTasks.filter(t => {
-              const eff = getEffectiveDueDate(t);
-              return t.status !== "completed" && eff && eff < todayStr;
+              return t.status !== "completed" && eff && eff <= todayStr;
             }).length;
             const countUpcoming = freqTasks.filter(t => isTaskUpcoming(t)).length;
             const countCompleted = freqTasks.filter(t => t.status === "completed").length;
@@ -502,10 +462,7 @@ export default function HRTasksPage() {
             const filteredTasks = freqTasks.filter((task) => {
               const taskDateStr = getEffectiveDueDate(task);
               if (taskSubTab === "today") {
-                return task.status !== "completed" && taskDateStr && taskDateStr === todayStr;
-              }
-              if (taskSubTab === "pending") {
-                return task.status !== "completed" && taskDateStr && taskDateStr < todayStr;
+                return task.status !== "completed" && taskDateStr && taskDateStr <= todayStr;
               }
               if (taskSubTab === "upcoming") {
                 return isTaskUpcoming(task);
@@ -521,7 +478,10 @@ export default function HRTasksPage() {
               const bComp = b.status === "completed";
               if (aComp && !bComp) return 1;
               if (!aComp && bComp) return -1;
-              return 0;
+
+              const aEff = getEffectiveDueDate(a) || "";
+              const bEff = getEffectiveDueDate(b) || "";
+              return aEff.localeCompare(bEff);
             });
 
             return (
@@ -531,7 +491,6 @@ export default function HRTasksPage() {
                     {[
                       { id: "all", label: "All Tasks", count: freqTasks.length },
                       { id: "today", label: "Today's Tasks", count: countToday },
-                      { id: "pending", label: "Pending Tasks", count: countPending },
                       { id: "upcoming", label: "Upcoming Tasks", count: countUpcoming },
                       { id: "completed", label: "Completed", count: countCompleted }
                     ].map((sub) => (
