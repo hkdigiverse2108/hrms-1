@@ -91,6 +91,8 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
     nextDate.trim()
   );
 
+  const todayStr = new Date().toISOString().split('T')[0];
+
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
@@ -144,6 +146,7 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
                 </Label>
                 <input 
                   type="date"
+                  min={todayStr}
                   value={nextPaymentDate}
                   onChange={(e) => setNextPaymentDate(e.target.value)}
                   className="w-full border border-emerald-200 rounded-lg p-2 text-xs focus:ring-emerald-500 focus:border-emerald-500 bg-white h-9"
@@ -183,6 +186,7 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
               </Label>
               <input 
                 type="date"
+                min={todayStr}
                 value={nextDate}
                 onChange={(e) => setNextDate(e.target.value)}
                 className="w-full border border-emerald-200 rounded-lg p-2 text-xs focus:ring-emerald-500 focus:border-emerald-500 bg-white h-9"
@@ -246,7 +250,7 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
                             {f.nextPaymentDate && (
                               <div className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-100 rounded px-1.5 py-0.5 text-[9.5px] font-bold">
                                 <Calendar className="w-2.5 h-2.5" />
-                                Next Payment: {f.nextPaymentDate}
+                                Next Payment: {dayjs(f.nextPaymentDate).format("DD-MM-YYYY")}
                               </div>
                             )}
                             {f.projectStatus && (
@@ -259,7 +263,7 @@ export function FinanceFollowUpDialog({ project, onUpdate, userId, userName }: F
                           {f.nextFollowUpDate && (
                             <div className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-100 rounded px-1.5 py-0.5 text-[9.5px] font-bold">
                               <Calendar className="w-2.5 h-2.5 text-amber-600" />
-                              Next Follow-up: {dayjs(f.nextFollowUpDate).format("DD/MM/YYYY")}
+                              Next Follow-up: {dayjs(f.nextFollowUpDate).format("DD-MM-YYYY")}
                             </div>
                           )}
                         </div>
