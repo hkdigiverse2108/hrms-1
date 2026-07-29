@@ -630,46 +630,53 @@ export default function ResearchPage() {
           <div className="pt-2 space-y-3">
             {selectedReferences.length > 0 ? (
               <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
-                <div className="flex items-center gap-3 bg-slate-50/90 px-4 py-2 border-b border-slate-200/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                  <div className="w-1/3 shrink-0">Concept / Subject</div>
-                  <div className="flex-1 min-w-0">Reference Link (URL)</div>
-                  <div className="w-10 text-right shrink-0">Open</div>
+                <div className="grid grid-cols-12 gap-3 items-center bg-slate-50/90 px-4 py-2 border-b border-slate-200/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  <div className="col-span-5 min-w-0 overflow-hidden">Concept / Subject</div>
+                  <div className="col-span-6 min-w-0 overflow-hidden">Reference Link (URL)</div>
+                  <div className="col-span-1 text-right">Open</div>
                 </div>
                 <div className="divide-y divide-slate-100 max-h-[55vh] overflow-y-auto overflow-x-hidden">
-                  {selectedReferences.map((item: any, idx: number) => (
-                    <div key={idx} className="flex items-center gap-3 px-4 py-2 hover:bg-brand-teal/[0.03] transition-colors group">
-                      <div className="w-1/3 shrink-0">
-                        <span className="text-xs font-bold text-slate-800 block truncate" title={item.concept || "General Reference"}>
-                          {item.concept || "General Reference"}
-                        </span>
+                  {selectedReferences.map((item: any, idx: number) => {
+                    const conceptStr = item.concept || "General Reference";
+                    const linkStr = item.link || "No link specified";
+                    const shortConcept = conceptStr.length > 35 ? conceptStr.substring(0, 35) + "..." : conceptStr;
+                    const shortLink = linkStr.length > 45 ? linkStr.substring(0, 45) + "..." : linkStr;
+
+                    return (
+                      <div key={idx} className="grid grid-cols-12 gap-3 items-center px-4 py-2 hover:bg-brand-teal/[0.03] transition-colors group">
+                        <div className="col-span-5 min-w-0 overflow-hidden">
+                          <span className="text-xs font-bold text-slate-800 block truncate cursor-help" title={conceptStr}>
+                            {shortConcept}
+                          </span>
+                        </div>
+                        <div className="col-span-6 min-w-0 overflow-hidden">
+                          <span className="text-xs font-medium text-slate-600 font-mono block truncate select-all cursor-help" title={linkStr}>
+                            {shortLink}
+                          </span>
+                        </div>
+                        <div className="col-span-1 flex justify-end">
+                          <button
+                            type="button"
+                            disabled={!item.link}
+                            onClick={() => {
+                              if (item.link) {
+                                const url = item.link.startsWith("http") ? item.link : `https://${item.link}`;
+                                window.open(url, "_blank", "noopener,noreferrer");
+                              }
+                            }}
+                            className={`p-1.5 rounded-lg border transition-all ${
+                              item.link
+                                ? "bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-600 hover:text-white cursor-pointer shadow-sm active:scale-95"
+                                : "bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed"
+                            }`}
+                            title="Redirect / Open Link in New Tab"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex-1 min-w-0 flex items-center">
-                        <span className="text-xs font-medium text-slate-600 font-mono block truncate select-all" title={item.link}>
-                          {item.link || "No link specified"}
-                        </span>
-                      </div>
-                      <div className="w-10 text-right shrink-0 flex justify-end">
-                        <button
-                          type="button"
-                          disabled={!item.link}
-                          onClick={() => {
-                            if (item.link) {
-                              const url = item.link.startsWith("http") ? item.link : `https://${item.link}`;
-                              window.open(url, "_blank", "noopener,noreferrer");
-                            }
-                          }}
-                          className={`p-1.5 rounded-lg border transition-all ${
-                            item.link
-                              ? "bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-600 hover:text-white cursor-pointer shadow-sm active:scale-95"
-                              : "bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed"
-                          }`}
-                          title="Redirect / Open Link in New Tab"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ) : (
