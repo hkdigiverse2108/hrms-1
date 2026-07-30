@@ -1202,7 +1202,10 @@ export default function SalesPage() {
       .filter(l => 
         (l.company || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
         (l.contact || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (l.remarks || "").toLowerCase().includes(searchTerm.toLowerCase())
+        (l.remarks || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (l.email || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (l.phone || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (l.createdByUserName || "").toLowerCase().includes(searchTerm.toLowerCase())
       )
       .filter(l => {
         if (categoryFilter === "Other") {
@@ -2216,6 +2219,15 @@ export default function SalesPage() {
           </TabsList>
 
           <div className="flex flex-wrap items-center gap-2 self-start xl:self-auto w-full xl:w-auto justify-start xl:justify-end shrink-0">
+            <div className="relative w-[200px]">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search leads..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-8 h-9 border-slate-200"
+              />
+            </div>
             {isAdmin && (
               <Popover>
                 <PopoverTrigger asChild>
