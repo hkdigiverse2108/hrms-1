@@ -782,6 +782,50 @@ export default function EmployeeDocumentsPage() {
     setModalOpen(true)
   }
 
+  const getDepositInfo = (record: any) => {
+    const emp = employees.find((e: any) => String(e.id) === String(record.employeeId) || String(e.employeeId) === String(record.employeeId));
+    
+    let target = 10000;
+    if (record.documentName?.includes('Intern - 2000') || record.documentName?.includes('2000')) {
+      target = 2000;
+    } else if (record.documentName?.includes('Employee - 10000') || record.documentName?.includes('10000')) {
+      target = 10000;
+    } else if (emp?.targetSecurityDeposit && Number(emp.targetSecurityDeposit) > 0) {
+      target = Number(emp.targetSecurityDeposit);
+    } else {
+      const match = record.documentName?.match(/(\d+)/);
+      if (match && Number(match[0]) > 0) {
+        target = Number(match[0]);
+      } else if (emp?.designation?.toLowerCase().includes('intern') || emp?.role?.toLowerCase().includes('intern')) {
+        target = 2000;
+      }
+    }
+
+    const isExempt = Boolean(emp?.securityDepositExempt);
+    const directPayments = emp?.securityDepositDirectPayments || [];
+    const directPaid = directPayments.reduce((sum: number, dp: any) => sum + (dp.amount || 0), 0);
+
+    const empIds = new Set([
+      String(record.employeeId),
+      ...(emp ? [String(emp.id), String(emp.employeeId)] : [])
+    ].filter(Boolean));
+
+    const empPayrolls = payrolls.filter((p: any) => empIds.has(String(p.employeeId)));
+    const payrollCollected = empPayrolls.reduce((sum: number, p: any) => sum + (p.securityDeposit || 0), 0);
+    const collected = payrollCollected + directPaid;
+    const isCollectedOrExempt = isExempt || (collected >= target);
+
+    return {
+      emp,
+      target,
+      isExempt,
+      directPaid,
+      payrollCollected,
+      collected,
+      isCollectedOrExempt
+    };
+  };
+
   const columns = [
     { key: 'employeeName' as const, header: 'Employee' },
     { key: 'documentName' as const, header: 'Document Name' },
@@ -793,22 +837,7 @@ export default function EmployeeDocumentsPage() {
     { key: 'status' as const, header: 'Status', render: (record: any) => {
       const isDeposit = record.documentName?.includes('Deposite') || record.documentName?.includes('Deposit');
       if (isDeposit) {
-        let target = 10000
-        if (record.documentName?.includes('Intern - 2000')) target = 2000
-        else if (record.documentName?.includes('Employee - 10000')) target = 10000
-        else {
-          const match = record.documentName?.match(/(\d+)/)
-          if (match) target = Number(match[0])
-        }
-        
-        const emp = employees.find((e: any) => e.id === record.employeeId)
-        const isExempt = emp?.securityDepositExempt || false
-        const directPayments = emp?.securityDepositDirectPayments || []
-        const directPaid = directPayments.reduce((sum: number, dp: any) => sum + (dp.amount || 0), 0)
-        
-        const empPayrolls = payrolls.filter((p: any) => p.employeeId === record.employeeId)
-        const payrollCollected = empPayrolls.reduce((sum: number, p: any) => sum + (p.securityDeposit || 0), 0)
-        const collected = payrollCollected + directPaid
+        const { target, isExempt, directPaid, collected } = getDepositInfo(record);
         
         if (isExempt) {
           const advanceAmount = Math.max(0, target - collected)
@@ -1062,14 +1091,30 @@ export default function EmployeeDocumentsPage() {
     
     let matchesStatus = true;
     if (filterStatus !== 'all') {
-      if (filterStatus === 'pending') {
-        matchesStatus = doc.isPendingSubmit === true;
-      } else if (filterStatus === 'accepted') {
-        matchesStatus = doc.status === 'Accepted' && !doc.isPendingSubmit;
-      } else if (filterStatus === 'rejected') {
-        matchesStatus = doc.status === 'Rejected' && !doc.isPendingSubmit;
-      } else if (filterStatus === 'returned') {
-        matchesStatus = doc.status === 'Returned to Employee' && !doc.isPendingSubmit;
+      const isDeposit = doc.documentName?.includes('Deposite') || doc.documentName?.includes('Deposit');
+      
+      if (isDeposit) {
+        const { isCollectedOrExempt } = getDepositInfo(doc);
+
+        if (filterStatus === 'accepted') {
+          matchesStatus = isCollectedOrExempt;
+        } else if (filterStatus === 'pending') {
+          matchesStatus = !isCollectedOrExempt;
+        } else if (filterStatus === 'rejected' || filterStatus === 'returned') {
+          matchesStatus = false;
+        }
+      } else {
+        const displayStatus = doc.status || (doc.isPendingSubmit ? 'Pending to Submit' : 'Pending to Submit');
+        
+        if (filterStatus === 'pending') {
+          matchesStatus = doc.isPendingSubmit === true || displayStatus === 'Pending to Submit' || displayStatus === 'Pending';
+        } else if (filterStatus === 'accepted') {
+          matchesStatus = (displayStatus === 'Accepted' || displayStatus === 'accepted') && !doc.isPendingSubmit;
+        } else if (filterStatus === 'rejected') {
+          matchesStatus = (displayStatus === 'Rejected' || displayStatus === 'rejected') && !doc.isPendingSubmit;
+        } else if (filterStatus === 'returned') {
+          matchesStatus = (displayStatus === 'Returned to Employee' || displayStatus === 'returned') && !doc.isPendingSubmit;
+        }
       }
     }
 
@@ -1445,23 +1490,7 @@ export default function EmployeeDocumentsPage() {
                   let totalTarget = 0;
                   let totalCollected = 0;
                   filteredDocuments.forEach((record: any) => {
-                    let target = 10000;
-                    if (record.documentName?.includes('Intern - 2000')) target = 2000;
-                    else if (record.documentName?.includes('Employee - 10000')) target = 10000;
-                    else {
-                      const match = record.documentName?.match(/(\d+)/);
-                      if (match) target = Number(match[0]);
-                    }
-                    
-                    const emp = employees.find((e: any) => e.id === record.employeeId);
-                    const isExempt = emp?.securityDepositExempt || false;
-                    const directPayments = emp?.securityDepositDirectPayments || [];
-                    const directPaid = directPayments.reduce((sum: number, dp: any) => sum + (dp.amount || 0), 0);
-                    
-                    const empPayrolls = payrolls.filter((p: any) => p.employeeId === record.employeeId);
-                    const payrollCollected = empPayrolls.reduce((sum: number, p: any) => sum + (p.securityDeposit || 0), 0);
-                    
-                    const collected = payrollCollected + directPaid;
+                    const { target, isExempt, collected } = getDepositInfo(record);
                     
                     if (isExempt) {
                       totalTarget += target;
