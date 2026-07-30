@@ -50,6 +50,19 @@ const parseLocalDate = (dateStr: string) => {
   return d;
 };
 
+const isStageSubsequentOrEqual = (stageName: string, remarkStageName?: string, postReel?: string) => {
+  if (!remarkStageName) return true;
+  const reelStages = ['Script', 'Shoot', 'Brand Person', 'Editing', 'Caption', 'Thumbnail', 'Approval', 'Posting'];
+  const postStages = ['Post/Graphics', 'Brand Person', 'Caption', 'Approval', 'Posting'];
+  
+  const stages = postReel === 'Post' ? postStages : reelStages;
+  const remarkIdx = stages.findIndex(s => s.toLowerCase() === remarkStageName.toLowerCase());
+  const stageIdx = stages.findIndex(s => s.toLowerCase() === stageName.toLowerCase());
+  
+  if (remarkIdx === -1 || stageIdx === -1) return true;
+  return stageIdx >= remarkIdx;
+};
+
 export interface MyTasksViewProps {
   targetUserId?: string;
   isEmbedded?: boolean;
@@ -166,17 +179,30 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
   }
 
   const getRedirectUrl = (task: any) => {
-    if (task.sourceType === 'wm-task') {
+    if (task.sourceType === 'smm-other' || task.isOtherWork || task.originalTask?.isOtherWork) {
+      return null;
+    }
+    if (task.sourceType === 'wm-task' || task.department === 'Development') {
       return '/work-management/development';
     }
-    if (task.sourceType === 'smm-creative') {
-      return '/work-management/smm';
-    }
-    if (task.sourceType === 'smm-other') {
-      if (task.department?.toLowerCase() === 'digital marketing' || task.originalTask?.taskType === 'digital-marketing') {
-        return '/work-management/digital-marketing';
+    if (task.sourceType === 'smm-creative' || task.sourceType === 'smm-followup' || task.department === 'Social Media Management') {
+      const isDM = task.department?.toLowerCase() === 'digital marketing' || task.originalTask?.taskType === 'digital-marketing';
+      const base = isDM ? '/work-management/digital-marketing' : '/work-management/smm';
+      
+      const clientId = task.clientId || task.originalTask?.clientId;
+      const projectId = task.projectId || task.originalTask?.projectId;
+      
+      if (clientId) {
+        let url = `${base}/${clientId}`;
+        if (projectId) {
+          url += `?projectId=${projectId}`;
+        }
+        return url;
       }
-      return '/work-management/smm';
+      return base;
+    }
+    if (task.department === 'Digital Marketing') {
+      return '/work-management/digital-marketing';
     }
     if (task.sourceType === 'general-task') {
       const dept = task.originalTask?.department;
@@ -300,13 +326,15 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
             consolidated.push({
               id: `${entry.id}-${stageName}`,
               title: entry.concept || entry.topic || (entry.postReel ? `${entry.postReel} Content` : 'SMM Task'),
-              clientDisplayName: client ? `${client.companyName || client.clientName || 'Client'}${assocProject?.title ? ` (${assocProject.title})` : ''}` : 'Unknown Client',
+              clientDisplayName: assocProject ? `${assocProject.title}${client ? ` (${client.companyName || client.clientName})` : ''}` : (client ? (client.companyName || client.clientName) : 'Unknown Client'),
               stage: stageName,
               dueDate: deadline.includes('T') ? deadline.split('T')[0] : deadline,
               priority: 'medium',
               status: 'todo',
               department: 'Social Media Management',
               sourceType: 'smm-creative',
+              clientId: entry.clientId || client?.id,
+              projectId: entry.projectId || assocProject?.id,
               originalTask: enrichedEntry
             })
           }
@@ -334,13 +362,15 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
               consolidated.push({
                 id: `${entry.id}-BrandPerson`,
                 title: entry.concept || entry.topic || (entry.postReel ? `${entry.postReel} Content` : 'SMM Task'),
-                clientDisplayName: client ? `${client.companyName || client.clientName || 'Client'} (${assocProject.title})` : 'Unknown Client',
+                clientDisplayName: assocProject ? `${assocProject.title}${client ? ` (${client.companyName || client.clientName})` : ''}` : (client ? (client.companyName || client.clientName) : 'Unknown Client'),
                 stage: 'Brand Person',
                 dueDate: taskDeadline,
                 priority: 'medium',
                 status: 'todo',
                 department: 'Social Media Management',
                 sourceType: 'smm-creative',
+                clientId: entry.clientId || client?.id,
+                projectId: entry.projectId || assocProject?.id,
                 originalTask: enrichedEntry
               })
             }
@@ -369,8 +399,9 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
 
     // 4. SMM Other Work
     otherWork.forEach(ow => {
-      const isAssignee = ow.assigneeId === uId
-      if (isAssignee && ow.status !== 'Approved') {
+      const isAssignee = String(ow.assigneeId) === String(uId) || (currentUser?.name && ow.assigneeName && ow.assigneeName.toLowerCase().includes(currentUser.name.toLowerCase()));
+      const isAssigner = String(ow.assignerId) === String(uId) || (currentUser?.name && ow.assignerName && ow.assignerName.toLowerCase().includes(currentUser.name.toLowerCase()));
+      if ((isAssignee || isAssigner) && ow.status !== 'Approved') {
         let isProjectOnHold = false;
         if (ow.projectId) {
           const assocProject = projects.find(p => p.id === ow.projectId);
@@ -378,13 +409,16 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
         }
         
         if (!isProjectOnHold) {
-          const creatorName = ow.logs?.[0]?.userName || 'Manager';
-          const empName = employees.find(e => e.id === ow.assigneeId)?.name || currentUser?.name || 'User';
+          const assignerEmp = employees.find(e => e.id === ow.assignerId);
+          const assigneeEmp = employees.find(e => e.id === ow.assigneeId);
+          const creatorName = assignerEmp ? (assignerEmp.name || `${assignerEmp.firstName || ''} ${assignerEmp.lastName || ''}`.trim()) : (ow.assignerName || ow.logs?.[0]?.userName || 'Manager');
+          const empName = assigneeEmp ? (assigneeEmp.name || `${assigneeEmp.firstName || ''} ${assigneeEmp.lastName || ''}`.trim()) : (ow.assigneeName || currentUser?.name || 'User');
           const enrichedOw = { ...ow, assignerName: creatorName, assigneeName: empName };
 
           consolidated.push({
             id: ow.id,
             title: ow.title,
+            clientDisplayName: ow.taskType === 'digital-marketing' ? 'Digital Marketing' : 'Other Work',
             description: ow.description || 'SMM other work task',
             dueDate: ow.deadline ? (ow.deadline.includes('T') ? ow.deadline.split('T')[0] : ow.deadline) : '',
             priority: ow.priority || 'medium',
@@ -392,6 +426,8 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
             stage: ow.status,
             department: ow.taskType === 'digital-marketing' ? 'Digital Marketing' : 'Social Media Management',
             sourceType: 'smm-other',
+            clientId: ow.clientId,
+            projectId: ow.projectId,
             originalTask: enrichedOw
           })
         }
@@ -512,7 +548,6 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
       })
     }
     
-    // For a single date (like targetDate), return all tasks and let categorizedTasks filter relative to this date.
     return allConsolidatedTasks
   }, [allConsolidatedTasks, activeDateRange])
 
@@ -540,8 +575,12 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
         return
       }
 
+      const hasApplicableRemark = t.originalTask?.remark && typeof t.originalTask.remark === 'string' && t.originalTask.remark.trim() !== '' && (
+        !t.originalTask.remarkStage || 
+        isStageSubsequentOrEqual(t.stage, t.originalTask.remarkStage, t.originalTask.postReel)
+      );
       const isClientIssue = (t.status && t.status.toLowerCase() === 'client issue') || 
-                            (t.originalTask?.remark && typeof t.originalTask.remark === 'string' && t.originalTask.remark.startsWith('[CLIENT ISSUE]'));
+                            (hasApplicableRemark && t.originalTask.remark.startsWith('[CLIENT ISSUE]'));
 
       if (isClientIssue) {
         pendingList.push(t);
@@ -599,7 +638,20 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
       }
     })
 
-    return { today: todayList, pending: pendingList, upcoming: upcomingList, completed: completedList }
+    const sortByDate = (list: any[]) => {
+      return [...list].sort((a, b) => {
+        const dA = a.dueDate ? parseLocalDate(a.dueDate).getTime() : 0;
+        const dB = b.dueDate ? parseLocalDate(b.dueDate).getTime() : 0;
+        return dA - dB;
+      });
+    };
+
+    return { 
+      today: sortByDate(todayList), 
+      pending: sortByDate(pendingList), 
+      upcoming: sortByDate(upcomingList), 
+      completed: sortByDate(completedList) 
+    }
   }, [filteredByDateTasks, targetDate])
 
   // Group task lists by Department for nice UI sectioning
@@ -873,12 +925,10 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                                       <tr 
                                         key={task.id} 
                                         onClick={() => {
-                                          if (!isCustomTask) {
-                                            const url = getRedirectUrl(task);
-                                            if (url) router.push(url);
-                                          }
+                                          const url = getRedirectUrl(task);
+                                          if (url) router.push(url);
                                         }}
-                                        className={`hover:bg-slate-50/50 transition-colors group ${!isCustomTask && getRedirectUrl(task) ? 'cursor-pointer' : ''}`}
+                                        className={`hover:bg-slate-50/50 transition-colors group ${getRedirectUrl(task) ? 'cursor-pointer' : ''}`}
                                       >
                                         <td className="p-4">
                                           <span className={`font-bold text-[10px] rounded px-2.5 py-1 ${isOverdue ? 'bg-red-800 text-white' : 'bg-slate-100 text-slate-700'}`}>

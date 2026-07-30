@@ -4738,7 +4738,136 @@ async def read_all_user_permissions(db=Depends(get_db)):
 async def update_bulk_module_permissions(request: schemas.ModuleBulkUpdateRequest, db=Depends(get_db), ):
     return await crud.bulk_update_module_permissions(db, request, performed_by="System", user_name="System User")
 
+
+# ==========================================
+# STV VOTING SYSTEM MODULE ENDPOINTS
+# ==========================================
+
+def _is_admin_or_hr(token_payload: dict) -> bool:
+    role = str(token_payload.get("role", "")).lower().strip()
+    admin_hr_roles = {"admin", "super admin", "superadmin", "administrator", "founder", "hr", "hr manager", "hr lead"}
+    return role in admin_hr_roles
+
+
+@app.post("/elections", response_model=schemas.ElectionOut)
+async def create_election_endpoint(
+    data: schemas.ElectionCreate,
+    token_payload: dict = Depends(auth.require_auth)
+):
+    if not _is_admin_or_hr(token_payload):
+        raise HTTPException(status_code=403, detail="Only Admin or HR can create elections.")
+    user_id = token_payload.get("sub")
+    return await crud.create_election(data, user_id)
+
+
+@app.get("/elections", response_model=List[schemas.ElectionOut])
+async def list_elections_endpoint(
+    month: Optional[str] = Query(None),
+    year: Optional[int] = Query(None),
+    token_payload: dict = Depends(auth.require_auth)
+):
+    return await crud.get_elections(month=month, year=year)
+
+
+@app.get("/elections/{election_id}", response_model=schemas.ElectionOut)
+async def get_election_endpoint(
+    election_id: str,
+    token_payload: dict = Depends(auth.require_auth)
+):
+    election = await crud.get_election_by_id(election_id)
+    if not election:
+        raise HTTPException(status_code=404, detail="Election not found.")
+    return election
+
+
+@app.delete("/elections/{election_id}")
+async def delete_election_endpoint(
+    election_id: str,
+    token_payload: dict = Depends(auth.require_auth)
+):
+    if not _is_admin_or_hr(token_payload):
+        raise HTTPException(status_code=403, detail="Only Admin or HR can delete elections.")
+    deleted = await crud.soft_delete_election(election_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Election not found or already deleted.")
+    return {"message": "Election deleted successfully."}
+
+
+@app.post("/elections/{election_id}/ballots")
+async def submit_ballot_endpoint(
+    election_id: str,
+    data: schemas.BallotSubmit,
+    token_payload: dict = Depends(auth.require_auth)
+):
+    voter_id = token_payload.get("sub")
+    try:
+        ballot = await crud.submit_ballot(election_id, voter_id, data.preferences)
+        return {"message": "Vote submitted successfully.", "ballot": ballot}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/elections/{election_id}/my-ballot")
+async def get_my_ballot_endpoint(
+    election_id: str,
+    token_payload: dict = Depends(auth.require_auth)
+):
+    voter_id = token_payload.get("sub")
+    ballot = await crud.get_voter_ballot(election_id, voter_id)
+    return ballot or {"isSubmitted": False, "preferences": []}
+
+
+@app.post("/elections/{election_id}/run")
+async def run_election_stv_endpoint(
+    election_id: str,
+    token_payload: dict = Depends(auth.require_auth)
+):
+    if not _is_admin_or_hr(token_payload):
+        raise HTTPException(status_code=403, detail="Only Admin or HR can run STV calculation.")
+    try:
+        result = await crud.run_stv_round_calculation(election_id)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/elections/{election_id}/rounds")
+async def get_election_rounds_endpoint(
+    election_id: str,
+    token_payload: dict = Depends(auth.require_auth)
+):
+    if not _is_admin_or_hr(token_payload):
+        raise HTTPException(status_code=403, detail="Only Admin or HR can view round calculation details.")
+    rounds = await crud.get_election_rounds_history(election_id)
+    return rounds
+
+
+@app.get("/elections/{election_id}/result")
+async def get_election_result_endpoint(
+    election_id: str,
+    token_payload: dict = Depends(auth.require_auth)
+):
+    if not _is_admin_or_hr(token_payload):
+        raise HTTPException(status_code=403, detail="Only Admin or HR can view election results.")
+    election = await crud.get_election_by_id(election_id)
+    if not election:
+        raise HTTPException(status_code=404, detail="Election not found.")
+    return election
+
+
+@app.get("/elections/{election_id}/voter-ballots")
+async def get_voter_ballots_admin_endpoint(
+    election_id: str,
+    token_payload: dict = Depends(auth.require_auth)
+):
+    if not _is_admin_or_hr(token_payload):
+        raise HTTPException(status_code=403, detail="Only Admin or HR can view individual voter ballots.")
+    ballots = await crud.get_admin_voter_ballots(election_id)
+    return ballots
+
+
 if __name__ == "__main__":
+
 
     port = int(os.environ.get("BACKEND_PORT", os.environ.get("PORT", 8000)))
     print(f"Starting HRMS Backend on http://127.0.0.1:{port}")

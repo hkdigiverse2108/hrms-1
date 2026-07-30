@@ -10,7 +10,8 @@ import {
   Star, 
   FileText, 
   Settings,
-  BookOpen
+  BookOpen,
+  Vote
 } from 'lucide-react'
 
 export interface ModuleDef {
@@ -33,6 +34,14 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { moduleName: 'dashboard', displayName: 'Dashboard', tabUrl: '/' },
     ]
   },
+  {
+    name: 'Elections',
+    icon: Vote,
+    modules: [
+      { moduleName: 'voting', displayName: 'Elections', tabUrl: '/voting' },
+    ]
+  },
+
   {
     name: 'Employees',
     icon: Users,

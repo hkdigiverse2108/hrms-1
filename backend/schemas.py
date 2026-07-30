@@ -3006,3 +3006,79 @@ class LectureProgressResponse(LectureProgressBase):
     last_watched_at: Optional[datetime] = None
     class Config:
         from_attributes = True
+
+# --- STV Voting Module Schemas ---
+class CandidateCreate(PydanticBaseModel):
+    employee_id: str
+    name: str
+    department: Optional[str] = None
+    designation: Optional[str] = None
+    avatar: Optional[str] = None
+
+class CandidateOut(PydanticBaseModel):
+    id: str
+    employee_id: str
+    name: str
+    department: Optional[str] = None
+    designation: Optional[str] = None
+    avatar: Optional[str] = None
+
+class ElectionCreate(PydanticBaseModel):
+    title: str
+    description: Optional[str] = None
+    maxPreferences: int = Field(default=5, ge=1)
+    candidate_employee_ids: List[str] = []
+    electionMonth: Optional[str] = None
+    electionYear: Optional[int] = None
+    status: Optional[str] = "active"
+
+class ElectionUpdate(PydanticBaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    maxPreferences: Optional[int] = None
+    candidate_employee_ids: Optional[List[str]] = None
+    electionMonth: Optional[str] = None
+    electionYear: Optional[int] = None
+    status: Optional[str] = None
+
+class ElectionOut(PydanticBaseModel):
+    id: str
+    title: str
+    description: Optional[str] = None
+    maxPreferences: int = 5
+    electionMonth: Optional[str] = None
+    electionYear: Optional[int] = None
+    status: str = "active"
+    candidates: List[CandidateOut] = []
+    totalValidVotes: int = 0
+    totalEligibleVoters: int = 0
+    quota: Optional[int] = None
+    winner_candidate_id: Optional[str] = None
+    winner_name: Optional[str] = None
+    createdAt: Optional[RobustDatetime] = None
+    updatedAt: Optional[RobustDatetime] = None
+
+class BallotSubmit(PydanticBaseModel):
+    preferences: List[str]
+
+class BallotOut(PydanticBaseModel):
+    id: str
+    electionId: str
+    voterId: str
+    voterName: Optional[str] = None
+    preferences: List[str]
+    isSubmitted: bool = True
+    submittedAt: Optional[RobustDatetime] = None
+
+class ElectionRoundOut(PydanticBaseModel):
+    id: str
+    electionId: str
+    roundNumber: int
+    tally: Dict[str, int]
+    eliminatedCandidateIds: List[str] = []
+    transferredVotes: List[Dict[str, Any]] = []
+    winnerCandidateId: Optional[str] = None
+    winnerName: Optional[str] = None
+    quota: int
+    timestamp: Optional[RobustDatetime] = None
+
