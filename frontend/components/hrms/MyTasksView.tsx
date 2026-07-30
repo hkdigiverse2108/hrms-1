@@ -398,9 +398,12 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
     })
 
     // 4. SMM Other Work
+    const targetEmp = employees.find(e => String(e.id) === String(uId)) || (uId === currentUser?.id ? currentUser : null);
+    const targetEmpName = targetEmp ? (targetEmp.name || `${targetEmp.firstName || ''} ${targetEmp.lastName || ''}`.trim()) : '';
+
     otherWork.forEach(ow => {
-      const isAssignee = String(ow.assigneeId) === String(uId) || (currentUser?.name && ow.assigneeName && ow.assigneeName.toLowerCase().includes(currentUser.name.toLowerCase()));
-      const isAssigner = String(ow.assignerId) === String(uId) || (currentUser?.name && ow.assignerName && ow.assignerName.toLowerCase().includes(currentUser.name.toLowerCase()));
+      const isAssignee = String(ow.assigneeId) === String(uId) || (targetEmpName && ow.assigneeName && ow.assigneeName.toLowerCase().includes(targetEmpName.toLowerCase()));
+      const isAssigner = !targetUserId && (String(ow.assignerId) === String(uId) || (targetEmpName && ow.assignerName && ow.assignerName.toLowerCase().includes(targetEmpName.toLowerCase())));
       if ((isAssignee || isAssigner) && ow.status !== 'Approved') {
         let isProjectOnHold = false;
         if (ow.projectId) {
