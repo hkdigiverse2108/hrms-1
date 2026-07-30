@@ -1733,7 +1733,7 @@ class SystemSettingsBase(BaseModel):
         "sales", "clients", "marketing", "creative", "research",
         "seating-arrangement", "resource-management", "gallery",
         "remarks", "review", "invoice", "chat", "activity-tracker", 
-        "activity-logs", "training", "admin-courses"
+        "activity-logs", "training", "admin-courses", "assets"
     ])
 
 class SystemSettingsUpdate(BaseModel):

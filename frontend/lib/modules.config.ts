@@ -84,6 +84,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     modules: [
       { moduleName: 'seating-arrangement', displayName: 'Seating Arrangement', tabUrl: '/workspace/seating' },
       { moduleName: 'resource-management', displayName: 'Resource Management', tabUrl: '/workspace/resource' },
+      { moduleName: 'assets', displayName: 'Assets', tabUrl: '/workspace/assets' },
     ]
   },
   {

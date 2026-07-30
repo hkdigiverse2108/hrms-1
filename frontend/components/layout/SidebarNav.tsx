@@ -266,6 +266,9 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (isModuleEnabled('gallery') && (isAdmin || checkPermission('gallery', 'canView'))) {
       workspaceChildren.push(getItem(<Link href="/workspace/gallery">Gallery</Link>, "/workspace/gallery"));
     }
+    if (isModuleEnabled('assets') && (isAdmin || checkPermission('assets', 'canView'))) {
+      workspaceChildren.push(getItem(<Link href="/workspace/assets">Assets</Link>, "/workspace/assets"));
+    }
 
     if (workspaceChildren.length > 0) {
       menuItems.push(getItem("Workspace", "workspace", <MonitorPlay className="w-5 h-5" />, workspaceChildren));

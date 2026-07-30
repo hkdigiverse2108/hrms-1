@@ -51,6 +51,7 @@ const DEFAULT_MODULES = [
   { moduleName: 'settings', displayName: 'Settings', tabUrl: '/settings' },
   { moduleName: 'activity-logs', displayName: 'Activity Logs', tabUrl: '/activity-logs' },
   { moduleName: 'gallery', displayName: 'Gallery', tabUrl: '/workspace/gallery' },
+  { moduleName: 'assets', displayName: 'Assets', tabUrl: '/workspace/assets' },
   { moduleName: 'training', displayName: 'Course Library', tabUrl: '/training' },
   { moduleName: 'admin-courses', displayName: 'Manage Courses', tabUrl: '/admin/courses' },
 ]

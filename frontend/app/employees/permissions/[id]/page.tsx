@@ -84,6 +84,7 @@ const PERMISSION_GROUPS = [
       { moduleName: 'seating-arrangement', displayName: 'Seating Arrangement', tabUrl: '/workspace/seating' },
       { moduleName: 'resource-management', displayName: 'Resource Management', tabUrl: '/workspace/resource' },
       { moduleName: 'gallery', displayName: 'Gallery', tabUrl: '/workspace/gallery' },
+      { moduleName: 'assets', displayName: 'Assets', tabUrl: '/workspace/assets' },
     ]
   },
   {
