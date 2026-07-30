@@ -67,6 +67,7 @@ export default function EmployeeDocumentsPage() {
   const [activeMainTab, setActiveMainTab] = useState<string>('submitted')
   const [contractEmployeeFilter, setContractEmployeeFilter] = useState('all')
   const [contractTypeFilter, setContractTypeFilter] = useState('all')
+  const [contractTimeFilter, setContractTimeFilter] = useState<'upcoming' | 'all'>('upcoming')
   
   const [signatureEmployeeFilter, setSignatureEmployeeFilter] = useState('all')
   const [signatureStatusFilter, setSignatureStatusFilter] = useState('all')
@@ -1161,6 +1162,23 @@ export default function EmployeeDocumentsPage() {
         if (contractTypeFilter === 'employment' && row.type !== 'Employment') return false;
       }
 
+      if (contractTimeFilter === 'upcoming') {
+        if (!row.sortDate) return false;
+        const parseDate = (dStr: string) => {
+          if (dStr.includes('-')) {
+            const parts = dStr.split('-');
+            if (parts[0].length === 4) return new Date(dStr);
+            return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+          }
+          return new Date(dStr);
+        };
+        const rowDate = parseDate(row.sortDate);
+        rowDate.setHours(0, 0, 0, 0);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (rowDate.getTime() < today.getTime()) return false;
+      }
+
       return true;
     })
     .sort((a: any, b: any) => {
@@ -1608,37 +1626,62 @@ export default function EmployeeDocumentsPage() {
         {isAdminOrHR && (
           <TabsContent value="contracts" className="mt-6 space-y-6">
             <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-5">
-              <div className="flex flex-wrap items-center gap-4">
-                <div className="w-64">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Filter by Employee</span>
-                  <SearchableSelect
-                    options={[
-                      { value: "all", label: "All Employees" },
-                      ...employees.map((emp: any) => ({
-                        value: emp.id,
-                        label: `${emp.name} (${emp.employeeId})`
-                      }))
-                    ]}
-                    value={contractEmployeeFilter}
-                    onValueChange={setContractEmployeeFilter}
-                    placeholder="All Employees"
-                    triggerClassName="h-10 border-slate-200 bg-slate-50/50 font-semibold w-full"
-                  />
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="w-64">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Filter by Employee</span>
+                    <SearchableSelect
+                      options={[
+                        { value: "all", label: "All Employees" },
+                        ...employees.map((emp: any) => ({
+                          value: emp.id,
+                          label: `${emp.name} (${emp.employeeId})`
+                        }))
+                      ]}
+                      value={contractEmployeeFilter}
+                      onValueChange={setContractEmployeeFilter}
+                      placeholder="All Employees"
+                      triggerClassName="h-10 border-slate-200 bg-slate-50/50 font-semibold w-full"
+                    />
+                  </div>
+                  <div className="w-64">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Filter by Term Type</span>
+                    <Select value={contractTypeFilter} onValueChange={setContractTypeFilter}>
+                      <SelectTrigger className="h-10 border-slate-200 bg-slate-50/50 font-semibold">
+                        <SelectValue placeholder="All Terms" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Terms (Bond / Notice / Resignation / Employment)</SelectItem>
+                        <SelectItem value="bond">Bond</SelectItem>
+                        <SelectItem value="notice">Notice Period</SelectItem>
+                        <SelectItem value="resignation">Resignation</SelectItem>
+                        <SelectItem value="employment">Employment</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <div className="w-64">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Filter by Term Type</span>
-                  <Select value={contractTypeFilter} onValueChange={setContractTypeFilter}>
-                    <SelectTrigger className="h-10 border-slate-200 bg-slate-50/50 font-semibold">
-                      <SelectValue placeholder="All Terms" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Terms (Bond / Notice / Resignation / Employment)</SelectItem>
-                      <SelectItem value="bond">Bond</SelectItem>
-                      <SelectItem value="notice">Notice Period</SelectItem>
-                      <SelectItem value="resignation">Resignation</SelectItem>
-                      <SelectItem value="employment">Employment</SelectItem>
-                    </SelectContent>
-                  </Select>
+
+                <div className="flex items-center gap-2 self-end mb-0.5">
+                  <Button
+                    variant={contractTimeFilter === 'upcoming' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setContractTimeFilter('upcoming')}
+                    className={contractTimeFilter === 'upcoming' 
+                      ? 'bg-brand-teal text-white font-bold h-10 px-4 rounded-xl shadow-xs' 
+                      : 'text-slate-600 font-semibold border-slate-200 h-10 px-4 rounded-xl hover:bg-slate-50'}
+                  >
+                    Upcoming Contracts
+                  </Button>
+                  <Button
+                    variant={contractTimeFilter === 'all' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setContractTimeFilter('all')}
+                    className={contractTimeFilter === 'all' 
+                      ? 'bg-brand-teal text-white font-bold h-10 px-4 rounded-xl shadow-xs' 
+                      : 'text-slate-600 font-semibold border-slate-200 h-10 px-4 rounded-xl hover:bg-slate-50'}
+                  >
+                    View All Contracts
+                  </Button>
                 </div>
               </div>
 
