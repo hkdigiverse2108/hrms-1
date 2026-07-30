@@ -48,6 +48,14 @@ async def get_current_user_token(authorization: Optional[str] = Header(None)):
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
+        # Set tenant context variable for global database filtering
+        from database import current_tenant_id
+        company_id = payload.get("company_id")
+        if company_id:
+            current_tenant_id.set(company_id)
+        elif payload.get("is_superadmin") or user_id == "superadmin":
+            current_tenant_id.set("superadmin")
+
         if payload.get("is_superadmin") or user_id == "superadmin":
             return payload
 

@@ -192,14 +192,17 @@ async def list_companies(token: dict = Depends(require_superadmin)):
             "company_name": c_name,
             "company_code": c_code or c_id,
             "logo_url": c.get("logo_url", ""),
-            "contact_email": c.get("contact_email", ""),
-            "contact_phone": c.get("contact_phone", ""),
+            "contact_email": c.get("contact_email", "") or c.get("billing_email", ""),
+            "contact_phone": c.get("contact_phone", "") or c.get("mobile", ""),
             "address": c.get("address", ""),
-            "subscription_plan": c.get("subscription_plan", "Standard"),
+            "subscription_plan": c.get("subscription_plan", "") or c.get("plan", "Standard"),
             "status": c.get("status", "active"),
             "max_employees": c.get("max_employees", 50),
             "employee_count": emp_count,
-            "created_at": c.get("created_at")
+            "created_at": c.get("created_at"),
+            "gstin": c.get("gstin", ""),
+            "payment_method": c.get("payment_method", ""),
+            "total_paid": c.get("total_paid", 0.0),
         }
         result.append(c_data)
         
@@ -236,12 +239,16 @@ async def get_company_detail(company_id: str, token: dict = Depends(require_supe
         "company_name": company.get("company_name", ""),
         "company_code": company.get("company_code", ""),
         "logo_url": company.get("logo_url", ""),
-        "contact_email": company.get("contact_email", ""),
-        "contact_phone": company.get("contact_phone", ""),
+        "contact_email": company.get("contact_email", "") or company.get("billing_email", ""),
+        "contact_phone": company.get("contact_phone", "") or company.get("mobile", ""),
         "address": company.get("address", ""),
-        "subscription_plan": company.get("subscription_plan", "Standard"),
+        "subscription_plan": company.get("subscription_plan", "") or company.get("plan", "Standard"),
         "status": company.get("status", "active"),
         "max_employees": company.get("max_employees", 50),
+        "gstin": company.get("gstin", ""),
+        "payment_method": company.get("payment_method", ""),
+        "total_paid": company.get("total_paid", 0.0),
+        "created_at": company.get("created_at"),
         "employees": emp_list
     }
 
@@ -302,6 +309,30 @@ async def reset_company_admin_password(company_id: str, payload: AdminResetPassw
     )
 
     return {"success": True, "message": f"Password for Admin '{admin_emp.get('email')}' updated successfully"}
+
+@router.delete("/companies/{company_id}")
+async def delete_company(company_id: str, token: dict = Depends(require_superadmin)):
+    filter_query = {"_id": ObjectId(company_id)} if len(company_id) == 24 else {"company_code": company_id}
+    company = await db.companies.find_one(filter_query)
+    
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    code = company.get("company_code") or str(company["_id"])
+    
+    # Delete the company
+    await db.companies.delete_one(filter_query)
+    
+    # Delete all employees of this company
+    await db.employees.delete_many({
+        "$or": [{"company_id": code}, {"company_code": code}]
+    })
+    
+    # Delete other major tenant data (optional but recommended for clean slate)
+    await db.attendance.delete_many({"company_code": code})
+    await db.leaves.delete_many({"company_code": code})
+    
+    return {"success": True, "message": "Company and all associated users deleted successfully"}
 
 @router.get("/stats")
 async def get_superadmin_dashboard_stats(token: dict = Depends(require_superadmin)):

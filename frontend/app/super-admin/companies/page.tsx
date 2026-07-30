@@ -7,7 +7,8 @@ import {
   Search, 
   X, 
   ArrowLeft,
-  ExternalLink
+  ExternalLink,
+  Trash2
 } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import SuperAdminHeader from "@/components/layout/SuperAdminHeader";
@@ -24,6 +25,10 @@ interface Company {
   status: string;
   max_employees: number;
   employee_count: number;
+  gstin?: string;
+  payment_method?: string;
+  total_paid?: number;
+  created_at?: string;
 }
 
 export default function SuperAdminCompaniesPage() {
@@ -83,6 +88,30 @@ export default function SuperAdminCompaniesPage() {
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const deleteCompany = async (company: Company) => {
+    if (!window.confirm(`Are you absolutely sure you want to delete the company "${company.company_name}"? This action cannot be undone and will delete all associated users and data.`)) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_URL}/super-admin/companies/${company.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (res.ok) {
+        setSuccessMsg(`Company ${company.company_name} was deleted successfully.`);
+        fetchCompanies();
+      } else {
+        const data = await res.json();
+        setError(data.detail || "Failed to delete company.");
+      }
+    } catch (err: any) {
+      setError(err.message || "Error deleting company.");
     }
   };
 
@@ -165,15 +194,18 @@ export default function SuperAdminCompaniesPage() {
                     <div className="flex items-center gap-3">
                       {company.logo_url ? (
                         <img
-                          src={company.logo_url}
+                          src={company.logo_url.startsWith("http") ? company.logo_url : `http://127.0.0.1:8000${company.logo_url}`}
                           alt={company.company_name}
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                            e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                          }}
                           className="w-12 h-12 rounded-xl object-contain bg-slate-100 p-1 border border-slate-200"
                         />
-                      ) : (
-                        <div className="w-12 h-12 rounded-xl bg-[#EAF7F6] border border-[#09A08A]/20 text-[#09A08A] flex items-center justify-center font-bold text-base">
-                          {company.company_name.substring(0, 2).toUpperCase()}
-                        </div>
-                      )}
+                      ) : null}
+                      <div className={`w-12 h-12 rounded-xl bg-[#EAF7F6] border border-[#09A08A]/20 text-[#09A08A] flex items-center justify-center font-bold text-base ${company.logo_url ? 'hidden' : ''}`}>
+                        {company.company_name.substring(0, 2).toUpperCase()}
+                      </div>
                       <div>
                         <h3 className="font-bold text-slate-900 text-base group-hover:text-[#09A08A] transition-colors">
                           {company.company_name}
@@ -182,16 +214,26 @@ export default function SuperAdminCompaniesPage() {
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => toggleCompanyStatus(company)}
-                      className={`px-2.5 py-1 text-[11px] font-bold rounded-full border transition-colors ${
-                        company.status === "active"
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-                          : "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
-                      }`}
-                    >
-                      {company.status === "active" ? "Active" : "Suspended"}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => toggleCompanyStatus(company)}
+                        className={`px-2.5 py-1 text-[11px] font-bold rounded-full border transition-colors ${
+                          company.status === "active"
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                            : "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
+                        }`}
+                      >
+                        {company.status === "active" ? "Active" : "Suspended"}
+                      </button>
+                      
+                      <button
+                        onClick={() => deleteCompany(company)}
+                        className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-100"
+                        title="Delete Company Permanently"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="space-y-2 text-xs text-slate-600 mb-6">
@@ -200,9 +242,21 @@ export default function SuperAdminCompaniesPage() {
                       <span className="font-semibold text-slate-800">{company.subscription_plan}</span>
                     </div>
                     <div className="flex justify-between border-b border-slate-100 pb-1.5">
-                      <span className="text-slate-400">Contact Email:</span>
+                      <span className="text-slate-400">Total Paid:</span>
+                      <span className="font-bold text-[#09A08A]">₹{company.total_paid?.toFixed(2) || "0.00"}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-slate-100 pb-1.5">
+                      <span className="text-slate-400">Payment Via:</span>
+                      <span className="font-medium text-slate-700">{company.payment_method || "N/A"}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-slate-100 pb-1.5">
+                      <span className="text-slate-400">GSTIN:</span>
+                      <span className="font-medium text-slate-700">{company.gstin || "N/A (No GSTIN)"}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-slate-100 pb-1.5">
+                      <span className="text-slate-400">Contact / Phone:</span>
                       <span className="font-medium text-slate-700 truncate max-w-[180px]">
-                        {company.contact_email || "N/A"}
+                        {company.contact_email || "N/A"} <br/> {company.contact_phone}
                       </span>
                     </div>
                     <div className="flex justify-between border-b border-slate-100 pb-1.5">

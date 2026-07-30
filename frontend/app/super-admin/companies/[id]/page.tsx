@@ -8,10 +8,11 @@ import {
   ArrowLeft, 
   Users, 
   Mail, 
-  Phone, 
+  Phone,
   Key, 
   Loader2, 
-  X
+  X,
+  Trash2
 } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import SuperAdminHeader from "@/components/layout/SuperAdminHeader";
@@ -38,6 +39,10 @@ interface CompanyDetail {
   status: string;
   max_employees: number;
   employees: Employee[];
+  gstin?: string;
+  payment_method?: string;
+  total_paid?: number;
+  created_at?: string;
 }
 
 export default function SuperAdminCompanyDetailPage() {
@@ -119,6 +124,31 @@ export default function SuperAdminCompanyDetailPage() {
     }
   };
 
+  const handleDeleteCompany = async () => {
+    if (!company) return;
+    if (!window.confirm(`Are you absolutely sure you want to delete the company "${company.company_name}"? This action cannot be undone and will delete all associated users and data.`)) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_URL}/super-admin/companies/${company.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (res.ok) {
+        alert(`Company ${company.company_name} was deleted successfully.`);
+        router.push("/super-admin/companies");
+      } else {
+        const data = await res.json();
+        setError(data.detail || "Failed to delete company.");
+      }
+    } catch (err: any) {
+      setError(err.message || "Error deleting company.");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col">
       {/* Mint SuperAdminHeader */}
@@ -145,13 +175,22 @@ export default function SuperAdminCompanyDetailPage() {
               <p className="text-xs text-[#09A08A] font-mono font-semibold">code: {company?.company_code}</p>
             </div>
           </div>
-          <button
-            onClick={() => setIsResetPasswordOpen(true)}
-            className="px-4 py-2.5 bg-white hover:bg-slate-50 text-[#09A08A] font-bold rounded-xl text-xs flex items-center gap-2 border border-[#09A08A]/30 transition-all shadow-sm cursor-pointer"
-          >
-            <Key className="w-4 h-4" />
-            Reset Admin Password
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsResetPasswordOpen(true)}
+              className="px-4 py-2.5 bg-white hover:bg-slate-50 text-[#09A08A] font-bold rounded-xl text-xs flex items-center gap-2 border border-[#09A08A]/30 transition-all shadow-sm cursor-pointer"
+            >
+              <Key className="w-4 h-4" />
+              Reset Admin Password
+            </button>
+            <button
+              onClick={handleDeleteCompany}
+              className="p-2.5 bg-white hover:bg-rose-50 text-rose-500 hover:text-rose-600 font-bold rounded-xl text-xs flex items-center gap-2 border border-rose-200 transition-all shadow-sm cursor-pointer"
+              title="Delete Company Permanently"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
         </div>
         {error && (
           <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs flex items-center justify-between font-medium">
@@ -177,43 +216,73 @@ export default function SuperAdminCompanyDetailPage() {
           </div>
         ) : (
           <>
-            {/* Overview Banner */}
-            <div className="bg-white border border-slate-200/80 rounded-2xl p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-sm">
-              <div className="flex items-center gap-4">
-                {company.logo_url ? (
-                  <img
-                    src={company.logo_url}
-                    alt={company.company_name}
-                    className="w-16 h-16 rounded-2xl object-contain bg-slate-100 p-2 border border-slate-200"
-                  />
-                ) : (
-                  <div className="w-16 h-16 rounded-2xl bg-[#EAF7F6] border border-[#09A08A]/20 text-[#09A08A] flex items-center justify-center font-bold text-xl">
+            {/* Overview & Billing Cards */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Overview Banner */}
+              <div className="bg-white border border-slate-200/80 rounded-2xl p-6 flex flex-col justify-between shadow-sm">
+                <div className="flex items-start gap-4 mb-6">
+                  {company.logo_url ? (
+                    <img
+                      src={company.logo_url.startsWith("http") ? company.logo_url : `http://127.0.0.1:8000${company.logo_url}`}
+                      alt={company.company_name}
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                      }}
+                      className="w-16 h-16 rounded-2xl object-contain bg-slate-100 p-2 border border-slate-200"
+                    />
+                  ) : null}
+                  <div className={`w-16 h-16 rounded-2xl bg-[#EAF7F6] border border-[#09A08A]/20 text-[#09A08A] flex items-center justify-center font-bold text-xl shrink-0 ${company.logo_url ? 'hidden' : ''}`}>
                     {company.company_name.substring(0, 2).toUpperCase()}
                   </div>
-                )}
 
-                <div>
-                  <h2 className="text-xl font-extrabold text-slate-900">{company.company_name}</h2>
-                  <p className="text-xs text-slate-500 mt-1 flex items-center gap-4">
-                    <span className="flex items-center gap-1"><Mail className="w-3.5 h-3.5 text-slate-400" /> {company.contact_email}</span>
-                    {company.contact_phone && (
-                      <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5 text-slate-400" /> {company.contact_phone}</span>
-                    )}
-                  </p>
+                  <div>
+                    <h2 className="text-xl font-extrabold text-slate-900">{company.company_name}</h2>
+                    <p className="text-sm text-slate-500 mt-1.5 flex flex-col gap-1.5">
+                      <span className="flex items-center gap-1.5"><Mail className="w-4 h-4 text-slate-400" /> {company.contact_email}</span>
+                      {company.contact_phone && (
+                        <span className="flex items-center gap-1.5"><Phone className="w-4 h-4 text-slate-400" /> {company.contact_phone}</span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 pt-4 border-t border-slate-100">
+                  <div>
+                    <p className="text-[11px] text-slate-400 font-bold uppercase">Subscription Plan</p>
+                    <p className="text-sm font-extrabold text-[#09A08A] mt-0.5">{company.subscription_plan}</p>
+                  </div>
+                  <div className="h-8 w-px bg-slate-200 mx-3" />
+                  <div>
+                    <p className="text-[11px] text-slate-400 font-bold uppercase">Status</p>
+                    <p className={`text-sm font-extrabold mt-0.5 ${company.status === "active" ? "text-emerald-600" : "text-rose-600"}`}>
+                      {company.status === "active" ? "Active" : "Suspended"}
+                    </p>
+                  </div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                <div className="text-right">
-                  <p className="text-[11px] text-slate-400 font-bold uppercase">Subscription Plan</p>
-                  <p className="text-sm font-extrabold text-[#09A08A] mt-0.5">{company.subscription_plan}</p>
-                </div>
-                <div className="h-8 w-px bg-slate-200 mx-2" />
-                <div className="text-right">
-                  <p className="text-[11px] text-slate-400 font-bold uppercase">Status</p>
-                  <p className={`text-sm font-extrabold mt-0.5 ${company.status === "active" ? "text-emerald-600" : "text-rose-600"}`}>
-                    {company.status === "active" ? "Active" : "Suspended"}
-                  </p>
+              {/* Billing & Payment Info */}
+              <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm flex flex-col justify-center">
+                <h3 className="font-extrabold text-slate-900 mb-4 flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
+                    <span className="font-bold text-sm">₹</span>
+                  </div>
+                  Billing Details
+                </h3>
+                <div className="space-y-3 text-sm">
+                  <div className="flex justify-between border-b border-slate-100 pb-2">
+                    <span className="text-slate-500 font-medium">GSTIN</span>
+                    <span className="font-bold text-slate-800">{company.gstin || "N/A (No GSTIN)"}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-100 pb-2">
+                    <span className="text-slate-500 font-medium">Payment Method</span>
+                    <span className="font-bold text-slate-800">{company.payment_method || "N/A"}</span>
+                  </div>
+                  <div className="flex justify-between pb-1">
+                    <span className="text-slate-500 font-medium">Total Paid</span>
+                    <span className="font-extrabold text-[#09A08A] text-lg">₹{company.total_paid?.toFixed(2) || "0.00"}</span>
+                  </div>
                 </div>
               </div>
             </div>

@@ -58,6 +58,22 @@ client = AsyncIOMotorClient(
 # --- Automatic Timestamp Handling Wrapper classes ---
 IST = pytz.timezone('Asia/Kolkata')
 
+import contextvars
+
+# Global Context variable to enforce Row-Level Security for current tenant
+current_tenant_id = contextvars.ContextVar("current_tenant_id", default=None)
+
+# Whitelist of collections that strictly belong to tenants
+TENANT_COLLECTIONS = {
+    "employees", "attendance", "leave_requests", "projects", "tasks", 
+    "time_recoveries", "invoices", "schedules", "activity_logs",
+    "departments", "wm_tasks", "clients", "leads", "sales_targets",
+    "finance_transactions", "daily_reports", "messages", "chat_groups",
+    "document_requests", "finance_balances", "research", "employee_documents",
+    "document_templates", "lead_logs", "schedules", "finance_plans", 
+    "finance_summary", "course_progress"
+}
+
 def get_current_time():
     return datetime.now(IST)
 
@@ -145,9 +161,27 @@ class WrappedCursor:
 class TimestampedCollection:
     def __init__(self, collection: AsyncIOMotorCollection):
         self._collection = collection
+        self.name = collection.name
 
     def __getattr__(self, name):
         return getattr(self._collection, name)
+
+    def _inject_tenant(self, data_or_filter):
+        if self.name not in TENANT_COLLECTIONS:
+            return data_or_filter
+
+        c_id = current_tenant_id.get()
+        if not c_id or c_id == "superadmin":
+            return data_or_filter
+
+        if data_or_filter is None:
+            data_or_filter = {}
+
+        if isinstance(data_or_filter, dict):
+            # Only inject if not already explicitly overriding (for specific sub-queries)
+            if "company_id" not in data_or_filter:
+                data_or_filter["company_id"] = c_id
+        return data_or_filter
 
     async def insert_one(self, document, *args, **kwargs):
         now = get_current_time()
@@ -155,6 +189,8 @@ class TimestampedCollection:
             document['created_at'] = now
         if document.get('updated_at') is None:
             document['updated_at'] = now
+            
+        document = self._inject_tenant(document)
         document_converted = string_ids_to_object_ids(document)
         return await self._collection.insert_one(document_converted, *args, **kwargs)
 
@@ -165,6 +201,7 @@ class TimestampedCollection:
                 doc['created_at'] = now
             if doc.get('updated_at') is None:
                 doc['updated_at'] = now
+            doc = self._inject_tenant(doc)
         documents_converted = [string_ids_to_object_ids(doc) for doc in documents]
         return await self._collection.insert_many(documents_converted, *args, **kwargs)
 
@@ -186,6 +223,7 @@ class TimestampedCollection:
         elif isinstance(update, list):
             update.append({"$set": {"updated_at": now}})
             
+        filter = self._inject_tenant(filter)
         filter_converted = string_ids_to_object_ids(filter)
         update_converted = string_ids_to_object_ids(update)
         return await self._collection.update_one(filter_converted, update_converted, *args, **kwargs)
@@ -208,6 +246,7 @@ class TimestampedCollection:
         elif isinstance(update, list):
             update.append({"$set": {"updated_at": now}})
             
+        filter = self._inject_tenant(filter)
         filter_converted = string_ids_to_object_ids(filter)
         update_converted = string_ids_to_object_ids(update)
         return await self._collection.update_many(filter_converted, update_converted, *args, **kwargs)
@@ -230,34 +269,45 @@ class TimestampedCollection:
         elif isinstance(update, list):
             update.append({"$set": {"updated_at": now}})
             
+        filter = self._inject_tenant(filter)
         filter_converted = string_ids_to_object_ids(filter)
         update_converted = string_ids_to_object_ids(update)
         doc = await self._collection.find_one_and_update(filter_converted, update_converted, *args, **kwargs)
         return object_ids_to_strings(doc)
 
     def find(self, filter=None, *args, **kwargs):
+        filter = self._inject_tenant(filter)
         filter_converted = string_ids_to_object_ids(filter)
         cursor = self._collection.find(filter_converted, *args, **kwargs)
         return WrappedCursor(cursor)
 
     async def find_one(self, filter=None, *args, **kwargs):
+        filter = self._inject_tenant(filter)
         filter_converted = string_ids_to_object_ids(filter)
         doc = await self._collection.find_one(filter_converted, *args, **kwargs)
         return object_ids_to_strings(doc)
 
     async def count_documents(self, filter, *args, **kwargs):
+        filter = self._inject_tenant(filter)
         filter_converted = string_ids_to_object_ids(filter)
         return await self._collection.count_documents(filter_converted, *args, **kwargs)
 
     async def delete_one(self, filter, *args, **kwargs):
+        filter = self._inject_tenant(filter)
         filter_converted = string_ids_to_object_ids(filter)
         return await self._collection.delete_one(filter_converted, *args, **kwargs)
 
     async def delete_many(self, filter, *args, **kwargs):
+        filter = self._inject_tenant(filter)
         filter_converted = string_ids_to_object_ids(filter)
         return await self._collection.delete_many(filter_converted, *args, **kwargs)
 
     def aggregate(self, pipeline, *args, **kwargs):
+        if self.name in TENANT_COLLECTIONS:
+            c_id = current_tenant_id.get()
+            if c_id and c_id != "superadmin":
+                pipeline.insert(0, {"$match": {"company_id": c_id}})
+                
         pipeline_converted = [string_ids_to_object_ids(stage) for stage in pipeline]
         cursor = self._collection.aggregate(pipeline_converted, *args, **kwargs)
         return WrappedCursor(cursor)
