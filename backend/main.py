@@ -2257,7 +2257,10 @@ async def get_employee_attendance_page_data(db=Depends(get_db)):
 @app.get("/my-tasks-view-data")
 async def get_my_tasks_view_data(userId: Optional[str] = None, role: Optional[str] = None, db=Depends(get_db)):
     """Clubbed endpoint for the MyTasksView component. Replaces 8 separate calls."""
-    import asyncio
+    from datetime import datetime, timedelta
+    start_date = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+    end_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+
     results = await asyncio.gather(
         crud.get_tasks(db, userId, role, skip=0, limit=10000),
         crud.get_wm_tasks(db, userId, role, skip=0, limit=10000),
@@ -2266,7 +2269,9 @@ async def get_my_tasks_view_data(userId: Optional[str] = None, role: Optional[st
         crud.get_projects(db, skip=0, limit=10000),
         crud.get_clients(db, skip=0, limit=10000),
         crud.get_employees(db, skip=0, limit=10000),
-        crud.get_leads(db, skip=0, limit=10000)
+        crud.get_leads(db, skip=0, limit=10000),
+        db.marketing_daily_reports.find({"date": {"$gte": start_date, "$lte": end_date}}).to_list(10000),
+        db.marketing_project_daily_remarks.find({"date": {"$gte": start_date, "$lte": end_date}}).to_list(10000)
     )
     
     employees = [
@@ -2284,7 +2289,9 @@ async def get_my_tasks_view_data(userId: Optional[str] = None, role: Optional[st
         "projects": results[4],
         "clients": results[5],
         "employees": employees,
-        "leads": results[7]
+        "leads": results[7],
+        "dailyReports": [crud.fix_id(r) for r in results[8]],
+        "projectRemarks": [crud.fix_id(r) for r in results[9]]
     }
 
 @app.get("/wm-tasks", response_model=List[schemas.WMTask])

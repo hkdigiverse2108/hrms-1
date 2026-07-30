@@ -458,6 +458,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
           date: dateStr,
           status: isFullDayLeave ? 'On Leave' : (report?.status || 'Pending Verification'),
           reportId: report?.id,
+          rating: report?.rating ?? null,
           note: report?.note || '',
           verifiedBy: report?.userName || '',
           responsiblePerson
@@ -527,6 +528,18 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
 
   const handleVerify = async (status: string) => {
     if (!verifyRecord) return
+
+    const numRating = Number(verifyRating)
+    if (!verifyRating || isNaN(numRating) || numRating < 1 || numRating > 10) {
+      toast.error("Please enter a compulsory rating between 1 and 10")
+      return
+    }
+
+    if (!verifyNote || !verifyNote.trim()) {
+      toast.error("Please enter a compulsory verification note")
+      return
+    }
+
     setIsSubmitting(true)
     try {
       const method = verifyRecord.reportId ? 'PUT' : 'POST'
@@ -620,15 +633,18 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
         <Clock className="w-3 h-3" /> {record.date}
       </div>
     )},
-    { key: 'status' as const, header: 'Work Status', render: (record: any) => (
-      <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-tight ${
-        record.status === 'Approved' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 
-        record.status === 'Rejected' ? 'bg-rose-50 text-rose-600 border border-rose-100' : 
-        'bg-amber-50 text-amber-600 border border-amber-100'
-      }`}>
-        {record.status}
-      </span>
-    )},
+    { key: 'status' as const, header: 'Work Status', render: (record: any) => {
+      const s = (record.status || '').toLowerCase();
+      return (
+        <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-tight ${
+          s === 'approved' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 
+          s === 'rejected' ? 'bg-rose-50 text-rose-600 border border-rose-100' : 
+          'bg-amber-50 text-amber-600 border border-amber-100'
+        }`}>
+          {record.status}
+        </span>
+      );
+    }},
     { key: 'note' as const, header: 'Verification Note', render: (record: any) => (
       <div className="flex flex-col gap-1">
         {record.note ? (
@@ -645,15 +661,16 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
         )}
       </div>
     )},
-    { key: 'rating' as const, header: 'Rating', render: (record: any) => (
-      record.status === 'Approved' && record.rating ? (
+    { key: 'rating' as const, header: 'Rating', render: (record: any) => {
+      const hasRating = record.rating != null && record.rating !== '' && !isNaN(Number(record.rating)) && Number(record.rating) > 0;
+      return hasRating ? (
         <span className="text-[10px] font-bold text-amber-500 bg-amber-50 px-2 py-1 rounded border border-amber-100 inline-flex items-center gap-1 w-max shadow-sm">
           ⭐ {record.rating}/10
         </span>
       ) : (
         <span className="text-[10px] text-slate-400 italic">-</span>
-      )
-    )},
+      );
+    }},
     { key: 'verifiedBy' as const, header: 'Verified By / Responsible', render: (record: any) => (
       record.status === 'Pending Verification' ? (
         <span className="text-[11px] text-slate-600 font-semibold">{record.responsiblePerson}</span>
@@ -923,7 +940,21 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
                 max="10"
                 step="any"
                 value={verifyRating}
-                onChange={(e) => setVerifyRating(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '') {
+                    setVerifyRating('');
+                    return;
+                  }
+                  const num = Number(val);
+                  if (num > 10) {
+                    setVerifyRating('10');
+                  } else if (num < 0) {
+                    setVerifyRating('1');
+                  } else {
+                    setVerifyRating(val);
+                  }
+                }}
                 placeholder="Enter rating from 1 to 10"
                 className="text-xs border-slate-200 focus:border-brand-teal focus:ring-brand-teal rounded-xl h-10"
               />

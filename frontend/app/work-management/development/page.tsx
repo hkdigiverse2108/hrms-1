@@ -868,7 +868,7 @@ export default function TasksPage() {
         title="Development Board"
         description="Manage software & web development sprints. Click any card to update details."
       >
-        <div className="flex gap-2">
+        <div className="flex items-center flex-wrap gap-2">
           {activeTab === "tasks" && !isRealAdmin && (
             <DevCreativeWorkDialog />
           )}

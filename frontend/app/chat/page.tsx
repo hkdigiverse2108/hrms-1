@@ -4400,10 +4400,10 @@ export default function ChatPage() {
   }, [unreadCounts, chatChannels]);
 
   return (
-    <div className="flex h-[calc(100vh-120px)] bg-white border border-border rounded-xl overflow-hidden shadow-sm">
+    <div className="flex h-[calc(100vh-95px)] sm:h-[calc(100vh-105px)] md:h-[calc(100vh-110px)] lg:h-[calc(100vh-95px)] w-full max-w-full min-w-0 bg-white border border-border rounded-xl overflow-hidden shadow-sm transition-all">
       {/* Messages Sidebar */}
       <div className={cn(
-        "w-full md:w-[350px] border-r border-border flex flex-col bg-gray-50/30",
+        "w-full sm:w-[290px] md:w-[320px] lg:w-[350px] xl:w-[380px] shrink-0 border-r border-border flex flex-col bg-gray-50/30 min-w-0 transition-all",
         selectedChat && "hidden md:flex" // Hide list on mobile when chat is open
       )}>
         <div className="p-6 space-y-4">
@@ -5548,7 +5548,7 @@ export default function ChatPage() {
                   <div
                     ref={scrollRef}
                     onScroll={handleScroll}
-                    className="flex-1 overflow-y-auto px-2 sm:px-4 md:px-6 lg:px-8 py-2 sm:py-4 space-y-0.5 custom-scrollbar"
+                    className="flex-1 overflow-y-auto pl-3.5 sm:pl-6 md:pl-7 lg:pl-8 pr-5 sm:pr-7 lg:pr-9 py-2 sm:py-4 space-y-0.5 custom-scrollbar"
                   >
                     <div className="flex justify-center">
                       <span className="px-3 py-1 bg-white border border-border rounded-full text-[10px] font-bold text-muted-foreground uppercase tracking-wider shadow-sm">
@@ -5608,15 +5608,15 @@ export default function ChatPage() {
                       return (
                         <React.Fragment key={msg.id}>
                           {showDateSeparator && (
-                            <div className="flex justify-center my-4">
-                              <span className="px-3 py-1 bg-white text-slate-600 text-xs rounded-[7.5px] shadow-[0_1px_0.5px_rgba(17,27,33,0.1)] font-normal border-none">
+                            <div className="flex justify-center my-3">
+                              <span className="px-3 py-1 bg-white/90 border border-slate-200/80 rounded-full text-[11px] font-bold text-slate-500 shadow-2xs">
                                 {dateText}
                               </span>
                             </div>
                           )}
                           {!messageSearchQuery && msg.id === firstUnreadId && (
-                            <div className="flex justify-center my-4 relative">
-                              <div className="absolute inset-0 flex items-center">
+                            <div className="flex items-center my-4 relative">
+                              <div className="flex-1 flex items-center justify-center">
                                 <div className="w-full border-t border-brand-teal/30"></div>
                               </div>
                               <span className="relative px-3 py-1 bg-brand-teal/10 text-brand-teal rounded-full text-[10px] font-bold uppercase tracking-wider shadow-sm">
@@ -5628,7 +5628,7 @@ export default function ChatPage() {
                             id={`msg-${msg.id}`}
                             className={cn(
                               "flex gap-2 group w-full mb-1",
-                              msg.isMe ? "justify-end items-end" : "justify-start items-start",
+                              msg.isMe ? "justify-end items-end pr-3" : "justify-start items-start",
                               isSelectionMode && "cursor-pointer",
                               isSelectionMode && selectedMessageIds.includes(msg.id) && "bg-brand-teal/10 rounded-lg -mx-2 px-2"
                             )}
@@ -5668,7 +5668,7 @@ export default function ChatPage() {
                             )}
                             <div className={cn(
                               "flex flex-col max-w-[90%] sm:max-w-[75%] lg:max-w-[65%] xl:max-w-[60%]",
-                              msg.isMe ? "items-end" : "items-start"
+                              msg.isMe ? "items-end mr-2" : "items-start"
                             )}>
                               {editingMessageId === msg.id ? (
                                 <div className="flex flex-col gap-2 bg-white p-3 rounded-xl border border-brand-teal shadow-sm min-w-[200px]">

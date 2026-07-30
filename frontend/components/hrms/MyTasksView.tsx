@@ -69,6 +69,8 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
   const [clients, setClients] = useState<any[]>([])
   const [employees, setEmployees] = useState<any[]>([])
   const [leads, setLeads] = useState<any[]>([])
+  const [dailyReports, setDailyReports] = useState<any[]>([])
+  const [projectRemarks, setProjectRemarks] = useState<any[]>([])
   
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('today')
@@ -102,6 +104,8 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
         setClients(data.clients || []);
         setEmployees(data.employees || []);
         setLeads(data.leads || []);
+        setDailyReports(data.dailyReports || []);
+        setProjectRemarks(data.projectRemarks || []);
       }
     } catch (err) {
       console.error('Error fetching data:', err)
@@ -169,14 +173,21 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
     if (task.sourceType === 'wm-task') {
       return '/work-management/development';
     }
-    if (task.sourceType === 'smm-creative') {
-      return '/work-management/smm';
-    }
-    if (task.sourceType === 'smm-other') {
-      if (task.department?.toLowerCase() === 'digital marketing' || task.originalTask?.taskType === 'digital-marketing') {
-        return '/work-management/digital-marketing';
+    if (task.sourceType === 'smm-creative' || task.sourceType === 'smm-followup' || task.department === 'Social Media Management' || task.department === 'Digital Marketing' || task.sourceType === 'dm-missing-metric') {
+      const isDM = task.department?.toLowerCase() === 'digital marketing' || task.originalTask?.taskType === 'digital-marketing' || task.originalTask?.taskType === 'dm-other-work' || task.sourceType === 'dm-missing-metric';
+      const base = isDM ? '/work-management/digital-marketing' : '/work-management/smm';
+      
+      const clientId = task.clientId || task.originalTask?.clientId;
+      const projectId = task.projectId || task.originalTask?.projectId;
+      
+      if (clientId) {
+        let url = `${base}/${clientId}`;
+        if (projectId) {
+          url += `?projectId=${projectId}`;
+        }
+        return url;
       }
-      return '/work-management/smm';
+      return base;
     }
     if (task.sourceType === 'general-task') {
       const dept = task.originalTask?.department;
@@ -368,9 +379,13 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
     })
 
     // 4. SMM Other Work
+    const targetEmp = employees.find(e => String(e.id) === String(uId)) || (uId === currentUser?.id ? currentUser : null);
+    const targetEmpName = targetEmp ? (targetEmp.name || `${targetEmp.firstName || ''} ${targetEmp.lastName || ''}`.trim()) : '';
+
     otherWork.forEach(ow => {
-      const isAssignee = ow.assigneeId === uId
-      if (isAssignee && ow.status !== 'Approved') {
+      const isAssignee = String(ow.assigneeId) === String(uId) || (targetEmpName && ow.assigneeName && ow.assigneeName.toLowerCase().includes(targetEmpName.toLowerCase()));
+      const isAssigner = !targetUserId && (String(ow.assignerId) === String(uId) || (targetEmpName && ow.assignerName && ow.assignerName.toLowerCase().includes(targetEmpName.toLowerCase())));
+      if ((isAssignee || isAssigner) && ow.status !== 'Approved') {
         let isProjectOnHold = false;
         if (ow.projectId) {
           const assocProject = projects.find(p => p.id === ow.projectId);
@@ -385,12 +400,13 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
           consolidated.push({
             id: ow.id,
             title: ow.title,
+            clientDisplayName: (ow.taskType === 'digital-marketing' || ow.taskType === 'dm-other-work') ? 'Digital Marketing' : 'Other Work',
             description: ow.description || 'SMM other work task',
             dueDate: ow.deadline ? (ow.deadline.includes('T') ? ow.deadline.split('T')[0] : ow.deadline) : '',
             priority: ow.priority || 'medium',
             status: ow.status,
             stage: ow.status,
-            department: ow.taskType === 'digital-marketing' ? 'Digital Marketing' : 'Social Media Management',
+            department: (ow.taskType === 'digital-marketing' || ow.taskType === 'dm-other-work') ? 'Digital Marketing' : 'Social Media Management',
             sourceType: 'smm-other',
             originalTask: enrichedOw
           })
@@ -430,8 +446,82 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
       }
     })
 
+    // 6. Digital Marketing Missing Daily Metrics
+    const normalizeDate = (d: string) => d ? d.split(" ")[0].split("T")[0] : "";
+    const getPastDates = (maxDays = 6) => {
+      const dates = [];
+      for (let i = -1; i <= maxDays; i++) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        dates.push(d.toISOString().split("T")[0]);
+      }
+      return dates;
+    };
+
+    clients.forEach((client) => {
+      const clientProjects = projects.filter((p) => p.clientId === client.id && p.department?.toLowerCase() === "digital marketing" && p.status !== "on-hold" && p.status !== "onhold" && p.status?.toLowerCase() !== "on-hold");
+      const proj = clientProjects[0];
+
+      if (proj) {
+        const dates = getPastDates(6);
+        dates.forEach(dateStr => {
+          const report = dailyReports.find(r => r.clientId === client.id && normalizeDate(r.date) === dateStr);
+          const isFilled = (val: any) => val !== undefined && val !== null && val !== 0 && val !== "" && val !== "0" && val !== 0.0;
+          const isClientIssue = report?.remarks && report.remarks.toString().includes("[CLIENT ISSUE]");
+
+          const metricsRecord = projectRemarks.find(r => r.projectId === proj.id && normalizeDate(r.date) === dateStr);
+          const hasMetrics = !!metricsRecord && (!metricsRecord.userRemark?.includes("[CLIENT ISSUE]") && !metricsRecord.clientRemark?.includes("[CLIENT ISSUE]") && !metricsRecord.remark?.includes("[CLIENT ISSUE]"));
+
+          let dayTasks = [
+            { id: "reach", name: "Reach", assigneeId: proj.assignedEmployeeId, date: dateStr, existingRemark: report?.remarks },
+            { id: "impression", name: "Impressions", assigneeId: proj.assignedEmployeeId, date: dateStr, existingRemark: report?.remarks },
+            { id: "leads", name: "Leads", assigneeId: proj.assignedEmployeeId, date: dateStr, existingRemark: report?.remarks },
+            { id: "spend", name: "Spend", assigneeId: proj.assignedEmployeeId, date: dateStr, existingRemark: report?.remarks },
+            { id: "cpl", name: "Cost Metric", assigneeId: proj.assignedEmployeeId, date: dateStr, existingRemark: report?.remarks },
+            { id: "revenue", name: "Revenue", assigneeId: proj.revenueAssigneeId, date: dateStr, existingRemark: metricsRecord?.remark },
+            { id: "follower", name: "Follower", assigneeId: proj.followerAssigneeId, date: dateStr, existingRemark: metricsRecord?.remark },
+          ].filter(t => t.assigneeId);
+
+          if (report && !isClientIssue) {
+            if (isFilled(report.reach)) dayTasks = dayTasks.filter(t => t.id !== "reach");
+            if (isFilled(report.impression)) dayTasks = dayTasks.filter(t => t.id !== "impression");
+            if (isFilled(report.leads)) dayTasks = dayTasks.filter(t => t.id !== "leads");
+            if (isFilled(report.spend)) dayTasks = dayTasks.filter(t => t.id !== "spend");
+            if (isFilled(report.cpl)) dayTasks = dayTasks.filter(t => t.id !== "cpl");
+          }
+          
+          if (hasMetrics) {
+            dayTasks = dayTasks.filter(t => !["revenue", "follower"].includes(t.id));
+          }
+
+          dayTasks.forEach(t => {
+            if (String(t.assigneeId) === String(uId)) {
+              const assigneeEmp = employees.find(e => String(e.id) === String(t.assigneeId));
+              const empName = assigneeEmp ? (assigneeEmp.name || `${assigneeEmp.firstName || ''} ${assigneeEmp.lastName || ''}`.trim()) : 'User';
+              
+              consolidated.push({
+                id: `${proj.id}-missing-${t.id}-${dateStr}`,
+                title: `Missing Metric: ${t.name} for ${dateStr}`,
+                clientDisplayName: 'Digital Marketing',
+                description: `Please fill in the daily report for ${t.name}.`,
+                dueDate: dateStr,
+                priority: 'high',
+                status: 'todo',
+                stage: 'Pending',
+                department: 'Digital Marketing',
+                sourceType: 'dm-missing-metric',
+                clientId: client.id,
+                projectId: proj.id,
+                originalTask: { ...t, assignerName: 'System', assigneeName: empName, taskType: 'digital-marketing', clientId: client.id, projectId: proj.id }
+              });
+            }
+          });
+        });
+      }
+    });
+
       return consolidated
-    }, [tasks, wmTasks, entries, otherWork, projects, clients, effectiveUserId, employees, currentUser])
+    }, [tasks, wmTasks, entries, otherWork, projects, clients, effectiveUserId, employees, currentUser, dailyReports, projectRemarks])
 
     const kpiData = useMemo(() => {
       let total = 0;

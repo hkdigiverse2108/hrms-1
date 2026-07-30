@@ -329,6 +329,10 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       menuItems.push(getItem("Training & Courses", "training", <BookOpen className="w-5 h-5" />, trainingChildren));
     }
 
+    if (isAdmin || (isModuleEnabled('voting') && checkPermission('voting', 'canView'))) {
+      menuItems.push(getItem(<Link href="/voting">Elections</Link>, "/voting", <Vote className="w-5 h-5" />));
+    }
+
     if (isAdmin || checkPermission('settings', 'canView')) {
       menuItems.push(getItem(<Link href="/settings">Settings</Link>, "/settings", <Settings className="w-5 h-5" />));
     }

@@ -1449,12 +1449,14 @@ export default function SalesPage() {
                       });
                       setConvertingLeadId(lead.id);
                       setClientDialogOpen(true);
-                    } else {
+                    } else if (val === "Client Lost") {
                       setStatusChangeData({
                         leadId: lead.id,
                         newStatus: val,
-                        keepEditing: val === "On Hold"
+                        keepEditing: false
                       });
+                    } else {
+                      handleInlineUpdate(lead.id, "status", val);
                     }
                   }}
                 >
@@ -3309,10 +3311,10 @@ export default function SalesPage() {
                   <SelectValue placeholder="Select a reason" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Follow-up requested">Follow-up requested</SelectItem>
-                  <SelectItem value="Not interested currently">Not interested currently</SelectItem>
-                  <SelectItem value="Pricing issue">Pricing issue</SelectItem>
-                  <SelectItem value="Competitor chosen">Competitor chosen</SelectItem>
+                  <SelectItem value="Budget too high">Budget too high</SelectItem>
+                  <SelectItem value="Lost to competitor">Lost to competitor</SelectItem>
+                  <SelectItem value="Not interested">Not interested</SelectItem>
+                  <SelectItem value="No response">No response</SelectItem>
                   <SelectItem value="Other">Other (Please specify)</SelectItem>
                 </SelectContent>
               </Select>
@@ -3340,6 +3342,20 @@ export default function SalesPage() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Convert Lead to Client Dialog */}
+      <Dialog open={clientDialogOpen} onOpenChange={setClientDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Convert Lead to Client</DialogTitle>
+          </DialogHeader>
+          <ClientForm 
+            initialData={clientFormData || {}} 
+            onSubmit={handleClientSubmit} 
+            isSubmitting={isClientSubmitting} 
+          />
         </DialogContent>
       </Dialog>
     </div>
