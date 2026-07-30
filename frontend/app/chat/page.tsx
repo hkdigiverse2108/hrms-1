@@ -5628,7 +5628,7 @@ export default function ChatPage() {
                             id={`msg-${msg.id}`}
                             className={cn(
                               "flex gap-2 group w-full mb-1",
-                              msg.isMe ? "justify-end items-end pr-2" : "justify-start items-start",
+                              msg.isMe ? "justify-end items-end pr-3" : "justify-start items-start",
                               isSelectionMode && "cursor-pointer",
                               isSelectionMode && selectedMessageIds.includes(msg.id) && "bg-brand-teal/10 rounded-lg -mx-2 px-2"
                             )}
@@ -5668,7 +5668,7 @@ export default function ChatPage() {
                             )}
                             <div className={cn(
                               "flex flex-col max-w-[90%] sm:max-w-[75%] lg:max-w-[65%] xl:max-w-[60%]",
-                              msg.isMe ? "items-end mr-1" : "items-start"
+                              msg.isMe ? "items-end mr-2" : "items-start"
                             )}>
                               {editingMessageId === msg.id ? (
                                 <div className="flex flex-col gap-2 bg-white p-3 rounded-xl border border-brand-teal shadow-sm min-w-[200px]">

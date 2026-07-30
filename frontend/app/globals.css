@@ -197,11 +197,13 @@
   content: "";
   position: absolute;
   top: 0;
-  right: -8px;
-  width: 8px;
-  height: 13px;
+  right: -6px;
+  width: 7px;
+  height: 12px;
   background-color: #d9fdd3;
   clip-path: polygon(0 0, 0 100%, 100% 0);
+  z-index: 1;
+  pointer-events: none;
 }
 
 .whatsapp-bubble-received {
