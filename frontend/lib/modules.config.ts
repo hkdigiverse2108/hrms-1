@@ -35,14 +35,6 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ]
   },
   {
-    name: 'Elections',
-    icon: Vote,
-    modules: [
-      { moduleName: 'voting', displayName: 'Elections', tabUrl: '/voting' },
-    ]
-  },
-
-  {
     name: 'Employees',
     icon: Users,
     modules: [
@@ -137,6 +129,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { moduleName: 'marketing', displayName: 'Digital Marketing', tabUrl: '/work-management/digital-marketing' },
       { moduleName: 'creative', displayName: 'Social Media Management', tabUrl: '/work-management/smm' },
       { moduleName: 'research', displayName: 'Research', tabUrl: '/work-management/research' },
+      { moduleName: 'voting', displayName: 'Elections', tabUrl: '/voting' },
     ]
   },
   {

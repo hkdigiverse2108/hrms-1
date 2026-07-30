@@ -33,6 +33,7 @@ interface UserPermissionsModalProps {
 
 const DEFAULT_MODULES = [
   { moduleName: 'dashboard', displayName: 'Dashboard', tabUrl: '/' },
+  { moduleName: 'voting', displayName: 'Elections', tabUrl: '/voting' },
   { moduleName: 'employees', displayName: 'Employee List', tabUrl: '/employees' },
   { moduleName: 'payroll', displayName: 'Payroll', tabUrl: '/payroll' },
   { moduleName: 'attendance', displayName: 'Attendance', tabUrl: '/attendance' },
