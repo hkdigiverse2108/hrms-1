@@ -133,8 +133,11 @@ def fix_id(doc):
             elif isinstance(v, ObjectId):
                 new_doc[k] = str(v)
             elif isinstance(v, (datetime, date)):
-                if hasattr(v, "hour") and (v.hour != 0 or v.minute != 0 or v.second != 0):
-                    new_doc[k] = v.isoformat()
+                if isinstance(v, datetime) and (v.hour != 0 or v.minute != 0 or v.second != 0):
+                    if v.tzinfo is None:
+                        new_doc[k] = v.replace(tzinfo=timezone.utc).isoformat()
+                    else:
+                        new_doc[k] = v.isoformat()
                 else:
                     new_doc[k] = v.strftime("%Y-%m-%d")
             elif isinstance(v, float):
@@ -3823,7 +3826,8 @@ async def get_projects(db, userId: str = None, role: str = None, skip: int = 0, 
                 {"assignedApproverId": userId},
                 {"assignedPosterId": userId},
                 {"assignedCaptionWriterId": userId},
-                {"assignedThumbnailDesignerId": userId}
+                {"assignedThumbnailDesignerId": userId},
+                {"assignedFinanceManagerId": userId}
             ]
             if project_ids:
                 project_ids_as_obj = []
@@ -3853,6 +3857,19 @@ async def get_projects(db, userId: str = None, role: str = None, skip: int = 0, 
 
     cursor = db.projects.find(query).sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
+    
+    today_date = get_now().date()
+    for row in rows:
+        if row.get("isPaymentReceived") and row.get("nextPaymentDate"):
+            try:
+                # nextPaymentDate is typically saved as "YYYY-MM-DD"
+                next_payment = datetime.strptime(row["nextPaymentDate"], "%Y-%m-%d").date()
+                if today_date > next_payment:
+                    row["isPaymentReceived"] = False
+                    await db.projects.update_one({"_id": row["_id"]}, {"$set": {"isPaymentReceived": False}})
+            except Exception:
+                pass
+                
     return [fix_id(row) for row in rows]
 
 async def create_project(db, project: schemas.ProjectCreate):
@@ -5382,6 +5399,92 @@ async def update_lead_follow_up(db, lead_id: str, follow_up_idx: int, follow_up:
     
     doc = await db.leads.find_one({"_id": ObjectId(lead_id)})
     return fix_id(doc)
+
+# Project Finance Follow-ups
+async def add_project_finance_follow_up(db, project_id: str, follow_up: schemas.FollowUp, performedBy: str = "Unknown", userName: str = "Unknown User"):
+    follow_up_dict = follow_up.dict()
+    next_follow_up_date = follow_up_dict.get("nextFollowUpDate", None)
+    if not follow_up_dict.get("date"):
+        follow_up_dict["date"] = get_now().strftime("%Y-%m-%d %H:%M")
+        
+    update_fields: dict = {"$push": {"financeFollowUps": follow_up_dict}}
+    if follow_up_dict.get("projectStatus"):
+        update_fields["$set"] = {"status": follow_up_dict.get("projectStatus")}
+        
+    await db.projects.update_one(
+        {"_id": ObjectId(project_id)},
+        update_fields
+    )
+    
+    # Log activity
+    log_detail = f"Added finance follow-up: {follow_up_dict.get('note', 'No notes provided')}"
+    if next_follow_up_date:
+        try:
+            date_str = next_follow_up_date.strftime("%Y-%m-%d")
+        except AttributeError:
+            date_str = str(next_follow_up_date)
+        log_detail += f" (Next follow-up date: {date_str})"
+    await log_activity(db, "Finance Follow-up Added", performedBy, userName, log_detail, projectId=project_id)
+    
+    project = await db.projects.find_one({"_id": ObjectId(project_id)})
+    project_title = project.get("title", "Project") if project else "Project"
+    
+    # Target assignee: Finance Manager if assigned, else the person adding the follow-up
+    assignee_id = (project.get("assignedFinanceManagerId") if project else None) or performedBy
+    assignee_name = (project.get("assignedFinanceManagerName") if project else None) or userName
+
+    # 1. Create reminder task for Next Follow-up Date if set
+    if next_follow_up_date:
+        try:
+            due_d = next_follow_up_date.strftime("%Y-%m-%d") if hasattr(next_follow_up_date, "strftime") else str(next_follow_up_date).split("T")[0].split(" ")[0]
+        except Exception:
+            due_d = str(next_follow_up_date)
+            
+        task_obj = schemas.TaskCreate(
+            title=f"Finance Follow-up Reminder: {project_title}",
+            description=f"Take finance follow-up for {project_title}.\nNote: {follow_up_dict.get('note', '')}",
+            assignedToId=assignee_id,
+            assignedToName=assignee_name,
+            assignedToIds=[assignee_id] if assignee_id else [],
+            assignedToNames=[assignee_name] if assignee_name else [],
+            assignedById=performedBy,
+            assignedByName=userName,
+            dueDate=due_d,
+            status="todo",
+            priority="high",
+            performedBy=performedBy,
+            userName=userName
+        )
+        try:
+            await create_task(db, task_obj)
+        except Exception as e:
+            print("Error creating finance follow-up reminder task:", e)
+
+    # 2. Create reminder task for Next Payment Date if set
+    next_pay_date = follow_up_dict.get("nextPaymentDate")
+    if next_pay_date:
+        amt_str = f" (₹{follow_up_dict.get('amountReceived')})" if follow_up_dict.get("amountReceived") else ""
+        task_obj = schemas.TaskCreate(
+            title=f"Payment Due Reminder: {project_title}{amt_str}",
+            description=f"Payment expected for project {project_title}.\nNote: {follow_up_dict.get('note', '')}",
+            assignedToId=assignee_id,
+            assignedToName=assignee_name,
+            assignedToIds=[assignee_id] if assignee_id else [],
+            assignedToNames=[assignee_name] if assignee_name else [],
+            assignedById=performedBy,
+            assignedByName=userName,
+            dueDate=str(next_pay_date),
+            status="todo",
+            priority="urgent",
+            performedBy=performedBy,
+            userName=userName
+        )
+        try:
+            await create_task(db, task_obj)
+        except Exception as e:
+            print("Error creating payment due reminder task:", e)
+
+    return fix_id(project)
 
 # System Settings CRUD
 async def get_system_settings(db):

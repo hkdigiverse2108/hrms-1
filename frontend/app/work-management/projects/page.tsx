@@ -2,14 +2,16 @@
 
 import React, { useState, useEffect } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
-import { Building2, Plus, Pencil, Trash2, Calendar, Shield, Loader2, Search, AlertTriangle, History, ClipboardList, Filter, CalendarClock, Key, Link2, ExternalLink } from "lucide-react";
+import { Building2, Plus, Pencil, Trash2, Calendar, Shield, Loader2, Search, AlertTriangle, History, ClipboardList, Filter, CalendarClock, Key, Link2, ExternalLink, Banknote, Wallet, ArrowUpRight, Clock3, XCircle, CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ProjectForm, ProjectFormData } from "@/components/hrms/ProjectForm";
+import { FinanceFollowUpDialog } from "@/components/hrms/FinanceFollowUpDialog";
 import { API_URL } from "@/lib/config";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 
 import { useUser } from "@/hooks/useUser";
 import { useRouter } from "next/navigation";
@@ -41,6 +43,7 @@ export default function ProjectsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [showFinanceDetails, setShowFinanceDetails] = useState(false);
   const [selectedDept, setSelectedDept] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [selectedPriority, setSelectedPriority] = useState("all");
@@ -360,15 +363,27 @@ export default function ProjectsPage() {
 
   const allowedProjects = projects.filter(p => {
     if (isAdmin) return true;
+    // Check global access roles
+    const userRole = (user?.role || "").toLowerCase();
+    if (userRole.includes("hr") || userRole.includes("finance")) return true;
+    
+    // Check explicit assignments dynamically
+    const isAssigned = Object.keys(p).some(key => {
+      const val = p[key];
+      return (typeof val === 'string' && val === user?.id);
+    });
+    if (isAssigned) return true;
+    
+    // If not assigned, filter by department
     if (!user?.department) return true;
     const userDept = user.department.toLowerCase().trim();
     return p.department && p.department.toLowerCase().includes(userDept);
   });
 
   const filteredProjects = allowedProjects.filter(p => {
-    const matchesSearch = p.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          p.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          p.department?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = (p.title || "").toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          (p.clientName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (p.department || "").toLowerCase().includes(searchTerm.toLowerCase());
     
     const selectedDeptTrimmed = selectedDept.toLowerCase().trim();
     const matchesDept = selectedDept === "all" || (p.department && p.department.toLowerCase().includes(selectedDeptTrimmed));
@@ -760,8 +775,162 @@ export default function ProjectsPage() {
               Clear Filters
             </Button>
           )}
+          {(isAdmin || projects.some(p => p.assignedFinanceManagerId === user?.id)) && (
+            <div className="flex items-center space-x-2 pl-4 border-l border-slate-200">
+              <Switch id="show-finance" checked={showFinanceDetails} onCheckedChange={setShowFinanceDetails} />
+              <Label htmlFor="show-finance" className="text-xs font-bold text-emerald-700 cursor-pointer uppercase tracking-wider">Finance Details</Label>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Admin-Only Finance KPI Cards */}
+      {isAdmin && showFinanceDetails && !isLoading && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+          {(() => {
+            let receivedAmount = 0;
+            let receivedCount = 0;
+            let upcomingAmount = 0;
+            let upcomingCount = 0;
+            let cancelledAmount = 0;
+            let cancelledCount = 0;
+            let followupsTakenCount = 0;
+            let followupsLeftCount = 0;
+
+            projects.forEach((p: any) => {
+              const hasFollowUps = p.financeFollowUps && p.financeFollowUps.length > 0;
+              if (hasFollowUps) {
+                followupsTakenCount += 1;
+              } else {
+                followupsLeftCount += 1;
+              }
+
+              const latestFollowUp = hasFollowUps ? p.financeFollowUps[p.financeFollowUps.length - 1] : null;
+              if (!latestFollowUp) return;
+
+              if (p.status === 'cancelled' || latestFollowUp.projectStatus === 'cancelled') {
+                cancelledCount += 1;
+                cancelledAmount += (latestFollowUp.amountReceived || 0);
+              } else if (latestFollowUp.isPaymentReceived) {
+                receivedCount += 1;
+                receivedAmount += (latestFollowUp.amountReceived || 0);
+              } else {
+                upcomingCount += 1;
+                upcomingAmount += (latestFollowUp.amountReceived || 0);
+              }
+            });
+
+            return (
+              <>
+                {/* Received Payments Card */}
+                <Card className="border-emerald-200 bg-gradient-to-br from-emerald-50/70 to-white shadow-sm hover:shadow transition-shadow">
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-emerald-700">
+                        <Wallet className="w-4 h-4 text-emerald-600" />
+                        Received Payments
+                      </div>
+                      <div className="text-xl font-black text-emerald-800">
+                        ₹{receivedAmount.toLocaleString('en-IN')}
+                      </div>
+                      <div className="text-[11px] font-medium text-emerald-600">
+                        {receivedCount} project{receivedCount !== 1 ? 's' : ''} completed / paid
+                      </div>
+                    </div>
+                    <div className="p-2.5 bg-emerald-100/80 rounded-xl text-emerald-700">
+                      <ArrowUpRight className="w-5 h-5" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Upcoming Payments Card */}
+                <Card className="border-amber-200 bg-gradient-to-br from-amber-50/70 to-white shadow-sm hover:shadow transition-shadow">
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-700">
+                        <Clock3 className="w-4 h-4 text-amber-600" />
+                        Upcoming / Due
+                      </div>
+                      <div className="text-xl font-black text-amber-800">
+                        ₹{upcomingAmount.toLocaleString('en-IN')}
+                      </div>
+                      <div className="text-[11px] font-medium text-amber-600">
+                        {upcomingCount} project{upcomingCount !== 1 ? 's' : ''} pending payment
+                      </div>
+                    </div>
+                    <div className="p-2.5 bg-amber-100/80 rounded-xl text-amber-700">
+                      <Banknote className="w-5 h-5" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Cancelled Payments Card */}
+                <Card className="border-rose-200 bg-gradient-to-br from-rose-50/70 to-white shadow-sm hover:shadow transition-shadow">
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-rose-700">
+                        <XCircle className="w-4 h-4 text-rose-600" />
+                        Cancelled
+                      </div>
+                      <div className="text-xl font-black text-rose-800">
+                        ₹{cancelledAmount.toLocaleString('en-IN')}
+                      </div>
+                      <div className="text-[11px] font-medium text-rose-600">
+                        {cancelledCount} project{cancelledCount !== 1 ? 's' : ''} cancelled
+                      </div>
+                    </div>
+                    <div className="p-2.5 bg-rose-100/80 rounded-xl text-rose-700">
+                      <XCircle className="w-5 h-5" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Follow-ups Taken Card */}
+                <Card className="border-teal-200 bg-gradient-to-br from-teal-50/70 to-white shadow-sm hover:shadow transition-shadow">
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-teal-700">
+                        <CheckCircle2 className="w-4 h-4 text-teal-600" />
+                        Follow-ups Taken
+                      </div>
+                      <div className="text-2xl font-black text-teal-800">
+                        {followupsTakenCount}
+                      </div>
+                      <div className="text-[11px] font-medium text-teal-600">
+                        projects with follow-ups logged
+                      </div>
+                    </div>
+                    <div className="p-2.5 bg-teal-100/80 rounded-xl text-teal-700">
+                      <CheckCircle2 className="w-5 h-5" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Follow-ups Left Card */}
+                <Card className="border-indigo-200 bg-gradient-to-br from-indigo-50/70 to-white shadow-sm hover:shadow transition-shadow">
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-indigo-700">
+                        <AlertCircle className="w-4 h-4 text-indigo-600" />
+                        Follow-ups Left
+                      </div>
+                      <div className="text-2xl font-black text-indigo-800">
+                        {followupsLeftCount}
+                      </div>
+                      <div className="text-[11px] font-medium text-indigo-600">
+                        projects needing follow-up
+                      </div>
+                    </div>
+                    <div className="p-2.5 bg-indigo-100/80 rounded-xl text-indigo-700">
+                      <AlertCircle className="w-5 h-5" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            );
+          })()}
+        </div>
+      )}
 
       {pendingProjects.length > 0 && !isLoading && (
         <div 
@@ -1029,19 +1198,114 @@ export default function ProjectsPage() {
                     )}
 
 
+                    {/* Finance & Feedback Details */}
+                    {(isAdmin || project.assignedFinanceManagerId === user?.id) && showFinanceDetails && (
+                      <div className="pt-3 border-t border-dashed border-emerald-200/60 bg-emerald-50/30 p-3 rounded-lg space-y-2 mt-2 mb-2">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-1.5 text-emerald-700">
+                            <Banknote className="w-3.5 h-3.5" />
+                            <span className="text-[10px] font-bold uppercase tracking-wider">Finance & Feedback</span>
+                          </div>
+                          <FinanceFollowUpDialog 
+                            project={project} 
+                            onUpdate={() => fetchData(false)} 
+                            userId={user?.id} 
+                            userName={`${user?.firstName || ""} ${user?.lastName || ""}`.trim()}
+                          />
+                        </div>
+                        {project.assignedFinanceManagerName && (
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-slate-500 font-medium">Finance Manager:</span>
+                            <span className="font-bold text-slate-700">{project.assignedFinanceManagerName}</span>
+                          </div>
+                        )}
+                        {(() => {
+                          const latestFollowUp = project.financeFollowUps?.length > 0 
+                            ? project.financeFollowUps[project.financeFollowUps.length - 1] 
+                            : null;
+                          
+                          const todayStr = new Date().toISOString().split('T')[0];
+                          const hasOverdueFollowup = latestFollowUp?.nextFollowUpDate && latestFollowUp.nextFollowUpDate.split('T')[0] <= todayStr;
+                          const hasOverduePayment = (latestFollowUp?.nextPaymentDate || project.nextPaymentDate) && (latestFollowUp?.nextPaymentDate || project.nextPaymentDate) <= todayStr && !latestFollowUp?.isPaymentReceived;
+
+                          return (
+                            <>
+                              {(hasOverdueFollowup || hasOverduePayment) && (
+                                <div className="flex items-center gap-1.5 p-1.5 bg-amber-100 border border-amber-300 rounded text-amber-800 text-[10.5px] font-bold animate-pulse mb-1.5">
+                                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                  <span>
+                                    {hasOverdueFollowup && hasOverduePayment ? "Follow-up & Payment Due Today!" : hasOverdueFollowup ? "Follow-up Reminder Due!" : "Payment Due Today!"}
+                                  </span>
+                                </div>
+                              )}
+                              
+                              {latestFollowUp ? (
+                                <>
+                                  {latestFollowUp.amountReceived != null && latestFollowUp.amountReceived > 0 && (
+                                    <div className="flex justify-between items-center text-xs">
+                                      <span className="text-slate-500 font-medium">Amount Received:</span>
+                                      <span className="font-bold text-emerald-600">₹{latestFollowUp.amountReceived}</span>
+                                    </div>
+                                  )}
+                                  <div className="flex justify-between items-center text-xs">
+                                    <span className="text-slate-500 font-medium">Next Payment Date:</span>
+                                    <span className={`font-bold ${latestFollowUp.nextPaymentDate && latestFollowUp.nextPaymentDate <= todayStr && !latestFollowUp.isPaymentReceived ? "text-red-600 font-extrabold" : "text-slate-700"}`}>
+                                      {latestFollowUp.nextPaymentDate ? (latestFollowUp.nextPaymentDate.includes('-') ? latestFollowUp.nextPaymentDate.split('-').reverse().join('-') : latestFollowUp.nextPaymentDate) : "Not Set"}
+                                    </span>
+                                  </div>
+                                  {latestFollowUp.isPaymentReceived != null && (
+                                    <div className="flex justify-between items-center text-xs">
+                                      <span className="text-slate-500 font-medium">Payment Received:</span>
+                                      <Badge variant={latestFollowUp.isPaymentReceived ? "success" : "destructive"} className="text-[10px] h-5 uppercase">
+                                        {latestFollowUp.isPaymentReceived ? "Yes" : "No"}
+                                      </Badge>
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                <>
+                                  {project.amountReceived !== undefined && project.amountReceived > 0 && (
+                                    <div className="flex justify-between items-center text-xs">
+                                      <span className="text-slate-500 font-medium">Amount Received:</span>
+                                      <span className="font-bold text-emerald-600">₹{project.amountReceived}</span>
+                                    </div>
+                                  )}
+                                  <div className="flex justify-between items-center text-xs">
+                                    <span className="text-slate-500 font-medium">Next Payment Date:</span>
+                                    <span className="font-bold text-slate-700">
+                                      {project.nextPaymentDate ? (project.nextPaymentDate.includes('-') ? project.nextPaymentDate.split('-').reverse().join('-') : project.nextPaymentDate) : "Not Set"}
+                                    </span>
+                                  </div>
+                                  {project.isPaymentReceived !== undefined && (
+                                    <div className="flex justify-between items-center text-xs">
+                                      <span className="text-slate-500 font-medium">Payment Received:</span>
+                                      <Badge variant={project.isPaymentReceived ? "success" : "destructive"} className="text-[10px] h-5 uppercase">
+                                        {project.isPaymentReceived ? "Yes" : "No"}
+                                      </Badge>
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </>
+                          );
+                        })()}
+
+                      </div>
+                    )}
+
                     <div className="flex items-start justify-between pt-2 border-t border-border/50 text-[12px] text-muted-foreground">
                       {isAdmin ? (
                         <div className="flex flex-col gap-1">
                           <div className="flex items-center gap-1.5 text-slate-600 font-medium text-[11px] flex-wrap">
                             <Calendar className="w-3.5 h-3.5 text-brand-teal shrink-0" />
-                            <span>Start: <strong className="text-slate-800 font-semibold">{project.startDate || "-"}</strong></span>
+                            <span>Start: <strong className="text-slate-800 font-semibold">{project.startDate ? (project.startDate.includes('-') ? project.startDate.split('-').reverse().join('-') : project.startDate) : "-"}</strong></span>
                             <span className="text-slate-300">|</span>
-                            <span className={overdue ? "text-red-600 font-bold" : ""}>Client Deadline: <strong className={overdue ? "text-red-600 font-bold" : "text-slate-800 font-semibold"}>{project.endDate || "-"}</strong></span>
+                            <span className={overdue ? "text-red-600 font-bold" : ""}>Client Deadline: <strong className={overdue ? "text-red-600 font-bold" : "text-slate-800 font-semibold"}>{project.endDate ? (project.endDate.includes('-') ? project.endDate.split('-').reverse().join('-') : project.endDate) : "-"}</strong></span>
                           </div>
                           {project.teamDeadline && (
                             <div className="flex items-center gap-1.5 text-amber-600 font-bold text-[11px]">
                               <CalendarClock className="w-3.5 h-3.5 shrink-0" />
-                              Team Deadline: {project.teamDeadline}
+                              Team Deadline: {project.teamDeadline.includes('-') ? project.teamDeadline.split('-').reverse().join('-') : project.teamDeadline}
                             </div>
                           )}
                         </div>
@@ -1049,11 +1313,14 @@ export default function ProjectsPage() {
                         <div className="flex flex-col gap-1">
                           <div className="flex items-center gap-1.5 text-slate-600 font-medium text-[11px]">
                             <Calendar className="w-3.5 h-3.5 text-brand-teal shrink-0" />
-                            <span>Start: <strong className="text-slate-800 font-semibold">{project.startDate || "-"}</strong></span>
+                            <span>Start: <strong className="text-slate-800 font-semibold">{project.startDate ? (project.startDate.includes('-') ? project.startDate.split('-').reverse().join('-') : project.startDate) : "-"}</strong></span>
                           </div>
                           <div className="flex items-center gap-1.5 text-amber-600 font-bold text-[11px]">
                             <CalendarClock className="w-3.5 h-3.5 shrink-0" />
-                            Team Deadline: {project.teamDeadline || project.endDate || project.startDate || "-"}
+                            Team Deadline: {(() => {
+                              const d = project.teamDeadline || project.endDate || project.startDate;
+                              return d ? (d.includes('-') ? d.split('-').reverse().join('-') : d) : "-";
+                            })()}
                           </div>
                         </div>
                       )}
