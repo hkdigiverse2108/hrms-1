@@ -26,6 +26,7 @@ import {
   Menu as MenuIcon,
   Activity,
   BookOpen,
+  Vote,
 } from "lucide-react";
 import { useUser } from "@/hooks/useUser";
 import { usePermissions } from "@/hooks/usePermissions";
