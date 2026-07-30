@@ -23,7 +23,7 @@ import {
   Bell,
 } from "lucide-react";
 import { API_URL } from "@/lib/config";
-import { message } from "antd";
+import { toast } from "sonner";
 
 export default function RestrictionsPage() {
   const [pcs, setPcs] = useState<any[]>([]);
@@ -99,7 +99,7 @@ export default function RestrictionsPage() {
       }
     } catch (err) {
       console.error("Error fetching PCs and system info:", err);
-      message.error("Failed to load restriction data.");
+      toast.error("Failed to load restriction data.");
     } finally {
       setIsLoading(false);
     }
@@ -138,11 +138,11 @@ export default function RestrictionsPage() {
         headers,
       });
       if (res.ok) {
-        message.success("Alert marked as resolved.");
+        toast.success("Alert marked as resolved.");
         fetchSecurityAlerts();
       }
     } catch (err) {
-      message.error("Failed to resolve alert.");
+      toast.error("Failed to resolve alert.");
     }
   };
 
@@ -183,21 +183,21 @@ export default function RestrictionsPage() {
       });
 
       if (res.ok) {
-        message.success(`Restrictions updated for PC: ${editingPc.hostname}`);
+        toast.success(`Restrictions updated for PC: ${editingPc.hostname}`);
         setEditingPc(null);
         fetchPcsAndInfo();
       } else {
-        message.error("Failed to update restrictions.");
+        toast.error("Failed to update restrictions.");
       }
     } catch (err) {
       console.error("Error saving policy:", err);
-      message.error("Failed to save restrictions policy.");
+      toast.error("Failed to save restrictions policy.");
     }
   };
 
   const handleSendBroadcast = async () => {
     if (!broadcastMsg.trim()) {
-      message.warning("Broadcast message cannot be empty.");
+      toast.warning("Broadcast message cannot be empty.");
       return;
     }
 
@@ -220,15 +220,15 @@ export default function RestrictionsPage() {
       });
 
       if (res.ok) {
-        message.success("Live broadcast sent successfully!");
+        toast.success("Live broadcast sent successfully!");
         setBroadcastTitle("");
         setBroadcastMsg("");
       } else {
-        message.error("Failed to send broadcast announcement.");
+        toast.error("Failed to send broadcast announcement.");
       }
     } catch (err) {
       console.error("Error sending broadcast:", err);
-      message.error("Broadcast failed.");
+      toast.error("Broadcast failed.");
     } finally {
       setIsBroadcasting(false);
     }

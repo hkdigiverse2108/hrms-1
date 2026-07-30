@@ -10567,3 +10567,545 @@ async def bulk_update_module_permissions(db, request: schemas.ModuleBulkUpdateRe
                 {"$set": {"permissions": perms, "presetId": None}}
             )
     return {"message": "Bulk permissions updated successfully"}
+
+
+# ==========================================
+# STV VOTING SYSTEM MODULE CRUD & ALGORITHM
+# ==========================================
+
+from database import db
+
+
+def calculate_quota(total_valid_votes: int) -> int:
+
+    """
+    Dynamic Quota Calculation (PDF Spec Feature 1):
+    Formula: ⌊Total Valid Votes / 2⌋ + 1
+    Calculated strictly based on submitted valid ballots.
+    """
+    if total_valid_votes <= 0:
+        return 0
+    return (total_valid_votes // 2) + 1
+
+
+async def create_election(data: schemas.ElectionCreate, created_by_id: str):
+    """
+    Create a new election with candidates.
+    Supports electionMonth & electionYear tagging (Req 6.8 Backdated Tagging).
+    """
+    now = datetime.now()
+    election_doc = {
+        "title": data.title,
+        "description": data.description,
+        "maxPreferences": data.maxPreferences,
+        "electionMonth": data.electionMonth or now.strftime("%B"),
+        "electionYear": data.electionYear or now.year,
+        "status": data.status or "active",
+        "isDeleted": False,
+        "created_by": str(created_by_id),
+        "created_at": now,
+        "updated_at": now
+    }
+    result = await db.elections.insert_one(election_doc)
+    election_id = str(result.inserted_id)
+
+    # Insert candidates if employee IDs were provided
+    candidates_list = []
+    if data.candidate_employee_ids:
+        for emp_id in data.candidate_employee_ids:
+            # Lookup employee details
+            emp = await db.employees.find_one({"_id": emp_id})
+            if not emp:
+                emp = await db.users.find_one({"_id": emp_id})
+            
+            emp_name = "Unknown Employee"
+            dept = None
+            desig = None
+            avatar = None
+
+            if emp:
+                emp_name = emp.get("name") or emp.get("fullName") or f"{emp.get('firstName', '')} {emp.get('lastName', '')}".strip() or "Employee"
+                dept = emp.get("department") or emp.get("departmentName")
+                desig = emp.get("designation") or emp.get("designationTitle") or emp.get("role")
+                avatar = emp.get("profilePicture") or emp.get("avatar")
+
+            cand_doc = {
+                "electionId": election_id,
+                "employee_id": str(emp_id),
+                "name": emp_name,
+                "department": dept,
+                "designation": desig,
+                "avatar": avatar,
+                "created_at": now
+            }
+            c_res = await db.candidates.insert_one(cand_doc)
+            cand_doc["id"] = str(c_res.inserted_id)
+            candidates_list.append(cand_doc)
+
+    election_doc["id"] = election_id
+    election_doc["candidates"] = candidates_list
+    return election_doc
+
+
+async def get_elections(month: Optional[str] = None, year: Optional[int] = None):
+    """
+    List elections with optional month and year filters.
+    Includes count of total valid votes cast and total eligible voters.
+    """
+    query = {"isDeleted": {"$ne": True}}
+    if month:
+        query["electionMonth"] = month
+    if year:
+        query["electionYear"] = year
+
+    cursor = db.elections.find(query).sort("created_at", -1)
+    elections = await cursor.to_list(length=500)
+
+    # Count total active employees for total eligible count
+    total_eligible = await db.employees.count_documents({"status": {"$ne": "inactive"}})
+    if total_eligible == 0:
+        total_eligible = await db.users.count_documents({})
+
+    result = []
+    for el in elections:
+        el_id = str(el["_id"])
+        c_cursor = db.candidates.find({"electionId": el_id})
+        cands = await c_cursor.to_list(length=100)
+        formatted_cands = []
+        for c in cands:
+            formatted_cands.append({
+                "id": str(c["_id"]),
+                "employee_id": str(c.get("employee_id", "")),
+                "name": c.get("name", "Unknown"),
+                "department": c.get("department"),
+                "designation": c.get("designation"),
+                "avatar": c.get("avatar")
+            })
+
+        valid_votes = await db.ballots.count_documents({"electionId": el_id, "isSubmitted": True})
+
+        # Fetch winner name if winner candidate ID exists
+        winner_name = None
+        if el.get("winner_candidate_id"):
+            w_cand = next((c for c in formatted_cands if c["id"] == str(el["winner_candidate_id"])), None)
+            if w_cand:
+                winner_name = w_cand["name"]
+
+        result.append({
+            "id": el_id,
+            "title": el.get("title", ""),
+            "description": el.get("description"),
+            "maxPreferences": el.get("maxPreferences", 5),
+            "electionMonth": el.get("electionMonth"),
+            "electionYear": el.get("electionYear"),
+            "status": el.get("status", "active"),
+            "candidates": formatted_cands,
+            "totalValidVotes": valid_votes,
+            "totalEligibleVoters": total_eligible,
+            "quota": el.get("quota"),
+            "winner_candidate_id": el.get("winner_candidate_id"),
+            "winner_name": winner_name,
+            "createdAt": el.get("created_at"),
+            "updatedAt": el.get("updated_at")
+        })
+
+    return result
+
+
+async def get_election_by_id(election_id: str):
+    """
+    Get election details by ID.
+    """
+    el = await db.elections.find_one({"_id": election_id, "isDeleted": {"$ne": True}})
+    if not el:
+        return None
+
+    c_cursor = db.candidates.find({"electionId": election_id})
+    cands = await c_cursor.to_list(length=100)
+    formatted_cands = []
+    for c in cands:
+        formatted_cands.append({
+            "id": str(c["_id"]),
+            "employee_id": str(c.get("employee_id", "")),
+            "name": c.get("name", "Unknown"),
+            "department": c.get("department"),
+            "designation": c.get("designation"),
+            "avatar": c.get("avatar")
+        })
+
+    valid_votes = await db.ballots.count_documents({"electionId": election_id, "isSubmitted": True})
+    total_eligible = await db.employees.count_documents({"status": {"$ne": "inactive"}})
+
+    winner_name = None
+    if el.get("winner_candidate_id"):
+        w_cand = next((c for c in formatted_cands if c["id"] == str(el["winner_candidate_id"])), None)
+        if w_cand:
+            winner_name = w_cand["name"]
+
+    return {
+        "id": election_id,
+        "title": el.get("title", ""),
+        "description": el.get("description"),
+        "maxPreferences": el.get("maxPreferences", 5),
+        "electionMonth": el.get("electionMonth"),
+        "electionYear": el.get("electionYear"),
+        "status": el.get("status", "active"),
+        "candidates": formatted_cands,
+        "totalValidVotes": valid_votes,
+        "totalEligibleVoters": total_eligible,
+        "quota": el.get("quota"),
+        "winner_candidate_id": el.get("winner_candidate_id"),
+        "winner_name": winner_name,
+        "createdAt": el.get("created_at"),
+        "updatedAt": el.get("updated_at")
+    }
+
+
+async def soft_delete_election(election_id: str):
+    """
+    Soft delete election (Req 6.10).
+    """
+    res = await db.elections.update_one(
+        {"_id": election_id},
+        {"$set": {"isDeleted": True, "deletedAt": datetime.now()}}
+    )
+    return res.modified_count > 0
+
+
+async def submit_ballot(election_id: str, voter_id: str, preferences: List[str]):
+    """
+    Submit ranked preferences ballot.
+    Validates maxPreferences limit and prevents modifying locked ballots (Req 6.5).
+    """
+    el = await db.elections.find_one({"_id": election_id, "isDeleted": {"$ne": True}})
+    if not el:
+        raise ValueError("Election not found")
+    
+    if el.get("status") == "completed":
+        raise ValueError("Election is completed. Voting is closed.")
+
+    max_pref = el.get("maxPreferences", 5)
+    if len(preferences) > max_pref:
+        raise ValueError(f"You can select maximum {max_pref} candidate preferences.")
+
+    existing_ballot = await db.ballots.find_one({"electionId": election_id, "voterId": str(voter_id)})
+    if existing_ballot and existing_ballot.get("isSubmitted"):
+        raise ValueError("Your vote has already been recorded and is locked.")
+
+    now = datetime.now()
+    ballot_doc = {
+        "electionId": election_id,
+        "voterId": str(voter_id),
+        "preferences": [str(p) for p in preferences],
+        "isSubmitted": True,
+        "submittedAt": now,
+        "created_at": now
+    }
+
+    if existing_ballot:
+        await db.ballots.update_one(
+            {"_id": existing_ballot["_id"]},
+            {"$set": ballot_doc}
+        )
+        ballot_doc["id"] = str(existing_ballot["_id"])
+    else:
+        res = await db.ballots.insert_one(ballot_doc)
+        ballot_doc["id"] = str(res.inserted_id)
+
+    return ballot_doc
+
+
+async def get_voter_ballot(election_id: str, voter_id: str):
+    """
+    Get user's submitted ballot status.
+    """
+    ballot = await db.ballots.find_one({"electionId": election_id, "voterId": str(voter_id)})
+    if not ballot:
+        return None
+    return {
+        "id": str(ballot["_id"]),
+        "electionId": ballot.get("electionId"),
+        "voterId": ballot.get("voterId"),
+        "preferences": ballot.get("preferences", []),
+        "isSubmitted": ballot.get("isSubmitted", False),
+        "submittedAt": ballot.get("submittedAt")
+    }
+
+
+async def run_stv_round_calculation(election_id: str):
+    """
+    Core Single Transferable Vote (STV) Engine Implementation.
+    Features implemented:
+    - Feature 1: Dynamic Quota Calculation based strictly on submitted ballots
+    - Feature 2: Priority Allocation Limit (maxPreferences)
+    - Feature 3: STV Elimination & Vote Transfer
+    - Feature 4: Batch Zero-Vote Elimination
+    - Feature 6: Audit Trail & Round Snapshots
+    - Req 6.6: Duplicate Candidate Preferences handling (skips duplicates during transfer)
+    - Req 6.9: Round Auto-Stop immediately when winner is found
+    """
+    el = await db.elections.find_one({"_id": election_id, "isDeleted": {"$ne": True}})
+    if not el:
+        raise ValueError("Election not found")
+
+    # Fetch candidates
+    cand_cursor = db.candidates.find({"electionId": election_id})
+    raw_candidates = await cand_cursor.to_list(length=200)
+    if not raw_candidates:
+        raise ValueError("No candidates configured for this election")
+
+    cand_map = {str(c["_id"]): c.get("name", "Candidate") for c in raw_candidates}
+    all_candidate_ids = set(cand_map.keys())
+
+    # Fetch valid ballots
+    ballot_cursor = db.ballots.find({"electionId": election_id, "isSubmitted": True})
+    raw_ballots = await ballot_cursor.to_list(length=10000)
+
+    total_valid_votes = len(raw_ballots)
+    quota = calculate_quota(total_valid_votes)
+
+    # Delete previous round records for clean rerun
+    await db.election_rounds.delete_many({"electionId": election_id})
+
+    # Prepare ballots list: sanitize candidate IDs and remove consecutive duplicates per ballot
+    processed_ballots = []
+    for b in raw_ballots:
+        raw_prefs = [str(p) for p in b.get("preferences", []) if str(p) in all_candidate_ids]
+        # Clean duplicates while preserving preference order (Req 6.6)
+        unique_prefs = []
+        for p in raw_prefs:
+            if p not in unique_prefs:
+                unique_prefs.append(p)
+        if unique_prefs:
+            processed_ballots.append(unique_prefs)
+
+    active_candidate_ids = set(all_candidate_ids)
+    winner_id = None
+    round_number = 1
+    rounds_summary = []
+
+    while active_candidate_ids and not winner_id:
+        now = datetime.now()
+        # 1. Calculate vote tally for current active candidates
+        tally = {cid: 0 for cid in all_candidate_ids}
+        
+        for prefs in processed_ballots:
+            # Find 1st preference candidate who is still active
+            first_active = next((p for p in prefs if p in active_candidate_ids), None)
+            if first_active:
+                tally[first_active] += 1
+
+        # 2. Check Quota condition for any active candidate
+        potential_winners = [cid for cid in active_candidate_ids if tally[cid] >= quota and quota > 0]
+
+        if potential_winners:
+            # Sort potential winners by highest vote count
+            potential_winners.sort(key=lambda cid: tally[cid], reverse=True)
+            winner_id = potential_winners[0]
+            winner_name = cand_map.get(winner_id, "Winner")
+
+            round_doc = {
+                "electionId": election_id,
+                "roundNumber": round_number,
+                "tally": tally,
+                "eliminatedCandidateIds": [],
+                "transferredVotes": [],
+                "winnerCandidateId": winner_id,
+                "winnerName": winner_name,
+                "quota": quota,
+                "timestamp": now,
+                "created_at": now
+            }
+            res = await db.election_rounds.insert_one(round_doc)
+            round_doc["id"] = str(res.inserted_id)
+            rounds_summary.append(round_doc)
+
+            # Auto-Stop (Req 6.9): Immediately complete election & break loop
+            await db.elections.update_one(
+                {"_id": election_id},
+                {
+                    "$set": {
+                        "status": "completed",
+                        "winner_candidate_id": winner_id,
+                        "quota": quota,
+                        "updated_at": now
+                    }
+                }
+            )
+            break
+
+        # If no winner and only 1 active candidate remains, declare them winner
+        if len(active_candidate_ids) == 1:
+            winner_id = list(active_candidate_ids)[0]
+            winner_name = cand_map.get(winner_id, "Winner")
+
+            round_doc = {
+                "electionId": election_id,
+                "roundNumber": round_number,
+                "tally": tally,
+                "eliminatedCandidateIds": [],
+                "transferredVotes": [],
+                "winnerCandidateId": winner_id,
+                "winnerName": winner_name,
+                "quota": quota,
+                "timestamp": now,
+                "created_at": now
+            }
+            res = await db.election_rounds.insert_one(round_doc)
+            round_doc["id"] = str(res.inserted_id)
+            rounds_summary.append(round_doc)
+
+            await db.elections.update_one(
+                {"_id": election_id},
+                {
+                    "$set": {
+                        "status": "completed",
+                        "winner_candidate_id": winner_id,
+                        "quota": quota,
+                        "updated_at": now
+                    }
+                }
+            )
+            break
+
+        # 3. Elimination logic
+        # Feature 4: Batch Zero-Vote Elimination
+        zero_vote_candidates = [cid for cid in active_candidate_ids if tally[cid] == 0]
+
+        eliminated_ids = []
+        transferred_votes_log = []
+
+        if len(zero_vote_candidates) > 0:
+            # Batch eliminate all zero vote candidates in one round
+            eliminated_ids = zero_vote_candidates
+            for cid in zero_vote_candidates:
+                active_candidate_ids.remove(cid)
+        else:
+            # Find candidate with lowest votes
+            active_list = list(active_candidate_ids)
+            active_list.sort(key=lambda cid: tally[cid])
+            lowest_cand_id = active_list[0]
+            eliminated_ids = [lowest_cand_id]
+            active_candidate_ids.remove(lowest_cand_id)
+
+            # Track vote transfers for ballots assigned to this eliminated candidate
+            for prefs in processed_ballots:
+                first_active = next((p for p in prefs if p in (active_candidate_ids | set(eliminated_ids))), None)
+                if first_active == lowest_cand_id:
+                    # Look for next active preference
+                    next_active = next((p for p in prefs if p in active_candidate_ids), None)
+                    if next_active:
+                        transferred_votes_log.append({
+                            "fromCandidateId": lowest_cand_id,
+                            "fromCandidateName": cand_map.get(lowest_cand_id),
+                            "toCandidateId": next_active,
+                            "toCandidateName": cand_map.get(next_active),
+                            "count": 1
+                        })
+
+        round_doc = {
+            "electionId": election_id,
+            "roundNumber": round_number,
+            "tally": tally,
+            "eliminatedCandidateIds": eliminated_ids,
+            "transferredVotes": transferred_votes_log,
+            "winnerCandidateId": None,
+            "winnerName": None,
+            "quota": quota,
+            "timestamp": now,
+            "created_at": now
+        }
+        res = await db.election_rounds.insert_one(round_doc)
+        round_doc["id"] = str(res.inserted_id)
+        rounds_summary.append(round_doc)
+
+        round_number += 1
+
+    return {
+        "electionId": election_id,
+        "quota": quota,
+        "totalValidVotes": total_valid_votes,
+        "winnerCandidateId": winner_id,
+        "winnerName": cand_map.get(winner_id) if winner_id else None,
+        "rounds": rounds_summary
+    }
+
+
+async def get_election_rounds_history(election_id: str):
+    """
+    Fetch election round snapshots history (Audit Trail Feature 6 & Req 6.12).
+    """
+    cursor = db.election_rounds.find({"electionId": election_id}).sort("roundNumber", 1)
+    rounds = await cursor.to_list(length=100)
+    
+    # Lookup candidate names for formatting
+    cand_cursor = db.candidates.find({"electionId": election_id})
+    raw_cands = await cand_cursor.to_list(length=200)
+    cand_map = {str(c["_id"]): c.get("name", "Candidate") for c in raw_cands}
+
+    result = []
+    for r in rounds:
+        tally = r.get("tally", {})
+        formatted_tally = {}
+        for cid, count in tally.items():
+            c_name = cand_map.get(cid, cid)
+            formatted_tally[cid] = {"candidateName": c_name, "votes": count}
+
+        result.append({
+            "id": str(r["_id"]),
+            "electionId": r.get("electionId"),
+            "roundNumber": r.get("roundNumber"),
+            "tally": formatted_tally,
+            "eliminatedCandidateIds": r.get("eliminatedCandidateIds", []),
+            "eliminatedCandidateNames": [cand_map.get(cid, cid) for cid in r.get("eliminatedCandidateIds", [])],
+            "transferredVotes": r.get("transferredVotes", []),
+            "winnerCandidateId": r.get("winnerCandidateId"),
+            "winnerName": r.get("winnerName"),
+            "quota": r.get("quota", 0),
+            "timestamp": r.get("timestamp")
+        })
+
+    return result
+
+
+async def get_admin_voter_ballots(election_id: str):
+    """
+    Fetch individual voter choices for Super Admin / HR inspection (Req 6.11).
+    """
+    cursor = db.ballots.find({"electionId": election_id, "isSubmitted": True})
+    ballots = await cursor.to_list(length=10000)
+
+    cand_cursor = db.candidates.find({"electionId": election_id})
+    raw_cands = await cand_cursor.to_list(length=200)
+    cand_map = {str(c["_id"]): c.get("name", "Candidate") for c in raw_cands}
+
+    result = []
+    for b in ballots:
+        voter_id = b.get("voterId")
+        voter_name = "Unknown Voter"
+        if voter_id:
+            emp = await db.employees.find_one({"_id": voter_id})
+            if not emp:
+                emp = await db.users.find_one({"_id": voter_id})
+            if emp:
+                voter_name = emp.get("name") or emp.get("fullName") or f"{emp.get('firstName', '')} {emp.get('lastName', '')}".strip() or "Employee"
+
+        ranked_preferences = []
+        for pid in b.get("preferences", []):
+            ranked_preferences.append({
+                "candidateId": pid,
+                "candidateName": cand_map.get(pid, pid)
+            })
+
+        result.append({
+            "id": str(b["_id"]),
+            "electionId": election_id,
+            "voterId": voter_id,
+            "voterName": voter_name,
+            "preferences": ranked_preferences,
+            "isSubmitted": b.get("isSubmitted", True),
+            "submittedAt": b.get("submittedAt")
+        })
+
+    return result
+

@@ -26,7 +26,9 @@ import {
   Menu as MenuIcon,
   Activity,
   BookOpen,
+  Vote,
 } from "lucide-react";
+
 import { useUser } from "@/hooks/useUser";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useChatContext } from "@/context/ChatContext";
@@ -332,9 +334,18 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       menuItems.push(getItem("Training & Courses", "training", <BookOpen className="w-5 h-5" />, trainingChildren));
     }
 
+    if (isModuleEnabled('voting') || isAdmin || checkPermission('voting', 'canView')) {
+      menuItems.push(getItem(
+        <Link href="/voting">Elections</Link>,
+        "/voting",
+        <Vote className="w-5 h-5" />
+      ));
+    }
+
     if (isAdmin || checkPermission('settings', 'canView')) {
       menuItems.push(getItem(<Link href="/settings">Settings</Link>, "/settings", <Settings className="w-5 h-5" />));
     }
+
 
     if (isAdmin) {
       menuItems.push(getItem(<Link href="/restrictions">Restrictions</Link>, "/restrictions", <ShieldHalf className="w-5 h-5" />));
@@ -380,6 +391,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (pathname.startsWith("/company-finance")) return [pathname];
     if (pathname.startsWith("/training")) return ["/training"];
     if (pathname.startsWith("/admin/courses")) return ["/admin/courses"];
+    if (pathname.startsWith("/voting")) return ["/voting"];
     return [];
   };
 
