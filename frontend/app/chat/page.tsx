@@ -4400,10 +4400,10 @@ export default function ChatPage() {
   }, [unreadCounts, chatChannels]);
 
   return (
-    <div className="flex h-[calc(100vh-120px)] bg-white border border-border rounded-xl overflow-hidden shadow-sm">
+    <div className="flex h-[calc(100vh-95px)] sm:h-[calc(100vh-105px)] md:h-[calc(100vh-110px)] lg:h-[calc(100vh-95px)] w-full max-w-full min-w-0 bg-white border border-border rounded-xl overflow-hidden shadow-sm transition-all">
       {/* Messages Sidebar */}
       <div className={cn(
-        "w-full md:w-[350px] border-r border-border flex flex-col bg-gray-50/30",
+        "w-full sm:w-[290px] md:w-[320px] lg:w-[350px] xl:w-[380px] shrink-0 border-r border-border flex flex-col bg-gray-50/30 min-w-0 transition-all",
         selectedChat && "hidden md:flex" // Hide list on mobile when chat is open
       )}>
         <div className="p-6 space-y-4">
