@@ -7,7 +7,8 @@ import {
   MessagesSquare, 
   Settings,
   Layers,
-  Landmark
+  Landmark,
+  Vote
 } from 'lucide-react';
 
 export const MODULES_CONFIG = [
@@ -90,6 +91,7 @@ export const MODULES_CONFIG = [
     name: 'More',
     icon: MessagesSquare,
     modules: [
+      { moduleName: 'voting', displayName: 'Elections', tabUrl: '/voting' },
       { moduleName: 'remarks', displayName: 'Penalty', tabUrl: '/penalty' },
       { moduleName: 'review', displayName: 'Remarks', tabUrl: '/remarks' },
       { moduleName: 'invoice', displayName: 'Invoice', tabUrl: '/invoice' },

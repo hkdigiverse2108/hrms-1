@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Loader2, Save, ShieldAlert, ArrowLeft, Search, User, ChevronRight, LayoutDashboard, Users, Clock, Calendar, Briefcase, IndianRupee, MonitorPlay, MessagesSquare, Star, FileText, Settings, ShieldHalf } from 'lucide-react'
+import { Loader2, Save, ShieldAlert, ArrowLeft, Search, User, ChevronRight, LayoutDashboard, Users, Clock, Calendar, Briefcase, IndianRupee, MonitorPlay, MessagesSquare, Star, FileText, Settings, ShieldHalf, Vote } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { API_URL } from '@/lib/config'
 import { toast } from 'sonner'
@@ -91,6 +91,7 @@ const PERMISSION_GROUPS = [
     name: 'More',
     icon: MessagesSquare,
     modules: [
+      { moduleName: 'voting', displayName: 'Elections', tabUrl: '/voting' },
       { moduleName: 'remarks', displayName: 'Penalty', tabUrl: '/penalty' },
       { moduleName: 'review', displayName: 'Remarks', tabUrl: '/remarks' },
       { moduleName: 'invoice', displayName: 'Invoice', tabUrl: '/invoice' },
