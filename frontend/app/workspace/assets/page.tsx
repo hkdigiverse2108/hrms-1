@@ -26,6 +26,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useUserContext } from "@/context/UserContext";
+import { Select as AntSelect } from "antd";
+import { BADGE_PRESETS } from "@/components/layout/Header";
 
 export default function WorkspaceAssetsPage() {
   const { user } = useUserContext();
@@ -35,7 +37,7 @@ export default function WorkspaceAssetsPage() {
   const [employees, setEmployees] = useState<any[]>([]);
   const [isAddBannerModalOpen, setIsAddBannerModalOpen] = useState(false);
   const [editingBannerId, setEditingBannerId] = useState<string | null>(null);
-  const [newBanner, setNewBanner] = useState({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "", employeeId: "" });
+  const [newBanner, setNewBanner] = useState({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "", employeeIds: [] as string[], employeeId: "", badgeStyle: "gold" });
   const [isUploadingBanner, setIsUploadingBanner] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -138,7 +140,7 @@ export default function WorkspaceAssetsPage() {
     setSettings(newSettings);
     saveSettingsToAPI(newSettings);
     
-    setNewBanner({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "", employeeId: "" });
+    setNewBanner({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "", employeeIds: [], employeeId: "", badgeStyle: "gold" });
     setEditingBannerId(null);
     setIsAddBannerModalOpen(false);
     toast.success(editingBannerId ? "Banner updated successfully!" : "Banner added successfully!");
@@ -190,7 +192,7 @@ export default function WorkspaceAssetsPage() {
         {(isAdmin || canAdd) && (
           <Dialog open={isAddBannerModalOpen} onOpenChange={(val) => {
             if (!val) {
-              setNewBanner({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "", employeeId: "" });
+              setNewBanner({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "", employeeIds: [], employeeId: "", badgeStyle: "gold" });
               setEditingBannerId(null);
             }
             setIsAddBannerModalOpen(val);
@@ -236,20 +238,79 @@ export default function WorkspaceAssetsPage() {
                   <Input placeholder="Enter announcement heading..." value={newBanner.heading || ""} onChange={e => setNewBanner({...newBanner, heading: e.target.value})} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Employee</Label>
-                  <SearchableSelect
-                    options={[
-                      { value: "all", label: "All Employees" },
-                      ...employees.map(emp => ({
-                        value: emp.id,
-                        label: emp.name || `${emp.firstName} ${emp.lastName}`
-                      }))
-                    ]}
-                    value={newBanner.employeeId || "all"}
-                    onValueChange={(val) => setNewBanner({...newBanner, employeeId: val === "all" ? "" : val})}
-                    placeholder="All Employees"
-                    triggerClassName="w-full"
+                  <Label>Employees (Target Audience)</Label>
+                  <AntSelect
+                    mode="multiple"
+                    allowClear
+                    showSearch
+                    optionFilterProp="label"
+                    className="w-full"
+                    placeholder="All Employees (or select specific employees)"
+                    value={newBanner.employeeIds || []}
+                    onChange={(vals) => setNewBanner({ ...newBanner, employeeIds: vals, employeeId: vals?.[0] || "" })}
+                    options={employees.map(emp => ({
+                      value: emp.id,
+                      label: emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.employeeId
+                    }))}
+                    getPopupContainer={(trigger) => trigger.parentNode as HTMLElement}
                   />
+                </div>
+
+                {/* Header Profile Ring Badge Selector & Live Preview */}
+                <div className="space-y-3 p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl">
+                  <div className="flex items-center justify-between">
+                    <Label className="font-bold text-xs text-slate-700 uppercase tracking-wider">Profile Badge Ring Style</Label>
+                    <span className="text-[10px] text-brand-teal font-semibold">Live Header Preview</span>
+                  </div>
+                  
+                  {/* Badge Preset Options */}
+                  <div className="grid grid-cols-3 gap-2">
+                    {Object.entries(BADGE_PRESETS).map(([key, preset]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setNewBanner({ ...newBanner, badgeStyle: key })}
+                        className={`flex items-center gap-2 p-2 rounded-lg border text-xs text-left transition-all ${
+                          (newBanner.badgeStyle || "gold") === key
+                            ? "border-brand-teal bg-white ring-2 ring-brand-teal/20 shadow-xs font-bold"
+                            : "border-slate-200 bg-white/60 hover:bg-white text-slate-600"
+                        }`}
+                      >
+                        <div className="relative w-5 h-5 shrink-0 flex items-center justify-center">
+                          {key !== "none" && (
+                            <div className={`absolute -inset-0.5 rounded-full ${preset.class}`}></div>
+                          )}
+                          <div className="relative z-10 w-4 h-4 rounded-full bg-slate-200 border border-white"></div>
+                        </div>
+                        <span className="truncate text-[11px]">{preset.label}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Live Avatar Preview */}
+                  <div className="flex items-center gap-3 p-2.5 bg-white border border-slate-200 rounded-lg shadow-2xs">
+                    <div className="relative flex items-center justify-center">
+                      {(newBanner.badgeStyle || "gold") !== "none" && (
+                        <div className={`absolute -inset-[2.5px] rounded-full shadow-sm ${BADGE_PRESETS[newBanner.badgeStyle || "gold"]?.class || BADGE_PRESETS.gold.class}`}></div>
+                      )}
+                      <div className="relative z-10 w-8 h-8 rounded-full bg-brand-teal text-white flex items-center justify-center font-bold text-xs border-2 border-white shadow-2xs">
+                        {employees.find(e => newBanner.employeeIds?.includes(e.id))?.name?.charAt(0) || "P"}
+                      </div>
+                    </div>
+                    <div className="text-xs">
+                      <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                        {employees.find(e => newBanner.employeeIds?.includes(e.id))?.name || "Targeted Employee"}
+                        {(newBanner.badgeStyle || "gold") !== "none" && (
+                          <span className="text-[9px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-black uppercase">Header Ring Active</span>
+                        )}
+                      </div>
+                      <div className="text-[10px] text-slate-500">
+                        {(newBanner.badgeStyle || "gold") !== "none" 
+                          ? BADGE_PRESETS[newBanner.badgeStyle || "gold"]?.description
+                          : "Standard avatar (No badge ring)"}
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -287,11 +348,30 @@ export default function WorkspaceAssetsPage() {
                     <img src={banner.imageUrl.startsWith('http') ? banner.imageUrl : `${API_URL}${banner.imageUrl}`} alt="Banner" className="w-full h-full object-cover" />
                   </div>
                   <div className="flex-1 space-y-2">
-                    {banner.heading ? (
-                      <h4 className="text-sm font-bold text-slate-800">{banner.heading}</h4>
-                    ) : (
-                      <h4 className="text-sm italic text-slate-400">Untitled announcement</h4>
-                    )}
+                    <div className="flex items-start justify-between gap-2">
+                      {banner.heading ? (
+                        <h4 className="text-sm font-bold text-slate-800">{banner.heading}</h4>
+                      ) : (
+                        <h4 className="text-sm italic text-slate-400">Untitled announcement</h4>
+                      )}
+
+                      {/* Ring Style Tag */}
+                      {(() => {
+                        const styleKey = banner.badgeStyle || "gold";
+                        const preset = BADGE_PRESETS[styleKey] || BADGE_PRESETS.gold;
+                        return (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold border border-slate-200 bg-white text-slate-700 shadow-2xs shrink-0">
+                            {styleKey !== "none" && (
+                              <span className="relative w-2.5 h-2.5 flex items-center justify-center shrink-0">
+                                <span className={`absolute inset-0 rounded-full ${preset.class}`}></span>
+                                <span className="relative z-10 w-1.5 h-1.5 rounded-full bg-white"></span>
+                              </span>
+                            )}
+                            {preset.label}
+                          </span>
+                        );
+                      })()}
+                    </div>
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div className="flex items-center gap-2 text-slate-600">
                         <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -301,19 +381,35 @@ export default function WorkspaceAssetsPage() {
                             : 'Always Active'}
                         </span>
                       </div>
-                      {banner.employeeId ? (
-                        <div className="flex items-center gap-2 text-brand-teal">
-                          <UserCircle className="w-3.5 h-3.5 text-brand-teal shrink-0" />
-                          <span className="truncate font-semibold">
-                            {employees.find((e: any) => e.id === banner.employeeId)?.name || 'Employee'}
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2 text-slate-600">
-                          <UserCircle className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span>All Employees</span>
-                        </div>
-                      )}
+                      {(() => {
+                        const targetIds = banner.employeeIds && Array.isArray(banner.employeeIds) && banner.employeeIds.length > 0
+                          ? banner.employeeIds
+                          : (banner.employeeId ? [banner.employeeId] : []);
+                        
+                        if (targetIds.length === 1) {
+                          const empName = employees.find((e: any) => e.id === targetIds[0])?.name || '1 Employee';
+                          return (
+                            <div className="flex items-center gap-2 text-brand-teal">
+                              <UserCircle className="w-3.5 h-3.5 text-brand-teal shrink-0" />
+                              <span className="truncate font-semibold">{empName}</span>
+                            </div>
+                          );
+                        } else if (targetIds.length > 1) {
+                          return (
+                            <div className="flex items-center gap-2 text-brand-teal">
+                              <UserCircle className="w-3.5 h-3.5 text-brand-teal shrink-0" />
+                              <span className="truncate font-semibold">{targetIds.length} Employees Selected</span>
+                            </div>
+                          );
+                        } else {
+                          return (
+                            <div className="flex items-center gap-2 text-slate-600">
+                              <UserCircle className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span>All Employees</span>
+                            </div>
+                          );
+                        }
+                      })()}
                     </div>
                     {banner.externalUrl && (
                       <a 
@@ -343,6 +439,9 @@ export default function WorkspaceAssetsPage() {
                           size="icon" 
                           className="text-brand-teal hover:text-brand-teal hover:bg-brand-light h-8 w-8" 
                           onClick={() => {
+                            const existingIds = banner.employeeIds && Array.isArray(banner.employeeIds)
+                              ? banner.employeeIds
+                              : (banner.employeeId ? [banner.employeeId] : []);
                             setNewBanner({
                               imageUrl: banner.imageUrl || "",
                               startDate: banner.startDate || "",
@@ -350,7 +449,9 @@ export default function WorkspaceAssetsPage() {
                               externalUrl: banner.externalUrl || "",
                               isActive: banner.isActive !== undefined ? banner.isActive : true,
                               heading: banner.heading || "",
-                              employeeId: banner.employeeId || ""
+                              employeeIds: existingIds,
+                              employeeId: existingIds[0] || "",
+                              badgeStyle: banner.badgeStyle || "gold"
                             });
                             setEditingBannerId(banner.id);
                             setIsAddBannerModalOpen(true);
