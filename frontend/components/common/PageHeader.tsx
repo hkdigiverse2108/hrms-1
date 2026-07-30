@@ -22,7 +22,7 @@ export function PageHeader({ title, description, children, className, backButton
         </div>
       </div>
       {children && (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center flex-wrap gap-2">
           {children}
         </div>
       )}
