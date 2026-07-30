@@ -133,8 +133,11 @@ def fix_id(doc):
             elif isinstance(v, ObjectId):
                 new_doc[k] = str(v)
             elif isinstance(v, (datetime, date)):
-                if hasattr(v, "hour") and (v.hour != 0 or v.minute != 0 or v.second != 0):
-                    new_doc[k] = v.isoformat()
+                if isinstance(v, datetime) and (v.hour != 0 or v.minute != 0 or v.second != 0):
+                    if v.tzinfo is None:
+                        new_doc[k] = v.replace(tzinfo=timezone.utc).isoformat()
+                    else:
+                        new_doc[k] = v.isoformat()
                 else:
                     new_doc[k] = v.strftime("%Y-%m-%d")
             elif isinstance(v, float):
