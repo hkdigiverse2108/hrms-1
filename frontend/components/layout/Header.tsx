@@ -23,6 +23,7 @@ import isSameOrBefore from "dayjs/plugin/isSameOrBefore";
 import { Check, Eye, Calendar, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { SparklesCelebration } from "@/components/common/SparklesCelebration";
 
 dayjs.extend(relativeTime);
 dayjs.extend(isSameOrAfter);
@@ -85,39 +86,57 @@ export function Header() {
   const [activeTab, setActiveTab] = useState<"all" | "unread">("all");
   const [hasTargetedBanner, setHasTargetedBanner] = useState(false);
   const [targetedBadgeStyle, setTargetedBadgeStyle] = useState<string>("gold");
+  const [targetedCelebrationEffect, setTargetedCelebrationEffect] = useState<string>("poppers");
   const [userTargetedBanners, setUserTargetedBanners] = useState<any[]>([]);
   const [selectedBannerId, setSelectedBannerId] = useState<string>("");
+  const [showSparkles, setShowSparkles] = useState(false);
+  const [sparklesTitle, setSparklesTitle] = useState("Featured Recognition!");
+  const [sparklesKey, setSparklesKey] = useState(Date.now());
+
+  const triggerCelebration = (banner: any) => {
+    const chosenStyle = banner.badgeStyle || "gold";
+    const chosenEffect = (banner.celebrationEffect && banner.celebrationEffect !== "none") ? banner.celebrationEffect : "poppers";
+    
+    setSelectedBannerId(banner.id);
+    setTargetedBadgeStyle(chosenStyle);
+    setTargetedCelebrationEffect(chosenEffect);
+    setSparklesTitle(banner.heading || "Featured Recognition!");
+  };
 
   const selectActiveBanner = (banner: any) => {
-    setSelectedBannerId(banner.id);
-    const chosenStyle = banner.badgeStyle || "gold";
-    setTargetedBadgeStyle(chosenStyle);
+    triggerCelebration(banner);
+
     if (user?.id) {
       try {
         localStorage.setItem(`user_badge_pref_${user.id}`, banner.id);
-        localStorage.setItem(`user_badge_style_${user.id}`, chosenStyle);
-        window.dispatchEvent(new CustomEvent("badge-preference-changed", { detail: { id: banner.id, style: chosenStyle } }));
-        const styleLabel = BADGE_PRESETS[chosenStyle]?.label || "selected ring";
-        toast.success(`Profile badge ring updated to ${styleLabel}!`);
+        localStorage.setItem(`user_badge_style_${user.id}`, banner.badgeStyle || "gold");
+        localStorage.setItem(`user_badge_effect_${user.id}`, banner.celebrationEffect || "poppers");
+        window.dispatchEvent(new CustomEvent("badge-preference-changed", { detail: { id: banner.id, style: banner.badgeStyle, effect: banner.celebrationEffect, heading: banner.heading } }));
+        const styleLabel = BADGE_PRESETS[banner.badgeStyle || "gold"]?.label || "selected ring";
+        toast.success(`Active badge updated to ${styleLabel}!`);
       } catch {}
     }
   };
   
   useEffect(() => {
     const handleBadgeChange = (e: any) => {
-      if (e.detail?.id) setSelectedBannerId(e.detail.id);
-      if (e.detail?.style) setTargetedBadgeStyle(e.detail.style);
+      if (e.detail?.id && userTargetedBanners.length > 0) {
+        const found = userTargetedBanners.find((b: any) => b.id === e.detail.id);
+        if (found) {
+          triggerCelebration(found);
+        }
+      }
     };
     window.addEventListener("badge-preference-changed", handleBadgeChange);
     return () => window.removeEventListener("badge-preference-changed", handleBadgeChange);
-  }, []);
+  }, [userTargetedBanners]);
 
   useEffect(() => {
     if (user?.id) {
       fetch(`${API_URL}/system-settings`)
         .then(res => res.json())
         .then(data => {
-          const banners = data.dashboardBanners || [];
+          const banners = data.systemSettings?.dashboardBanners || data.dashboardBanners || [];
           const todayStr = dayjs().format('YYYY-MM-DD');
           const active = banners.filter((b: any) => {
             if (!b.isActive) return false;
@@ -142,15 +161,22 @@ export function Header() {
             setHasTargetedBanner(true);
             let savedId = "";
             let savedStyle = "";
+            let savedEffect = "";
             try { 
               savedId = localStorage.getItem(`user_badge_pref_${user.id}`) || ""; 
               savedStyle = localStorage.getItem(`user_badge_style_${user.id}`) || "";
+              savedEffect = localStorage.getItem(`user_badge_effect_${user.id}`) || "";
             } catch {}
             
             const matchSaved = targetedList.find((b: any) => b.id === savedId);
             const currentBanner = matchSaved || targetedList[0];
             setSelectedBannerId(currentBanner.id);
             setTargetedBadgeStyle(savedStyle && matchSaved ? savedStyle : (currentBanner.badgeStyle || "gold"));
+            
+            const effectiveFx = (savedEffect && matchSaved && savedEffect !== "none") 
+              ? savedEffect 
+              : ((currentBanner.celebrationEffect && currentBanner.celebrationEffect !== "none") ? currentBanner.celebrationEffect : "poppers");
+            setTargetedCelebrationEffect(effectiveFx);
           } else {
             setHasTargetedBanner(false);
             setUserTargetedBanners([]);
@@ -159,6 +185,21 @@ export function Header() {
         .catch(err => console.error("Error fetching settings for banners:", err));
     }
   }, [user?.id]);
+
+  // Trigger celebration sparkles burst every time employee visits or returns to the dashboard
+  useEffect(() => {
+    if (hasTargetedBanner && (pathname === "/" || pathname === "/dashboard")) {
+      const currentBanner = userTargetedBanners.find((b: any) => b.id === selectedBannerId) || userTargetedBanners[0];
+      if (currentBanner) {
+        setSparklesTitle(currentBanner.heading || "Featured Recognition!");
+      }
+      setShowSparkles(false);
+      setSparklesKey(Date.now());
+      setTimeout(() => {
+        setShowSparkles(true);
+      }, 40);
+    }
+  }, [pathname, hasTargetedBanner]);
  
   const getFromNow = (dateStr: any) => {
     if (!dateStr) return "";
@@ -734,6 +775,15 @@ export function Header() {
           </span>
         </div>
       )}
+
+      {/* Celebratory Sparkles & Confetti Burst for Targeted Employee Login */}
+      <SparklesCelebration 
+        key={sparklesKey}
+        trigger={showSparkles} 
+        effectStyle={targetedCelebrationEffect}
+        title={sparklesTitle} 
+        onComplete={() => setShowSparkles(false)} 
+      />
     </>
   );
 }

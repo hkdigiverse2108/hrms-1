@@ -28,6 +28,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useUserContext } from "@/context/UserContext";
 import { Select as AntSelect } from "antd";
 import { BADGE_PRESETS } from "@/components/layout/Header";
+import { CELEBRATION_PRESETS } from "@/components/common/SparklesCelebration";
 
 export default function WorkspaceAssetsPage() {
   const { user } = useUserContext();
@@ -37,7 +38,7 @@ export default function WorkspaceAssetsPage() {
   const [employees, setEmployees] = useState<any[]>([]);
   const [isAddBannerModalOpen, setIsAddBannerModalOpen] = useState(false);
   const [editingBannerId, setEditingBannerId] = useState<string | null>(null);
-  const [newBanner, setNewBanner] = useState({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "", employeeIds: [] as string[], employeeId: "", badgeStyle: "gold" });
+  const [newBanner, setNewBanner] = useState({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "", employeeIds: [] as string[], employeeId: "", badgeStyle: "gold", celebrationEffect: "poppers" });
   const [isUploadingBanner, setIsUploadingBanner] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -140,7 +141,7 @@ export default function WorkspaceAssetsPage() {
     setSettings(newSettings);
     saveSettingsToAPI(newSettings);
     
-    setNewBanner({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "", employeeIds: [], employeeId: "", badgeStyle: "gold" });
+    setNewBanner({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "", employeeIds: [], employeeId: "", badgeStyle: "gold", celebrationEffect: "poppers" });
     setEditingBannerId(null);
     setIsAddBannerModalOpen(false);
     toast.success(editingBannerId ? "Banner updated successfully!" : "Banner added successfully!");
@@ -192,7 +193,7 @@ export default function WorkspaceAssetsPage() {
         {(isAdmin || canAdd) && (
           <Dialog open={isAddBannerModalOpen} onOpenChange={(val) => {
             if (!val) {
-              setNewBanner({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "", employeeIds: [], employeeId: "", badgeStyle: "gold" });
+              setNewBanner({ imageUrl: "", startDate: "", endDate: "", externalUrl: "", isActive: true, heading: "", employeeIds: [], employeeId: "", badgeStyle: "gold", celebrationEffect: "poppers" });
               setEditingBannerId(null);
             }
             setIsAddBannerModalOpen(val);
@@ -203,11 +204,11 @@ export default function WorkspaceAssetsPage() {
                 Add Banner
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
+            <DialogContent className="sm:max-w-[540px] max-h-[85vh] flex flex-col overflow-hidden">
               <DialogHeader>
                 <DialogTitle>{editingBannerId ? "Edit Dashboard Banner" : "Add Dashboard Banner"}</DialogTitle>
               </DialogHeader>
-              <div className="space-y-4 py-4">
+              <div className="space-y-4 py-2 overflow-y-auto pr-1 custom-scrollbar flex-1">
                 <div className="space-y-2">
                   <Label>Banner Image <span className="text-red-500">*</span></Label>
                   {newBanner.imageUrl ? (
@@ -310,6 +311,28 @@ export default function WorkspaceAssetsPage() {
                           : "Standard avatar (No badge ring)"}
                       </div>
                     </div>
+                  </div>
+                </div>
+
+                {/* Dashboard Celebration Animation Selector */}
+                <div className="space-y-2 p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl">
+                  <Label className="font-bold text-xs text-slate-700 uppercase tracking-wider">Dashboard Celebration Effect</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {Object.entries(CELEBRATION_PRESETS).map(([key, preset]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setNewBanner({ ...newBanner, celebrationEffect: key })}
+                        className={`flex flex-col p-2 rounded-lg border text-xs text-left transition-all ${
+                          (newBanner.celebrationEffect || "poppers") === key
+                            ? "border-brand-teal bg-white ring-2 ring-brand-teal/20 shadow-xs font-bold"
+                            : "border-slate-200 bg-white/60 hover:bg-white text-slate-600"
+                        }`}
+                      >
+                        <span className="font-bold text-slate-800 text-[11px]">{preset.label}</span>
+                        <span className="text-[9px] text-slate-500 line-clamp-1">{preset.description}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -451,7 +474,8 @@ export default function WorkspaceAssetsPage() {
                               heading: banner.heading || "",
                               employeeIds: existingIds,
                               employeeId: existingIds[0] || "",
-                              badgeStyle: banner.badgeStyle || "gold"
+                              badgeStyle: banner.badgeStyle || "gold",
+                              celebrationEffect: banner.celebrationEffect || "poppers"
                             });
                             setEditingBannerId(banner.id);
                             setIsAddBannerModalOpen(true);
