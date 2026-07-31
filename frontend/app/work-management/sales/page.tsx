@@ -1202,7 +1202,10 @@ export default function SalesPage() {
       .filter(l => 
         (l.company || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
         (l.contact || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (l.remarks || "").toLowerCase().includes(searchTerm.toLowerCase())
+        (l.remarks || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (l.email || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (l.phone || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (l.createdByUserName || "").toLowerCase().includes(searchTerm.toLowerCase())
       )
       .filter(l => {
         if (categoryFilter === "Other") {
@@ -1449,12 +1452,14 @@ export default function SalesPage() {
                       });
                       setConvertingLeadId(lead.id);
                       setClientDialogOpen(true);
-                    } else {
+                    } else if (val === "Client Lost") {
                       setStatusChangeData({
                         leadId: lead.id,
                         newStatus: val,
-                        keepEditing: val === "On Hold"
+                        keepEditing: false
                       });
+                    } else {
+                      handleInlineUpdate(lead.id, "status", val);
                     }
                   }}
                 >
@@ -2216,6 +2221,15 @@ export default function SalesPage() {
           </TabsList>
 
           <div className="flex flex-wrap items-center gap-2 self-start xl:self-auto w-full xl:w-auto justify-start xl:justify-end shrink-0">
+            <div className="relative w-[200px]">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search leads..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-8 h-9 border-slate-200"
+              />
+            </div>
             {isAdmin && (
               <Popover>
                 <PopoverTrigger asChild>
@@ -3309,10 +3323,10 @@ export default function SalesPage() {
                   <SelectValue placeholder="Select a reason" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Follow-up requested">Follow-up requested</SelectItem>
-                  <SelectItem value="Not interested currently">Not interested currently</SelectItem>
-                  <SelectItem value="Pricing issue">Pricing issue</SelectItem>
-                  <SelectItem value="Competitor chosen">Competitor chosen</SelectItem>
+                  <SelectItem value="Budget too high">Budget too high</SelectItem>
+                  <SelectItem value="Lost to competitor">Lost to competitor</SelectItem>
+                  <SelectItem value="Not interested">Not interested</SelectItem>
+                  <SelectItem value="No response">No response</SelectItem>
                   <SelectItem value="Other">Other (Please specify)</SelectItem>
                 </SelectContent>
               </Select>
@@ -3340,6 +3354,20 @@ export default function SalesPage() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Convert Lead to Client Dialog */}
+      <Dialog open={clientDialogOpen} onOpenChange={setClientDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Convert Lead to Client</DialogTitle>
+          </DialogHeader>
+          <ClientForm 
+            initialData={clientFormData || {}} 
+            onSubmit={handleClientSubmit} 
+            isSubmitting={isClientSubmitting} 
+          />
         </DialogContent>
       </Dialog>
     </div>

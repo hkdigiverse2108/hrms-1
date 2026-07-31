@@ -1711,7 +1711,11 @@ function EventsSidebar({ user, leaves }: { user: any, leaves: any[] }) {
   const today = dayjs().format('YYYY-MM-DD');
   const activeBanners = dashboardBanners.filter(b => {
     if (!b.isActive) return false;
-    if (b.employeeId && b.employeeId !== "all" && b.employeeId !== user?.id) return false;
+    if (b.employeeIds && Array.isArray(b.employeeIds) && b.employeeIds.length > 0) {
+      if (!b.employeeIds.includes(user?.id) && !b.employeeIds.includes(user?.employeeId)) return false;
+    } else if (b.employeeId && b.employeeId !== "all" && b.employeeId !== user?.id && b.employeeId !== user?.employeeId) {
+      return false;
+    }
     const hasStartDate = !!b.startDate;
     const hasEndDate = !!b.endDate;
     if (!hasStartDate && !hasEndDate) return true;
@@ -1720,7 +1724,10 @@ function EventsSidebar({ user, leaves }: { user: any, leaves: any[] }) {
     return dayjs(today).isSameOrAfter(b.startDate) && dayjs(today).isSameOrBefore(b.endDate);
   });
   
-  const hasTargetedBanner = activeBanners.some(b => b.employeeId === user?.id);
+  const hasTargetedBanner = activeBanners.some(b => 
+    (b.employeeIds && (b.employeeIds.includes(user?.id) || b.employeeIds.includes(user?.employeeId))) ||
+    b.employeeId === user?.id || b.employeeId === user?.employeeId
+  );
  
   useEffect(() => {
     fetchEvents();

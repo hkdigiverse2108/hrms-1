@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { DatePicker, TimePicker, Popconfirm, Tooltip as AntTooltip, Select as AntSelect } from "antd";
 import dayjs from "dayjs";
-import { Plus, Loader2, ChevronLeft, ChevronRight, X, Search, CalendarCheck, RefreshCcw, Copy, Link, Calendar, ChevronUp, ChevronDown } from "lucide-react";
+import { Plus, Loader2, ChevronLeft, ChevronRight, X, Search, CalendarCheck, RefreshCcw, Copy, Link, Calendar, ChevronUp, ChevronDown, Video } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import { useUserContext } from "@/context/UserContext";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -264,12 +264,13 @@ export default function SchedulePage() {
     date: dayjs(getISTNow()).format("YYYY-MM-DD"),
     startTime: defaultTimes.start,
     endTime: defaultTimes.end,
-    type: "meeting",
+    type: "",
     attendees: [] as string[]
   });
 
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isMeetingOnlyMode, setIsMeetingOnlyMode] = useState(false);
 
   /* ───── free slots state ───── */
   const [freeSlots, setFreeSlots] = useState<{start: string, end: string}[]>([]);
@@ -277,6 +278,7 @@ export default function SchedulePage() {
 
   const resetForm = () => {
     setEditingScheduleId(null);
+    setIsMeetingOnlyMode(false);
     setForm({
       title: "",
       description: "",
@@ -285,7 +287,7 @@ export default function SchedulePage() {
       date: dayjs(getISTNow()).format("YYYY-MM-DD"),
       startTime: defaultTimes.start,
       endTime: defaultTimes.end,
-      type: "meeting",
+      type: "",
       attendees: [] as string[]
     });
   };
@@ -367,6 +369,16 @@ export default function SchedulePage() {
     }, 500);
     return () => clearTimeout(timeoutId);
   }, [form.date, form.employeeId, form.attendees, createModalOpen]);
+
+  const todaysMeetingsCount = useMemo(() => {
+    const todayStr = dayjs(getISTNow()).format("YYYY-MM-DD");
+    return schedules.filter((s) => {
+      const sDate = typeof s.date === "string" ? s.date.split("T")[0] : dayjs(s.date).format("YYYY-MM-DD");
+      const isToday = sDate === todayStr;
+      const isMeeting = (s.type || "meeting").toLowerCase() === "meeting";
+      return isToday && isMeeting;
+    }).length;
+  }, [schedules, getISTNow]);
 
   /* scroll to current time on mount */
   useEffect(() => {
@@ -479,6 +491,16 @@ export default function SchedulePage() {
       toast.error("End time must be after start time");
       return;
     }
+
+    // Prevent scheduling for past dates or past time slots
+    if (!editingScheduleId) {
+      const now = dayjs(getISTNow());
+      const selectedStart = dayjs(`${form.date} ${form.startTime}`);
+      if (selectedStart.isBefore(now)) {
+        toast.error("Schedules and meetings cannot be added for past dates or past time slots");
+        return;
+      }
+    }
     // Check for overlap within currently loaded schedules
     let overlapEmployee = false;
     let overlapAttendee = false;
@@ -531,6 +553,7 @@ export default function SchedulePage() {
       
       const payload: any = {
         ...form,
+        type: form.type || "meeting",
         employeeName: empName
       };
       
@@ -961,18 +984,85 @@ export default function SchedulePage() {
         title="Schedule"
         description="View and manage employee schedules."
       >
-        {canAdd && (
-          <Dialog open={createModalOpen} onOpenChange={(open) => {
-            if (!open) resetForm();
-            setCreateModalOpen(open);
-          }}>
-            <DialogTrigger asChild>
-              <Button className="bg-brand-teal hover:bg-brand-teal/90 text-white font-medium shadow-sm" onClick={() => resetForm()}>
-                <Plus className="w-4 h-4 mr-2" />
+        <div className="flex items-center flex-wrap gap-2.5">
+          {/* Today's Meetings Count Badge */}
+          <div className="flex items-center gap-2 bg-amber-50 text-amber-800 border border-amber-200/80 px-3.5 py-1.5 rounded-full font-bold text-xs shadow-2xs">
+            <Video className="w-4 h-4 text-amber-600" />
+            <span>Today's Meetings: <strong className="text-amber-950 text-sm ml-0.5">{todaysMeetingsCount}</strong></span>
+          </div>
+
+          {canAdd && (
+            <>
+              {/* Dedicated Add Meeting Button */}
+              <Button
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm gap-1.5"
+                onClick={() => {
+                  resetForm();
+                  setIsMeetingOnlyMode(true);
+                  setForm(prev => ({ ...prev, type: "meeting" }));
+                  setCreateModalOpen(true);
+                }}
+              >
+                <Video className="w-4 h-4" />
+                Add Meeting
+              </Button>
+
+              {/* Add Schedule Button */}
+              <Button
+                variant="outline"
+                className="border-brand-teal text-brand-teal hover:bg-brand-teal/10 font-bold shadow-2xs gap-1.5"
+                onClick={() => {
+                  resetForm();
+                  setCreateModalOpen(true);
+                }}
+              >
+                <Plus className="w-4 h-4" />
                 Add Schedule
               </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[450px] max-h-[90vh] overflow-y-auto">
+
+              {/* Appointment Setup Button */}
+              <Button
+                variant="outline"
+                className="border-brand-teal text-brand-teal hover:bg-brand-teal/5 font-medium shadow-sm gap-1.5"
+                onClick={() => {
+                  const empId = user?.id || user?.employeeId || "";
+                  if (!appConfig.active) {
+                    setAppConfig({
+                      id: null,
+                      employeeId: empId,
+                      title: "",
+                      duration: 60,
+                      availability: {
+                        Monday: [{ start: "09:00", end: "17:00" }],
+                        Tuesday: [{ start: "09:00", end: "17:00" }],
+                        Wednesday: [{ start: "09:00", end: "17:00" }],
+                        Thursday: [{ start: "09:00", end: "17:00" }],
+                        Friday: [{ start: "09:00", end: "17:00" }],
+                        Saturday: [],
+                        Sunday: []
+                      },
+                      timezone: "Asia/Kolkata",
+                      active: true,
+                      employeeIds: []
+                    });
+                  }
+                  setIsConfiguring(true);
+                  setViewMode("week");
+                }}
+              >
+                <Calendar className="w-4 h-4" />
+                Appointment Setup
+              </Button>
+            </>
+          )}
+        </div>
+      </PageHeader>
+
+      <Dialog open={createModalOpen} onOpenChange={(open) => {
+        if (!open) resetForm();
+        setCreateModalOpen(open);
+      }}>
+        <DialogContent className="sm:max-w-[450px] max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle className="text-xl font-bold">{editingScheduleId ? "Edit Schedule" : "New Schedule Block"}</DialogTitle>
               </DialogHeader>
@@ -1084,21 +1174,26 @@ export default function SchedulePage() {
                       className="w-full h-10"
                       value={form.date && dayjs(form.date).isValid() ? dayjs(form.date) : undefined}
                       onChange={d => setForm({ ...form, date: d ? d.format("YYYY-MM-DD") : "" })}
+                      disabledDate={(current) => !editingScheduleId && current && current.isBefore(dayjs(getISTNow()).startOf('day'))}
                       format="YYYY-MM-DD"
                       getPopupContainer={(trigger) => trigger.parentNode as HTMLElement}
                     />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Type</label>
-                    <Select value={form.type} onValueChange={(v) => setForm({ ...form, type: v })}>
+                    <Select value={form.type} onValueChange={(v) => setForm({ ...form, type: v })} disabled={isMeetingOnlyMode}>
                       <SelectTrigger>
-                        <SelectValue placeholder="Type" />
+                        <SelectValue placeholder="Select Type..." />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="meeting">Meeting</SelectItem>
-                        <SelectItem value="work">Work Block</SelectItem>
-                        <SelectItem value="busy">Busy</SelectItem>
-                        <SelectItem value="out_of_office">Out of Office</SelectItem>
+                        {!isMeetingOnlyMode && (
+                          <>
+                            <SelectItem value="work">Work Block</SelectItem>
+                            <SelectItem value="busy">Busy</SelectItem>
+                            <SelectItem value="out_of_office">Out of Office</SelectItem>
+                          </>
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1119,7 +1214,13 @@ export default function SchedulePage() {
                         <SelectValue placeholder="Start Time" />
                       </SelectTrigger>
                       <SelectContent className="max-h-[250px]">
-                        {TIME_OPTIONS.map(opt => (
+                        {TIME_OPTIONS.filter(opt => {
+                          if (editingScheduleId) return true;
+                          const isToday = form.date === dayjs(getISTNow()).format("YYYY-MM-DD");
+                          if (!isToday) return true;
+                          const currentISTTime = dayjs(getISTNow()).format("HH:mm");
+                          return opt.value >= currentISTTime;
+                        }).map(opt => (
                           <SelectItem key={`start-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
                         ))}
                       </SelectContent>
@@ -1181,43 +1282,6 @@ export default function SchedulePage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-        )}
-
-        {canAdd && (
-          <Button
-            variant="outline"
-            className="border-brand-teal text-brand-teal hover:bg-brand-teal/5 font-medium shadow-sm ml-2"
-            onClick={() => {
-              const empId = user?.id || user?.employeeId || "";
-              if (!appConfig.active) {
-                setAppConfig({
-                  id: null,
-                  employeeId: empId,
-                  title: "",
-                  duration: 60,
-                  availability: {
-                    Monday: [{ start: "09:00", end: "17:00" }],
-                    Tuesday: [{ start: "09:00", end: "17:00" }],
-                    Wednesday: [{ start: "09:00", end: "17:00" }],
-                    Thursday: [{ start: "09:00", end: "17:00" }],
-                    Friday: [{ start: "09:00", end: "17:00" }],
-                    Saturday: [],
-                    Sunday: []
-                  },
-                  timezone: "Asia/Kolkata",
-                  active: true,
-                  employeeIds: []
-                });
-              }
-              setIsConfiguring(true);
-              setViewMode("week");
-            }}
-          >
-            <Calendar className="w-4 h-4 mr-2" />
-            Appointment Setup
-          </Button>
-        )}
-      </PageHeader>
 
       {/* ═══════ MAIN LAYOUT ═══════ */}
       <div className="flex gap-0 bg-white rounded-xl shadow-sm border border-border overflow-hidden" style={{ height: "calc(100vh - 180px)" }}>

@@ -67,6 +67,7 @@ export default function EmployeeDocumentsPage() {
   const [activeMainTab, setActiveMainTab] = useState<string>('submitted')
   const [contractEmployeeFilter, setContractEmployeeFilter] = useState('all')
   const [contractTypeFilter, setContractTypeFilter] = useState('all')
+  const [contractTimeFilter, setContractTimeFilter] = useState<'upcoming' | 'all'>('upcoming')
   
   const [signatureEmployeeFilter, setSignatureEmployeeFilter] = useState('all')
   const [signatureStatusFilter, setSignatureStatusFilter] = useState('all')
@@ -781,6 +782,50 @@ export default function EmployeeDocumentsPage() {
     setModalOpen(true)
   }
 
+  const getDepositInfo = (record: any) => {
+    const emp = employees.find((e: any) => String(e.id) === String(record.employeeId) || String(e.employeeId) === String(record.employeeId));
+    
+    let target = 10000;
+    if (record.documentName?.includes('Intern - 2000') || record.documentName?.includes('2000')) {
+      target = 2000;
+    } else if (record.documentName?.includes('Employee - 10000') || record.documentName?.includes('10000')) {
+      target = 10000;
+    } else if (emp?.targetSecurityDeposit && Number(emp.targetSecurityDeposit) > 0) {
+      target = Number(emp.targetSecurityDeposit);
+    } else {
+      const match = record.documentName?.match(/(\d+)/);
+      if (match && Number(match[0]) > 0) {
+        target = Number(match[0]);
+      } else if (emp?.designation?.toLowerCase().includes('intern') || emp?.role?.toLowerCase().includes('intern')) {
+        target = 2000;
+      }
+    }
+
+    const isExempt = Boolean(emp?.securityDepositExempt);
+    const directPayments = emp?.securityDepositDirectPayments || [];
+    const directPaid = directPayments.reduce((sum: number, dp: any) => sum + (dp.amount || 0), 0);
+
+    const empIds = new Set([
+      String(record.employeeId),
+      ...(emp ? [String(emp.id), String(emp.employeeId)] : [])
+    ].filter(Boolean));
+
+    const empPayrolls = payrolls.filter((p: any) => empIds.has(String(p.employeeId)));
+    const payrollCollected = empPayrolls.reduce((sum: number, p: any) => sum + (p.securityDeposit || 0), 0);
+    const collected = payrollCollected + directPaid;
+    const isCollectedOrExempt = isExempt || (collected >= target);
+
+    return {
+      emp,
+      target,
+      isExempt,
+      directPaid,
+      payrollCollected,
+      collected,
+      isCollectedOrExempt
+    };
+  };
+
   const columns = [
     { key: 'employeeName' as const, header: 'Employee' },
     { key: 'documentName' as const, header: 'Document Name' },
@@ -792,22 +837,7 @@ export default function EmployeeDocumentsPage() {
     { key: 'status' as const, header: 'Status', render: (record: any) => {
       const isDeposit = record.documentName?.includes('Deposite') || record.documentName?.includes('Deposit');
       if (isDeposit) {
-        let target = 10000
-        if (record.documentName?.includes('Intern - 2000')) target = 2000
-        else if (record.documentName?.includes('Employee - 10000')) target = 10000
-        else {
-          const match = record.documentName?.match(/(\d+)/)
-          if (match) target = Number(match[0])
-        }
-        
-        const emp = employees.find((e: any) => e.id === record.employeeId)
-        const isExempt = emp?.securityDepositExempt || false
-        const directPayments = emp?.securityDepositDirectPayments || []
-        const directPaid = directPayments.reduce((sum: number, dp: any) => sum + (dp.amount || 0), 0)
-        
-        const empPayrolls = payrolls.filter((p: any) => p.employeeId === record.employeeId)
-        const payrollCollected = empPayrolls.reduce((sum: number, p: any) => sum + (p.securityDeposit || 0), 0)
-        const collected = payrollCollected + directPaid
+        const { target, isExempt, directPaid, collected } = getDepositInfo(record);
         
         if (isExempt) {
           const advanceAmount = Math.max(0, target - collected)
@@ -1061,14 +1091,30 @@ export default function EmployeeDocumentsPage() {
     
     let matchesStatus = true;
     if (filterStatus !== 'all') {
-      if (filterStatus === 'pending') {
-        matchesStatus = doc.isPendingSubmit === true;
-      } else if (filterStatus === 'accepted') {
-        matchesStatus = doc.status === 'Accepted' && !doc.isPendingSubmit;
-      } else if (filterStatus === 'rejected') {
-        matchesStatus = doc.status === 'Rejected' && !doc.isPendingSubmit;
-      } else if (filterStatus === 'returned') {
-        matchesStatus = doc.status === 'Returned to Employee' && !doc.isPendingSubmit;
+      const isDeposit = doc.documentName?.includes('Deposite') || doc.documentName?.includes('Deposit');
+      
+      if (isDeposit) {
+        const { isCollectedOrExempt } = getDepositInfo(doc);
+
+        if (filterStatus === 'accepted') {
+          matchesStatus = isCollectedOrExempt;
+        } else if (filterStatus === 'pending') {
+          matchesStatus = !isCollectedOrExempt;
+        } else if (filterStatus === 'rejected' || filterStatus === 'returned') {
+          matchesStatus = false;
+        }
+      } else {
+        const displayStatus = doc.status || (doc.isPendingSubmit ? 'Pending to Submit' : 'Pending to Submit');
+        
+        if (filterStatus === 'pending') {
+          matchesStatus = doc.isPendingSubmit === true || displayStatus === 'Pending to Submit' || displayStatus === 'Pending';
+        } else if (filterStatus === 'accepted') {
+          matchesStatus = (displayStatus === 'Accepted' || displayStatus === 'accepted') && !doc.isPendingSubmit;
+        } else if (filterStatus === 'rejected') {
+          matchesStatus = (displayStatus === 'Rejected' || displayStatus === 'rejected') && !doc.isPendingSubmit;
+        } else if (filterStatus === 'returned') {
+          matchesStatus = (displayStatus === 'Returned to Employee' || displayStatus === 'returned') && !doc.isPendingSubmit;
+        }
       }
     }
 
@@ -1159,6 +1205,23 @@ export default function EmployeeDocumentsPage() {
         if (contractTypeFilter === 'notice' && row.type !== 'Notice Period') return false;
         if (contractTypeFilter === 'resignation' && row.type !== 'Resignation') return false;
         if (contractTypeFilter === 'employment' && row.type !== 'Employment') return false;
+      }
+
+      if (contractTimeFilter === 'upcoming') {
+        if (!row.sortDate) return false;
+        const parseDate = (dStr: string) => {
+          if (dStr.includes('-')) {
+            const parts = dStr.split('-');
+            if (parts[0].length === 4) return new Date(dStr);
+            return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+          }
+          return new Date(dStr);
+        };
+        const rowDate = parseDate(row.sortDate);
+        rowDate.setHours(0, 0, 0, 0);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (rowDate.getTime() < today.getTime()) return false;
       }
 
       return true;
@@ -1427,23 +1490,7 @@ export default function EmployeeDocumentsPage() {
                   let totalTarget = 0;
                   let totalCollected = 0;
                   filteredDocuments.forEach((record: any) => {
-                    let target = 10000;
-                    if (record.documentName?.includes('Intern - 2000')) target = 2000;
-                    else if (record.documentName?.includes('Employee - 10000')) target = 10000;
-                    else {
-                      const match = record.documentName?.match(/(\d+)/);
-                      if (match) target = Number(match[0]);
-                    }
-                    
-                    const emp = employees.find((e: any) => e.id === record.employeeId);
-                    const isExempt = emp?.securityDepositExempt || false;
-                    const directPayments = emp?.securityDepositDirectPayments || [];
-                    const directPaid = directPayments.reduce((sum: number, dp: any) => sum + (dp.amount || 0), 0);
-                    
-                    const empPayrolls = payrolls.filter((p: any) => p.employeeId === record.employeeId);
-                    const payrollCollected = empPayrolls.reduce((sum: number, p: any) => sum + (p.securityDeposit || 0), 0);
-                    
-                    const collected = payrollCollected + directPaid;
+                    const { target, isExempt, collected } = getDepositInfo(record);
                     
                     if (isExempt) {
                       totalTarget += target;
@@ -1608,37 +1655,62 @@ export default function EmployeeDocumentsPage() {
         {isAdminOrHR && (
           <TabsContent value="contracts" className="mt-6 space-y-6">
             <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-5">
-              <div className="flex flex-wrap items-center gap-4">
-                <div className="w-64">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Filter by Employee</span>
-                  <SearchableSelect
-                    options={[
-                      { value: "all", label: "All Employees" },
-                      ...employees.map((emp: any) => ({
-                        value: emp.id,
-                        label: `${emp.name} (${emp.employeeId})`
-                      }))
-                    ]}
-                    value={contractEmployeeFilter}
-                    onValueChange={setContractEmployeeFilter}
-                    placeholder="All Employees"
-                    triggerClassName="h-10 border-slate-200 bg-slate-50/50 font-semibold w-full"
-                  />
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="w-64">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Filter by Employee</span>
+                    <SearchableSelect
+                      options={[
+                        { value: "all", label: "All Employees" },
+                        ...employees.map((emp: any) => ({
+                          value: emp.id,
+                          label: `${emp.name} (${emp.employeeId})`
+                        }))
+                      ]}
+                      value={contractEmployeeFilter}
+                      onValueChange={setContractEmployeeFilter}
+                      placeholder="All Employees"
+                      triggerClassName="h-10 border-slate-200 bg-slate-50/50 font-semibold w-full"
+                    />
+                  </div>
+                  <div className="w-64">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Filter by Term Type</span>
+                    <Select value={contractTypeFilter} onValueChange={setContractTypeFilter}>
+                      <SelectTrigger className="h-10 border-slate-200 bg-slate-50/50 font-semibold">
+                        <SelectValue placeholder="All Terms" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Terms (Bond / Notice / Resignation / Employment)</SelectItem>
+                        <SelectItem value="bond">Bond</SelectItem>
+                        <SelectItem value="notice">Notice Period</SelectItem>
+                        <SelectItem value="resignation">Resignation</SelectItem>
+                        <SelectItem value="employment">Employment</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <div className="w-64">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Filter by Term Type</span>
-                  <Select value={contractTypeFilter} onValueChange={setContractTypeFilter}>
-                    <SelectTrigger className="h-10 border-slate-200 bg-slate-50/50 font-semibold">
-                      <SelectValue placeholder="All Terms" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Terms (Bond / Notice / Resignation / Employment)</SelectItem>
-                      <SelectItem value="bond">Bond</SelectItem>
-                      <SelectItem value="notice">Notice Period</SelectItem>
-                      <SelectItem value="resignation">Resignation</SelectItem>
-                      <SelectItem value="employment">Employment</SelectItem>
-                    </SelectContent>
-                  </Select>
+
+                <div className="flex items-center gap-2 self-end mb-0.5">
+                  <Button
+                    variant={contractTimeFilter === 'upcoming' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setContractTimeFilter('upcoming')}
+                    className={contractTimeFilter === 'upcoming' 
+                      ? 'bg-brand-teal text-white font-bold h-10 px-4 rounded-xl shadow-xs' 
+                      : 'text-slate-600 font-semibold border-slate-200 h-10 px-4 rounded-xl hover:bg-slate-50'}
+                  >
+                    Upcoming Contracts
+                  </Button>
+                  <Button
+                    variant={contractTimeFilter === 'all' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setContractTimeFilter('all')}
+                    className={contractTimeFilter === 'all' 
+                      ? 'bg-brand-teal text-white font-bold h-10 px-4 rounded-xl shadow-xs' 
+                      : 'text-slate-600 font-semibold border-slate-200 h-10 px-4 rounded-xl hover:bg-slate-50'}
+                  >
+                    View All Contracts
+                  </Button>
                 </div>
               </div>
 

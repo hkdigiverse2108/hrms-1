@@ -744,7 +744,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   return (
     <Layout hasSider className="h-screen overflow-hidden w-full">
       <Sidebar />
-      <Layout className="site-layout h-screen overflow-y-auto relative custom-scrollbar">
+      <Layout className="site-layout h-screen overflow-y-auto overflow-x-hidden relative custom-scrollbar">
         <Header />
         <Content
           className="px-4 sm:px-6 lg:px-8 w-full"

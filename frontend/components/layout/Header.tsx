@@ -20,14 +20,48 @@ import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import isSameOrAfter from "dayjs/plugin/isSameOrAfter";
 import isSameOrBefore from "dayjs/plugin/isSameOrBefore";
-import { Check, Eye, Calendar } from "lucide-react";
+import { Check, Eye, Calendar, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { SparklesCelebration } from "@/components/common/SparklesCelebration";
 
 dayjs.extend(relativeTime);
 dayjs.extend(isSameOrAfter);
 dayjs.extend(isSameOrBefore);
 const { Header: AntHeader } = Layout;
+
+export const BADGE_PRESETS: Record<string, { label: string; class: string; description: string }> = {
+  gold: {
+    label: "Golden Star",
+    class: "bg-gradient-to-tr from-yellow-400 via-amber-300 to-yellow-600 animate-pulse",
+    description: "Golden glowing aura (ideal for Employee of the Month)"
+  },
+  rainbow: {
+    label: "Rainbow Spinner",
+    class: "bg-gradient-to-r from-amber-400 via-rose-500 to-indigo-500 animate-spin",
+    description: "Multi-color spinning gradient ring"
+  },
+  emerald: {
+    label: "Emerald Neon",
+    class: "bg-gradient-to-r from-emerald-400 via-teal-500 to-cyan-500 animate-pulse",
+    description: "Vibrant emerald green glow"
+  },
+  rose: {
+    label: "Rose Diamond",
+    class: "bg-gradient-to-r from-rose-400 via-pink-500 to-purple-600 animate-pulse",
+    description: "Elegant pink-rose diamond aura"
+  },
+  indigo: {
+    label: "Cyber Blue",
+    class: "bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-600 animate-spin",
+    description: "Futuristic spinning blue-indigo ring"
+  },
+  none: {
+    label: "None",
+    class: "",
+    description: "Standard profile avatar with no ring"
+  }
+};
  
 export function Header() {
   const router = useRouter();
@@ -51,17 +85,66 @@ export function Header() {
   const [isNotificationsModalOpen, setIsNotificationsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"all" | "unread">("all");
   const [hasTargetedBanner, setHasTargetedBanner] = useState(false);
+  const [targetedBadgeStyle, setTargetedBadgeStyle] = useState<string>("gold");
+  const [targetedCelebrationEffect, setTargetedCelebrationEffect] = useState<string>("poppers");
+  const [userTargetedBanners, setUserTargetedBanners] = useState<any[]>([]);
+  const [selectedBannerId, setSelectedBannerId] = useState<string>("");
+  const [showSparkles, setShowSparkles] = useState(false);
+  const [sparklesTitle, setSparklesTitle] = useState("Featured Recognition!");
+  const [sparklesKey, setSparklesKey] = useState(Date.now());
+
+  const triggerCelebration = (banner: any) => {
+    const chosenStyle = banner.badgeStyle || "gold";
+    const chosenEffect = (banner.celebrationEffect && banner.celebrationEffect !== "none") ? banner.celebrationEffect : "poppers";
+    
+    setSelectedBannerId(banner.id);
+    setTargetedBadgeStyle(chosenStyle);
+    setTargetedCelebrationEffect(chosenEffect);
+    setSparklesTitle(banner.heading || "Featured Recognition!");
+  };
+
+  const selectActiveBanner = (banner: any) => {
+    triggerCelebration(banner);
+
+    if (user?.id) {
+      try {
+        localStorage.setItem(`user_badge_pref_${user.id}`, banner.id);
+        localStorage.setItem(`user_badge_style_${user.id}`, banner.badgeStyle || "gold");
+        localStorage.setItem(`user_badge_effect_${user.id}`, banner.celebrationEffect || "poppers");
+        window.dispatchEvent(new CustomEvent("badge-preference-changed", { detail: { id: banner.id, style: banner.badgeStyle, effect: banner.celebrationEffect, heading: banner.heading } }));
+        const styleLabel = BADGE_PRESETS[banner.badgeStyle || "gold"]?.label || "selected ring";
+        toast.success(`Active badge updated to ${styleLabel}!`);
+      } catch {}
+    }
+  };
   
+  useEffect(() => {
+    const handleBadgeChange = (e: any) => {
+      if (e.detail?.id && userTargetedBanners.length > 0) {
+        const found = userTargetedBanners.find((b: any) => b.id === e.detail.id);
+        if (found) {
+          triggerCelebration(found);
+        }
+      }
+    };
+    window.addEventListener("badge-preference-changed", handleBadgeChange);
+    return () => window.removeEventListener("badge-preference-changed", handleBadgeChange);
+  }, [userTargetedBanners]);
+
   useEffect(() => {
     if (user?.id) {
       fetch(`${API_URL}/system-settings`)
         .then(res => res.json())
         .then(data => {
-          const banners = data.dashboardBanners || [];
+          const banners = data.systemSettings?.dashboardBanners || data.dashboardBanners || [];
           const todayStr = dayjs().format('YYYY-MM-DD');
           const active = banners.filter((b: any) => {
             if (!b.isActive) return false;
-            if (b.employeeId && b.employeeId !== "all" && b.employeeId !== user.id) return false;
+            if (b.employeeIds && Array.isArray(b.employeeIds) && b.employeeIds.length > 0) {
+              if (!b.employeeIds.includes(user.id) && !b.employeeIds.includes(user.employeeId)) return false;
+            } else if (b.employeeId && b.employeeId !== "all" && b.employeeId !== user.id && b.employeeId !== user.employeeId) {
+              return false;
+            }
             const hasStartDate = !!b.startDate;
             const hasEndDate = !!b.endDate;
             if (!hasStartDate && !hasEndDate) return true;
@@ -69,11 +152,54 @@ export function Header() {
             if (!hasStartDate && hasEndDate) return dayjs(todayStr).isSameOrBefore(b.endDate);
             return dayjs(todayStr).isSameOrAfter(b.startDate) && dayjs(todayStr).isSameOrBefore(b.endDate);
           });
-          setHasTargetedBanner(active.some((b: any) => b.employeeId === user.id));
+          const targetedList = active.filter((b: any) => 
+            (b.employeeIds && (b.employeeIds.includes(user.id) || b.employeeIds.includes(user.employeeId))) ||
+            b.employeeId === user.id || b.employeeId === user.employeeId
+          );
+          setUserTargetedBanners(targetedList);
+          if (targetedList.length > 0) {
+            setHasTargetedBanner(true);
+            let savedId = "";
+            let savedStyle = "";
+            let savedEffect = "";
+            try { 
+              savedId = localStorage.getItem(`user_badge_pref_${user.id}`) || ""; 
+              savedStyle = localStorage.getItem(`user_badge_style_${user.id}`) || "";
+              savedEffect = localStorage.getItem(`user_badge_effect_${user.id}`) || "";
+            } catch {}
+            
+            const matchSaved = targetedList.find((b: any) => b.id === savedId);
+            const currentBanner = matchSaved || targetedList[0];
+            setSelectedBannerId(currentBanner.id);
+            setTargetedBadgeStyle(savedStyle && matchSaved ? savedStyle : (currentBanner.badgeStyle || "gold"));
+            
+            const effectiveFx = (savedEffect && matchSaved && savedEffect !== "none") 
+              ? savedEffect 
+              : ((currentBanner.celebrationEffect && currentBanner.celebrationEffect !== "none") ? currentBanner.celebrationEffect : "poppers");
+            setTargetedCelebrationEffect(effectiveFx);
+          } else {
+            setHasTargetedBanner(false);
+            setUserTargetedBanners([]);
+          }
         })
         .catch(err => console.error("Error fetching settings for banners:", err));
     }
   }, [user?.id]);
+
+  // Trigger celebration sparkles burst every time employee visits or returns to the dashboard
+  useEffect(() => {
+    if (hasTargetedBanner && (pathname === "/" || pathname === "/dashboard")) {
+      const currentBanner = userTargetedBanners.find((b: any) => b.id === selectedBannerId) || userTargetedBanners[0];
+      if (currentBanner) {
+        setSparklesTitle(currentBanner.heading || "Featured Recognition!");
+      }
+      setShowSparkles(false);
+      setSparklesKey(Date.now());
+      setTimeout(() => {
+        setShowSparkles(true);
+      }, 40);
+    }
+  }, [pathname, hasTargetedBanner]);
  
   const getFromNow = (dateStr: any) => {
     if (!dateStr) return "";
@@ -383,36 +509,92 @@ export function Header() {
             )}
           </Link>
           
-          <Link href="/profile" className="flex items-center gap-3 ml-2 border-l border-border pl-6 px-2 py-1 h-10 my-auto hover:bg-muted rounded-md transition-colors">
-            <div className="flex items-center gap-3">
-              <div className="relative flex items-center justify-center">
-                {hasTargetedBanner && (
-                  <div className="absolute -inset-[2.5px] rounded-full bg-gradient-to-tr from-yellow-400 via-amber-300 to-yellow-600 shadow-sm animate-pulse"></div>
-                )}
-                <Avatar className={`relative z-10 w-8 h-8 ${hasTargetedBanner ? 'border-2 border-white' : ''}`}>
-                  <AvatarImage 
-                    src={getAvatarUrl(user?.profilePhoto, userName)} 
-                    alt={userName} 
-                  />
-                  <AvatarFallback>{showUserInfo ? initials : ""}</AvatarFallback>
-                </Avatar>
+          <div className="flex items-center">
+            <Link href="/profile" className="flex items-center gap-3 ml-2 border-l border-border pl-6 px-2 py-1 h-10 my-auto hover:bg-muted rounded-md transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="relative flex items-center justify-center">
+                  {hasTargetedBanner && targetedBadgeStyle !== "none" && (
+                    <div className={`absolute -inset-[2.5px] rounded-full shadow-sm ${BADGE_PRESETS[targetedBadgeStyle]?.class || BADGE_PRESETS.gold.class}`}></div>
+                  )}
+                  <Avatar className={`relative z-10 w-8 h-8 ${hasTargetedBanner && targetedBadgeStyle !== "none" ? 'border-2 border-white' : ''}`}>
+                    <AvatarImage 
+                      src={getAvatarUrl(user?.profilePhoto, userName)} 
+                      alt={userName} 
+                    />
+                    <AvatarFallback>{showUserInfo ? initials : ""}</AvatarFallback>
+                  </Avatar>
+                </div>
+     
+                <div className="hidden md:flex flex-col text-sm leading-tight min-w-[100px]">
+                  {showUserInfo ? (
+                    <>
+                      <span className="font-medium text-foreground">{userName}</span>
+                      <span className="text-xs text-muted-foreground">{designation}</span>
+                    </>
+                  ) : (
+                    <div className="space-y-1">
+                      <div className="h-3 w-20 bg-gray-100 animate-pulse rounded"></div>
+                      <div className="h-2 w-16 bg-gray-50 animate-pulse rounded"></div>
+                    </div>
+                  )}
+                </div>
               </div>
-   
-              <div className="hidden md:flex flex-col text-sm leading-tight min-w-[100px]">
-                {showUserInfo ? (
-                  <>
-                    <span className="font-medium text-foreground">{userName}</span>
-                    <span className="text-xs text-muted-foreground">{designation}</span>
-                  </>
-                ) : (
-                  <div className="space-y-1">
-                    <div className="h-3 w-20 bg-gray-100 animate-pulse rounded"></div>
-                    <div className="h-2 w-16 bg-gray-50 animate-pulse rounded"></div>
+            </Link>
+
+            {userTargetedBanners.length > 1 && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button 
+                    className="relative z-20 flex items-center justify-center w-5 h-5 -ml-2.5 bg-white border border-amber-300 text-amber-600 rounded-full shadow-sm hover:scale-110 transition-transform cursor-pointer"
+                    title="You have multiple active profile badges! Click to choose which badge ring to display."
+                  >
+                    <Sparkles className="w-3 h-3 text-amber-500 animate-pulse" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-72 p-3 text-xs space-y-2.5" align="end">
+                  <div className="flex items-center justify-between border-b pb-2">
+                    <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                      Active Profile Badges
+                    </span>
+                    <span className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-bold">
+                      {userTargetedBanners.length} Available
+                    </span>
                   </div>
-                )}
-              </div>
-            </div>
-          </Link>
+                  <div className="space-y-1.5">
+                    {userTargetedBanners.map((b: any) => {
+                      const styleKey = b.badgeStyle || "gold";
+                      const preset = BADGE_PRESETS[styleKey] || BADGE_PRESETS.gold;
+                      const isSelected = selectedBannerId === b.id;
+                      return (
+                        <button
+                          key={b.id}
+                          onClick={() => selectActiveBanner(b)}
+                          className={`w-full flex items-center gap-2.5 p-2 rounded-lg border text-left transition-all ${
+                            isSelected 
+                              ? "border-amber-400 bg-amber-50/60 ring-2 ring-amber-400/20 font-bold" 
+                              : "border-slate-200 bg-white hover:bg-slate-50"
+                          }`}
+                        >
+                          <div className="relative w-5 h-5 shrink-0 flex items-center justify-center">
+                            {styleKey !== "none" && (
+                              <div className={`absolute -inset-0.5 rounded-full ${preset.class}`}></div>
+                            )}
+                            <div className="relative z-10 w-4 h-4 rounded-full bg-slate-200 border border-white"></div>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="truncate font-semibold text-slate-800">{b.heading?.trim() ? b.heading : "Announcement Banner"}</div>
+                            <div className="text-[10px] text-slate-500 truncate font-medium">Ring Style: {preset.label}</div>
+                          </div>
+                          {isSelected && <Check className="w-3.5 h-3.5 text-amber-600 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            )}
+          </div>
         {isElectron && (
           <div className="flex items-center gap-1.5 ml-2 border border-slate-200 bg-slate-50/50 px-2.5 py-1 rounded-md text-xs font-semibold text-slate-500 leading-none">
             <span>v{appVersion}</span>
@@ -593,6 +775,15 @@ export function Header() {
           </span>
         </div>
       )}
+
+      {/* Celebratory Sparkles & Confetti Burst for Targeted Employee Login */}
+      <SparklesCelebration 
+        key={sparklesKey}
+        trigger={showSparkles} 
+        effectStyle={targetedCelebrationEffect}
+        title={sparklesTitle} 
+        onComplete={() => setShowSparkles(false)} 
+      />
     </>
   );
 }
