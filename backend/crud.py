@@ -343,8 +343,11 @@ async def get_employees(db, skip: int = 0, limit: int = 100, include_inactive: b
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
-async def get_attendance(db, skip: int = 0, limit: int = 100):
-    cursor = db.attendance.find().sort([("date", -1), ("_id", -1)]).skip(skip).limit(limit)
+async def get_attendance(db, employee_id: Optional[str] = None, skip: int = 0, limit: int = 100):
+    query = {}
+    if employee_id:
+        query["employeeId"] = employee_id
+    cursor = db.attendance.find(query).sort([("date", -1), ("_id", -1)]).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 

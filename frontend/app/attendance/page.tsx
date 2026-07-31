@@ -53,8 +53,8 @@ export default function AttendancePage() {
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
   const router = useRouter();
 
-  const isHR = user?.role?.toLowerCase() === 'hr';
-  const canManageAttendance = isAdmin || user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin';
+  const isHR = user?.role?.toLowerCase() === 'hr' || user?.designation?.toLowerCase() === 'hr';
+  const canManageAttendance = isAdmin || user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin' || isHR;
 
   const canViewAttendance = isAdmin || checkPermission('attendance', 'canView');
   const canAddAttendance = isAdmin || checkPermission('attendance', 'canAdd');
@@ -142,7 +142,9 @@ export default function AttendancePage() {
   const fetchAttendance = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_URL}/attendance`);
+      const isHRRole = user?.designation?.toLowerCase() === 'hr' || user?.role?.toLowerCase() === 'hr';
+      const roleParam = isAdmin || isHRRole ? 'Admin' : (user?.role || '');
+      const res = await fetch(`${API_URL}/attendance?userId=${user?.id || ''}&role=${roleParam}`);
       if (res.ok) {
         let data = await res.json();
         

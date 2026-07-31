@@ -83,7 +83,7 @@ export default function WorkLogsPage() {
   // ── filtered attendance rows ────────────────────────────────────────────────
   const filteredAttendance = useMemo(() => {
     if (!attendance.length || !user) return []
-    const isAdmin = user.role?.toLowerCase() === 'admin'
+    const isAdmin = user.role?.toLowerCase() === 'admin' || user.role?.toLowerCase() === 'hr' || user.designation?.toLowerCase() === 'hr'
 
     let rows = [...attendance]
 
