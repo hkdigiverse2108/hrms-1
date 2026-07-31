@@ -628,6 +628,19 @@ export function PendingWorkEmbedded({
       const isManagerOrAdmin = ['Team Leader', 'Admin', 'HR', 'Manager', 'Social Media Manager'].includes(user?.role) || userRoleName === 'admin' || userDesigName === 'team leader' || userDesigName === 'head' || userRoleName === 'team leader' || userRoleName === 'head' || userDeptName.includes('marketing') || userDeptName.includes('dm');
       if ((isManagerOrAdmin && (type === 'all' || workScope === 'all')) || isAssignee || isAssigner) {
         if (type === 'all' || (type === 'completed-work' ? ow.status === 'Approved' : ow.status !== 'Approved')) {
+          let isInactive = false;
+          if (ow.projectId) {
+            const assocProject = projects.find(p => p.id === ow.projectId);
+            if (ow.taskType === 'digital-marketing' || ow.taskType === 'dm-other-work') {
+              if (!assocProject || assocProject.status?.toLowerCase() !== 'active') isInactive = true;
+            }
+          }
+          if (ow.clientId && (ow.taskType === 'digital-marketing' || ow.taskType === 'dm-other-work')) {
+            const assocClient = clients.find(c => c.id === ow.clientId);
+            if (!assocClient || assocClient.status?.toLowerCase() !== 'active') isInactive = true;
+          }
+          
+          if (isInactive) return;
           
           const assignee = employees.find((e: any) => String(e.id) === String(ow.assigneeId));
           const assigner = employees.find((e: any) => String(e.id) === String(ow.assignerId));
@@ -885,7 +898,7 @@ export function PendingWorkEmbedded({
           if (type === 'completed-work') return t.status === 'Approved';
           if (type === 'pending-work') return t.status === 'Pending' || t.status === 'Ready for Review' || isClientIssue;
           
-          if (isClientIssue && type !== 'all') return false;
+          if (isClientIssue) return false;
 
           const deadlineDate = parseLocalDate(t.deadline);
           
@@ -910,7 +923,7 @@ export function PendingWorkEmbedded({
         }
 
         // If it's a client issue, it should ONLY show in pending work (and all)!
-        if (isClientIssue && type !== 'all') return false;
+        if (isClientIssue) return false;
         
         const deadlineDate = parseLocalDate(t.deadline);
         
