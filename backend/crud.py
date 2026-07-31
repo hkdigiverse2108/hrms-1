@@ -338,7 +338,9 @@ async def update_employee(db, employee_id: str, employee_update: schemas.Employe
 async def get_employees(db, skip: int = 0, limit: int = 100, include_inactive: bool = False):
     query = {}
     if not include_inactive:
-        query["status"] = {"$ne": "inactive"}
+        query["status"] = {
+            "$nin": ["inactive", "Inactive", "INACTIVE", "terminated", "Terminated", "TERMINATED", "resigned", "Resigned", "RESIGNED"]
+        }
     cursor = db.employees.find(query).sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]

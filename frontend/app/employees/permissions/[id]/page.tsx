@@ -75,6 +75,8 @@ const PERMISSION_GROUPS = [
       { moduleName: 'marketing', displayName: 'Digital Marketing', tabUrl: '/work-management/digital-marketing' },
       { moduleName: 'creative', displayName: 'Social Media Management', tabUrl: '/work-management/smm' },
       { moduleName: 'research', displayName: 'Research', tabUrl: '/work-management/research' },
+      { moduleName: 'employee-of-month', displayName: 'Employee of Month', tabUrl: '/employee-of-the-month' },
+      { moduleName: 'employee-of-week', displayName: 'Employee of Week', tabUrl: '/employee-of-the-week' },
     ]
   },
   {

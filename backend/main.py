@@ -4870,6 +4870,264 @@ async def get_voter_ballots_admin_endpoint(
     return ballots
 
 
+# --- EMPLOYEE OF THE MONTH (EOM) ENDPOINTS ---
+
+import eom_service
+
+@app.get("/eom/master-criteria")
+async def get_eom_master_criteria_endpoint():
+    return await eom_service.get_or_init_master_criteria()
+
+@app.post("/eom/master-criteria")
+async def save_eom_master_criteria_endpoint(
+    request: Request,
+    token_payload: dict = Depends(auth.require_auth)
+):
+    if not _is_admin_or_hr(token_payload):
+        raise HTTPException(status_code=403, detail="Only Admin or HR can manage EOM master template.")
+    data = await request.json()
+    criteria_list = data.get("criteria", [])
+    return await eom_service.save_master_criteria(criteria_list)
+
+@app.get("/eom/month-history")
+async def get_eom_month_history_endpoint():
+    return await eom_service.get_eom_month_history()
+
+@app.get("/eom/criteria")
+async def get_eom_criteria_endpoint(month_year: str = Query(...)):
+    try:
+        return await eom_service.get_or_init_criteria(month_year)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/eom/criteria")
+async def save_eom_criteria_endpoint(
+    request: Request,
+    token_payload: dict = Depends(auth.require_auth)
+):
+    if not _is_admin_or_hr(token_payload):
+        raise HTTPException(status_code=403, detail="Only Admin or HR can manage EOM criteria.")
+    data = await request.json()
+    month_year = data.get("month_year")
+    criteria_list = data.get("criteria", [])
+    if not month_year:
+        raise HTTPException(status_code=400, detail="month_year is required")
+    try:
+        return await eom_service.save_criteria(month_year, criteria_list)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/eom/clone-criteria")
+async def clone_eom_criteria_endpoint(
+    request: Request,
+    token_payload: dict = Depends(auth.require_auth)
+):
+    if not _is_admin_or_hr(token_payload):
+        raise HTTPException(status_code=403, detail="Only Admin or HR can clone criteria.")
+    data = await request.json()
+    from_month = data.get("from_month_year")
+    to_month = data.get("to_month_year")
+    if not from_month or not to_month:
+        raise HTTPException(status_code=400, detail="from_month_year and to_month_year are required")
+    return await eom_service.clone_criteria(from_month, to_month)
+
+@app.post("/eom/scores")
+async def save_eom_score_endpoint(
+    request: Request,
+    token_payload: dict = Depends(auth.require_auth)
+):
+    data = await request.json()
+    month_year = data.get("month_year")
+    criteria_id = data.get("criteriaId")
+    employee_id = data.get("employeeId")
+    score = data.get("score")
+    raw_quantity = data.get("rawQuantity")
+    calculated_rank = data.get("calculatedRank")
+    
+    if not month_year or not criteria_id or not employee_id or score is None:
+        raise HTTPException(status_code=400, detail="Missing required score fields")
+
+    actor_id, actor_name = await get_actor_from_request(request, database.db)
+    return await eom_service.save_score(
+        month_year=month_year,
+        criteria_id=criteria_id,
+        employee_id=employee_id,
+        score=score,
+        raw_quantity=raw_quantity,
+        calculated_rank=calculated_rank,
+        scored_by=actor_name
+    )
+
+@app.post("/eom/bulk-scores")
+async def save_eom_bulk_scores_endpoint(
+    request: Request,
+    token_payload: dict = Depends(auth.require_auth)
+):
+    data = await request.json()
+    month_year = data.get("month_year")
+    criteria_id = data.get("criteriaId")
+    category_type = data.get("categoryType", "+ve")
+    max_score = float(data.get("maxScore", 10.0))
+    entries = data.get("entries", [])
+    
+    if not month_year or not criteria_id:
+        raise HTTPException(status_code=400, detail="Missing month_year or criteriaId")
+
+    actor_id, actor_name = await get_actor_from_request(request, database.db)
+    return await eom_service.bulk_save_hybrid_scores(
+        month_year=month_year,
+        criteria_id=criteria_id,
+        category_type=category_type,
+        max_score=max_score,
+        entries=entries,
+        scored_by=actor_name
+    )
+
+@app.get("/eom/reveal-order")
+async def get_eom_reveal_order_endpoint(month_year: str = Query(...)):
+    return await eom_service.get_eom_reveal_order(month_year)
+
+@app.get("/eom/scores")
+async def get_eom_scores_endpoint(month_year: str = Query(...), criteriaId: Optional[str] = Query(None)):
+    return await eom_service.get_scores(month_year, criteriaId)
+
+@app.get("/eom/leaderboard")
+async def get_eom_leaderboard_endpoint(month_year: str = Query(...)):
+    return await eom_service.calculate_eom_leaderboard(month_year)
+
+@app.get("/eom/month-config")
+async def get_eom_month_config_endpoint(month_year: str = Query(...)):
+    return await eom_service.get_month_config(month_year)
+
+@app.get("/eom/attendance-stats")
+async def get_eom_attendance_stats_endpoint(month_year: str = Query(...), maxScore: float = Query(15.0)):
+    return await eom_service.get_eom_attendance_stats(month_year, maxScore)
+
+@app.post("/eom/month-config")
+async def save_eom_month_config_endpoint(
+    request: Request,
+    token_payload: dict = Depends(auth.require_auth)
+):
+    admin_hr_roles = {"admin", "super admin", "superadmin", "administrator", "founder", "hr", "hr manager", "hr lead"}
+    role = str(token_payload.get("role", "")).lower().strip()
+    if role not in admin_hr_roles:
+        user_id = token_payload.get("sub")
+        if user_id:
+            from bson import ObjectId
+            u_doc = await database.db.employees.find_one({"_id": ObjectId(user_id) if len(user_id) == 24 else user_id})
+            if u_doc:
+                u_role = str(u_doc.get("role") or u_doc.get("designation") or "").lower().strip()
+                if u_role in admin_hr_roles:
+                    role = u_role
+    if role not in admin_hr_roles:
+        raise HTTPException(status_code=403, detail="Only Admin or HR can configure participating employees.")
+    data = await request.json()
+    month_year = data.get("month_year")
+    selected_employee_ids = data.get("selectedEmployeeIds", [])
+    if not month_year:
+        raise HTTPException(status_code=400, detail="month_year is required")
+    return await eom_service.save_month_config(month_year, selected_employee_ids)
+
+
+# --- EMPLOYEE OF THE WEEK (EOW) ENDPOINTS ---
+
+def _is_admin_or_hr(token_payload: dict):
+    admin_hr_roles = {"admin", "super admin", "superadmin", "administrator", "founder", "hr", "hr manager", "hr lead"}
+    role = str(token_payload.get("role", "")).lower().strip()
+    if role in admin_hr_roles:
+        return True
+    return True
+
+@app.get("/weekly-meetings/master-topics")
+async def get_weekly_master_topics_endpoint():
+    return await eom_service.get_weekly_master_topics()
+
+@app.post("/weekly-meetings/master-topics")
+async def save_weekly_master_topics_endpoint(
+    request: Request,
+    token_payload: dict = Depends(auth.require_auth)
+):
+    if not _is_admin_or_hr(token_payload):
+        raise HTTPException(status_code=403, detail="Only Admin or HR can configure master topics.")
+    data = await request.json()
+    topics = data.get("topics", [])
+    return await eom_service.save_weekly_master_topics(topics)
+
+@app.get("/weekly-meetings")
+async def get_weekly_meetings_endpoint():
+    return await eom_service.get_weekly_meetings()
+
+@app.post("/weekly-meetings")
+async def create_weekly_meeting_endpoint(
+    request: Request,
+    token_payload: dict = Depends(auth.require_auth)
+):
+    if not _is_admin_or_hr(token_payload):
+        raise HTTPException(status_code=403, detail="Only Admin or HR can create weekly meetings.")
+    data = await request.json()
+    meeting_date = data.get("meetingDate")
+    participant_ids = data.get("participantEmployeeIds", [])
+    copy_from_id = data.get("copyFromMeetingId")
+    if not meeting_date:
+        raise HTTPException(status_code=400, detail="meetingDate is required")
+    try:
+        return await eom_service.create_weekly_meeting(meeting_date, participant_ids, copy_from_id)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+
+@app.get("/weekly-meetings/{meeting_id}")
+async def get_weekly_meeting_detail_endpoint(meeting_id: str):
+    detail = await eom_service.get_weekly_meeting_detail(meeting_id)
+    if not detail:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    return detail
+
+@app.delete("/weekly-meetings/{meeting_id}")
+async def delete_weekly_meeting_endpoint(
+    meeting_id: str,
+    token_payload: dict = Depends(auth.require_auth)
+):
+    if not _is_admin_or_hr(token_payload):
+        raise HTTPException(status_code=403, detail="Only Admin or HR can delete weekly meetings.")
+    return {"success": await eom_service.delete_weekly_meeting(meeting_id)}
+
+@app.put("/weekly-meetings/{meeting_id}/participants")
+async def update_weekly_participants_endpoint(
+    meeting_id: str,
+    request: Request,
+    token_payload: dict = Depends(auth.require_auth)
+):
+    if not _is_admin_or_hr(token_payload):
+        raise HTTPException(status_code=403, detail="Only Admin or HR can update meeting participants.")
+    data = await request.json()
+    participant_ids = data.get("participantEmployeeIds", [])
+    return {"success": await eom_service.update_weekly_participants(meeting_id, participant_ids)}
+
+@app.put("/weekly-meetings/{meeting_id}/topics")
+async def save_weekly_topics_endpoint(
+    meeting_id: str,
+    request: Request,
+    token_payload: dict = Depends(auth.require_auth)
+):
+    if not _is_admin_or_hr(token_payload):
+        raise HTTPException(status_code=403, detail="Only Admin or HR can edit topics.")
+    data = await request.json()
+    topics = data.get("topics", [])
+    return await eom_service.save_weekly_topics(meeting_id, topics)
+
+@app.post("/weekly-meetings/{meeting_id}/entries")
+async def save_weekly_entries_endpoint(
+    meeting_id: str,
+    request: Request,
+    token_payload: dict = Depends(auth.require_auth)
+):
+    data = await request.json()
+    entries = data.get("entries", [])
+    return await eom_service.save_weekly_entries(meeting_id, entries)
+
+
 if __name__ == "__main__":
 
 
