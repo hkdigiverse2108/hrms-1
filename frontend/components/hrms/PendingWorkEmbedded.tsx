@@ -47,25 +47,6 @@ const parseLocalDate = (dateStr: string) => {
   return d;
 };
 
-const isProjectInactive = (p: any, taskType?: string) => {
-  if (!p || !p.status) return false;
-  const s = p.status.toLowerCase();
-  const isDM = p.department?.toLowerCase() === 'digital marketing' || 
-               p.department?.toLowerCase() === 'dm' || 
-               taskType === 'digital-marketing' || 
-               taskType === 'dm-other-work';
-  if (isDM) {
-    return s !== 'active';
-  }
-  return s === 'on-hold' || s === 'onhold' || s === 'completed' || s === 'rejected' || s === 'inactive' || s === 'cancelled';
-};
-
-const isClientInactive = (c: any) => {
-  if (!c || !c.status) return false;
-  const s = c.status.toLowerCase();
-  return s !== 'active';
-};
-
 const formatDateToDDMMYYYY = (dateInput: string | Date | undefined): string => {
   if (!dateInput) return '';
   try {
@@ -472,7 +453,7 @@ export function PendingWorkEmbedded({
         project = clientProjects[entry.clientId];
       }
       if (!project) return; // Only show if active creative project
-      if (isProjectInactive(project) || isClientInactive(client)) return;
+      if (project.status === "on-hold" || project.status === "onhold" || project.status?.toLowerCase() === "on-hold") return;
       
       const clientName = client ? (client.companyName || client.clientName || 'Unknown Client') : 'Unknown Client';
       const projectName = project.title;
@@ -596,11 +577,10 @@ export function PendingWorkEmbedded({
 
     if (projects) {
       projects.forEach(project => {
-        if (isProjectInactive(project)) return;
+        if (project.status === "on-hold" || project.status === "onhold" || project.status?.toLowerCase() === "on-hold") return;
         if (!project.nextFollowupDate) return;
         const nextDate = project.nextFollowupDate.split("T")[0].split(" ")[0];
         const client = clients.find(c => c.id === project.clientId) || {};
-        if (isClientInactive(client)) return;
         
         const followUpAssigneeId = project.assignedFollowUpId || client.assignedFollowUpId;
         
@@ -649,17 +629,6 @@ export function PendingWorkEmbedded({
       if ((isManagerOrAdmin && (type === 'all' || workScope === 'all')) || isAssignee || isAssigner) {
         if (type === 'all' || (type === 'completed-work' ? ow.status === 'Approved' : ow.status !== 'Approved')) {
           
-          let isInactive = false;
-          if (ow.projectId) {
-            const assocProject = projects.find(p => p.id === ow.projectId);
-            if (isProjectInactive(assocProject, ow.taskType)) isInactive = true;
-          }
-          if (ow.clientId) {
-            const assocClient = clients.find(c => c.id === ow.clientId);
-            if (isClientInactive(assocClient)) isInactive = true;
-          }
-          if (isInactive) return;
-
           const assignee = employees.find((e: any) => String(e.id) === String(ow.assigneeId));
           const assigner = employees.find((e: any) => String(e.id) === String(ow.assignerId));
 
@@ -682,11 +651,10 @@ export function PendingWorkEmbedded({
 
     // Add client project follow-ups
     Object.values(clientProjects).forEach((project: any) => {
-      if (isProjectInactive(project)) return;
+      if (project.status === "on-hold" || project.status === "onhold" || project.status?.toLowerCase() === "on-hold") return;
       if (!project.nextFollowupDate) return;
       
       const client = clients.find(c => c.id === project.clientId);
-      if (isClientInactive(client)) return;
       const clientName = client ? (client.companyName || client.clientName || 'Unknown Client') : 'Unknown Client';
       const displayName = `${project.title} (${clientName})`;
       
@@ -721,10 +689,9 @@ export function PendingWorkEmbedded({
 
     // Add assigned SMM onboarding tasks
     Object.values(clientProjects).forEach((project: any) => {
-      if (isProjectInactive(project)) return;
+      if (project.status === "on-hold" || project.status === "onhold" || project.status?.toLowerCase() === "on-hold") return;
       
       const client = clients.find(c => c.id === project.clientId) || {};
-      if (isClientInactive(client)) return;
       const clientName = client ? (client.companyName || client.clientName || 'Unknown Client') : 'Unknown Client';
       const displayName = `${project.title} (${clientName})`;
       
@@ -1372,14 +1339,8 @@ export function PendingWorkEmbedded({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Projects</SelectItem>
-                  {projects.filter((p: any) => {
-                    if (p.department !== 'Creative') return false;
-                    if (isProjectInactive(p)) return false;
-                    const client = clients.find((c: any) => c.id === p.clientId);
-                    if (isClientInactive(client)) return false;
-                    return true;
-                  }).map((project: any) => {
-                    const client = clients.find((c: any) => c.id === project.clientId);
+                  {projects.filter((p: any) => p.department === 'Creative' && p.status !== 'on-hold' && p.status !== 'onhold').map((project: any) => {
+                    const client = clients.find(c => c.id === project.clientId);
                     const cName = client ? (client.companyName || client.clientName) : '';
                     return (
                       <SelectItem key={project.id} value={project.id}>{project.title} ({cName})</SelectItem>

@@ -50,25 +50,6 @@ const parseLocalDate = (dateStr: string) => {
   return d;
 };
 
-const isProjectInactive = (p: any, taskType?: string) => {
-  if (!p || !p.status) return false;
-  const s = p.status.toLowerCase();
-  const isDM = p.department?.toLowerCase() === 'digital marketing' || 
-               p.department?.toLowerCase() === 'dm' || 
-               taskType === 'digital-marketing' || 
-               taskType === 'dm-other-work';
-  if (isDM) {
-    return s !== 'active';
-  }
-  return s === 'on-hold' || s === 'onhold' || s === 'completed' || s === 'rejected' || s === 'inactive' || s === 'cancelled';
-};
-
-const isClientInactive = (c: any) => {
-  if (!c || !c.status) return false;
-  const s = c.status.toLowerCase();
-  return s !== 'active';
-};
-
 const isStageSubsequentOrEqual = (stageName: string, remarkStageName?: string, postReel?: string) => {
   if (!remarkStageName) return true;
   const reelStages = ['Script', 'Shoot', 'Brand Person', 'Editing', 'Caption', 'Thumbnail', 'Approval', 'Posting'];
@@ -425,17 +406,13 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
       const isAssignee = String(ow.assigneeId) === String(uId) || (targetEmpName && ow.assigneeName && ow.assigneeName.toLowerCase().includes(targetEmpName.toLowerCase()));
       const isAssigner = !targetUserId && (String(ow.assignerId) === String(uId) || (targetEmpName && ow.assignerName && ow.assignerName.toLowerCase().includes(targetEmpName.toLowerCase())));
       if ((isAssignee || isAssigner) && ow.status !== 'Approved') {
-        let isInactive = false;
+        let isProjectOnHold = false;
         if (ow.projectId) {
           const assocProject = projects.find(p => p.id === ow.projectId);
-          if (isProjectInactive(assocProject, ow.taskType)) isInactive = true;
-        }
-        if (ow.clientId) {
-          const assocClient = clients.find(c => c.id === ow.clientId);
-          if (isClientInactive(assocClient)) isInactive = true;
+          isProjectOnHold = assocProject && (assocProject.status === 'on-hold' || assocProject.status === 'onhold' || assocProject.status?.toLowerCase() === 'on-hold');
         }
         
-        if (!isInactive) {
+        if (!isProjectOnHold) {
           const assignerEmp = employees.find(e => e.id === ow.assignerId);
           const assigneeEmp = employees.find(e => e.id === ow.assigneeId);
           const creatorName = assignerEmp ? (assignerEmp.name || `${assignerEmp.firstName || ''} ${assignerEmp.lastName || ''}`.trim()) : (ow.assignerName || ow.logs?.[0]?.userName || 'Manager');
@@ -506,8 +483,7 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
     };
 
     clients.forEach((client) => {
-      if (isClientInactive(client)) return;
-      const clientProjects = projects.filter((p) => p.clientId === client.id && p.department?.toLowerCase() === "digital marketing" && !isProjectInactive(p, "digital-marketing"));
+      const clientProjects = projects.filter((p) => p.clientId === client.id && p.department?.toLowerCase() === "digital marketing" && p.status !== "on-hold" && p.status !== "onhold" && p.status?.toLowerCase() !== "on-hold");
       const proj = clientProjects[0];
 
       if (proj) {
