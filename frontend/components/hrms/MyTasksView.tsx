@@ -410,15 +410,6 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
         if (ow.projectId) {
           const assocProject = projects.find(p => p.id === ow.projectId);
           isProjectOnHold = assocProject && (assocProject.status === 'on-hold' || assocProject.status === 'onhold' || assocProject.status?.toLowerCase() === 'on-hold');
-          
-          if (ow.taskType === 'digital-marketing' || ow.taskType === 'dm-other-work') {
-            if (!assocProject || assocProject.status?.toLowerCase() !== 'active') isProjectOnHold = true;
-          }
-        }
-        
-        if (ow.clientId && (ow.taskType === 'digital-marketing' || ow.taskType === 'dm-other-work')) {
-          const assocClient = clients.find(c => c.id === ow.clientId);
-          if (!assocClient || assocClient.status?.toLowerCase() !== 'active') isProjectOnHold = true;
         }
         
         if (!isProjectOnHold) {
@@ -491,8 +482,8 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
       return dates;
     };
 
-    clients.filter(c => c.status?.toLowerCase() === 'active').forEach((client) => {
-      const clientProjects = projects.filter((p) => p.clientId === client.id && p.department?.toLowerCase() === "digital marketing" && p.status?.toLowerCase() === "active");
+    clients.forEach((client) => {
+      const clientProjects = projects.filter((p) => p.clientId === client.id && p.department?.toLowerCase() === "digital marketing" && p.status !== "on-hold" && p.status !== "onhold" && p.status?.toLowerCase() !== "on-hold");
       const proj = clientProjects[0];
 
       if (proj) {
