@@ -165,7 +165,7 @@ export function TodaysWorkView({
       if (!isMyTask) return false;
     }
     
-    const isClientIssue = task.existingRemark && task.existingRemark.includes('[CLIENT ISSUE]');
+    const isClientIssue = task.existingRemark && task.existingRemark.toString().includes('[CLIENT ISSUE]');
 
     if (timeFilter === "today") {
       if (task.date > yesterdayStr) return false; // keep yesterday and older
@@ -175,6 +175,8 @@ export function TodaysWorkView({
     } else if (timeFilter === "upcoming") {
       if (task.date <= yesterdayStr) return false; // newer than yesterday
       if (isClientIssue) return false; // usually upcoming wouldn't have issues, but just in case
+    } else if (timeFilter === "all") {
+      // In 'all', don't filter out anything based on time or client issue
     }
 
     if (brandFilter !== "all" && String(task.clientId) !== String(brandFilter)) {
