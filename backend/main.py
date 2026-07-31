@@ -273,6 +273,56 @@ async def auto_inactive_employee_task():
             
         await asyncio.sleep(1800) # Check every 30 minutes
 
+async def auto_mark_present_inactive_hrms_users_task():
+    from database import db
+    from datetime import datetime
+    import pytz
+    
+    print("[Auto Mark Present] Task started.", flush=True)
+    await asyncio.sleep(40) # wait for startup
+    
+    while True:
+        try:
+            now = datetime.now(pytz.timezone('Asia/Kolkata'))
+            today_str = now.strftime("%Y-%m-%d")
+            today_midnight = datetime(now.year, now.month, now.day, 0, 0, 0)
+            
+            inactive_users = await db.employees.find({
+                "status": "active",
+                "activelyUsingHRMS": False
+            }).to_list(length=1000)
+            
+            for user in inactive_users:
+                emp_id = str(user["_id"]) if "_id" in user else user.get("id")
+                if not emp_id: continue
+                
+                existing = await db.attendance.find_one({
+                    "employeeId": emp_id,
+                    "date": {"$regex": f"^{today_str}"}
+                })
+                
+                if not existing:
+                    punch_in_time = today_midnight.replace(hour=9, minute=0, second=0)
+                    punch_out_time = today_midnight.replace(hour=18, minute=0, second=0)
+                    
+                    new_attendance = {
+                        "employeeId": emp_id,
+                        "date": today_str,
+                        "punchIn": punch_in_time,
+                        "punchOut": punch_out_time,
+                        "status": "Present",
+                        "totalHours": 9.0,
+                        "totalBreakHours": 0.0,
+                        "regularHours": 9.0,
+                        "overtimeHours": 0.0,
+                        "location": {"lat": 0, "lng": 0, "address": "Auto Marked Present"}
+                    }
+                    await db.attendance.insert_one(new_attendance)
+        except Exception as e:
+            print(f"[Auto Mark Present] Error: {e}", flush=True)
+            
+        await asyncio.sleep(3600) # Check every hour
+
 async def monthly_report_scheduler_task():
     from database import db
     import crud
@@ -651,6 +701,7 @@ async def lifespan(app):
     monthly_report_task = asyncio.create_task(monthly_report_scheduler_task())
     logs_cleanup_task = asyncio.create_task(activity_logs_cleanup_task())
     auto_inactive_task = asyncio.create_task(auto_inactive_employee_task())
+    auto_present_task = asyncio.create_task(auto_mark_present_inactive_hrms_users_task())
     yield
     # --- Shutdown ---
     try:

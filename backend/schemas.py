@@ -270,6 +270,8 @@ class EmployeeBase(BaseModel):
     hasEmployment: Optional[bool] = False
     employmentStartDate: Optional[RobustDate] = None
     bondsHistory: Optional[List[BondDetail]] = []
+    workMode: Optional[str] = None
+    activelyUsingHRMS: Optional[bool] = True
 
 class EmployeeCreate(EmployeeBase):
     pass
@@ -324,6 +326,8 @@ class EmployeeUpdate(BaseModel):
     hasEmployment: Optional[bool] = None
     employmentStartDate: Optional[RobustDate] = None
     bondsHistory: Optional[List[BondDetail]] = None
+    workMode: Optional[str] = None
+    activelyUsingHRMS: Optional[bool] = None
 
 class Employee(EmployeeBase):
     id: str

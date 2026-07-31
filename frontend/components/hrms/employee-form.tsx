@@ -58,6 +58,8 @@ export interface EmployeeFormData {
   endTime: string
   profilePhoto: string
   status: string
+  workMode: string
+  activelyUsingHRMS: boolean
   gender: string
   position: string
   requiredDocuments: string[]
@@ -110,6 +112,8 @@ const defaultFormData: EmployeeFormData = {
   endTime: '',
   profilePhoto: '',
   status: 'active',
+  workMode: '',
+  activelyUsingHRMS: true,
   gender: 'Male',
   position: 'Intern',
   requiredDocuments: [],
@@ -236,7 +240,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
             } else {
               sanitizedData[k] = strVal;
             }
-          } else if (k === 'hasBond' || k === 'hasNoticePeriod' || k === 'hasResignation' || k === 'hasEmployment') {
+          } else if (k === 'hasBond' || k === 'hasNoticePeriod' || k === 'hasResignation' || k === 'hasEmployment' || k === 'activelyUsingHRMS') {
             sanitizedData[k] = (value === true || value === 'true') as any
           } else if (k === 'bondsHistory') {
             sanitizedData[k] = (Array.isArray(value) ? value : []) as any;
@@ -292,6 +296,9 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
             next.resignationDate = calculatedDate
           }
         }
+      }
+      if (field === 'workMode' && value !== 'WFH') {
+        next.activelyUsingHRMS = true
       }
       return next
     })
@@ -535,18 +542,51 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
         
         {!isRoleAdmin(formData.role) && (
           <>
-            <FormSelect 
-              label="Status" 
-              id="status" 
-              required 
-              value={formData.status} 
-              onValueChange={(v: string) => handleChange('status', v)} 
-              options={[
-                { label: 'Active', value: 'active' },
-                { label: 'Inactive', value: 'inactive' }
-              ]} 
-              placeholder="Select status" 
-            />
+            <div className="flex flex-col sm:flex-row gap-4 w-full max-w-4xl">
+              <FormSelect 
+                className="flex-1"
+                label="Status" 
+                id="status" 
+                required 
+                value={formData.status} 
+                onValueChange={(v: string) => handleChange('status', v)} 
+                options={[
+                  { label: 'Active', value: 'active' },
+                  { label: 'Inactive', value: 'inactive' }
+                ]} 
+                placeholder="Select status" 
+              />
+
+              <FormSelect 
+                className="flex-1"
+                label="Work Mode" 
+                id="workMode" 
+                required 
+                value={formData.workMode} 
+                onValueChange={(v: string) => handleChange('workMode', v)} 
+                options={[
+                  { label: 'WHO', value: 'WHO' },
+                  { label: 'WFH', value: 'WFH' },
+                  { label: 'Hybrid', value: 'Hybrid' }
+                ]} 
+                placeholder="Select one" 
+              />
+
+              {formData.workMode === 'WFH' && (
+                <FormSelect 
+                  className="flex-1 animate-in fade-in slide-in-from-left-2 duration-200"
+                  label="Actively Using HRMS" 
+                  id="activelyUsingHRMS" 
+                  required 
+                  value={formData.activelyUsingHRMS ? 'Yes' : 'No'} 
+                  onValueChange={(v: string) => handleChange('activelyUsingHRMS', v === 'Yes')} 
+                  options={[
+                    { label: 'Yes', value: 'Yes' },
+                    { label: 'No', value: 'No' }
+                  ]} 
+                />
+              )}
+            </div>
 
             {/* Working Hours */}
             <div className="flex items-center gap-4">
