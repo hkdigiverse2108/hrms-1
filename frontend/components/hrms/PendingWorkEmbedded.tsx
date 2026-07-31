@@ -885,7 +885,7 @@ export function PendingWorkEmbedded({
           if (type === 'completed-work') return t.status === 'Approved';
           if (type === 'pending-work') return t.status === 'Pending' || t.status === 'Ready for Review' || isClientIssue;
           
-          if (isClientIssue && type !== 'all') return false;
+          if (isClientIssue) return false;
 
           const deadlineDate = parseLocalDate(t.deadline);
           
@@ -910,7 +910,7 @@ export function PendingWorkEmbedded({
         }
 
         // If it's a client issue, it should ONLY show in pending work (and all)!
-        if (isClientIssue && type !== 'all') return false;
+        if (isClientIssue) return false;
         
         const deadlineDate = parseLocalDate(t.deadline);
         
