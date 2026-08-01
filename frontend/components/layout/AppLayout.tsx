@@ -1,5 +1,5 @@
 "use client";
- 
+
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -31,7 +31,7 @@ function getRequiredModuleForPath(pathname: string): string | null {
   if (pathname.startsWith("/work-management/smm")) return "creative";
   if (pathname.startsWith("/work-management/work-logs")) return "work-logs";
   if (pathname.startsWith("/work-management/research")) return "research";
-  
+
   if (pathname.startsWith("/employees/organization")) return "org-structure";
   if (pathname.startsWith("/employees/attendance")) return "employee-attendance";
   if (pathname.startsWith("/employees/leave")) return "leave-requests";
@@ -41,21 +41,21 @@ function getRequiredModuleForPath(pathname: string): string | null {
     return "employee-list";
   }
   if (pathname === "/employees" || pathname.startsWith("/employees/")) return "employee-list";
-  
+
   if (pathname.startsWith("/payroll/salary-structure")) return "salary-structure";
   if (pathname.startsWith("/payroll/payslips")) return "payslips";
   if (pathname.startsWith("/payroll/bonuses")) return "bonuses-deductions";
   if (pathname.startsWith("/payroll")) return "payroll-processing";
-  
+
   if (pathname.startsWith("/recruitment/hiring-board")) return "interviews";
   if (pathname.startsWith("/recruitment")) return "hirings";
-  
+
   if (pathname.startsWith("/attendance")) return "attendance";
   if (pathname.startsWith("/leave")) return "leave";
-  
+
   if (pathname.startsWith("/workspace/seating")) return "seating-arrangement";
   if (pathname.startsWith("/workspace/resource")) return "resource-management";
-  
+
   if (pathname.startsWith("/penalty")) return "remarks";
   if (pathname.startsWith("/remarks")) return "review";
   if (pathname.startsWith("/invoice")) return "invoice";
@@ -65,16 +65,17 @@ function getRequiredModuleForPath(pathname: string): string | null {
   if (pathname.startsWith("/settings")) return "settings";
   if (pathname.startsWith("/activity-tracker")) return "activity-tracker";
   if (pathname.startsWith("/activity-logs")) return "activity-logs";
-  
+
   if (pathname.startsWith("/admin/courses")) return "admin-courses";
   if (pathname.startsWith("/training")) return "training";
-  
+
   return null;
 }
- 
+
 export function AppLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [modal, contextHolder] = Modal.useModal();
   const { user, isLoading, logout } = useUserContext();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
   const isPublicPage = pathname.startsWith("/login") || pathname.startsWith("/register") || pathname.startsWith("/feedback/") || pathname.startsWith("/f/");
@@ -102,7 +103,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       try {
         const cached = localStorage.getItem('system-settings-cache');
         if (cached) return JSON.parse(cached);
-      } catch {}
+      } catch { }
     }
     return null;
   });
@@ -137,13 +138,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   const lastActivityTimeRef = useRef<number>(Date.now());
   const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const resetInactivityTimerRef = useRef<() => void>(() => {});
+  const resetInactivityTimerRef = useRef<() => void>(() => { });
 
   // Check for desktop application updates
   useEffect(() => {
     if (typeof window === "undefined" || !(window as any).electronAPI) return;
     if (!user || isPublicPage) return;
-    
+
     const checkForUpdates = async (showNoUpdateToast = false) => {
       try {
         const localVersion = await (window as any).electronAPI.getAppVersion();
@@ -151,7 +152,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         if (res.ok) {
           const data = await res.json();
           const remoteVersion = data.version;
-          
+
           const isNewerVersion = (remote: string, local: string) => {
             const r = remote.split('.').map(Number);
             const l = local.split('.').map(Number);
@@ -161,7 +162,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             }
             return false;
           };
-          
+
           if (remoteVersion && isNewerVersion(remoteVersion, localVersion)) {
             setUpdateInfo({
               version: remoteVersion,
@@ -180,7 +181,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         }
       }
     };
-    
+
     checkForUpdates();
 
     const handleManualCheck = () => {
@@ -196,11 +197,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
   // Monitor download progress from Electron IPC — subscribe on mount so we never miss events
   useEffect(() => {
     if (typeof window === "undefined" || !(window as any).electronAPI) return;
-    
+
     const unsubscribe = (window as any).electronAPI.onUpdateProgress((progress: number) => {
       setDownloadProgress(progress);
     });
-    
+
     return () => {
       unsubscribe();
     };
@@ -257,7 +258,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       const statusRes = await fetch(`${API_URL}/attendance/status/${user.id || user.employeeId}`);
       if (!statusRes.ok) return;
       const statusData = await statusRes.json();
-      
+
       const isCurrentlyOnBreak = statusData && statusData.status === "On Break";
       if (isCurrentlyOnBreak) {
         localStorage.setItem("last_activity_timestamp", Date.now().toString());
@@ -272,7 +273,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       const dateStr = typeof statusData.date === "string" ? statusData.date.split("T")[0] : dayjs(statusData.date).format("YYYY-MM-DD");
       const punchInTimeObj = dayjs(`${dateStr} ${statusData.checkIn}`);
       const punchInTs = punchInTimeObj.isValid() ? punchInTimeObj.valueOf() : Date.now();
-      
+
       // Clamp last activity time to punch-in time
       if (lastActivityTimeRef.current < punchInTs) {
         lastActivityTimeRef.current = punchInTs;
@@ -313,7 +314,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
       if (res.ok) {
         toast.warning("You were punched out due to inactivity. Move your mouse or click to recover this time.");
-        
+
         // Show OS desktop notification
         if ((window as any).electronAPI && typeof (window as any).electronAPI.showNotification === 'function') {
           (window as any).electronAPI.showNotification("Inactivity Alert", {
@@ -333,7 +334,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         }
 
         const inactiveUntilStr = dayjs().format("HH:mm:ss");
-        
+
         const recData = {
           inactiveFrom: punchOutTimeStr,
           inactiveFromTimestamp: lastActivityTimeRef.current,
@@ -359,7 +360,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const resetInactivityTimer = useCallback(() => {
     if (!systemSettings?.inactivityTimeoutEnabled) return;
     if (!user || showRecoveryModal) return;
-    
+
     if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
     const timeoutMs = (systemSettings?.inactivityTimeoutMins || 5) * 60 * 1000;
     inactivityTimerRef.current = setTimeout(handleInactivityPunchOut, timeoutMs);
@@ -490,7 +491,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         const activeData = await activeRes.json();
         if (activeData && typeof activeData.last_active === 'number') {
           const globalLastActiveMs = activeData.last_active * 1000;
-          
+
           // If the global PC activity is newer than our local localStorage timestamp, use it!
           if (globalLastActiveMs > resolvedLastActivityTs) {
             resolvedLastActivityTs = globalLastActiveMs;
@@ -570,18 +571,18 @@ export function AppLayout({ children }: { children: ReactNode }) {
       toast.error("Please enter a reason.");
       return;
     }
-    
+
     const startStr = recoveryForm.startTime;
     const endStr = recoveryForm.endTime;
-    
+
     if (!startStr || !endStr) {
       toast.error("Please select start and end times.");
       return;
     }
-    
+
     const startObj = dayjs(`${dayjs().format("YYYY-MM-DD")} ${startStr}`);
     const endObj = dayjs(`${dayjs().format("YYYY-MM-DD")} ${endStr}`);
-    
+
     if (endObj.isBefore(startObj) || endObj.isSame(startObj)) {
       toast.error("End time must be after start time.");
       return;
@@ -616,14 +617,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
         toast.success("Time recovery request submitted and punched in!");
         localStorage.removeItem("inactivity_punch_out_recovery_pending");
         localStorage.removeItem("going_for_meeting_pending");
-        
+
         setShowRecoveryModal(false);
         setRecoveryRange(null);
-        
+
         localStorage.setItem("last_activity_timestamp", Date.now().toString());
         lastActivityTimeRef.current = Date.now();
         resetInactivityTimer();
-        
+
         window.dispatchEvent(new Event("attendance-update"));
       } else {
         toast.error("Failed to submit recovery request.");
@@ -685,7 +686,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     if (typeof window !== 'undefined' && (window as any).electronAPI) {
       (window as any).electronAPI.focusWindow();
     }
-    Modal.warning({
+    modal.warning({
       title: data.title || "System Announcement",
       content: data.message,
       okText: "Dismiss",
@@ -716,11 +717,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
       router.push("/login");
     }
   }, [user, isLoading, isPublicPage, router]);
- 
+
   if (isPublicPage) {
     return <main className="flex-1 w-full h-screen bg-white">{children}</main>;
   }
- 
+
   if (isLoading || (!user && !isPublicPage) || (user && permissionsLoading)) {
     return (
       <div className="flex items-center justify-center h-screen w-full bg-white">
@@ -731,14 +732,25 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   const requiredModule = getRequiredModuleForPath(pathname);
   const hasAccess = !requiredModule || isAdmin || checkPermission(requiredModule, 'canView');
- 
+  const isRevealPage = pathname.includes("/employee-of-the-month/reveal");
+
+  if (isRevealPage) {
+    return (
+      <main className="w-full min-h-screen bg-[#0A0D18] text-white overflow-y-auto">
+        {hasAccess ? children : <AccessDenied />}
+      </main>
+    );
+  }
+
   return (
-    <Layout hasSider className="h-screen overflow-hidden w-full">
+    <>
+      {contextHolder}
+      <Layout hasSider className="h-screen overflow-hidden w-full">
       <Sidebar />
       <Layout className="site-layout h-screen overflow-y-auto overflow-x-hidden relative custom-scrollbar">
         <Header />
-        <Content 
-          className="px-4 sm:px-6 lg:px-8 w-full max-w-full"
+        <Content
+          className="px-4 sm:px-6 lg:px-8 w-full"
           style={{ paddingBottom: '24px' }}
         >
           {hasAccess ? children : <AccessDenied />}
@@ -794,8 +806,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
               {recoveryRange.isMeetingOnly ? "Meeting Time Recovery" : "Recover Inactivity Time"}
             </h2>
             <p style={{ fontSize: "13.5px", color: "#6b7280", textAlign: "center", marginBottom: "24px", lineHeight: 1.5 }}>
-              {recoveryRange.isMeetingOnly 
-                ? "Please record the details of your meeting to add it to your work hours." 
+              {recoveryRange.isMeetingOnly
+                ? "Please record the details of your meeting to add it to your work hours."
                 : "You were inactive while punched in. Request to recover this time."}
             </p>
 
@@ -1087,5 +1099,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </div>
       )}
     </Layout>
+    </>
   );
 }

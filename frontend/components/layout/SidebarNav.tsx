@@ -70,6 +70,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
   });
 
   const getOpenKeys = React.useCallback(() => {
+    if (pathname.startsWith("/employee-of-the-month") || pathname.startsWith("/employee-of-the-week") || pathname.startsWith("/voting") || pathname.startsWith("/elections")) return ["elections-awards-sub"];
     if (pathname.startsWith("/employees/documents")) return ["documents-sub"];
     if (pathname.startsWith("/employees")) return ["employees-sub"];
     if (pathname.startsWith("/workspace")) return ["workspace"];
@@ -330,12 +331,19 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       trainingChildren.push(getItem(<Link href="/admin/courses">Manage Courses</Link>, "/admin/courses"));
     }
 
-    if (trainingChildren.length > 0) {
-      menuItems.push(getItem("Training & Courses", "training", <BookOpen className="w-5 h-5" />, trainingChildren));
+    const electionsAwardsChildren: MenuItem[] = [];
+    if (isAdmin || checkPermission('employee-of-month', 'canView')) {
+      electionsAwardsChildren.push(getItem(<Link href="/employee-of-the-month">Employee of Month</Link>, "/employee-of-the-month"));
+    }
+    if (isAdmin || checkPermission('employee-of-week', 'canView')) {
+      electionsAwardsChildren.push(getItem(<Link href="/employee-of-the-week">Team Leader of the Week</Link>, "/employee-of-the-week"));
+    }
+    if (isAdmin || (isModuleEnabled('voting') && checkPermission('voting', 'canView'))) {
+      electionsAwardsChildren.push(getItem(<Link href="/voting">Elections</Link>, "/voting"));
     }
 
-    if (isAdmin || (isModuleEnabled('voting') && checkPermission('voting', 'canView'))) {
-      menuItems.push(getItem(<Link href="/voting">Elections</Link>, "/voting", <Vote className="w-5 h-5" />));
+    if (electionsAwardsChildren.length > 0) {
+      menuItems.push(getItem("Elections & Recognition", "elections-awards-sub", <Vote className="w-5 h-5" />, electionsAwardsChildren));
     }
 
     if (isAdmin || checkPermission('settings', 'canView')) {
@@ -387,7 +395,9 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (pathname.startsWith("/company-finance")) return [pathname];
     if (pathname.startsWith("/training")) return ["/training"];
     if (pathname.startsWith("/admin/courses")) return ["/admin/courses"];
-    if (pathname.startsWith("/voting")) return ["/voting"];
+    if (pathname.startsWith("/employee-of-the-month")) return ["/employee-of-the-month"];
+    if (pathname.startsWith("/employee-of-the-week")) return ["/employee-of-the-week"];
+    if (pathname.startsWith("/voting") || pathname.startsWith("/elections")) return ["/voting"];
     return [];
   };
 

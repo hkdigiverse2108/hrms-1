@@ -192,7 +192,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           }
         }
       } catch (err) {
-        console.warn("[ChatContext] Failed to fetch WS info:", err);
+        // Quietly handle backend restart / offline drops
       }
 
       if (!active) return;
@@ -261,7 +261,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       };
 
       websocket.onerror = (err) => {
-        console.warn("[ChatContext] WebSocket error:", err);
+        // Quiet handling when backend server restarts or port reconnects
         websocket.close();
       };
 
