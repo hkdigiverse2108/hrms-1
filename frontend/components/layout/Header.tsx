@@ -140,11 +140,6 @@ export function Header() {
           const todayStr = dayjs().format('YYYY-MM-DD');
           const active = banners.filter((b: any) => {
             if (!b.isActive) return false;
-            if (b.employeeIds && Array.isArray(b.employeeIds) && b.employeeIds.length > 0) {
-              if (!b.employeeIds.includes(user.id) && !b.employeeIds.includes(user.employeeId)) return false;
-            } else if (b.employeeId && b.employeeId !== "all" && b.employeeId !== user.id && b.employeeId !== user.employeeId) {
-              return false;
-            }
             const hasStartDate = !!b.startDate;
             const hasEndDate = !!b.endDate;
             if (!hasStartDate && !hasEndDate) return true;
