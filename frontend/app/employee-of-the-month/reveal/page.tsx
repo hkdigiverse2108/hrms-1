@@ -102,6 +102,7 @@ interface Criterion {
   id: string;
   name: string;
   maxScore: number;
+  category?: string;
 }
 
 interface Candidate {
@@ -250,13 +251,22 @@ export default function AuditoriumRevealPage() {
 
   // Stage Management
   const [activeStageIndex, setActiveStageIndex] = useState<number>(0);
+  const totalStages = criteriaList.length > 0 ? criteriaList.length : 1;
+  const isFinalStage = activeStageIndex === totalStages - 1;
 
   // Grand Finale Step-by-Step Bottom-Up Reveal State & Highlight Tracker
   const [finaleRevealedIds, setFinaleRevealedIds] = useState<Set<string>>(new Set());
   const [justRevealedEmpId, setJustRevealedEmpId] = useState<string | null>(null);
+  // Candidate currently mid-suspense-oscillation — position is teasing, score is still HIDDEN
+  const [oscillatingEmpId, setOscillatingEmpId] = useState<string | null>(null);
   const [prevRanksMap, setPrevRanksMap] = useState<Record<string, number>>({});
   // Suspense Slot Machine Position Tease State
   const [animOverride, setAnimOverride] = useState<{ employeeId: string; rank: number } | null>(null);
+  const [isStepFlash, setIsStepFlash] = useState(false);
+  // Pre-Blast Golden Glow Pulse Wait State (candidate landed on real position, 600ms hold before BOOM)
+  const [isGoldenGlowActive, setIsGoldenGlowActive] = useState(false);
+  // Increments on every oscillation step-land, used to re-trigger a quick landing flash pulse
+  const [oscillationFlashKey, setOscillationFlashKey] = useState(0);
 
   const [isTop2Showdown, setIsTop2Showdown] = useState(false);
   const [isWinnerAnnounced, setIsWinnerAnnounced] = useState(false);
@@ -272,6 +282,8 @@ export default function AuditoriumRevealPage() {
 
   // Table Row DOM References for Auto-Scroll
   const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
+  const tableScrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const handleNextStepRef = useRef<() => void>(() => {});
 
   // Admin Role Permission Check
   const isAdmin = user && ["admin", "super admin", "superadmin", "administrator", "founder"].includes(String(user.role || "").toLowerCase().trim());
@@ -326,17 +338,68 @@ export default function AuditoriumRevealPage() {
     }
   }, [justRevealedEmpId, finaleRevealedIds]);
 
+  // Brief landing flash pulse on every oscillation step (visible "beat" so each pause reads clearly)
+  useEffect(() => {
+    if (oscillationFlashKey === 0) return;
+    setIsStepFlash(true);
+    const t = setTimeout(() => setIsStepFlash(false), 260);
+    return () => clearTimeout(t);
+  }, [oscillationFlashKey]);
+
+  // Scroll-Follow: keep candidate row centered in viewport on EVERY suspense oscillation step
+  useEffect(() => {
+    if (isFinalStage && animOverride) {
+      const t = setTimeout(() => {
+        const targetRow = rowRefs.current[animOverride.employeeId];
+        const container = tableScrollContainerRef.current;
+        if (targetRow && container) {
+          const rowTop = targetRow.offsetTop;
+          const rowHeight = targetRow.offsetHeight;
+          const containerHeight = container.clientHeight;
+          const scrollToY = Math.max(0, rowTop - (containerHeight / 2) + (rowHeight / 2));
+          container.scrollTo({ top: scrollToY, behavior: "smooth" });
+        } else if (targetRow) {
+          targetRow.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 30);
+      return () => clearTimeout(t);
+    }
+  }, [isFinalStage, animOverride]);
+
+  // When the Grand Finale winner is announced, snap the standings scroll back to the TOP
+  // (rank #1 / the winner) so the audience sees the champion, not wherever the list last scrolled to.
+  useEffect(() => {
+    if (isWinnerAnnounced) {
+      setTimeout(() => {
+        if (tableScrollContainerRef.current) {
+          tableScrollContainerRef.current.scrollTo({ top: 0, behavior: "smooth" });
+        }
+      }, 150);
+    }
+  }, [isWinnerAnnounced]);
+
+  // When top 5 unrevealed contenders mode is active, keep view focused on top unrevealed contenders
+  useEffect(() => {
+    if (isFinalStage && !animOverride && (candidates.length - finaleRevealedIds.size) <= 5) {
+      setTimeout(() => {
+        if (tableScrollContainerRef.current) {
+          tableScrollContainerRef.current.scrollTo({ top: 0, behavior: "smooth" });
+        }
+      }, 100);
+    }
+  }, [isFinalStage, finaleRevealedIds.size, animOverride]);
+
   // Spacebar Listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === "Space" && !loading) {
+      if ((e.code === "Space" || e.key === " " || e.keyCode === 32) && !loading) {
         e.preventDefault();
-        handleNextStep();
+        handleNextStepRef.current();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeStageIndex, finaleRevealedIds, candidates, criteriaList, loading, activeIntermission]);
+  }, [loading]);
 
   const toggleFullscreen = () => {
     try {
@@ -370,9 +433,6 @@ export default function AuditoriumRevealPage() {
       setLoading(false);
     }
   };
-
-  const totalStages = criteriaList.length > 0 ? criteriaList.length : 1;
-  const isFinalStage = activeStageIndex === totalStages - 1;
 
   const finaleTargetOrder = [...candidates].sort((a, b) => b.totalScore - a.totalScore);
 
@@ -432,6 +492,10 @@ export default function AuditoriumRevealPage() {
   const handleNextStep = () => {
     if (criteriaList.length === 0 || candidates.length === 0) return;
 
+    // Prevent double-fire (rapid spacebar/click) while a suspense oscillation or golden
+    // glow pause is already running — otherwise scores can end up revealed out of order.
+    if (oscillatingEmpId || isGoldenGlowActive) return;
+
     // Auto request fullscreen on presentation click if not active
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().catch(() => {});
@@ -444,32 +508,19 @@ export default function AuditoriumRevealPage() {
     }
 
     if (!isFinalStage) {
-      const currentList = getDisplayList();
-      const topEmp = currentList[0] || candidates[0];
-      const startRank = topEmp ? topEmp.rank : 10;
-      
+      // Regular criteria columns (Stage 0..N-2): Smooth reveal without position tease oscillations
       const nextStage = activeStageIndex + 1;
       setActiveStageIndex(nextStage);
-
-      // Trigger multi-step suspense tease on stage reveal
-      const targetEmpId = topEmp ? topEmp.employeeId : candidates[0]?.employeeId;
-      if (targetEmpId) {
-        triggerSuspenseOscillation(targetEmpId, Math.min(candidates.length, startRank + 8), startRank, () => {
-          setTimeout(() => {
-            triggerConfetti(false);
-          }, 1500);
-        });
-      } else {
-        setTimeout(() => {
-          triggerConfetti(false);
-        }, 1500);
-      }
+      setJustRevealedEmpId(null);
+      setTimeout(() => {
+        triggerConfetti(false);
+      }, 400);
     } else {
+      // LAST STAGE (Final Column / Grand Finale): Run 5 random position tease oscillations!
       if (isWinnerAnnounced) return;
 
       const N = finaleTargetOrder.length;
       const currentRevealedCount = finaleRevealedIds.size;
-      const nextCount = currentRevealedCount + 1;
 
       // Capture pre-reveal rank snapshot of all candidates
       const currentStandings = getDisplayList();
@@ -479,62 +530,24 @@ export default function AuditoriumRevealPage() {
       });
       setPrevRanksMap(rankMap);
 
-      // Triggers at ~45% and ~80% reveal thresholds
-      const break1Target = Math.max(1, Math.floor(N * 0.45));
-      const break2Target = Math.max(2, Math.floor(N * 0.8));
-
-      if (
-        (nextCount === break1Target || nextCount === break2Target) &&
-        !triggeredBreakStages.has(nextCount) &&
-        N >= 4
-      ) {
-        const nextTriggered = new Set(triggeredBreakStages);
-        nextTriggered.add(nextCount);
-        setTriggeredBreakStages(nextTriggered);
-
-        const targetCandidateToReveal = finaleTargetOrder[N - 1 - currentRevealedCount];
-        if (targetCandidateToReveal) {
-          const nextSet = new Set(finaleRevealedIds);
-          nextSet.add(targetCandidateToReveal.employeeId);
-          setFinaleRevealedIds(nextSet);
-          setJustRevealedEmpId(targetCandidateToReveal.employeeId);
-        }
-
-        // Drumroll + Gujarati Intermission popup
-        setIsDrumrollActive(true);
-        setTimeout(() => {
-          setIsDrumrollActive(false);
-          triggerGujaratiIntermission();
-        }, 1200);
-
-        return;
-      }
-
       if (currentRevealedCount < N - 2) {
         const targetCandidateToReveal = finaleTargetOrder[N - 1 - currentRevealedCount];
         if (targetCandidateToReveal) {
           const startRank = prevRanksMap[targetCandidateToReveal.employeeId] || N;
-          
-          const nextSet = new Set(finaleRevealedIds);
-          nextSet.add(targetCandidateToReveal.employeeId);
-          setFinaleRevealedIds(nextSet);
-          setJustRevealedEmpId(targetCandidateToReveal.employeeId);
+          const targetRank = N - currentRevealedCount;
 
-          if (nextSet.size === N - 2) {
-            setIsTop2Showdown(true);
-          }
-
-          // Calculate final target rank
-          const tempStandings = getDisplayList();
-          const targetItem = tempStandings.find(e => e.employeeId === targetCandidateToReveal.employeeId);
-          const targetRank = targetItem ? targetItem.rank : 1;
-
-          // Trigger slot machine suspense oscillation (18 -> 14 -> 18 -> 15 -> 9 -> targetRank)!
+          // Trigger slot machine suspense oscillation (5 random rank jumps -> targetRank)!
           triggerSuspenseOscillation(targetCandidateToReveal.employeeId, startRank, targetRank, () => {
-            // 1500ms (1.5s) pre-blast dramatic suspense wait pause!
-            setTimeout(() => {
-              triggerConfetti(false);
-            }, 1500);
+            const nextSet = new Set(finaleRevealedIds);
+            nextSet.add(targetCandidateToReveal.employeeId);
+            setFinaleRevealedIds(nextSet);
+            setJustRevealedEmpId(targetCandidateToReveal.employeeId);
+
+            if (nextSet.size === N - 2) {
+              setIsTop2Showdown(true);
+            }
+
+            triggerConfetti(false);
           });
         }
       } else if (isTop2Showdown || currentRevealedCount === N - 2) {
@@ -553,10 +566,15 @@ export default function AuditoriumRevealPage() {
     }
   };
 
+  handleNextStepRef.current = handleNextStep;
+
   const handleResetStage = () => {
     setActiveStageIndex(0);
     setFinaleRevealedIds(new Set());
     setJustRevealedEmpId(null);
+    setOscillatingEmpId(null);
+    setAnimOverride(null);
+    setIsGoldenGlowActive(false);
     setPrevRanksMap({});
     setIsTop2Showdown(false);
     setIsWinnerAnnounced(false);
@@ -575,7 +593,11 @@ export default function AuditoriumRevealPage() {
       revealedCols.forEach(col => {
         const sc = emp.criteriaScores?.[col.id] ?? 0;
         colScores[col.id] = sc.toFixed(2);
-        stageTotal += sc;
+        if (col.category === "-ve") {
+          stageTotal += Math.max(0, (Number(col.maxScore) || 0) - sc);
+        } else {
+          stageTotal += sc;
+        }
       });
 
       return {
@@ -592,7 +614,11 @@ export default function AuditoriumRevealPage() {
       prevCols.forEach(col => {
         const sc = emp.criteriaScores?.[col.id] ?? 0;
         colScores[col.id] = sc.toFixed(2);
-        prevSum += sc;
+        if (col.category === "-ve") {
+          prevSum += Math.max(0, (Number(col.maxScore) || 0) - sc);
+        } else {
+          prevSum += sc;
+        }
       });
 
       const isFinaleRevealed = finaleRevealedIds.has(emp.employeeId);
@@ -600,8 +626,9 @@ export default function AuditoriumRevealPage() {
       if (isFinaleRevealed) {
         const finalSc = emp.criteriaScores?.[finalCol.id] ?? 0;
         colScores[finalCol.id] = finalSc.toFixed(2);
+        const finalContrib = finalCol.category === "-ve" ? Math.max(0, (Number(finalCol.maxScore) || 0) - finalSc) : finalSc;
         return {
-          stageTotal: Number((prevSum + finalSc).toFixed(2)),
+          stageTotal: Number((prevSum + finalContrib).toFixed(2)),
           colScores,
           isFinaleRevealed: true
         };
@@ -618,37 +645,41 @@ export default function AuditoriumRevealPage() {
 
   const triggerSuspenseOscillation = (employeeId: string, startRank: number, targetRank: number, onComplete: () => void) => {
     const N = candidates.length || 20;
-    const diff = startRank - targetRank;
     
-    let steps: number[] = [];
-    if (Math.abs(diff) >= 2) {
-      // Multi-step rank tease: 18 -> 14 -> 18 -> 15 -> 9 -> targetRank
-      const mid1 = Math.max(1, Math.min(N, startRank - Math.floor(diff * 0.4)));
-      const mid2 = Math.max(1, Math.min(N, startRank + 1));
-      const mid3 = Math.max(1, Math.min(N, startRank - Math.floor(diff * 0.25)));
-      const mid4 = Math.max(1, Math.min(N, startRank - Math.floor(diff * 0.7)));
-      steps = [mid1, mid2, mid3, mid4, targetRank];
-    } else {
-      // Synthetic tease steps e.g. 5 -> 3 -> 6 -> 4 -> targetRank
-      const up1 = Math.max(1, targetRank - 2);
-      const down1 = Math.min(N, targetRank + 2);
-      const up2 = Math.max(1, targetRank - 1);
-      steps = [up1, down1, up2, targetRank];
+    // Generate 5 completely RANDOM position jumps across 1..N range
+    const randomSteps: number[] = [];
+    let prev = startRank;
+    while (randomSteps.length < 5) {
+      const r = Math.floor(Math.random() * N) + 1;
+      if (r !== prev) {
+        randomSteps.push(r);
+        prev = r;
+      }
     }
+    // 6th step is always the true target rank landing!
+    const steps = [...randomSteps, targetRank];
 
-    setJustRevealedEmpId(employeeId);
+    setOscillatingEmpId(employeeId);
+    const STEP_DURATION_MS = 2000; // 2.0 full seconds per tease step for crystal-clear auditorium visibility!
+    const GOLDEN_GLOW_HOLD_MS = 1200; // 1.2 seconds pre-blast golden glow hold
 
     let stepIndex = 0;
     const interval = setInterval(() => {
       if (stepIndex < steps.length) {
         setAnimOverride({ employeeId, rank: steps[stepIndex] });
+        setOscillationFlashKey(prev => prev + 1);
         stepIndex++;
       } else {
         clearInterval(interval);
         setAnimOverride(null);
-        onComplete();
+        setOscillatingEmpId(null);
+        setIsGoldenGlowActive(true);
+        setTimeout(() => {
+          setIsGoldenGlowActive(false);
+          onComplete();
+        }, GOLDEN_GLOW_HOLD_MS);
       }
-    }, 1000);
+    }, STEP_DURATION_MS);
   };
 
   const getDisplayList = () => {
@@ -935,7 +966,7 @@ export default function AuditoriumRevealPage() {
               </div>
             </div>
 
-            <div className="overflow-x-auto rounded-2xl border border-slate-800 max-h-[580px] overflow-y-auto scroll-smooth">
+            <div ref={tableScrollContainerRef} className="overflow-x-auto rounded-2xl border border-slate-800 max-h-[580px] overflow-y-auto scroll-smooth">
               <table className="w-full text-left text-xs sm:text-sm border-collapse">
                 <thead>
                   <tr className="bg-slate-900/90 border-b border-slate-800 text-slate-400 font-extrabold uppercase tracking-wider text-[11px]">
@@ -954,7 +985,7 @@ export default function AuditoriumRevealPage() {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60 font-sans transition-all duration-700">
+                <tbody className="divide-y divide-slate-800/60 font-sans">
                   {displayList.map((emp) => {
                     const isRank1 = emp.rank === 1;
                     const isRank2 = emp.rank === 2;
@@ -965,21 +996,29 @@ export default function AuditoriumRevealPage() {
                     const rankShifted = prevRank && prevRank !== emp.rank;
                     const climbedUp = prevRank && prevRank > emp.rank;
 
+                    const isTeasingRow = animOverride?.employeeId === emp.employeeId || oscillatingEmpId === emp.employeeId;
+                    const unrevealedCount = candidates.length - finaleRevealedIds.size;
+                    const isTop5Unrevealed = isFinalStage && !emp.isFinaleRevealed && unrevealedCount <= 5;
+
                     return (
                       <motion.tr
-                        layout
-                        transition={{ type: "spring", stiffness: 350, damping: 25 }}
+                        layout="position"
+                        transition={{ type: "spring", stiffness: 260, damping: 30 }}
                         key={emp.employeeId}
                         ref={(el) => {
                           rowRefs.current[emp.employeeId] = el as any;
                         }}
-                        className={`transition-all duration-700 ease-out transform ${
-                          isJustRevealed && rankShifted
+                        className={`${
+                          isTeasingRow
+                            ? "bg-gradient-to-r from-amber-500/40 via-yellow-400/35 to-amber-500/40 border-l-4 border-l-amber-300 border-r-4 border-r-amber-300 shadow-2xl shadow-amber-500/40 text-amber-100 font-black z-50 relative ring-2 ring-amber-400/90 brightness-125"
+                            : isJustRevealed && rankShifted
                             ? climbedUp
-                              ? "bg-gradient-to-r from-emerald-500/30 via-amber-500/25 to-emerald-500/30 border-l-4 border-l-emerald-400 shadow-2xl z-30 relative font-bold text-emerald-100 scale-[1.01]"
-                              : "bg-gradient-to-r from-rose-500/30 via-amber-500/25 to-rose-500/30 border-l-4 border-l-rose-400 shadow-2xl z-30 relative font-bold text-rose-100 scale-[1.01]"
+                              ? "bg-gradient-to-r from-emerald-500/30 via-amber-500/25 to-emerald-500/30 border-l-4 border-l-emerald-400 border-r-4 border-r-emerald-400 shadow-2xl z-30 relative font-bold text-emerald-100"
+                              : "bg-gradient-to-r from-rose-500/30 via-amber-500/25 to-rose-500/30 border-l-4 border-l-rose-400 border-r-4 border-r-rose-400 shadow-2xl z-30 relative font-bold text-rose-100"
                             : isJustRevealed
-                            ? "bg-gradient-to-r from-amber-500/30 via-yellow-500/25 to-amber-500/30 border-l-4 border-l-amber-400 shadow-2xl z-30 relative font-bold text-amber-100"
+                            ? "bg-gradient-to-r from-amber-500/30 via-yellow-500/25 to-amber-500/30 border-l-4 border-l-amber-400 border-r-4 border-r-amber-400 shadow-2xl z-30 relative font-bold text-amber-100"
+                            : isTop5Unrevealed
+                            ? "bg-gradient-to-r from-amber-500/25 via-yellow-500/20 to-amber-500/25 border-l-4 border-l-amber-400 border-r-4 border-r-amber-400 font-extrabold text-amber-100 shadow-lg shadow-amber-500/20 ring-1 ring-amber-400/60 animate-pulse z-20 relative"
                             : isRank1
                             ? "bg-amber-500/10 border-l-4 border-l-amber-400 hover:bg-amber-500/20 font-bold"
                             : isRank2
@@ -987,6 +1026,12 @@ export default function AuditoriumRevealPage() {
                             : isRank3
                             ? "bg-orange-500/5 hover:bg-orange-500/10"
                             : "hover:bg-slate-800/40"
+                        } ${
+                          isGoldenGlowActive && isJustRevealed
+                            ? "ring-2 ring-amber-300 ring-inset animate-pulse"
+                            : isStepFlash && isTeasingRow
+                            ? "ring-2 ring-cyan-300 ring-inset brightness-125"
+                            : ""
                         }`}
                       >
                         <td className="py-3.5 px-4 text-center">
@@ -1023,6 +1068,11 @@ export default function AuditoriumRevealPage() {
                                 <p className={`font-bold text-xs sm:text-sm truncate ${isJustRevealed ? "text-amber-200 font-black" : isRank1 ? "text-amber-200 font-extrabold" : "text-slate-200"}`}>
                                   {emp.name}
                                 </p>
+                                {isTeasingRow && (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-amber-400 text-slate-950 text-[10px] font-black rounded-md uppercase tracking-wider shadow-md shadow-amber-400/50 animate-pulse">
+                                    <Zap className="w-3 h-3 text-slate-950 fill-slate-950" /> JUMPED TO #{emp.rank}
+                                  </span>
+                                )}
                                 {isJustRevealed && (
                                   <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-400 text-slate-950 text-[10px] font-black rounded-md uppercase tracking-wider shadow-md">
                                     <Sparkles className="w-3 h-3 text-slate-950" /> REVEALED
@@ -1092,6 +1142,14 @@ export default function AuditoriumRevealPage() {
               </table>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Pre-Blast Golden Glow Pulse Wait (600ms hold right after candidate lands on real position, before BOOM confetti) */}
+      {isGoldenGlowActive && (
+        <div className="fixed inset-0 z-[99997] pointer-events-none flex items-center justify-center">
+          <div className="w-80 h-80 bg-amber-400/30 rounded-full blur-3xl animate-pulse" />
+          <div className="absolute inset-0 bg-amber-400/5 animate-pulse" />
         </div>
       )}
 

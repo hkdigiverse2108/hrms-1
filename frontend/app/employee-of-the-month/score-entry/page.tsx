@@ -15,6 +15,7 @@ interface Criterion {
   maxScore: number;
   isFixed: boolean;
   assignedPersonIds: string[];
+  category?: string;
 }
 
 export default function ScoreEntryPage() {
@@ -119,6 +120,7 @@ export default function ScoreEntryPage() {
 
         // Auto Sync/Calculate Attendance Scores based on HRMS attendance & approved leaves
         if (attCrit) {
+          const isLowerIsBetter = attCrit.category === "-ve";
           empData.forEach((emp: any) => {
             const eId = String(emp.id || emp._id);
             const eName = (emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`).trim().toLowerCase();
@@ -126,7 +128,9 @@ export default function ScoreEntryPage() {
 
             if (!map[eId]) map[eId] = {};
             const totalDays = attData.totalWorkingDays || 26;
-            const calcScore = Math.min(Math.round(((presentDays / totalDays) * attCrit.maxScore) * 10) / 10, attCrit.maxScore);
+            const rawRatio = Math.min(1, Math.max(0, presentDays / totalDays));
+            const ratio = isLowerIsBetter ? (1 - rawRatio) : rawRatio;
+            const calcScore = Math.min(Math.round((ratio * attCrit.maxScore) * 10) / 10, attCrit.maxScore);
             map[eId][attCrit.id] = calcScore;
           });
         }
@@ -150,19 +154,22 @@ export default function ScoreEntryPage() {
 
     const totalDays = attendanceStats.totalWorkingDays || 26;
     const nextMap = { ...scoresMap };
+    const isLowerIsBetter = attCrit.category === "-ve";
 
     employees.forEach((emp) => {
       const eId = String(emp.id || emp._id);
       const eName = (emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`).trim().toLowerCase();
       const presentDays = attendanceStats.employeeStats?.[eId] ?? attendanceStats.employeeStats?.[eName] ?? 0;
-      const calcScore = Math.min(Math.round(((presentDays / totalDays) * attCrit.maxScore) * 10) / 10, attCrit.maxScore);
+      const rawRatio = Math.min(1, Math.max(0, presentDays / totalDays));
+      const ratio = isLowerIsBetter ? (1 - rawRatio) : rawRatio;
+      const calcScore = Math.min(Math.round((ratio * attCrit.maxScore) * 10) / 10, attCrit.maxScore);
       
       if (!nextMap[eId]) nextMap[eId] = {};
       nextMap[eId][attCrit.id] = calcScore;
     });
 
     setScoresMap(nextMap);
-    toast.success("Attendance scores auto-calculated from HRMS records!");
+    toast.success(`Attendance scores auto-calculated (${isLowerIsBetter ? "-ve Lower is Better Mode" : "+ve Higher is Better Mode"})!`);
   };
 
   const handleScoreChange = (empId: string, critId: string, value: string) => {
@@ -182,7 +189,11 @@ export default function ScoreEntryPage() {
     const empScores = scoresMap[empId] || {};
     return criteria.reduce((sum, c) => {
       const val = Number(empScores[c.id]);
-      return sum + (isNaN(val) ? 0 : val);
+      if (isNaN(val)) return sum;
+      if (c.category === "-ve") {
+        return sum + Math.max(0, (Number(c.maxScore) || 0) - val);
+      }
+      return sum + val;
     }, 0);
   };
 
@@ -415,12 +426,36 @@ export default function ScoreEntryPage() {
                           <span>{c.name}</span>
                           {isAtt && (
                             <Tooltip title={
-                              <div className="p-1.5 space-y-1 text-xs">
+                              <div className="p-2 space-y-2 text-xs max-w-[290px]">
                                 <p className="font-bold text-amber-300 flex items-center gap-1">ℹ️ Attendance Calculation Formula:</p>
-                                <p className="font-mono bg-slate-800 p-2 rounded text-[11px] text-amber-200 border border-slate-700">
-                                  Score = ( Present Days / {attendanceStats.totalWorkingDays || 26} Working Days ) × {c.maxScore} pts
-                                </p>
-                                <div className="text-[10px] text-slate-300 space-y-0.5 pt-1">
+                                
+                                {c.category === "-ve" ? (
+                                  <div className="space-y-1">
+                                    <p className="font-mono bg-slate-900 p-2 rounded text-[11px] text-rose-300 border border-rose-800/60">
+                                      Penalty = ( Absent Days / {attendanceStats.totalWorkingDays || 26} ) × {c.maxScore} pts
+                                    </p>
+                                    <div className="p-1.5 bg-rose-950/60 border border-rose-800/40 rounded text-[10px] text-rose-200 space-y-0.5">
+                                      <p className="font-bold text-rose-300">🔴 Mode: -ve (Lower is Better)</p>
+                                      <p>• Entered value = Absent Days penalty points</p>
+                                      <p>• Contributed to Total = (Max Score - Penalty)</p>
+                                      <p>• 0 Penalty ➔ Full {c.maxScore} Pts added to Total!</p>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="space-y-1">
+                                    <p className="font-mono bg-slate-900 p-2 rounded text-[11px] text-emerald-300 border border-emerald-800/60">
+                                      Score = ( Present Days / {attendanceStats.totalWorkingDays || 26} ) × {c.maxScore} pts
+                                    </p>
+                                    <div className="p-1.5 bg-emerald-950/60 border border-emerald-800/40 rounded text-[10px] text-emerald-200 space-y-0.5">
+                                      <p className="font-bold text-emerald-300">🟢 Mode: +ve (Higher is Better)</p>
+                                      <p>• Entered value = Attendance points</p>
+                                      <p>• Contributed to Total = Direct Score</p>
+                                      <p>• Full Present Days ➔ Full {c.maxScore} Pts added!</p>
+                                    </div>
+                                  </div>
+                                )}
+
+                                <div className="text-[10px] text-slate-300 space-y-0.5 pt-1 border-t border-slate-700">
                                   <p>• Total Days in Month: {attendanceStats.totalDaysInMonth || 31}</p>
                                   <p>• Sundays: -{attendanceStats.sundays || 4} days</p>
                                   <p>• Company Holidays: -{attendanceStats.companyHolidays || 0} days</p>
@@ -429,6 +464,17 @@ export default function ScoreEntryPage() {
                               </div>
                             }>
                               <Info className="w-3.5 h-3.5 text-blue-500 hover:text-blue-600 cursor-pointer inline shrink-0" />
+                            </Tooltip>
+                          )}
+                          {c.category === "-ve" && !isAtt && (
+                            <Tooltip title={
+                              <div className="p-2 space-y-1 text-xs max-w-[240px]">
+                                <p className="font-bold text-rose-300">🔴 Mode: -ve (Lower is Better)</p>
+                                <p className="text-[11px] text-slate-200">Entered value represents penalty points. Lower score contributes MORE to total score!</p>
+                                <p className="font-mono text-[10px] bg-slate-900 p-1.5 rounded text-amber-300">Total Contribution = {c.maxScore} - Entered Score</p>
+                              </div>
+                            }>
+                              <Info className="w-3.5 h-3.5 text-rose-500 hover:text-rose-600 cursor-pointer inline shrink-0" />
                             </Tooltip>
                           )}
                         </div>

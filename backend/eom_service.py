@@ -577,6 +577,7 @@ async def calculate_eom_leaderboard(month_year: str):
         for crit in criteria_list:
             cid = str(crit.get("id"))
             max_sc = float(crit.get("maxScore", 0))
+            cat = str(crit.get("category", "+ve")).lower().strip()
             key = (cid, emp_id)
             sub_list = submitted_scores.get(key, [])
             
@@ -587,7 +588,11 @@ async def calculate_eom_leaderboard(month_year: str):
             
             avg_sc = min(avg_sc, max_sc) # Cap at maxScore
             c_scores[cid] = round(avg_sc, 2)
-            total_score += avg_sc
+            
+            if cat == "-ve":
+                total_score += max(0.0, max_sc - avg_sc)
+            else:
+                total_score += avg_sc
 
         leaderboard.append({
             "employeeId": emp_id,

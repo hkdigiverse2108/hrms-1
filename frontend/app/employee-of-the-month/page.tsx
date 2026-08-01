@@ -45,6 +45,7 @@ interface Criterion {
 export default function EmployeeOfMonthPage() {
   const router = useRouter();
   const { user } = useUser();
+  const [modal, contextHolder] = Modal.useModal();
 
   const isAdmin = user && ["admin", "super admin", "superadmin", "administrator", "founder"].includes(String(user.role || "").toLowerCase().trim());
   const isHR = user && ["hr", "hr manager", "hr lead"].includes(String(user.role || "").toLowerCase().trim());
@@ -225,7 +226,7 @@ export default function EmployeeOfMonthPage() {
 
   const handleRemoveCriterion = (index: number) => {
     const target = criteria[index];
-    Modal.confirm({
+    modal.confirm({
       title: "Remove Parameter for this Month?",
       content: `Are you sure you want to remove "${target.name}" for ${selectedMonthYear}? Click "Save Month Criteria" afterwards to persist this change.`,
       okText: "Remove Parameter",
@@ -387,6 +388,7 @@ export default function EmployeeOfMonthPage() {
 
   return (
     <div className="min-h-screen bg-slate-50/50 p-6 space-y-6">
+      {contextHolder}
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80">
         <div className="space-y-1">
@@ -1008,7 +1010,7 @@ export default function EmployeeOfMonthPage() {
                   type="button"
                   onClick={() => {
                     const target = masterCriteria[idx];
-                    Modal.confirm({
+                    modal.confirm({
                       title: "Delete Master Parameter?",
                       content: `Are you sure you want to remove "${target.name}" from the Master Template?`,
                       okText: "Delete",

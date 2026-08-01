@@ -75,6 +75,7 @@ function getRequiredModuleForPath(pathname: string): string | null {
 export function AppLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [modal, contextHolder] = Modal.useModal();
   const { user, isLoading, logout } = useUserContext();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
   const isPublicPage = pathname.startsWith("/login") || pathname.startsWith("/register") || pathname.startsWith("/feedback/") || pathname.startsWith("/f/");
@@ -685,7 +686,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     if (typeof window !== 'undefined' && (window as any).electronAPI) {
       (window as any).electronAPI.focusWindow();
     }
-    Modal.warning({
+    modal.warning({
       title: data.title || "System Announcement",
       content: data.message,
       okText: "Dismiss",
@@ -742,7 +743,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <Layout hasSider className="h-screen overflow-hidden w-full">
+    <>
+      {contextHolder}
+      <Layout hasSider className="h-screen overflow-hidden w-full">
       <Sidebar />
       <Layout className="site-layout h-screen overflow-y-auto overflow-x-hidden relative custom-scrollbar">
         <Header />
@@ -1096,5 +1099,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </div>
       )}
     </Layout>
+    </>
   );
 }
