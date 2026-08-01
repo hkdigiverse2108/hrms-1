@@ -527,6 +527,7 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
                 id: `${proj.id}-missing-${t.id}-${dateStr}`,
                 title: `Missing Metric: ${t.name} for ${dateStr}`,
                 clientDisplayName: 'Digital Marketing',
+                projectName: `${proj.title} (${client.companyName || client.clientName || 'Unknown Client'})`,
                 description: `Please fill in the daily report for ${t.name}.`,
                 dueDate: dateStr,
                 priority: 'high',

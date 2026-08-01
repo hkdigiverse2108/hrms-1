@@ -141,6 +141,7 @@ export default function SalesPage() {
   const [leads, setLeads] = useState<any[]>([]);
   const [leadCategories, setLeadCategories] = useState<string[]>([]);
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1214,6 +1215,12 @@ export default function SalesPage() {
           return l.category === categoryFilter;
         }
         return true;
+      })
+      .filter(l => {
+        if (statusFilter !== "all") {
+          return l.status === statusFilter;
+        }
+        return true;
       });
 
     const filteredAndSorted = filtered.sort((a, b) => {
@@ -2273,6 +2280,17 @@ export default function SalesPage() {
                 <SelectItem value="Other">Other</SelectItem>
                 {leadCategories.map((cat) => (
                   <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[150px] h-9 border-slate-200">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                {Object.keys(STATUS_REASONS).map((status) => (
+                  <SelectItem key={status} value={status}>{status}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

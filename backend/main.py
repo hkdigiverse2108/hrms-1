@@ -1258,8 +1258,15 @@ async def transfer_responsibilities(payload: dict, request: Request, db=Depends(
 
 # Attendance Endpoints
 @app.get("/attendance", response_model=List[schemas.Attendance])
-async def read_attendance(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
-    return await crud.get_attendance(db, skip=skip, limit=limit)
+async def read_attendance(
+    userId: Optional[str] = None,
+    role: Optional[str] = None,
+    skip: int = 0, 
+    limit: int = 10000, 
+    db=Depends(get_db)
+):
+    is_admin = role and role.lower() in ["admin", "super admin", "hr"]
+    return await crud.get_attendance(db, employee_id=None if is_admin else userId, skip=skip, limit=limit)
 
 @app.get("/attendance/status/{employee_id}")
 async def get_attendance_status(employee_id: str, db=Depends(get_db)):
@@ -2052,7 +2059,7 @@ async def get_attendance_page_data(
     
     coros = [
         crud.get_employees(db, skip=0, limit=10000),
-        crud.get_attendance(db, skip=0, limit=10000),
+        crud.get_attendance(db, employee_id=None if is_admin else userId, skip=0, limit=10000),
         crud.get_system_settings(db),
     ]
     

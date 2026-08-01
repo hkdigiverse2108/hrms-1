@@ -879,9 +879,14 @@ export function PendingWorkEmbedded({
       today.setHours(0, 0, 0, 0);
       filteredTasks = filteredTasks.filter(t => {
         if (t.isOtherWork) {
+          const isClientIssue = (t.status && t.status.toLowerCase() === 'client issue') || 
+                                (t.remark && typeof t.remark === 'string' && t.remark.includes('[CLIENT ISSUE]'));
+
           if (type === 'completed-work') return t.status === 'Approved';
-          if (type === 'pending-work') return t.status === 'Pending' || t.status === 'Ready for Review';
+          if (type === 'pending-work') return t.status === 'Pending' || t.status === 'Ready for Review' || isClientIssue;
           
+          if (isClientIssue) return false;
+
           const deadlineDate = parseLocalDate(t.deadline);
           
           if (type === 'todays-work') return deadlineDate <= today && t.status !== 'Approved';
@@ -889,11 +894,12 @@ export function PendingWorkEmbedded({
           return true;
         }
 
-        const hasApplicableRemark = t.remark && t.remark.trim() !== '' && (
+        const hasApplicableRemark = t.remark && typeof t.remark === 'string' && t.remark.trim() !== '' && (
           !t.remarkStage || 
           isStageSubsequentOrEqual(t.stage, t.remarkStage, t.postReel)
         );
-        const isClientIssue = hasApplicableRemark && t.remark.startsWith('[CLIENT ISSUE] ');
+        const isClientIssue = (hasApplicableRemark && t.remark.includes('[CLIENT ISSUE]')) || 
+                              (t.status && t.status.toLowerCase() === 'client issue');
 
         if (type === 'pending-work') {
           return isClientIssue;
@@ -903,7 +909,7 @@ export function PendingWorkEmbedded({
           return false; // For now, only Other Work is shown in completed work
         }
 
-        // If it's a client issue, it should ONLY show in pending work!
+        // If it's a client issue, it should ONLY show in pending work (and all)!
         if (isClientIssue) return false;
         
         const deadlineDate = parseLocalDate(t.deadline);
