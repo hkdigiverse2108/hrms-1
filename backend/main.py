@@ -353,12 +353,29 @@ async def monthly_report_scheduler_task():
         except Exception as e:
             print(f"[Monthly Report Scheduler] Error: {e}", flush=True)
             
+        await asyncio.sleep(300) # Sleep for 5 minutes
+
 @asynccontextmanager
 async def lifespan(app):
     # --- Startup ---
-    # Create Default Admin & Sub-Admin Presets if they don't exist
+    # Database migration: clean up department and designation for admin users
     try:
         from database import db
+        print("[Admin Migration] Cleaning up department and designation for admin users...", flush=True)
+        admin_roles_list = ["admin", "super admin", "superadmin", "administrator", "founder"]
+        admin_query = {
+            "$or": [
+                {"role": {"$regex": r"^(admin|super\s*admin|superadmin|administrator|founder)$", "$options": "i"}},
+                {"role": {"$in": admin_roles_list}}
+            ]
+        }
+        await db.employees.update_many(
+            admin_query,
+            {"$set": {"department": "", "designation": ""}}
+        )
+        print("[Admin Migration] Completed admin cleanup.", flush=True)
+
+        # Create Default Admin & Sub-Admin Presets if they don't exist
         print("[Admin Migration] Checking for Admin and Sub-Admin presets...", flush=True)
         default_presets = [
             {"name": "Admin", "description": "System Administrator Preset with Full Access", "presetType": "role"},
