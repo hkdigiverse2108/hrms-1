@@ -33,7 +33,7 @@ export default function WorkLogsPage() {
   const { user, isLoading: isUserLoading } = useUser()
   
   const isAdmin = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'hr' || user?.designation?.toLowerCase() === 'hr'
-  const isTeamLeader = user?.designation?.toLowerCase() === 'team leader' || user?.designation?.toLowerCase() === 'head' || user?.role?.toLowerCase() === 'team leader'
+  const isTeamLeader = user?.designation?.toLowerCase().includes('team leader') || user?.designation?.toLowerCase().includes('head') || user?.role?.toLowerCase() === 'team leader'
 
 
   const [attendance, setAttendance] = useState<any[]>([])
