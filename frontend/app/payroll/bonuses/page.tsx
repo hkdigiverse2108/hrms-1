@@ -21,36 +21,14 @@ import { useApi } from '@/hooks/useApi'
 import { API_URL } from '@/lib/config'
 import { toast } from 'sonner'
 import { useConfirm } from "@/context/ConfirmContext";
+import { usePermissions } from '@/hooks/usePermissions'
 export default function BonusesPage() {
   const { confirm } = useConfirm();
   const { user } = useUserContext()
-  const canManage = (() => {
-    if (user) {
-      return user.role?.toLowerCase() === 'admin' || user.role?.toLowerCase() === 'hr' || user.name === 'Admin Admin'
-    }
-    if (typeof window !== 'undefined') {
-      const uStr = localStorage.getItem('user')
-      if (uStr) {
-        const u = JSON.parse(uStr)
-        return u.role?.toLowerCase() === 'admin' || u.role?.toLowerCase() === 'hr' || u.name === 'Admin Admin'
-      }
-    }
-    return false
-  })()
-
-  const isAdmin = (() => {
-    if (user) {
-      return user.role?.toLowerCase() === 'admin' || user.name === 'Admin Admin'
-    }
-    if (typeof window !== 'undefined') {
-      const uStr = localStorage.getItem('user')
-      if (uStr) {
-        const u = JSON.parse(uStr)
-        return u.role?.toLowerCase() === 'admin' || u.name === 'Admin Admin'
-      }
-    }
-    return false
-  })()
+  const { checkPermission, isAdmin: isRoleAdmin } = usePermissions('bonuses-deductions')
+  
+  const canManage = isRoleAdmin || checkPermission('bonuses-deductions', 'canEdit') || checkPermission('bonuses-deductions', 'canAdd')
+  const isAdmin = isRoleAdmin
 
   const { data, isLoading: loadingEmployees } = useApi()
   const employees = data?.employees || []
