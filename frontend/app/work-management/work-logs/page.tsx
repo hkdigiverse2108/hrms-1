@@ -80,11 +80,20 @@ export default function WorkLogsPage() {
 
   const employeeOptions = useMemo(() => {
     let emps = employees
-    if (isTeamLeader && user) {
+    if (isTeamLeader && !isAdmin && user) {
       const userDept = user.department?.toLowerCase() || ''
       emps = emps.filter(e => {
+        const isSelf = String(e.id) === String(user.id) || String(e._id) === String(user._id)
+        if (isSelf) return true
+
         const eDept = e.department?.toLowerCase() || ''
-        return (userDept && eDept === userDept) || String(e.id) === String(user.id) || String(e._id) === String(user._id)
+        if (!userDept || eDept !== userDept) return false
+
+        const rStr = (e.role || '').toLowerCase()
+        const dStr = (e.designation || '').toLowerCase()
+        const isHighLevel = ['team leader', 'manager', 'social media manager', 'head'].some(r => rStr.includes(r) || dStr.includes(r))
+        
+        return !isHighLevel && rStr !== 'admin'
       })
     }
     return emps
