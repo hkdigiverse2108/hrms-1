@@ -490,7 +490,7 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
         const dates = getPastDates(6);
         dates.forEach(dateStr => {
           const report = dailyReports.find(r => r.clientId === client.id && normalizeDate(r.date) === dateStr);
-          const isFilled = (val: any) => val !== undefined && val !== null && val !== 0 && val !== "" && val !== "0" && val !== 0.0;
+          const isFilled = (val: any) => val !== undefined && val !== null && val !== "";
           const isClientIssue = report?.remarks && report.remarks.toString().includes("[CLIENT ISSUE]");
 
           const metricsRecord = projectRemarks.find(r => r.projectId === proj.id && normalizeDate(r.date) === dateStr);
