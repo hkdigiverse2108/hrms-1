@@ -88,6 +88,7 @@ export default function WorkLogsPage() {
       })
     }
     return emps
+      .filter(e => e.name && e.name.trim() !== '')
       .map(e => ({ id: e.id || e._id, name: e.name }))
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
   }, [employees, isAdmin, isTeamLeader, user])
@@ -96,7 +97,7 @@ export default function WorkLogsPage() {
   const filteredAttendance = useMemo(() => {
     if (!attendance.length || !user) return []
 
-    let rows = [...attendance]
+    let rows = [...attendance].filter(a => a.employeeName && a.employeeName.trim() !== '')
 
     // date filter
     if (dateFilterPreset === 'today') {
