@@ -80,7 +80,7 @@ export default function WorkLogsPage() {
 
   const employeeOptions = useMemo(() => {
     let emps = employees
-    if (!isAdmin && isTeamLeader && user) {
+    if (isTeamLeader && user) {
       const userDept = user.department?.toLowerCase() || ''
       emps = emps.filter(e => {
         const eDept = e.department?.toLowerCase() || ''
@@ -119,7 +119,7 @@ export default function WorkLogsPage() {
     // employee filter
     if (!isAdmin && !isTeamLeader) {
       rows = rows.filter(a => a.employeeId === user.id || a.employeeId === user._id)
-    } else if (!isAdmin && isTeamLeader) {
+    } else if (isTeamLeader) {
       const allowedIds = new Set(employeeOptions.map(e => e.id))
       rows = rows.filter(a => allowedIds.has(a.employeeId))
       if (filterEmployee !== 'All') {
