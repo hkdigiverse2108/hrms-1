@@ -1041,7 +1041,7 @@ async def run_payroll_processing(db, month: str, year: int, performed_by: str = 
             
             # We only care about scheduled working days
             if date_str not in sunday_dates_set and date_str not in holiday_dates_set:
-                if not employee.get("activelyUsingHRMS", True):
+                if not emp.get("activelyUsingHRMS", True):
                     attendance_present_days += 1.0
                 elif date_str in leave_map:
                     leave_info = leave_map[date_str]

@@ -81,12 +81,12 @@ export default function WorkLogsPage() {
   const employeeOptions = useMemo(() => {
     let emps = employees
     if (isTeamLeader && !isAdmin && user) {
-      const userDept = user.department?.toLowerCase() || ''
+      const userDept = user.department?.toLowerCase().trim() || ''
       emps = emps.filter(e => {
         const isSelf = String(e.id) === String(user.id) || String(e._id) === String(user._id)
         if (isSelf) return true
 
-        const eDept = e.department?.toLowerCase() || ''
+        const eDept = e.department?.toLowerCase().trim() || ''
         if (!userDept || eDept !== userDept) return false
 
         const rStr = (e.role || '').toLowerCase()
@@ -128,15 +128,15 @@ export default function WorkLogsPage() {
 
     // employee filter
     if (!isAdmin && !isTeamLeader) {
-      rows = rows.filter(a => a.employeeId === user.id || a.employeeId === user._id)
+      rows = rows.filter(a => String(a.employeeId) === String(user.id) || String(a.employeeId) === String(user._id))
     } else if (isTeamLeader) {
-      const allowedIds = new Set(employeeOptions.map(e => e.id))
-      rows = rows.filter(a => allowedIds.has(a.employeeId))
+      const allowedIds = new Set(employeeOptions.map(e => String(e.id)))
+      rows = rows.filter(a => allowedIds.has(String(a.employeeId)))
       if (filterEmployee !== 'All') {
-        rows = rows.filter(a => a.employeeId === filterEmployee)
+        rows = rows.filter(a => String(a.employeeId) === String(filterEmployee))
       }
     } else if (filterEmployee !== 'All') {
-      rows = rows.filter(a => a.employeeId === filterEmployee)
+      rows = rows.filter(a => String(a.employeeId) === String(filterEmployee))
     }
 
     return rows
