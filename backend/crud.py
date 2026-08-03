@@ -7084,7 +7084,7 @@ async def calculate_sales_incentive(db, total_amount: float, invoice_amount: flo
         
     return 0.0, 0.0
 
-async def recalculate_sales_target(db, employee_id: str, month: str, year: int, target_type: str = "Monthly", week: Optional[int] = None):
+async def recalculate_sales_target(db, employee_id: str, month: str, year: int, target_type: str = "Monthly", week: Optional[int] = None, startDate: Optional[str] = None, endDate: Optional[str] = None):
     try:
         # 1. Calculate Achievement from First Paid Invoices
         emp = await get_employee(db, employee_id)

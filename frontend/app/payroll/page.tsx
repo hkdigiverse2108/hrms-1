@@ -38,8 +38,8 @@ export default function PayrollPage() {
   const [employees, setEmployees] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isProcessing, setIsProcessing] = useState(false)
-  const [selectedMonth, setSelectedMonth] = useState('May')
-  const [selectedYear, setSelectedYear] = useState('2026')
+  const [selectedMonth, setSelectedMonth] = useState(() => new Date().toLocaleString('en-US', { month: 'long' }))
+  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear().toString())
   
   const [isBreakdownOpen, setIsBreakdownOpen] = useState(false)
   const [selectedBreakdown, setSelectedBreakdown] = useState<any[]>([])
