@@ -74,10 +74,11 @@ export default function LeavePage() {
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
   const router = useRouter();
 
-  const canViewLeave = isAdmin || checkPermission('leave', 'canView');
-  const canAddLeave = isAdmin || checkPermission('leave', 'canAdd');
-  const canEditLeave = isAdmin || checkPermission('leave', 'canEdit');
-  const canDeleteLeave = isAdmin || checkPermission('leave', 'canDelete');
+  const isHR = user?.role?.toLowerCase() === 'hr' || user?.designation?.toLowerCase() === 'hr';
+  const canViewLeave = isAdmin || isHR || checkPermission('leave', 'canView');
+  const canAddLeave = isAdmin || isHR || checkPermission('leave', 'canAdd');
+  const canEditLeave = isAdmin || isHR || checkPermission('leave', 'canEdit');
+  const canDeleteLeave = isAdmin || isHR || checkPermission('leave', 'canDelete');
 
   useEffect(() => {
     if (!permissionsLoading) {
@@ -832,7 +833,7 @@ export default function LeavePage() {
         description="View your leave balances, history, and upcoming time off."
       >
         <div className="flex flex-col sm:flex-row sm:flex-wrap items-center gap-3 w-full sm:w-auto mt-4 sm:mt-0">
-          {(user?.role === 'Admin' || user?.designation?.toLowerCase() === 'hr') && (
+          {(isAdmin || isHR) && (
             <Button variant="outline" className="shadow-sm w-full sm:w-auto font-medium" onClick={() => exportToCSV(leaves, 'leaves')}>
               <Download className="w-4 h-4 mr-2" />
               Export PDF
@@ -1337,7 +1338,7 @@ export default function LeavePage() {
 
       {/* Main Content Tabs */}
       <div className="bg-transparent mt-8">
-        <Tabs defaultValue={user?.role === 'Admin' ? 'public' : 'history'} className="w-full" onValueChange={setActiveTab}>
+        <Tabs defaultValue={(isAdmin || isHR) ? 'public' : 'history'} className="w-full" onValueChange={setActiveTab}>
           <TabsList className="bg-transparent border-b border-border w-full justify-start rounded-none p-0 h-auto space-x-4 sm:space-x-6 overflow-x-auto flex-nowrap [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             {user?.role !== 'Admin' && (
               <>
@@ -1355,7 +1356,7 @@ export default function LeavePage() {
                 </TabsTrigger>
               </>
             )}
-            {(user?.role === 'Admin' || user?.designation?.toLowerCase() === 'hr') && (
+            {(isAdmin || isHR) && (
               <TabsTrigger 
                 value="public" 
                 className="rounded-none border-b-2 border-transparent data-[state=active]:border-brand-teal data-[state=active]:text-brand-teal text-muted-foreground data-[state=active]:bg-transparent px-1 py-3 data-[state=active]:shadow-none font-medium"
@@ -1754,7 +1755,7 @@ export default function LeavePage() {
             />
           </TabsContent>
 
-          {(user?.role === 'Admin' || user?.designation?.toLowerCase() === 'hr') && (
+          {(isAdmin || isHR) && (
             <TabsContent value="public" className="mt-6 bg-white border border-border rounded-xl shadow-sm overflow-hidden">
               <div className="p-5 flex flex-col sm:flex-row justify-between items-center border-b border-border gap-4">
                 <h3 className="font-bold text-lg">Public Holidays</h3>
@@ -1935,7 +1936,7 @@ export default function LeavePage() {
                       </DialogContent>
                     </Dialog>
 
-                    {user?.role === 'Admin' && holidays.length > 0 && (
+                    {(isAdmin || isHR) && holidays.length > 0 && (
                       <Button 
                         variant="destructive" 
                         className="h-9" 
@@ -1963,7 +1964,7 @@ export default function LeavePage() {
                   <tbody className="divide-y divide-border">
                     {(() => {
                       const filteredHolidays = holidays.filter(h => 
-                        user?.role === 'Admin' || user?.designation?.toLowerCase() === 'hr' || 
+                        isAdmin || isHR || 
                         !h.company || h.company === "All Companies" || h.company === user?.company
                       );
                       return filteredHolidays
@@ -2020,7 +2021,7 @@ export default function LeavePage() {
               </div>
               <TablePagination 
                 totalItems={holidays.filter(h => 
-                  user?.role === 'Admin' || user?.designation?.toLowerCase() === 'hr' || 
+                  isAdmin || isHR || 
                   !h.company || h.company === "All Companies" || h.company === user?.company
                 ).length}
                 itemsPerPage={itemsPerPage}
