@@ -1124,11 +1124,9 @@ export default function CompanyFinanceTransactionsPage() {
                     <th className="px-3.5 py-3 text-right cursor-pointer hover:bg-slate-100 select-none transition-colors" onClick={() => handleSort("amount")}>
                       Amount {renderSortIndicator("amount")}
                     </th>
-                    {activeTab === "bank" && (
-                      <th className="px-3.5 py-3 cursor-pointer hover:bg-slate-100 select-none transition-colors" onClick={() => handleSort("category")}>
-                        Category {renderSortIndicator("category")}
-                      </th>
-                    )}
+                    <th className="px-3.5 py-3 cursor-pointer hover:bg-slate-100 select-none transition-colors" onClick={() => handleSort("category")}>
+                      Category {renderSortIndicator("category")}
+                    </th>
                     <th className="px-3.5 py-3">Descriptions</th>
                     <th className="px-3.5 py-3">Services</th>
                     <th className="px-3.5 py-3">Remarks</th>
@@ -1184,11 +1182,9 @@ export default function CompanyFinanceTransactionsPage() {
                         <td className="px-3.5 py-3 font-black text-emerald-600 text-right">
                           {formatVal(Number(t.amount) || 0)}
                         </td>
-                        {activeTab === "bank" && (
-                          <td className="px-3.5 py-3 font-semibold text-slate-700">
-                            {t.category || "General"}
-                          </td>
-                        )}
+                        <td className="px-3.5 py-3 font-semibold text-slate-700">
+                          {t.category || "General"}
+                        </td>
                         <td className="px-3.5 py-3 font-medium text-slate-800 max-w-[180px] truncate" title={t.descriptions || t.description}>
                           {t.descriptions || t.description || "-"}
                         </td>
@@ -1272,11 +1268,9 @@ export default function CompanyFinanceTransactionsPage() {
                     <th className="px-3.5 py-3 text-right cursor-pointer hover:bg-slate-100 select-none transition-colors" onClick={() => handleSort("amount")}>
                       Amount {renderSortIndicator("amount")}
                     </th>
-                    {activeTab === "bank" && (
-                      <th className="px-3.5 py-3 cursor-pointer hover:bg-slate-100 select-none transition-colors" onClick={() => handleSort("category")}>
-                        Category {renderSortIndicator("category")}
-                      </th>
-                    )}
+                    <th className="px-3.5 py-3 cursor-pointer hover:bg-slate-100 select-none transition-colors" onClick={() => handleSort("category")}>
+                      Category {renderSortIndicator("category")}
+                    </th>
                     <th className="px-3.5 py-3">Things</th>
                     <th className="px-3.5 py-3">Narrative</th>
                     <th className="px-3.5 py-3 text-center">Actions</th>
@@ -1323,11 +1317,9 @@ export default function CompanyFinanceTransactionsPage() {
                         <td className="px-3.5 py-3 font-black text-rose-600 text-right">
                           {formatVal(Number(t.amount) || 0)}
                         </td>
-                        {activeTab === "bank" && (
-                          <td className="px-3.5 py-3 font-semibold text-slate-700">
-                            {t.category || "General"}
-                          </td>
-                        )}
+                        <td className="px-3.5 py-3 font-semibold text-slate-700">
+                          {t.category || "General"}
+                        </td>
                         <td className="px-3.5 py-3 font-medium text-slate-800 max-w-[160px] truncate" title={t.things || t.description}>
                           {t.things || t.description || "-"}
                         </td>
@@ -1633,7 +1625,6 @@ export default function CompanyFinanceTransactionsPage() {
                 />
               </div>
 
-              {activeTab === "bank" && (
                 <div className="space-y-1.5 relative">
                   <label className="text-xs font-bold text-slate-700">Category</label>
                   <div className="relative">
@@ -1691,7 +1682,6 @@ export default function CompanyFinanceTransactionsPage() {
                     </div>
                   )}
                 </div>
-              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
