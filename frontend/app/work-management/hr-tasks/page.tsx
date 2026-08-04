@@ -368,11 +368,15 @@ export default function HRTasksPage() {
                 }
                 return "";
               }
+              if (task.frequency === "daily") {
+                const dbDate = task.dueDate ? (task.dueDate.includes("T") ? task.dueDate.split("T")[0] : task.dueDate) : "";
+                if (dbDate && dbDate < todayStr) {
+                  return todayStr;
+                }
+                return dbDate || todayStr;
+              }
               if (task.dueDate) {
                 return task.dueDate.includes("T") ? task.dueDate.split("T")[0] : task.dueDate;
-              }
-              if (task.frequency === "daily") {
-                return todayStr;
               }
               return task.createdDate || todayStr;
             };

@@ -4267,7 +4267,7 @@ async def get_tasks(db, userId: str = None, role: str = None, skip: int = 0, lim
     
     # Exclude tasks belonging to a specific department (e.g. "HR")
     if exclude_department:
-        query["department"] = {"$ne": exclude_department}
+        query["department"] = {"$nin": [exclude_department.upper(), exclude_department.lower(), exclude_department.capitalize()]}
                 
     cursor = db.tasks.find(query).sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
