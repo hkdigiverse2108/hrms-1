@@ -831,7 +831,7 @@ export default function LeavePage() {
         title="Leave"
         description="View your leave balances, history, and upcoming time off."
       >
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto mt-4 sm:mt-0">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap items-center gap-3 w-full sm:w-auto mt-4 sm:mt-0">
           {(user?.role === 'Admin' || user?.designation?.toLowerCase() === 'hr') && (
             <Button variant="outline" className="shadow-sm w-full sm:w-auto font-medium" onClick={() => exportToCSV(leaves, 'leaves')}>
               <Download className="w-4 h-4 mr-2" />
