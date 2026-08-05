@@ -45,11 +45,39 @@ import isSameOrBefore from "dayjs/plugin/isSameOrBefore";
 dayjs.extend(isSameOrAfter);
 dayjs.extend(isSameOrBefore);
 
+const BADGE_PRESETS: Record<string, { label: string; class: string }> = {
+  gold: {
+    label: "Golden Star",
+    class: "bg-gradient-to-tr from-yellow-400 via-amber-300 to-yellow-600 animate-pulse",
+  },
+  rainbow: {
+    label: "Rainbow Spinner",
+    class: "bg-gradient-to-r from-amber-400 via-rose-500 to-indigo-500 animate-spin",
+  },
+  emerald: {
+    label: "Emerald Neon",
+    class: "bg-gradient-to-r from-emerald-400 via-teal-500 to-cyan-500 animate-pulse",
+  },
+  rose: {
+    label: "Rose Diamond",
+    class: "bg-gradient-to-r from-rose-400 via-pink-500 to-purple-600 animate-pulse",
+  },
+  indigo: {
+    label: "Cyber Blue",
+    class: "bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-600 animate-spin",
+  },
+  none: {
+    label: "None",
+    class: "",
+  }
+};
+
 const COLUMN_OPTIONS = [
   { key: "firstName", label: "First Name", default: false },
   { key: "middleName", label: "Middle Name", default: false },
   { key: "lastName", label: "Last Name", default: false },
   { key: "name", label: "Employee Name", default: true },
+  { key: "ring", label: "Assigned Ring", default: true },
   { key: "phone", label: "Phone Number", default: false },
   { key: "password", label: "Password", default: true },
   { key: "dob", label: "Date of Birth", default: false },
@@ -95,6 +123,7 @@ export default function EmployeeListPage() {
   const { confirm } = useConfirm();
   const [employees, setEmployees] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [employeeRings, setEmployeeRings] = useState<Record<string, { style: string; label: string; class: string }>>({});
 
   const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
@@ -124,16 +153,16 @@ export default function EmployeeListPage() {
   };
 
   const renderCell = (emp: any, colKey: string) => {
+    const ring = employeeRings[emp.id] || employeeRings[emp._id] || employeeRings[emp.employeeId];
     switch (colKey) {
       case "name": {
-        const isTargeted = targetedEmployeeIds.has(emp.id);
         return (
           <div className="flex items-center gap-3">
             <div className="relative flex items-center justify-center">
-              {isTargeted && (
-                <div className="absolute -inset-[2.5px] rounded-full bg-gradient-to-tr from-yellow-400 via-amber-300 to-yellow-600 shadow-sm animate-pulse"></div>
+              {ring && (
+                <div className={`absolute -inset-[2.5px] rounded-full shadow-sm ${ring.class}`}></div>
               )}
-              <Avatar className={`relative z-10 w-9 h-9 ${isTargeted ? 'border-2 border-white' : ''}`}>
+              <Avatar className={`relative z-10 w-9 h-9 ${ring ? 'border-2 border-white' : ''}`}>
                 <AvatarImage src={getAvatarUrl(emp.profilePhoto, emp.name)} alt={emp.name} />
                 <AvatarFallback>{emp.name?.charAt(0) || "U"}</AvatarFallback>
               </Avatar>
@@ -150,6 +179,20 @@ export default function EmployeeListPage() {
                       : emp.designation || emp.email}
               </div>
             </div>
+          </div>
+        );
+      }
+      case "ring": {
+        if (!ring) {
+          return <span className="text-slate-400 font-medium text-xs">None</span>;
+        }
+        return (
+          <div className="flex items-center gap-2">
+            <div className="relative w-5 h-5 shrink-0 flex items-center justify-center">
+              <div className={`absolute -inset-[1px] rounded-full ${ring.class}`}></div>
+              <div className="relative z-10 w-4 h-4 rounded-full bg-slate-200 border border-white"></div>
+            </div>
+            <span className="font-bold text-xs text-slate-800">{ring.label}</span>
           </div>
         );
       }
@@ -386,6 +429,10 @@ export default function EmployeeListPage() {
           if (col.key === "role") {
             return emp.role || emp.designation || "";
           }
+          if (col.key === "ring") {
+            const ring = employeeRings[emp.id] || employeeRings[emp._id] || employeeRings[emp.employeeId];
+            return ring ? ring.label : "None";
+          }
           if (col.key === "hasBond" || col.key === "hasNoticePeriod" || col.key === "hasResignation" || col.key === "hasEmployment") {
             return emp[col.key] ? "Yes" : "No";
           }
@@ -459,7 +506,6 @@ export default function EmployeeListPage() {
         const todayStr = dayjs().format('YYYY-MM-DD');
         const active = banners.filter((b: any) => {
           if (!b.isActive) return false;
-          if (!b.employeeId || b.employeeId === "all") return false;
           const hasStartDate = !!b.startDate;
           const hasEndDate = !!b.endDate;
           if (!hasStartDate && !hasEndDate) return true;
@@ -467,8 +513,30 @@ export default function EmployeeListPage() {
           if (!hasStartDate && hasEndDate) return dayjs(todayStr).isSameOrBefore(b.endDate);
           return dayjs(todayStr).isSameOrAfter(b.startDate) && dayjs(todayStr).isSameOrBefore(b.endDate);
         });
+        
+        const ringsMap: Record<string, { style: string; label: string; class: string }> = {};
         const targetedSet = new Set<string>();
-        active.forEach((b: any) => targetedSet.add(b.employeeId));
+        
+        active.forEach((b: any) => {
+          const style = b.badgeStyle || "gold";
+          if (style !== "none") {
+            const preset = BADGE_PRESETS[style] || BADGE_PRESETS.gold;
+            const ringInfo = { style, label: preset.label, class: preset.class };
+            
+            if (b.employeeId && b.employeeId !== "all") {
+              ringsMap[b.employeeId] = ringInfo;
+              targetedSet.add(b.employeeId);
+            }
+            if (b.employeeIds && Array.isArray(b.employeeIds)) {
+              b.employeeIds.forEach((id: string) => {
+                ringsMap[id] = ringInfo;
+                targetedSet.add(id);
+              });
+            }
+          }
+        });
+        
+        setEmployeeRings(ringsMap);
         setTargetedEmployeeIds(targetedSet);
       }
     } catch (err: any) {
