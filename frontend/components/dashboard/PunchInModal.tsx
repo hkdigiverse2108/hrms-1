@@ -39,6 +39,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
       } catch (e) {}
     }
   }
+  const isHR = userDept === 'hr' || userDept === 'human resources' || userDept.includes('hr');
   
   const [tasks, setTasks] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>(null);
@@ -120,7 +121,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
       }
       if (tasksRes.ok) {
         let allTasks = [];
-        if (userDept === 'hr') {
+        if (isHR) {
           const genTasksRes = await fetch(`${API_URL}/tasks?userId=${userId}`);
           if (genTasksRes.ok) {
             allTasks = await genTasksRes.json();
@@ -141,7 +142,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
           const isAssigned = String(t.assignedToId) === String(userId) || 
                              (t.assignedToIds && t.assignedToIds.map(String).includes(String(userId)));
           const isHRTask = t.department === 'HR' || t.department?.toUpperCase() === 'HR';
-          const canShow = isAssigned || (userDept === 'hr' && isHRTask);
+          const canShow = isAssigned || (isHR && isHRTask);
           if (!canShow) return false;
           const statusLower = (t.status || "").toLowerCase().trim();
           if (statusLower === "completed" || statusLower === "onhold" || statusLower === "on hold" || statusLower === "approved") return false;
@@ -561,8 +562,8 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                   <>
                     <TabsTrigger value="today_work" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Today's Work</TabsTrigger>
                     <TabsTrigger value="upcoming_work" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Upcoming Work</TabsTrigger>
-                    {userDept === 'creative' && (
-                      <TabsTrigger value="pending_task" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Pending Task</TabsTrigger>
+                    {(userDept === 'creative' || isHR) && (
+                      <TabsTrigger value="pending_task" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Pending Tasks</TabsTrigger>
                     )}
                   </>
                 )}
