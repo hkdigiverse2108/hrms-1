@@ -21,7 +21,26 @@ interface PunchInModalProps {
   initialActivityValue?: string;
   initialTaskId?: string;
   isUpdateMode?: boolean;
-}
+}const parseLocalDate = (dateStr: string) => {
+  if (!dateStr) return new Date(0);
+  if (dateStr.includes('T')) {
+    const d = new Date(dateStr);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+  const delimiter = dateStr.includes('-') ? '-' : '/';
+  const parts = dateStr.split(delimiter);
+  if (parts.length === 3) {
+    if (parts[0].length === 4) {
+      return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]), 0, 0, 0, 0);
+    } else if (parts[2].length === 4) {
+      return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]), 0, 0, 0, 0);
+    }
+  }
+  const d = new Date(dateStr);
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
 
 export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialActivityType, initialActivitySubtype, initialActivityValue, initialTaskId, isUpdateMode }: PunchInModalProps) {
   const [selectedTab, setSelectedTab] = useState<string>("today_work");
@@ -86,17 +105,15 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [tasksRes, settingsRes, attRes, globalProjRes] = await Promise.all([
-        fetch(`${API_URL}/wm-tasks`),
-        fetch(`${API_URL}/system-settings`),
-        fetch(`${API_URL}/attendance`),
-        fetch(`${API_URL}/projects`)
-      ]);
+      const userStr = localStorage.getItem("user");
+      const userObj = userStr ? JSON.parse(userStr) : null;
+      const userRole = userObj?.role || "";
 
-      let allProjects: any[] = [];
-      if (globalProjRes.ok) {
-        allProjects = await globalProjRes.json();
-      }
+      const [viewDataRes, settingsRes, attRes] = await Promise.all([
+        fetch(`${API_URL}/my-tasks-view-data?userId=${userId}&role=${userRole}`),
+        fetch(`${API_URL}/system-settings`),
+        fetch(`${API_URL}/attendance`)
+      ]);
 
       if (settingsRes.ok) {
         setSettings(await settingsRes.json());
@@ -119,213 +136,296 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
         setPastResearch(Array.from(uniqueTitles));
         setPastWorkTasks(Array.from(uniqueWorkTitles));
       }
-      if (tasksRes.ok) {
-        let allTasks = [];
-        if (isHR) {
-          const genTasksRes = await fetch(`${API_URL}/tasks?userId=${userId}&limit=10000`);
-          if (genTasksRes.ok) {
-            allTasks = await genTasksRes.json();
-          }
-        } else {
-          allTasks = await tasksRes.json();
-          try {
-            const genTasksRes = await fetch(`${API_URL}/tasks?userId=${userId}&limit=10000`);
-            if (genTasksRes.ok) {
-              const genTasks = await genTasksRes.json();
-              allTasks = [...allTasks, ...genTasks];
-            }
-          } catch (e) {
-            console.error("Error fetching general tasks:", e);
-          }
-        }
-        let myTasks = allTasks.filter((t: any) => {
-          const isAssigned = String(t.assignedToId) === String(userId) || 
-                             (t.assignedToIds && t.assignedToIds.map(String).includes(String(userId)));
-          const isHRTask = t.department === 'HR' || t.department?.toUpperCase() === 'HR';
-          const canShow = isAssigned || (isHR && isHRTask);
-          if (!canShow) return false;
-          const statusLower = (t.status || "").toLowerCase().trim();
-          if (statusLower === "completed" || statusLower === "onhold" || statusLower === "on hold" || statusLower === "approved") return false;
-          
-          if (t.projectId) {
-            const project = allProjects.find((p: any) => String(p.id || p._id) === String(t.projectId));
-            if (project) {
-              const pStatus = (project.status || "").toLowerCase().trim();
-              if (pStatus === "onhold" || pStatus === "on-hold" || pStatus === "on hold") return false;
+      if (viewDataRes.ok) {
+        const data = await viewDataRes.json();
+        const {
+          tasks: rawTasks,
+          wmTasks: rawWmTasks,
+          contentCalendar: rawCC,
+          otherWork: rawOtherWork,
+          projects: rawProjects,
+          clients: rawClients,
+          employees: rawEmployees,
+        } = data;
+
+        const consolidated: any[] = [];
+        const uId = userId;
+
+        // 1. General & HR Tasks
+        (rawTasks || []).forEach((t: any) => {
+          let assIds: string[] = [];
+          if (Array.isArray(t.assignedToIds)) {
+            assIds = t.assignedToIds;
+          } else if (typeof t.assignedToIds === 'string') {
+            try {
+              assIds = t.assignedToIds.split(',').map((id: string) => id.trim()).filter(Boolean);
+            } catch (e) {
+              assIds = t.assignedToIds.split(',').map((id: string) => id.trim()).filter(Boolean);
             }
           }
-          return true;
+
+          const isAssigned = t.assignedToId === uId || assIds.includes(uId);
+
+          if (isAssigned) {
+            let isProjectOnHold = false;
+            if (t.projectId) {
+              const assocProject = (rawProjects || []).find((p: any) => p.id === t.projectId);
+              isProjectOnHold = assocProject && (assocProject.status === 'on-hold' || assocProject.status === 'onhold' || assocProject.status?.toLowerCase() === 'on-hold');
+            }
+            
+            if (!isProjectOnHold) {
+              const isHRTask = t.department === 'HR' || t.department?.toUpperCase() === 'HR';
+              consolidated.push({
+                id: t.id,
+                title: t.title,
+                description: t.description,
+                dueDate: t.dueDate ? (t.dueDate.includes('T') ? t.dueDate.split('T')[0] : t.dueDate) : '',
+                priority: t.priority || 'medium',
+                status: t.status,
+                frequency: t.frequency || 'one-time',
+                department: isHRTask ? 'HR Tasks' : 'General Tasks',
+                sourceType: 'general-task',
+                originalTask: t
+              });
+            }
+          }
         });
 
-        // Fetch SMM tasks if applicable
-        try {
-          const userStr = localStorage.getItem("user");
-          const userObj = userStr ? JSON.parse(userStr) : null;
-          const userDept = (userObj?.department || "").toLowerCase().trim();
-          const isCreativeUser = ['creative', 'smm', 'social media marketing', 'graphics'].includes(userDept);
-          const isDigitalMarketingUser = ['digital marketing', 'dm'].includes(userDept);
-
-          if (isCreativeUser || isDigitalMarketingUser) {
-            const [ccRes, owRes, clientRes, transferRes] = await Promise.all([
-              fetch(`${API_URL}/content-calendar/all`),
-              fetch(`${API_URL}/other-work/all`),
-              fetch(`${API_URL}/clients`),
-              fetch(`${API_URL}/work-transfer-requests`)
-            ]);
+        // 2. Development Tasks
+        (rawWmTasks || []).forEach((t: any) => {
+          const isAssigned = t.assignedToId === uId || t.assignedToIds?.includes(uId);
+          if (isAssigned) {
+            const assocProject = (rawProjects || []).find((p: any) => p.id === t.projectId);
+            const isProjectOnHold = assocProject && (assocProject.status === 'on-hold' || assocProject.status === 'onhold' || assocProject.status?.toLowerCase() === 'on-hold');
             
-            if (ccRes.ok && owRes.ok && clientRes.ok) {
-              const [ccList, owList, clientList, transferListRaw] = await Promise.all([ccRes.json(), owRes.json(), clientRes.json(), transferRes.ok ? transferRes.json() : []]);
-              const projList = allProjects;
-              const acceptedTransfers = (Array.isArray(transferListRaw) ? transferListRaw : []).filter((r: any) => r.status === 'Accepted');
-              const smmTasks: any[] = [];
-              if (isCreativeUser) {
-                const myOw = owList.filter((o: any) => {
-                  const transfer = acceptedTransfers.find((t: any) => String(t.taskId) === String(o.id || o._id) && (t.taskType === 'other-work' || t.taskType === 'creative'));
-                  const currentAssigneeId = transfer ? transfer.receiverId : o.assigneeId;
-                  return String(currentAssigneeId).trim() === String(userId).trim() && o.status !== 'Approved';
-                });
-                myOw.forEach((o: any) => {
-                  const project = projList.find((p: any) => String(p.id || p._id).trim() === String(o.projectId).trim());
-                  if (project) {
-                    const pStatus = (project.status || "").toLowerCase().trim();
-                    if (pStatus === "onhold" || pStatus === "on-hold" || pStatus === "on hold") return;
-                  }
-                  const client = clientList.find((c: any) => String(c.id || c._id).trim() === String(o.clientId).trim());
-                  let displayName = "Other Work";
-                  if (o.taskType === 'digital-marketing') displayName = 'Digital Marketing';
-                  else if (client) displayName = project ? `${client.companyName || client.clientName} (${project.projectName})` : (client.companyName || client.clientName);
-
-                  smmTasks.push({
-                    id: o.id || o._id,
-                    title: o.title || o.taskName || 'Other Work Task',
-                    projectName: displayName,
-                    dueDate: o.deadline || "",
-                    status: o.status
-                  });
-                });
-              }
-              
-              if (isDigitalMarketingUser) {
-                const dmProjects = projList.filter((p: any) => {
-                  if (p.department && p.department.trim().toLowerCase() === 'digital marketing') {
-                    const pStatus = (p.status || "").toLowerCase().trim();
-                    if (pStatus === "onhold" || pStatus === "on-hold" || pStatus === "on hold" || pStatus === "completed") return false;
-                    return true;
-                  }
-                  return false;
-                });
-                const myProjects = dmProjects.filter((p: any) => {
-                  const isOriginalAssignee = String(p.assignedEmployeeId).trim() === String(userId).trim();
-                  const isTransferredToMe = acceptedTransfers.some((t: any) => String(t.taskId) === String(p.id || p._id) && String(t.receiverId) === String(userId));
-                  return isOriginalAssignee || isTransferredToMe;
-                });
-                
-                myProjects.forEach((p: any) => {
-                  const client = clientList.find((c: any) => String(c.id || c._id) === String(p.clientId));
-                  const cName = client?.companyName || client?.clientName || p.clientName || "Unknown Client";
-                  smmTasks.push({
-                    id: p.id || p._id,
-                    title: cName,
-                    projectName: p.projectName || p.title || "",
-                    dueDate: p.endDate || p.deadline || "",
-                    status: "pending"
-                  });
-                });
-                
-                const myOw = owList.filter((o: any) => {
-                  const transfer = acceptedTransfers.find((t: any) => String(t.taskId) === String(o.id || o._id) && t.taskType === 'dm-other-work');
-                  const currentAssigneeId = transfer ? transfer.receiverId : o.assigneeId;
-                  return String(currentAssigneeId).trim() === String(userId).trim() && o.status !== 'Approved' && o.taskType === 'dm-other-work';
-                });
-                myOw.forEach((o: any) => {
-                  const project = projList.find((p: any) => String(p.id || p._id).trim() === String(o.projectId).trim());
-                  if (project) {
-                    const pStatus = (project.status || "").toLowerCase().trim();
-                    if (pStatus === "onhold" || pStatus === "on-hold" || pStatus === "on hold") return;
-                  }
-                  smmTasks.push({
-                    id: o.id || o._id,
-                    title: o.title || o.taskName || 'Other Work Task',
-                    projectName: 'Other Work',
-                    dueDate: o.deadline || "",
-                    status: o.status,
-                    isDmOtherWork: true
-                  });
-                });
-              }
-              
-              if (isCreativeUser) {
-                ccList.forEach((entry: any) => {
-                  const client = clientList.find((c: any) => String(c.id || c._id).trim() === String(entry.clientId).trim());
-                  // In SMM, CC tasks use the client's Creative project
-                  const project = projList.find((p: any) => String(p.clientId).trim() === String(entry.clientId).trim() && p.department?.toLowerCase().trim() === 'creative');
-                  if (!project) return; // Only show if active creative project (matching SMM)
-                  const pStatus = (project.status || "").toLowerCase().trim();
-                  if (pStatus === "onhold" || pStatus === "on-hold" || pStatus === "on hold") return;
-                  
-                  const cName = client?.companyName || client?.clientName || "Unknown Client";
-                  
-                  const checkStage = (stageName: string, idField: string, dateField: string, linkField: string, linkCheck?: (e:any)=>boolean) => {
-                    const originalAssigneeId = entry[idField] || project?.[idField] || client?.[idField];
-                    const isDone = linkCheck ? linkCheck(entry) : !!entry[linkField];
-                    
-                    const hasApplicableRemark = entry.remark && entry.remark.trim() !== '' && (
-                      !entry.remarkStage || 
-                      (() => {
-                        const stages = ['Script', 'Shoot', 'Caption', 'Thumbnail', 'Editing', 'Post/Graphics', 'Approval', 'Posting'];
-                        const idx1 = stages.indexOf(stageName === 'Editing' && entry.postReel === 'Post' ? 'Post/Graphics' : stageName);
-                        const idx2 = stages.indexOf(entry.remarkStage);
-                        return idx1 >= idx2;
-                      })()
-                    );
-                    const isClientIssue = hasApplicableRemark && entry.remark.startsWith('[CLIENT ISSUE] ');
-                    if (isClientIssue) return; // SMM moves these to Pending Work
-
-                    const transfer = acceptedTransfers.find((t: any) => String(t.taskId) === String(entry.id || entry._id) && t.stage === (stageName === 'Editing' && entry.postReel === 'Post' ? 'Post/Graphics' : stageName));
-                    const currentAssigneeId = transfer ? transfer.receiverId : originalAssigneeId;
-
-                    if (String(currentAssigneeId).trim() === String(userId).trim() && !isDone) {
-                      let dateStr = entry[dateField];
-                      if (!dateStr && (stageName === 'Caption' || stageName === 'Thumbnail')) {
-                        dateStr = entry.editingStart;
-                      }
-                      
-                      if (!dateStr) return; // SMM strictly requires a date for CC tasks
-
-                      const taskName = entry.concept || entry.topic || (entry.postReel ? `${entry.postReel} Content` : `Task for ${entry.postingDate || entry.monthYear || 'Unknown Date'}`);
-                      
-                      smmTasks.push({
-                        id: `${entry.id || entry._id}-${stageName}`,
-                        title: taskName,
-                        projectName: `${stageName} - ${cName}`,
-                        dueDate: dateStr,
-                        status: "pending"
-                      });
-                    }
-                  };
-                  
-                  const isPost = entry.postReel === "Post";
-                  if (!isPost) checkStage('Script', 'assignedScriptwriterId', 'scriptDate', 'scriptLink');
-                  if (!isPost) checkStage('Shoot', 'assignedShooterId', 'shootDate', 'shootLink');
-                  checkStage('Caption', 'assignedCaptionWriterId', 'captionDate', 'caption');
-                  if (!isPost) checkStage('Thumbnail', 'assignedThumbnailDesignerId', 'thumbnailDate', 'thumbnailLink');
-                  
-                  const editIdField = isPost ? 'assignedPostDesignerId' : 'assignedReelEditorId';
-                  const editLinkField = isPost ? 'finalPostLink' : 'finalReelLink';
-                  checkStage('Editing', editIdField, 'editingStart', editLinkField);
-                  checkStage('Approval', 'assignedApproverId', 'approval', 'isApproved', (e) => e.isApproved === 'Yes');
-                  checkStage('Posting', 'assignedPosterId', 'postingDate', 'postingLinkOfIg');
-                });
-              }
-              
-              myTasks = [...myTasks, ...smmTasks];
+            if (!isProjectOnHold) {
+              consolidated.push({
+                id: t.id,
+                title: t.title,
+                description: t.description,
+                dueDate: t.dueDate ? (t.dueDate.includes('T') ? t.dueDate.split('T')[0] : t.dueDate) : '',
+                priority: t.priority || 'medium',
+                status: t.status,
+                department: 'Development',
+                sourceType: 'wm-task',
+                projectName: t.projectName || assocProject?.title || 'Unknown Project',
+                originalTask: t
+              });
             }
           }
-        } catch (e) {
-          console.error("Error fetching SMM tasks", e);
+        });
+
+        // 3. SMM Creative Tasks
+        const isCreativeUser = ['creative', 'smm', 'social media marketing', 'graphics'].includes(userDept);
+        const isDigitalMarketingUser = ['digital marketing', 'dm'].includes(userDept);
+
+        if (isCreativeUser) {
+          (rawCC || []).forEach((entry: any) => {
+            const client = (rawClients || []).find((c: any) => c.id === entry.clientId);
+            let assocProject = null;
+            if (entry.projectId) {
+              assocProject = (rawProjects || []).find((p: any) => p.id === entry.projectId);
+            }
+            if (!assocProject) {
+              assocProject = (rawProjects || []).find((p: any) => 
+                p.clientId === entry.clientId && 
+                (p.department === 'Creative' || p.department?.toLowerCase() === 'smm' || p.department?.toLowerCase() === 'social media management')
+              );
+            }
+
+            const isProjectOnHold = assocProject && (assocProject.status === 'on-hold' || assocProject.status === 'onhold' || assocProject.status?.toLowerCase() === 'on-hold');
+            
+            if (!isProjectOnHold) {
+              const checkAndAddCreativeTask = (stageName: string, deadline: string, isDone: boolean) => {
+                let assigneeId = null;
+                if (stageName === 'Script') assigneeId = entry.assignedScriptwriterId || assocProject?.assignedScriptwriterId || client?.assignedScriptwriterId;
+                if (stageName === 'Shoot') assigneeId = entry.assignedShooterId || assocProject?.assignedShooterId || client?.assignedShooterId;
+                if (stageName === 'Caption') assigneeId = entry.assignedCaptionWriterId || assocProject?.assignedCaptionWriterId || client?.assignedCaptionWriterId;
+                if (stageName === 'Thumbnail') assigneeId = entry.assignedThumbnailDesignerId || assocProject?.assignedThumbnailDesignerId || client?.assignedThumbnailDesignerId;
+                if (stageName === 'Editing') {
+                  if (entry.postReel === 'Post') {
+                    assigneeId = entry.assignedPostDesignerId || assocProject?.assignedPostDesignerId || client?.assignedPostDesignerId;
+                  } else {
+                    assigneeId = entry.assignedReelEditorId || assocProject?.assignedReelEditorId || client?.assignedReelEditorId;
+                  }
+                }
+                if (stageName === 'Approval') assigneeId = entry.assignedApproverId || assocProject?.assignedApproverId || client?.assignedApproverId;
+                if (stageName === 'Posting') assigneeId = entry.assignedPosterId || assocProject?.assignedPosterId || client?.assignedPosterId;
+
+                if (assigneeId === uId && !isDone && deadline) {
+                  const creatorName = entry.logs?.[0]?.userName || 'Admin';
+                  const empName = (rawEmployees || []).find((e: any) => e.id === assigneeId)?.name || userObj?.name || 'User';
+                  const enrichedEntry = { ...entry, assignerName: creatorName, assigneeName: empName };
+
+                  consolidated.push({
+                    id: `${entry.id}-${stageName}`,
+                    title: entry.concept || entry.topic || (entry.postReel ? `${entry.postReel} Content` : 'SMM Task'),
+                    projectName: `${stageName} - ${assocProject ? assocProject.title : (client ? (client.companyName || client.clientName) : 'SMM Client')}`,
+                    dueDate: deadline.includes('T') ? deadline.split('T')[0] : deadline,
+                    priority: 'medium',
+                    status: 'todo',
+                    department: 'Social Media Management',
+                    sourceType: 'smm-creative',
+                    clientId: entry.clientId || client?.id,
+                    projectId: entry.projectId || assocProject?.id,
+                    originalTask: enrichedEntry
+                  });
+                }
+              };
+
+              if (entry.postReel !== 'Post' && entry.scriptDate) {
+                checkAndAddCreativeTask('Script', entry.scriptDate, !!entry.scriptLink);
+              }
+              if (entry.postReel !== 'Post' && entry.shootDate) {
+                checkAndAddCreativeTask('Shoot', entry.shootDate, !!entry.shootLink && entry.shootLink !== '-');
+              }
+              
+              // Brand Person Check
+              if (entry.assignedBrandPersonIds && (!entry.shootLink || entry.shootLink === '-')) {
+                const bpIdsRaw = entry.assignedBrandPersonIds;
+                const bpIds = Array.isArray(bpIdsRaw) ? bpIdsRaw : (typeof bpIdsRaw === 'string' ? bpIdsRaw.split(',').map((id: string) => id.trim()).filter(Boolean) : []);
+                bpIds.forEach((bpId: string) => {
+                  if (bpId === uId) {
+                    const taskDeadline = entry.shootDate || entry.postingDate || (entry.monthYear ? `${entry.monthYear}-28` : new Date().toISOString().split('T')[0]);
+                    const creatorName = entry.logs?.[0]?.userName || 'Admin';
+                    const empName = (rawEmployees || []).find((e: any) => e.id === bpId)?.name || userObj?.name || 'User';
+                    const enrichedEntry = { ...entry, assignerName: creatorName, assigneeName: empName };
+                    
+                    consolidated.push({
+                      id: `${entry.id}-BrandPerson`,
+                      title: entry.concept || entry.topic || (entry.postReel ? `${entry.postReel} Content` : 'SMM Task'),
+                      projectName: `Brand Person - ${assocProject ? assocProject.title : (client ? (client.companyName || client.clientName) : 'SMM Client')}`,
+                      dueDate: taskDeadline,
+                      priority: 'medium',
+                      status: 'todo',
+                      department: 'Social Media Management',
+                      sourceType: 'smm-creative',
+                      clientId: entry.clientId || client?.id,
+                      projectId: entry.projectId || assocProject?.id,
+                      originalTask: enrichedEntry
+                    });
+                  }
+                });
+              }
+
+              const captionDate = entry.captionDate || entry.editingStart;
+              if (captionDate) {
+                checkAndAddCreativeTask('Caption', captionDate, !!entry.caption);
+              }
+              if (entry.postReel !== 'Post' && entry.thumbnailDate) {
+                checkAndAddCreativeTask('Thumbnail', entry.thumbnailDate, !!entry.thumbnailLink);
+              }
+              if (entry.editingStart) {
+                const isDone = entry.postReel === 'Post' ? !!entry.finalPostLink : !!entry.finalReelLink;
+                checkAndAddCreativeTask('Editing', entry.editingStart, isDone);
+              }
+              if (entry.approval) {
+                checkAndAddCreativeTask('Approval', entry.approval, entry.isApproved === 'Yes');
+              }
+              if (entry.postingDate) {
+                checkAndAddCreativeTask('Posting', entry.postingDate, !!entry.postingLinkOfIg);
+              }
+            }
+          });
         }
 
-        setTasks(myTasks);
+        // 4. Digital Marketing Client Projects
+        if (isDigitalMarketingUser) {
+          const dmProjects = (rawProjects || []).filter((p: any) => {
+            if (p.department && p.department.trim().toLowerCase() === 'digital marketing') {
+              const pStatus = (p.status || "").toLowerCase().trim();
+              if (pStatus === "onhold" || pStatus === "on-hold" || pStatus === "on hold" || pStatus === "completed") return false;
+              return true;
+            }
+            return false;
+          });
+          const myProjects = dmProjects.filter((p: any) => {
+            return String(p.assignedEmployeeId).trim() === String(uId).trim();
+          });
+          
+          myProjects.forEach((p: any) => {
+            const client = (rawClients || []).find((c: any) => c.id === p.clientId);
+            const cName = client?.companyName || client?.clientName || p.clientName || "Unknown Client";
+            consolidated.push({
+              id: p.id,
+              title: cName,
+              projectName: p.projectName || p.title || "",
+              dueDate: p.endDate || p.deadline || "",
+              status: "pending",
+              department: 'Digital Marketing',
+              sourceType: 'dm-missing-metric',
+              originalTask: p
+            });
+          });
+        }
+
+        // 5. SMM Other Work & DM Other Work
+        const targetEmpName = userObj ? (userObj.name || `${userObj.firstName || ''} ${userObj.lastName || ''}`.trim()) : '';
+        (rawOtherWork || []).forEach((ow: any) => {
+          const isAssignee = String(ow.assigneeId) === String(uId) || (targetEmpName && ow.assigneeName && ow.assigneeName.toLowerCase().includes(targetEmpName.toLowerCase()));
+          if (isAssignee && ow.status !== 'Approved') {
+            let isProjectOnHold = false;
+            if (ow.projectId) {
+              const assocProject = (rawProjects || []).find((p: any) => p.id === ow.projectId);
+              isProjectOnHold = assocProject && (assocProject.status === 'on-hold' || assocProject.status === 'onhold' || assocProject.status?.toLowerCase() === 'on-hold');
+            }
+            
+            if (!isProjectOnHold) {
+              const creatorName = ow.assignerName || ow.logs?.[0]?.userName || 'Manager';
+              const empName = ow.assigneeName || userObj?.name || 'User';
+              const enrichedOw = { ...ow, assignerName: creatorName, assigneeName: empName };
+
+              consolidated.push({
+                id: ow.id,
+                title: ow.title,
+                projectName: ow.taskType === 'digital-marketing' ? 'Digital Marketing' : 'Other Work',
+                description: ow.description || 'SMM other work task',
+                dueDate: ow.deadline ? (ow.deadline.includes('T') ? ow.deadline.split('T')[0] : ow.deadline) : '',
+                priority: ow.priority || 'medium',
+                status: ow.status,
+                stage: ow.status,
+                department: ow.taskType === 'digital-marketing' ? 'Digital Marketing' : 'Social Media Management',
+                sourceType: 'smm-other',
+                isDmOtherWork: ow.taskType === 'digital-marketing',
+                clientId: ow.clientId,
+                projectId: ow.projectId,
+                originalTask: enrichedOw
+              });
+            }
+          }
+        });
+
+        // 6. SMM Client Project Follow-ups
+        (rawProjects || []).forEach((project: any) => {
+          const isCreative = project.department === 'Creative' || project.department?.toLowerCase() === 'smm';
+          if (isCreative) {
+            const isProjectOnHold = project.status === 'on-hold' || project.status === 'onhold' || project.status?.toLowerCase() === 'on-hold';
+            if (!isProjectOnHold && project.nextFollowupDate) {
+              const client = (rawClients || []).find((c: any) => c.id === project.clientId);
+              const followUpAssigneeId = project.assignedFollowUpId || client?.assignedFollowUpId || project.teamLeaderId;
+              if (followUpAssigneeId === uId) {
+                const nextDate = project.nextFollowupDate.split("T")[0].split(" ")[0];
+                const empName = (rawEmployees || []).find((e: any) => e.id === followUpAssigneeId)?.name || userObj?.name || 'User';
+                const tlName = (rawEmployees || []).find((e: any) => e.id === project.teamLeaderId)?.name || 'Manager';
+                const enrichedProject = { ...project, assignerName: tlName, assigneeName: empName };
+
+                consolidated.push({
+                  id: `${project.id}-Followup`,
+                  title: `Follow-up: ${project.title || client?.companyName || 'Project'}`,
+                  projectName: client?.companyName || 'Unknown Client',
+                  dueDate: nextDate,
+                  priority: 'medium',
+                  status: 'todo',
+                  department: 'Social Media Management',
+                  sourceType: 'smm-followup',
+                  originalTask: enrichedProject
+                });
+              }
+            }
+          }
+        });
+
+        setTasks(consolidated);
       }
     } catch (err) {
       console.error("Error fetching data for punch in modal:", err);
@@ -488,49 +588,58 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
     return false;
   };
 
-  const parseLocalDate = (dateStr: string) => {
-    if (!dateStr) return new Date(0);
-    if (dateStr.includes('T')) {
-      const d = new Date(dateStr);
-      d.setHours(0, 0, 0, 0);
-      return d;
-    }
-    const delimiter = dateStr.includes('-') ? '-' : '/';
-    const parts = dateStr.split(delimiter);
-    if (parts.length === 3) {
-      if (parts[0].length === 4) {
-        return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]), 0, 0, 0, 0);
-      } else if (parts[2].length === 4) {
-        return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]), 0, 0, 0, 0);
-      }
-    }
-    const d = new Date(dateStr);
-    d.setHours(0, 0, 0, 0);
-    return d;
-  };
-
   const todayDate = new Date();
   todayDate.setHours(0, 0, 0, 0);
 
-  const todayTasks = tasks.filter(t => {
-    const taskDate = t.dueDate || t.postingDate || t.moduleDeadline;
-    if (!taskDate) return true;
-    const dateObj = parseLocalDate(taskDate);
-    return dateObj <= todayDate;
-  }).sort((a, b) => {
-    const dateA = a.dueDate || a.postingDate || a.moduleDeadline ? parseLocalDate(a.dueDate || a.postingDate || a.moduleDeadline) : new Date(0);
-    const dateB = b.dueDate || b.postingDate || b.moduleDeadline ? parseLocalDate(b.dueDate || b.postingDate || b.moduleDeadline) : new Date(0);
+  const todayTasks: any[] = [];
+  const pendingTasks: any[] = [];
+  const upcomingTasks: any[] = [];
+
+  tasks.forEach((t) => {
+    const deadlineDate = t.dueDate ? parseLocalDate(t.dueDate) : todayDate;
+
+    if (t.sourceType === 'smm-creative' || t.sourceType === 'smm-followup' || t.sourceType === 'smm-other' || t.sourceType === 'dm-missing-metric') {
+      if (t.status === 'Completed' || t.status === 'Approved') return;
+      if (deadlineDate <= todayDate) {
+        todayTasks.push(t);
+      } else {
+        upcomingTasks.push(t);
+      }
+    } else {
+      if (!t.dueDate) {
+        if (t.frequency === 'daily') {
+          todayTasks.push(t);
+        } else {
+          pendingTasks.push(t);
+        }
+      } else {
+        if (deadlineDate.getTime() === todayDate.getTime() || (t.frequency === 'daily' && deadlineDate <= todayDate)) {
+          todayTasks.push(t);
+        } else if (deadlineDate < todayDate) {
+          todayTasks.push(t);
+          pendingTasks.push(t);
+        } else {
+          upcomingTasks.push(t);
+        }
+      }
+    }
+  });
+
+  todayTasks.sort((a, b) => {
+    const dateA = a.dueDate ? parseLocalDate(a.dueDate) : new Date(0);
+    const dateB = b.dueDate ? parseLocalDate(b.dueDate) : new Date(0);
     return dateA.getTime() - dateB.getTime();
   });
-  
-  const upcomingTasks = tasks.filter(t => {
-    const taskDate = t.dueDate || t.postingDate || t.moduleDeadline;
-    if (!taskDate) return false;
-    const dateObj = parseLocalDate(taskDate);
-    return dateObj > todayDate;
-  }).sort((a, b) => {
-    const dateA = parseLocalDate(a.dueDate || a.postingDate || a.moduleDeadline);
-    const dateB = parseLocalDate(b.dueDate || b.postingDate || b.moduleDeadline);
+
+  upcomingTasks.sort((a, b) => {
+    const dateA = a.dueDate ? parseLocalDate(a.dueDate) : new Date(0);
+    const dateB = b.dueDate ? parseLocalDate(b.dueDate) : new Date(0);
+    return dateA.getTime() - dateB.getTime();
+  });
+
+  pendingTasks.sort((a, b) => {
+    const dateA = a.dueDate ? parseLocalDate(a.dueDate) : new Date(0);
+    const dateB = b.dueDate ? parseLocalDate(b.dueDate) : new Date(0);
     return dateA.getTime() - dateB.getTime();
   });
 
@@ -592,7 +701,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                         if (selectedTab === "assigned_brands") {
                           activeTasks = tasks.filter(t => !t.isDmOtherWork); // All active projects are shown regardless of date
                         } else if (selectedTab === "pending_task") {
-                          activeTasks = tasks;
+                          activeTasks = pendingTasks;
                         } else {
                           activeTasks = selectedTab === "today_work" ? todayTasks : upcomingTasks;
                         }
