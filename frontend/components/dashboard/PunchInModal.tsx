@@ -686,8 +686,8 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                   <div className="space-y-3">
                     <Label className="text-base">Select Task</Label>
                     <div className="max-h-[500px] overflow-y-scroll flex flex-col gap-1.5 pr-2 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-slate-100/50 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-brand-teal/30 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-brand-teal/50 transition-colors" style={{ scrollbarWidth: 'thin', scrollbarColor: '#09A08A4D transparent' }}>
-                      {/* Show actual assigned tasks from tasks API */}
-                      {todayTasks.length > 0 && todayTasks.map(t => (
+                      {/* Show ALL assigned tasks since Sales only has one Work tab (no Today/Upcoming split) */}
+                      {tasks.length > 0 && tasks.map(t => (
                         <div 
                           key={t.id} 
                           onClick={() => {
@@ -715,7 +715,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
 
                       {/* Show past work tasks that aren't already in the assigned tasks list */}
                       {(() => {
-                        const taskTitles = new Set(todayTasks.map(t => t.title));
+                        const taskTitles = new Set(tasks.map(t => t.title));
                         const filteredPastWork = pastWorkTasks.filter(topic => !taskTitles.has(topic));
                         if (filteredPastWork.length === 0) return null;
                         return filteredPastWork.map(topic => (
