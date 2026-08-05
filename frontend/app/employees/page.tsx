@@ -77,6 +77,7 @@ const COLUMN_OPTIONS = [
   { key: "middleName", label: "Middle Name", default: false },
   { key: "lastName", label: "Last Name", default: false },
   { key: "name", label: "Employee Name", default: true },
+  { key: "email", label: "Email Address", default: true },
   { key: "phone", label: "Phone Number", default: false },
   { key: "password", label: "Password", default: true },
   { key: "dob", label: "Date of Birth", default: false },
@@ -182,12 +183,15 @@ export default function EmployeeListPage() {
                     ? `${emp.designation} ${emp.sub_department || emp.subDepartment}`
                     : (emp.designation && emp.department)
                       ? `${emp.designation} ${emp.department}`
-                      : emp.designation || emp.email}
+                      : emp.designation || ""}
               </div>
+              <div className="text-[11px] text-slate-400 mt-0.5">{emp.email}</div>
             </div>
           </div>
         );
       }
+      case "email":
+        return <span className="text-muted-foreground text-xs">{emp.email}</span>;
       case "employeeId":
         return <span className="font-medium">{emp.employeeId}</span>;
       case "gender":
