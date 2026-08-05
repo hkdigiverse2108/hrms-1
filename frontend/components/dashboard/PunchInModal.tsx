@@ -31,11 +31,14 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
   const [customTaskName, setCustomTaskName] = useState<string>("");
   
   let userDept = "";
+  let userRole = "";
   if (typeof window !== "undefined") {
     const userStr = localStorage.getItem("user");
     if (userStr) {
       try {
-        userDept = (JSON.parse(userStr).department || "").toLowerCase().trim();
+        const parsed = JSON.parse(userStr);
+        userDept = (parsed.department || "").toLowerCase().trim();
+        userRole = parsed.role || "";
       } catch (e) {}
     }
   }
@@ -121,15 +124,23 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
       }
       if (tasksRes.ok) {
         let allTasks = [];
+        const roleParam = userRole ? `&role=${encodeURIComponent(userRole)}` : '';
         if (isHR) {
-          const genTasksRes = await fetch(`${API_URL}/tasks?userId=${userId}&limit=10000`);
+          const genTasksRes = await fetch(`${API_URL}/tasks?userId=${userId}${roleParam}&limit=10000`);
           if (genTasksRes.ok) {
             allTasks = await genTasksRes.json();
+          }
+          // Also include wm-tasks for HR users (they may have dev tasks assigned)
+          try {
+            const wmData = await tasksRes.json();
+            allTasks = [...allTasks, ...wmData];
+          } catch (e) {
+            // tasksRes body may already be consumed if it failed, ignore
           }
         } else {
           allTasks = await tasksRes.json();
           try {
-            const genTasksRes = await fetch(`${API_URL}/tasks?userId=${userId}&limit=10000`);
+            const genTasksRes = await fetch(`${API_URL}/tasks?userId=${userId}${roleParam}&limit=10000`);
             if (genTasksRes.ok) {
               const genTasks = await genTasksRes.json();
               allTasks = [...allTasks, ...genTasks];
