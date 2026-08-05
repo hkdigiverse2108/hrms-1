@@ -2606,11 +2606,13 @@ class ContentCalendarEntryBase(BaseModel):
     assignedPostDesignerId: Optional[str] = None
     assignedApproverId: Optional[str] = None
     assignedPosterId: Optional[str] = None
+    highlightedByUserIds: Optional[List[str]] = []
 
 class ContentCalendarEntryCreate(ContentCalendarEntryBase):
     pass
 
 class ContentCalendarEntryUpdate(BaseModel):
+    highlightedByUserIds: Optional[List[str]] = None
     monthYear: Optional[str] = None
     postingDate: Optional[str] = None
     postingDay: Optional[str] = None
