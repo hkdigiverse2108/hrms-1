@@ -705,13 +705,6 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
       return;
     }
     
-    const isConfirmed = await confirm({
-      title: "Clear All Highlights",
-      message: `Are you sure you want to clear your highlights for all ${highlightedEntries.length} rows?`,
-      confirmText: "Clear All",
-    });
-    
-    if (!isConfirmed) return;
     
     try {
       setIsSaving(true);
