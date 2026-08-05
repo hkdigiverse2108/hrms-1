@@ -361,8 +361,16 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
     const data: any = { type };
     if (type === "Work") {
       if (selectedTab === "hr_sales_work" && !isNewWorkTask) {
-        data.taskId = undefined;
-        data.value = activityValue;
+        if (taskId) {
+          // User selected an actual assigned task
+          data.taskId = taskId;
+          const selectedTask = tasks.find(t => t.id === taskId);
+          data.value = selectedTask ? selectedTask.title : activityValue;
+        } else {
+          // User selected a past work task (free-text)
+          data.taskId = undefined;
+          data.value = activityValue;
+        }
       } else if (selectedTab === "dm_other_work" && !isNewWorkTask) {
         data.taskId = taskId;
         const selectedTask = tasks.find(t => t.id === taskId);
@@ -678,29 +686,64 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                   <div className="space-y-3">
                     <Label className="text-base">Select Task</Label>
                     <div className="max-h-[500px] overflow-y-scroll flex flex-col gap-1.5 pr-2 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-slate-100/50 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-brand-teal/30 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-brand-teal/50 transition-colors" style={{ scrollbarWidth: 'thin', scrollbarColor: '#09A08A4D transparent' }}>
-                      {pastWorkTasks.map(topic => (
+                      {/* Show actual assigned tasks from tasks API */}
+                      {todayTasks.length > 0 && todayTasks.map(t => (
                         <div 
-                          key={topic} 
+                          key={t.id} 
                           onClick={() => {
                             setIsNewWorkTask(false);
-                            setActivityValue(topic);
+                            setTaskId(t.id);
+                            setActivityValue(t.title);
                           }}
                           className={`px-3 py-1.5 rounded-lg cursor-pointer border transition-all duration-200 flex items-center justify-between min-h-[38px] ${
-                            activityValue === topic && !isNewWorkTask
+                            taskId === t.id && !isNewWorkTask
                               ? 'border-brand-teal bg-brand-teal/10 shadow-sm ring-1 ring-brand-teal' 
                               : 'border-border/50 hover:border-brand-teal/50 hover:bg-muted/30'
                           }`}
                         >
                           <div className="font-medium text-sm flex-1 flex items-center gap-2 min-w-0">
-                            <span className="whitespace-normal break-words" title={topic}>{topic}</span>
+                            <span className="whitespace-normal break-words" title={t.title}>{t.title}</span>
+                            {t.dueDate && (
+                              <span className="text-[10px] font-semibold bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap">
+                                {typeof t.dueDate === 'string' && t.dueDate.includes('T') ? t.dueDate.split('T')[0] : String(t.dueDate)}
+                              </span>
+                            )}
                           </div>
+                          {t.projectName && <div className="text-[11px] text-muted-foreground ml-3 bg-muted/40 px-1.5 py-0.5 rounded flex-shrink-0 max-w-[35%] line-clamp-1">{t.projectName}</div>}
                         </div>
                       ))}
+
+                      {/* Show past work tasks that aren't already in the assigned tasks list */}
+                      {(() => {
+                        const taskTitles = new Set(todayTasks.map(t => t.title));
+                        const filteredPastWork = pastWorkTasks.filter(topic => !taskTitles.has(topic));
+                        if (filteredPastWork.length === 0) return null;
+                        return filteredPastWork.map(topic => (
+                          <div 
+                            key={`past_${topic}`} 
+                            onClick={() => {
+                              setIsNewWorkTask(false);
+                              setTaskId("");
+                              setActivityValue(topic);
+                            }}
+                            className={`px-3 py-1.5 rounded-lg cursor-pointer border transition-all duration-200 flex items-center justify-between min-h-[38px] ${
+                              activityValue === topic && !taskId && !isNewWorkTask
+                                ? 'border-brand-teal bg-brand-teal/10 shadow-sm ring-1 ring-brand-teal' 
+                                : 'border-border/50 hover:border-brand-teal/50 hover:bg-muted/30'
+                            }`}
+                          >
+                            <div className="font-medium text-sm flex-1 flex items-center gap-2 min-w-0">
+                              <span className="whitespace-normal break-words" title={topic}>{topic}</span>
+                            </div>
+                          </div>
+                        ));
+                      })()}
                       
                       <div 
                         key="custom_work" 
                         onClick={() => {
                           setIsNewWorkTask(true);
+                          setTaskId("");
                           setActivityValue("");
                         }}
                         className={`px-3 py-1.5 mt-2 rounded-lg cursor-pointer border transition-all duration-200 flex items-center justify-between min-h-[38px] border-dashed ${
