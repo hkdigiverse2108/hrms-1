@@ -118,8 +118,51 @@ export default function HRTasksPage() {
       const matchedEmp = employees.find(e => e.id === taskFormData.assignedToId || e._id === taskFormData.assignedToId);
       const assignedToName = matchedEmp ? `${matchedEmp.firstName} ${matchedEmp.lastName}` : "";
 
+      let remarks = taskFormData.remarks;
+      let dueDate = taskFormData.dueDate;
+
+      if (taskFormData.frequency === "weekly") {
+        if (!remarks || !remarks.trim()) {
+          remarks = "Monday";
+        }
+        if (!dueDate) {
+          const today = new Date();
+          const currentDay = today.getDay();
+          const distance = (1 - currentDay + 7) % 7; // Monday is 1
+          const nextMonday = new Date(today);
+          nextMonday.setDate(today.getDate() + distance);
+          const yyyy = nextMonday.getFullYear();
+          const mm = String(nextMonday.getMonth() + 1).padStart(2, '0');
+          const dd = String(nextMonday.getDate()).padStart(2, '0');
+          dueDate = `${yyyy}-${mm}-${dd}`;
+        }
+      } else if (taskFormData.frequency === "monthly") {
+        if (!remarks || !remarks.trim()) {
+          remarks = "1";
+        }
+        if (!dueDate) {
+          const today = new Date();
+          let targetMonth = today.getMonth();
+          let targetYear = today.getFullYear();
+          if (today.getDate() > 1) {
+            targetMonth += 1;
+            if (targetMonth > 11) {
+              targetMonth = 0;
+              targetYear += 1;
+            }
+          }
+          const nextFirst = new Date(targetYear, targetMonth, 1);
+          const yyyy = nextFirst.getFullYear();
+          const mm = String(nextFirst.getMonth() + 1).padStart(2, '0');
+          const dd = String(nextFirst.getDate()).padStart(2, '0');
+          dueDate = `${yyyy}-${mm}-${dd}`;
+        }
+      }
+
       const payload = {
         ...taskFormData,
+        remarks,
+        dueDate,
         assignedToName,
         assignedToIds: taskFormData.assignedToId ? [taskFormData.assignedToId] : [],
         assignedToNames: assignedToName ? [assignedToName] : [],
@@ -325,8 +368,8 @@ export default function HRTasksPage() {
               const todayStr = formatLocalDate(today);
 
               if (task.frequency === "monthly") {
-                if (!task.remarks) return "";
-                const selectedDates = task.remarks.split(",").map(Number).filter(n => !isNaN(n));
+                const remarksVal = task.remarks || "1";
+                const selectedDates = remarksVal.split(",").map(Number).filter(n => !isNaN(n));
                 if (selectedDates.length > 0) {
                   const todayDom = today.getDate();
                   if (selectedDates.includes(todayDom)) {
@@ -350,9 +393,9 @@ export default function HRTasksPage() {
               }
 
               if (task.frequency === "weekly") {
-                if (!task.remarks) return "";
+                const remarksVal = task.remarks || "Monday";
                 const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-                const selectedDays = task.remarks.split(",").map(d => d.trim().toLowerCase());
+                const selectedDays = remarksVal.split(",").map(d => d.trim().toLowerCase());
                 const targetDayIndices = selectedDays.map(d => days.findIndex(dayName => dayName.toLowerCase() === d)).filter(idx => idx !== -1);
                 
                 if (targetDayIndices.length > 0) {
@@ -384,8 +427,9 @@ export default function HRTasksPage() {
             const getNextOccurrenceDate = (task: any) => {
               const today = new Date();
               
-              if (task.frequency === "monthly" && task.remarks) {
-                const selectedDates = task.remarks.split(",").map(Number).filter(n => !isNaN(n));
+              if (task.frequency === "monthly") {
+                const remarksVal = task.remarks || "1";
+                const selectedDates = remarksVal.split(",").map(Number).filter(n => !isNaN(n));
                 if (selectedDates.length > 0) {
                   const todayDom = today.getDate();
                   // Find next date in the current month that is strictly greater than today
@@ -403,9 +447,10 @@ export default function HRTasksPage() {
                 }
               }
 
-              if (task.frequency === "weekly" && task.remarks) {
+              if (task.frequency === "weekly") {
+                const remarksVal = task.remarks || "Monday";
                 const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-                const selectedDays = task.remarks.split(",").map(d => d.trim().toLowerCase());
+                const selectedDays = remarksVal.split(",").map(d => d.trim().toLowerCase());
                 const targetDayIndices = selectedDays.map(d => days.findIndex(dayName => dayName.toLowerCase() === d)).filter(idx => idx !== -1);
                 
                 if (targetDayIndices.length > 0) {
@@ -785,7 +830,12 @@ export default function HRTasksPage() {
                 <Label>Frequency</Label>
                 <Select 
                   value={taskFormData.frequency} 
-                  onValueChange={(val) => setTaskFormData({ ...taskFormData, frequency: val })}
+                  onValueChange={(val) => {
+                    let remarks = "";
+                    if (val === "weekly") remarks = "Monday";
+                    else if (val === "monthly") remarks = "1";
+                    setTaskFormData({ ...taskFormData, frequency: val, remarks });
+                  }}
                 >
                   <SelectTrigger className="bg-white border-slate-200 text-xs">
                     <SelectValue />
@@ -817,6 +867,9 @@ export default function HRTasksPage() {
                             newSelected = selectedDays.filter(d => d !== dayName.toLowerCase());
                           } else {
                             newSelected = [...selectedDays, dayName.toLowerCase()];
+                          }
+                          if (newSelected.length === 0) {
+                            newSelected = ["monday"];
                           }
                           // Keep order matching the calendar week
                           const orderedDays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
@@ -884,6 +937,9 @@ export default function HRTasksPage() {
                                     newSelected = selectedDates.filter(d => d !== dateNum);
                                   } else {
                                     newSelected = [...selectedDates, dateNum].sort((a, b) => a - b);
+                                  }
+                                  if (newSelected.length === 0) {
+                                    newSelected = [1];
                                   }
                                   setTaskFormData({ ...taskFormData, remarks: newSelected.join(",") });
                                 }}
