@@ -562,8 +562,8 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
         if (status === 'completed' || status === 'approved') return;
 
         total++;
-        if (status === 'in progress' || status === 'in_progress') inProgress++;
-        else if (status === 'pending review' || status === 'pending_review' || status === 'ready for review' || status === 'ready_for_review') pendingReview++;
+        if (status === 'in progress' || status === 'in_progress' || status === 'in-progress') inProgress++;
+        else if (status === 'pending review' || status === 'pending_review' || status === 'ready for review' || status === 'ready_for_review' || status === 'review') pendingReview++;
 
         const dueDateStr = t.dueDate || t.postingDate;
         if (dueDateStr) {
