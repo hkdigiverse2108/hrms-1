@@ -140,7 +140,9 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
         let myTasks = allTasks.filter((t: any) => {
           const isAssigned = String(t.assignedToId) === String(userId) || 
                              (t.assignedToIds && t.assignedToIds.map(String).includes(String(userId)));
-          if (!isAssigned) return false;
+          const isHRTask = t.department === 'HR' || t.department?.toUpperCase() === 'HR';
+          const canShow = isAssigned || (userDept === 'hr' && isHRTask);
+          if (!canShow) return false;
           const statusLower = (t.status || "").toLowerCase().trim();
           if (statusLower === "completed" || statusLower === "onhold" || statusLower === "on hold" || statusLower === "approved") return false;
           
