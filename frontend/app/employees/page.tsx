@@ -77,7 +77,6 @@ const COLUMN_OPTIONS = [
   { key: "middleName", label: "Middle Name", default: false },
   { key: "lastName", label: "Last Name", default: false },
   { key: "name", label: "Employee Name", default: true },
-  { key: "ring", label: "Assigned Ring", default: true },
   { key: "phone", label: "Phone Number", default: false },
   { key: "password", label: "Password", default: true },
   { key: "dob", label: "Date of Birth", default: false },
@@ -168,7 +167,14 @@ export default function EmployeeListPage() {
               </Avatar>
             </div>
             <div>
-              <div className="font-semibold text-foreground">{emp.name}</div>
+              <div className="flex items-center gap-2">
+                <div className="font-semibold text-foreground">{emp.name}</div>
+                {ring && (
+                  <span className="inline-flex items-center text-[9px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded uppercase tracking-wide">
+                    {ring.label}
+                  </span>
+                )}
+              </div>
               <div className="text-xs text-muted-foreground">
                 {emp.role?.toLowerCase().includes('admin')
                   ? emp.designation || emp.role
@@ -179,20 +185,6 @@ export default function EmployeeListPage() {
                       : emp.designation || emp.email}
               </div>
             </div>
-          </div>
-        );
-      }
-      case "ring": {
-        if (!ring) {
-          return <span className="text-slate-400 font-medium text-xs">None</span>;
-        }
-        return (
-          <div className="flex items-center gap-2">
-            <div className="relative w-5 h-5 shrink-0 flex items-center justify-center">
-              <div className={`absolute -inset-[1px] rounded-full ${ring.class}`}></div>
-              <div className="relative z-10 w-4 h-4 rounded-full bg-slate-200 border border-white"></div>
-            </div>
-            <span className="font-bold text-xs text-slate-800">{ring.label}</span>
           </div>
         );
       }
@@ -428,10 +420,6 @@ export default function EmployeeListPage() {
           }
           if (col.key === "role") {
             return emp.role || emp.designation || "";
-          }
-          if (col.key === "ring") {
-            const ring = employeeRings[emp.id] || employeeRings[emp._id] || employeeRings[emp.employeeId];
-            return ring ? ring.label : "None";
           }
           if (col.key === "hasBond" || col.key === "hasNoticePeriod" || col.key === "hasResignation" || col.key === "hasEmployment") {
             return emp[col.key] ? "Yes" : "No";
