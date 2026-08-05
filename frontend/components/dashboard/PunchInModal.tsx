@@ -39,7 +39,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
       } catch (e) {}
     }
   }
-  const isHR = userDept === 'hr' || userDept === 'human resources' || userDept.includes('hr');
+  const isHR = userDept === 'hr' || userDept.includes('hr') || userDept.includes('human resources') || userDept.includes('human-resources');
   
   const [tasks, setTasks] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>(null);
@@ -122,14 +122,14 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
       if (tasksRes.ok) {
         let allTasks = [];
         if (isHR) {
-          const genTasksRes = await fetch(`${API_URL}/tasks?userId=${userId}`);
+          const genTasksRes = await fetch(`${API_URL}/tasks?userId=${userId}&limit=10000`);
           if (genTasksRes.ok) {
             allTasks = await genTasksRes.json();
           }
         } else {
           allTasks = await tasksRes.json();
           try {
-            const genTasksRes = await fetch(`${API_URL}/tasks?userId=${userId}`);
+            const genTasksRes = await fetch(`${API_URL}/tasks?userId=${userId}&limit=10000`);
             if (genTasksRes.ok) {
               const genTasks = await genTasksRes.json();
               allTasks = [...allTasks, ...genTasks];
