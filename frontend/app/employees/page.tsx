@@ -485,13 +485,15 @@ export default function EmployeeListPage() {
 
   const fetchEmployees = async () => {
     try {
-      const response = await fetch(`${API_URL}/employees?include_inactive=true`);
+      const [response, settingsRes] = await Promise.all([
+        fetch(`${API_URL}/employees?include_inactive=true`),
+        fetch(`${API_URL}/system-settings`)
+      ]);
       if (!response.ok) throw new Error("Failed to fetch employees");
       const data = await response.json();
       setEmployees(data);
       
-      // Fetch settings for banners
-      const settingsRes = await fetch(`${API_URL}/system-settings`);
+      // Process settings for banners
       if (settingsRes.ok) {
         const settingsData = await settingsRes.json();
         const banners = settingsData.dashboardBanners || [];

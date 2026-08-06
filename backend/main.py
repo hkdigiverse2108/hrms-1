@@ -4941,3 +4941,61 @@ if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", os.environ.get("PORT", 8000)))
     print(f"Starting HRMS Backend on http://127.0.0.1:{port}")
     uvicorn.run(app, host="127.0.0.1", port=port, reload=False)
+
+@app.get("/documents-page-data")
+async def get_documents_page_data(userId: Optional[str] = None, role: Optional[str] = None, db=Depends(get_db)):
+    """Clubbed endpoint for the Documents page. Replaces 4 separate calls."""
+    is_admin = role and role.lower() in ["admin", "super admin", "hr"]
+    
+    results = await asyncio.gather(
+        crud.get_document_requests(db, employee_id=None if is_admin else userId),
+        crud.get_document_types(db),
+        crud.get_payroll(db, skip=0, limit=10000),
+        crud.get_document_templates(db, skip=0, limit=10000)
+    )
+    
+    return {
+        "requests": results[0],
+        "types": results[1],
+        "payroll": results[2],
+        "templates": results[3]
+    }
+
+@app.get("/modules-page-data")
+async def get_modules_page_data(db=Depends(get_db)):
+    """Clubbed endpoint for the Modules page. Replaces 3 separate calls."""
+    results = await asyncio.gather(
+        crud.get_projects(db, skip=0, limit=10000, department="Development"),
+        crud.get_employees(db, skip=0, limit=10000),
+        crud.get_wm_tasks(db, skip=0, limit=10000)
+    )
+    
+    return {
+        "projects": results[0],
+        "employees": [
+            {"id": e.get("id"), "firstName": e.get("firstName"), "lastName": e.get("lastName"),
+             "name": e.get("name"), "department": e.get("department"), "designation": e.get("designation"),
+             "role": e.get("role"), "email": e.get("email"), "photoUrl": e.get("photoUrl")}
+            for e in results[1]
+        ],
+        "tasks": results[2]
+    }
+
+@app.get("/settings-page-data")
+async def get_settings_page_data(db=Depends(get_db)):
+    """Clubbed endpoint for the Settings page. Replaces 2 separate calls."""
+    results = await asyncio.gather(
+        crud.get_system_settings(db),
+        crud.get_employees(db, skip=0, limit=10000)
+    )
+    
+    return {
+        "systemSettings": results[0],
+        "employees": [
+            {"id": e.get("id"), "firstName": e.get("firstName"), "lastName": e.get("lastName"),
+             "name": e.get("name"), "department": e.get("department"), "designation": e.get("designation"),
+             "role": e.get("role"), "email": e.get("email"), "photoUrl": e.get("photoUrl"),
+             "signatureUrl": e.get("signatureUrl")}
+            for e in results[1]
+        ]
+    }

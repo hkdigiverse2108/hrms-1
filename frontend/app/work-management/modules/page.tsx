@@ -565,34 +565,31 @@ export default function ModulesPage() {
 
   const fetchData = async () => {
     try {
-      const [pRes, eRes, tRes] = await Promise.all([
-        fetch(`${API_URL}/projects?department=Development`),
-        fetch(`${API_URL}/employees`),
-        fetch(`${API_URL}/wm-tasks`)
-      ]);
-      
-      if (pRes.ok) {
-        const data = await pRes.json();
-        const devProjects = data.filter((p: any) => p.department === "Development");
+      const res = await fetch(`${API_URL}/modules-page-data`);
+      if (res.ok) {
+        const data = await res.json();
+        const devProjects = data.projects || [];
         setProjects(devProjects);
         if (devProjects.length > 0) {
           if (!selectedProjectId || !devProjects.find((p: any) => p.id === selectedProjectId)) {
             setSelectedProjectId(devProjects[0].id);
           }
         }
+        setEmployees(data.employees || []);
+        
+        let fetchedTasks = data.tasks || [];
+        fetchedTasks = fetchedTasks.filter((t: any) => {
+          if (t.isDmOtherWork) return false;
+          if (t.department && t.department !== "Development") return false;
+          if (t.taskType && t.taskType !== "module" && t.taskType !== "module-subtask" && t.taskType !== "module-ticket") return false;
+          return true;
+        });
+        setAllTasks(fetchedTasks);
+      } else {
+        toast.error("Failed to load data");
       }
-      
-      if (eRes.ok) {
-        const emps = await eRes.json();
-        setEmployees(emps.filter((e: any) => e.department === "Development"));
-      }
-
-      if (tRes.ok) {
-        const tData = await tRes.json();
-        setAllTasks(tData);
-      }
-    } catch (err) {
-      console.error("Error fetching data:", err);
+    } catch (error) {
+      console.error("Error fetching data:", error);
       toast.error("Failed to load data");
     } finally {
       setLoading(false);

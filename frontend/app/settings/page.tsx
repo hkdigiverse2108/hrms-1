@@ -93,13 +93,27 @@ export default function SettingsPage() {
         router.push('/');
         return;
       }
-      fetchSettings();
-      fetchEmployees();
+      fetchPageData();
     }
   }, [user, router]);
 
-  const fetchSettings = async () => {
+  const fetchPageData = async () => {
     setIsLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/settings-page-data?t=${Date.now()}`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        setSettings(data.systemSettings || null);
+        setEmployees(data.employees || []);
+      }
+    } catch (err) {
+      console.error("Error fetching settings page data:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchSettings = async () => {
     try {
       const res = await fetch(`${API_URL}/system-settings?t=${Date.now()}`, { cache: 'no-store' });
       if (res.ok) {
@@ -107,8 +121,6 @@ export default function SettingsPage() {
       }
     } catch (err) {
       console.error("Error fetching settings:", err);
-    } finally {
-      setIsLoading(false);
     }
   };
 
