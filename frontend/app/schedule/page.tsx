@@ -227,10 +227,25 @@ export default function SchedulePage() {
         if (freshUser && !freshUser.detail) {
           const pData = pRes.ok ? await pRes.json() : { permissions: [] };
           if (updateUser) {
-            updateUser({
+            const newUserData = {
               ...freshUser,
               permissions: pData?.permissions || []
+            };
+            
+            // Prevent infinite loops by only updating if there are actual changes
+            const currentUserStr = JSON.stringify({
+              ...user,
+              // Exclude fields that might not be in freshUser or are handled differently
+              token: undefined
             });
+            const freshUserStr = JSON.stringify({
+              ...newUserData,
+              token: undefined
+            });
+            
+            if (currentUserStr !== freshUserStr) {
+              updateUser(newUserData);
+            }
           }
         }
       }

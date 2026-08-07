@@ -92,7 +92,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
       const [tasksRes, settingsRes, attRes, globalProjRes] = await Promise.all([
         fetch(`${API_URL}/wm-tasks`),
         fetch(`${API_URL}/system-settings`),
-        fetch(`${API_URL}/attendance`),
+        fetch(`${API_URL}/attendance?userId=${userId}`),
         fetch(`${API_URL}/projects`)
       ]);
 
