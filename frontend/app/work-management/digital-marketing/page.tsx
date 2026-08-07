@@ -1988,7 +1988,7 @@ export default function MarketingReportsPage() {
     }
 
     const assocProject = projects.find((p: any) => String(p.id) === String(r.projectId) || String(p.clientId) === String(r.clientId));
-    if (assocProject && (assocProject.status === "on-hold" || assocProject.status === "onhold" || assocProject.status?.toLowerCase() === "on-hold")) {
+    if (assocProject && assocProject.status?.toLowerCase() !== "active") {
       return false;
     }
 
@@ -2085,7 +2085,7 @@ export default function MarketingReportsPage() {
       monthFilter.includes("all") || monthFilter.includes(r.month);
 
     const assocProj = projects.find((p: any) => String(p.id) === String(r.projectId) || String(p.clientId) === String(r.clientId));
-    if (assocProj && (assocProj.status === "on-hold" || assocProj.status === "onhold" || assocProj.status?.toLowerCase() === "on-hold")) {
+    if (assocProj && assocProj.status?.toLowerCase() !== "active") {
       return false;
     }
 
@@ -3196,7 +3196,7 @@ export default function MarketingReportsPage() {
 
                     const clientProjs = projects.filter((p) => String(p.clientId) === String(c.id || (c as any)._id) && p.department?.toLowerCase() === "digital marketing");
                     const filteredProjs = clientProjs.filter((p) => {
-                      if (p.status === "on-hold" || p.status === "onhold" || p.status?.toLowerCase() === "on-hold") return false;
+                      if (p.status?.toLowerCase() !== "active") return false;
                       if (!isFullAuthority || taskFilterType === "my") {
                         if (user?.id) {
                           return isProjectAssignedToUser(p, user.id, acceptedTransfers);

@@ -220,7 +220,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                 const dmProjects = projList.filter((p: any) => {
                   if (p.department && p.department.trim().toLowerCase() === 'digital marketing') {
                     const pStatus = (p.status || "").toLowerCase().trim();
-                    if (pStatus === "onhold" || pStatus === "on-hold" || pStatus === "on hold" || pStatus === "completed") return false;
+                    if (pStatus !== "active") return false;
                     return true;
                   }
                   return false;
