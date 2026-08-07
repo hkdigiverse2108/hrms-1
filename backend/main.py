@@ -4965,7 +4965,7 @@ async def get_documents_page_data(userId: Optional[str] = None, role: Optional[s
 async def get_modules_page_data(db=Depends(get_db)):
     """Clubbed endpoint for the Modules page. Replaces 3 separate calls."""
     results = await asyncio.gather(
-        crud.get_projects(db, skip=0, limit=10000, department="Development"),
+        crud.get_projects(db, skip=0, limit=10000),
         crud.get_employees(db, skip=0, limit=10000),
         crud.get_wm_tasks(db, skip=0, limit=10000)
     )
