@@ -2188,6 +2188,8 @@ class ModulePermission(BaseModel):
     canEdit: bool = False
     canDelete: bool = False
     canView: bool = False
+    restrictClients: bool = False
+    allowedClients: Optional[List[str]] = []
 
 class UserPermissionBase(BaseModel):
     employeeId: str

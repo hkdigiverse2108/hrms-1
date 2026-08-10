@@ -3206,6 +3206,10 @@ async def recalculate_all_sales_targets(db=Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 # User Permission Routes
+@app.get("/user-permissions/all", response_model=List[schemas.UserPermission])
+async def read_all_user_permissions(db=Depends(get_db)):
+    return await crud.get_all_user_permissions(db)
+
 @app.get("/user-permissions/{employee_id}", response_model=Optional[schemas.UserPermission])
 async def read_user_permissions(employee_id: str, db=Depends(get_db)):
     return await crud.get_user_permissions(db, employee_id)
@@ -4799,9 +4803,7 @@ async def get_all_course_progress(course_id: str, db=Depends(get_db), token_payl
 
 
 
-@app.get("/user-permissions/all", response_model=List[schemas.UserPermission])
-async def read_all_user_permissions(db=Depends(get_db)):
-    return await crud.get_all_user_permissions(db)
+
 
 @app.put("/user-permissions/bulk-module")
 async def update_bulk_module_permissions(request: schemas.ModuleBulkUpdateRequest, db=Depends(get_db), ):
