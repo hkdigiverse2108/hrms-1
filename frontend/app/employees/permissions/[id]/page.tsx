@@ -26,12 +26,24 @@ const PERMISSION_GROUPS = [
     icon: Users,
     modules: [
       { moduleName: 'employee-list', displayName: 'Employee List', tabUrl: '/employees' },
-      { moduleName: 'company-finance', displayName: 'Company Finance', tabUrl: '/company-finance' },
       { moduleName: 'org-structure', displayName: 'Org Structure', tabUrl: '/employees/organization/departments' },
       { moduleName: 'employee-attendance', displayName: 'Employee Attendance List', tabUrl: '/employees/attendance' },
       { moduleName: 'leave-requests', displayName: 'Leave Requests', tabUrl: '/employees/leave' },
       { moduleName: 'employee-documents', displayName: 'Employee Documents', tabUrl: '/employees/documents' },
       { moduleName: 'document-generator', displayName: 'Document Generator', tabUrl: '/employees/documents/generate' },
+    ]
+  },
+  {
+    name: 'Company Finance',
+    icon: IndianRupee,
+    modules: [
+      { moduleName: 'company-finance-bank-transactions', displayName: 'Bank Transactions', tabUrl: '/company-finance' },
+      { moduleName: 'company-finance-cash-transactions', displayName: 'Cash Transactions', tabUrl: '/company-finance' },
+      { moduleName: 'company-finance-add-credit-debit', displayName: 'Add Credit / Debit', tabUrl: '/company-finance' },
+      { moduleName: 'company-finance-plan', displayName: 'Plan', tabUrl: '/company-finance/plan' },
+      { moduleName: 'company-finance-summary', displayName: 'Summary', tabUrl: '/company-finance/summary' },
+      { moduleName: 'company-finance-client-transactions', displayName: 'Other Transactions', tabUrl: '/company-finance/client-transactions' },
+      { moduleName: 'company-finance-logs', displayName: 'Audit Logs', tabUrl: '/company-finance/logs' },
     ]
   },
   {

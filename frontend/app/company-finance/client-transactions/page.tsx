@@ -376,7 +376,7 @@ export default function ClientTransactionsPage() {
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <PageHeader
-          title="Client Transactions"
+          title="Other Transactions"
           description="Keep aggregated records of manual payments (inflow/outflow) grouped by client/person."
         />
         <Button onClick={() => handleOpenAddModal("")} className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-2">
@@ -650,7 +650,7 @@ export default function ClientTransactionsPage() {
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <Coins className="w-5 h-5 text-indigo-600" />
-              {editingTx ? "Edit Client Transaction" : "New Client Transaction"}
+              {editingTx ? "Edit Other Transaction" : "New Other Transaction"}
             </DialogTitle>
             <DialogDescription>
               {editingTx

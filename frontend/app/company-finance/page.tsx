@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { usePermissions } from "@/hooks/usePermissions";
 import { API_URL } from "@/lib/config";
 import {
   ArrowUpRight,
@@ -108,6 +109,11 @@ function convertNumberToWords(num: number): string {
 }
 
 export default function CompanyFinanceTransactionsPage() {
+  const { checkPermission, isAdmin } = usePermissions();
+  const canViewBank = isAdmin || checkPermission('company-finance-bank-transactions', 'canView');
+  const canViewCash = isAdmin || checkPermission('company-finance-cash-transactions', 'canView');
+  const canAddCreditDebit = isAdmin || checkPermission('company-finance-add-credit-debit', 'canView');
+
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [balances, setBalances] = useState<BalanceData>({
     bankOpeningBalance: 0,
@@ -116,7 +122,7 @@ export default function CompanyFinanceTransactionsPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeTab, setActiveTab] = useState<"bank" | "cash">("bank");
+  const [activeTab, setActiveTab] = useState<"bank" | "cash">(canViewBank ? "bank" : "cash");
 
   // Filters state
   const [filterCategory, setFilterCategory] = useState("all");
@@ -791,23 +797,27 @@ export default function CompanyFinanceTransactionsPage() {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Button
-            size="sm"
-            onClick={handleOpenCreditModal}
-            className="h-9 font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
-          >
-            <Plus className="w-4 h-4 mr-1.5" />
-            Add Credit (Invoice)
-          </Button>
+          {canAddCreditDebit && (
+            <>
+              <Button
+                size="sm"
+                onClick={handleOpenCreditModal}
+                className="h-9 font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+              >
+                <Plus className="w-4 h-4 mr-1.5" />
+                Add Credit (Invoice)
+              </Button>
 
-          <Button
-            size="sm"
-            onClick={handleOpenDebitModal}
-            className="h-9 font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-sm"
-          >
-            <Plus className="w-4 h-4 mr-1.5" />
-            Add Debt (Expense)
-          </Button>
+              <Button
+                size="sm"
+                onClick={handleOpenDebitModal}
+                className="h-9 font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-sm"
+              >
+                <Plus className="w-4 h-4 mr-1.5" />
+                Add Debt (Expense)
+              </Button>
+            </>
+          )}
         </div>
       </PageHeader>
 
@@ -820,20 +830,24 @@ export default function CompanyFinanceTransactionsPage() {
       >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200/80">
           <TabsList className="bg-transparent h-11 p-0 gap-1.5">
-            <TabsTrigger
-              value="bank"
-              className="gap-2.5 rounded-xl px-6 font-bold text-sm h-11 transition-all data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-md data-[state=active]:scale-[1.01]"
-            >
-              <Landmark className="w-4 h-4 text-emerald-600" />
-              Bank Acc Management
-            </TabsTrigger>
-            <TabsTrigger
-              value="cash"
-              className="gap-2.5 rounded-xl px-6 font-bold text-sm h-11 transition-all data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-md data-[state=active]:scale-[1.01]"
-            >
-              <Banknote className="w-4 h-4 text-amber-600" />
-              Cash Transaction
-            </TabsTrigger>
+            {canViewBank && (
+              <TabsTrigger
+                value="bank"
+                className="gap-2.5 rounded-xl px-6 font-bold text-sm h-11 transition-all data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-md data-[state=active]:scale-[1.01]"
+              >
+                <Landmark className="w-4 h-4 text-emerald-600" />
+                Bank Acc Management
+              </TabsTrigger>
+            )}
+            {canViewCash && (
+              <TabsTrigger
+                value="cash"
+                className="gap-2.5 rounded-xl px-6 font-bold text-sm h-11 transition-all data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-md data-[state=active]:scale-[1.01]"
+              >
+                <Banknote className="w-4 h-4 text-amber-600" />
+                Cash Transaction
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* Search bar */}

@@ -234,15 +234,23 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     }
 
     const companyFinanceChildren: MenuItem[] = [];
-    if (isAdmin || checkPermission('company-finance', 'canView')) {
+    if (isAdmin || checkPermission('company-finance-bank-transactions', 'canView') || checkPermission('company-finance-cash-transactions', 'canView')) {
       companyFinanceChildren.push(getItem(<Link href="/company-finance">Transactions</Link>, "/company-finance"));
+    }
+    if (isAdmin || checkPermission('company-finance-plan', 'canView')) {
       companyFinanceChildren.push(getItem(<Link href="/company-finance/plan">Plan</Link>, "/company-finance/plan"));
+    }
+    if (isAdmin || checkPermission('company-finance-summary', 'canView')) {
       companyFinanceChildren.push(getItem(<Link href="/company-finance/summary">Summary</Link>, "/company-finance/summary"));
-      companyFinanceChildren.push(getItem(<Link href="/company-finance/client-transactions">Client Transactions</Link>, "/company-finance/client-transactions"));
+    }
+    if (isAdmin || checkPermission('company-finance-client-transactions', 'canView')) {
+      companyFinanceChildren.push(getItem(<Link href="/company-finance/client-transactions">Other Transactions</Link>, "/company-finance/client-transactions"));
+    }
+    if (isAdmin || checkPermission('company-finance-logs', 'canView')) {
       companyFinanceChildren.push(getItem(<Link href="/company-finance/logs">Audit Logs</Link>, "/company-finance/logs"));
     }
 
-    if (isAdmin || companyFinanceChildren.length > 0) {
+    if (companyFinanceChildren.length > 0) {
       menuItems.push(getItem("Company Finance", "company-finance-sub", <Landmark className="w-5 h-5" />, companyFinanceChildren));
     }
 
