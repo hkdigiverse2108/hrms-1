@@ -2560,7 +2560,13 @@ export default function ChatPage() {
         setEmployees(await res.json());
       }
     } catch (err) {
-      console.error("Error fetching employees:", err);
+      console.warn("Retrying fetchEmployees in 2s:", err);
+      setTimeout(() => {
+        fetch(`${API_URL}/employees`, { cache: 'no-store' })
+          .then(r => r.ok ? r.json() : null)
+          .then(data => data && setEmployees(data))
+          .catch(() => {});
+      }, 2000);
     }
   };
 
@@ -2943,7 +2949,15 @@ export default function ChatPage() {
         setChatGroups(await res.json());
       }
     } catch (err) {
-      console.error("Error fetching groups:", err);
+      console.warn("Retrying fetchGroups in 2s:", err);
+      setTimeout(() => {
+        if (user?.id) {
+          fetch(`${API_URL}/chat/groups/${user.id}`, { cache: 'no-store' })
+            .then(r => r.ok ? r.json() : null)
+            .then(data => data && setChatGroups(data))
+            .catch(() => {});
+        }
+      }, 2000);
     }
   }, [user]);
 
@@ -3878,42 +3892,45 @@ export default function ChatPage() {
           
           if (blob.type.startsWith('image/')) {
             let copied = false;
+            const ClipboardItemClass = (typeof window !== 'undefined' && (window as any).ClipboardItem) || (globalThis as any).ClipboardItem;
 
-            // Try direct ClipboardItem write with native format
-            try {
-              await navigator.clipboard.write([
-                new ClipboardItem({ [blob.type]: blob })
-              ]);
-              copied = true;
-            } catch {
-              // Browser requires image/png for ClipboardItem (e.g. Chrome/Edge requirement for JPEG/WEBP/GIF)
-            }
-
-            if (!copied) {
-              // Convert any image format (JPEG, WEBP, GIF, BMP, SVG) to standard PNG blob via Canvas
-              const img = new Image();
-              img.crossOrigin = 'anonymous';
-              img.src = URL.createObjectURL(blob);
-              await new Promise((resolve) => {
-                img.onload = () => resolve(true);
-                img.onerror = () => resolve(false);
-              });
-
-              const canvas = document.createElement('canvas');
-              canvas.width = img.naturalWidth || 300;
-              canvas.height = img.naturalHeight || 300;
-              const ctx = canvas.getContext('2d');
-              ctx?.drawImage(img, 0, 0);
-
-              const pngBlob = await new Promise<Blob | null>((resolve) =>
-                canvas.toBlob((b) => resolve(b), 'image/png')
-              );
-
-              if (pngBlob) {
+            if (ClipboardItemClass) {
+              // Try direct ClipboardItem write with native format
+              try {
                 await navigator.clipboard.write([
-                  new ClipboardItem({ 'image/png': pngBlob })
+                  new ClipboardItemClass({ [blob.type]: blob })
                 ]);
                 copied = true;
+              } catch {
+                // Browser requires image/png for ClipboardItem (e.g. Chrome/Edge requirement for JPEG/WEBP/GIF)
+              }
+
+              if (!copied) {
+                // Convert any image format (JPEG, WEBP, GIF, BMP, SVG) to standard PNG blob via Canvas
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.src = URL.createObjectURL(blob);
+                await new Promise((resolve) => {
+                  img.onload = () => resolve(true);
+                  img.onerror = () => resolve(false);
+                });
+
+                const canvas = document.createElement('canvas');
+                canvas.width = img.naturalWidth || 300;
+                canvas.height = img.naturalHeight || 300;
+                const ctx = canvas.getContext('2d');
+                ctx?.drawImage(img, 0, 0);
+
+                const pngBlob = await new Promise<Blob | null>((resolve) =>
+                  canvas.toBlob((b) => resolve(b), 'image/png')
+                );
+
+                if (pngBlob) {
+                  await navigator.clipboard.write([
+                    new ClipboardItemClass({ 'image/png': pngBlob })
+                  ]);
+                  copied = true;
+                }
               }
             }
 
