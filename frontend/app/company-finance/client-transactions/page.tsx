@@ -16,7 +16,8 @@ import {
   Wallet,
   Coins,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +31,8 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { usePermissions } from "@/hooks/usePermissions";
+import { ManageClientAccessModal } from "@/components/hrms/ManageClientAccessModal";
 
 interface ClientTransaction {
   id?: string;
@@ -57,6 +60,11 @@ interface ClientSummary {
 }
 
 export default function ClientTransactionsPage() {
+  const { checkPermission, isAdmin, restrictClients, allowedClients } = usePermissions("company-finance-client-transactions");
+  const canAdd = isAdmin || checkPermission("company-finance-client-transactions", "canAdd");
+  const canEdit = isAdmin || checkPermission("company-finance-client-transactions", "canEdit");
+  const canDelete = isAdmin || checkPermission("company-finance-client-transactions", "canDelete");
+
   const [transactions, setTransactions] = useState<ClientTransaction[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,6 +72,7 @@ export default function ClientTransactionsPage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [expandedClients, setExpandedClients] = useState<string[]>([]);
+  const [isManageAccessOpen, setIsManageAccessOpen] = useState(false);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -157,9 +166,11 @@ export default function ClientTransactionsPage() {
       const matchStart = !startDate || txDate >= new Date(startDate);
       const matchEnd = !endDate || txDate <= new Date(endDate);
 
-      return matchSearch && matchStart && matchEnd;
+      const matchAccess = isAdmin || !restrictClients || allowedClients.includes(tx.personName);
+
+      return matchSearch && matchStart && matchEnd && matchAccess;
     });
-  }, [transactions, searchTerm, startDate, endDate]);
+  }, [transactions, searchTerm, startDate, endDate, isAdmin, restrictClients, allowedClients]);
 
   // Client Wise Summary Aggregation
   const clientSummaries = useMemo(() => {
@@ -214,14 +225,17 @@ export default function ClientTransactionsPage() {
   // Suggestion list combining existing clients & previously typed manual names
   const clientSuggestions = useMemo(() => {
     const names = new Set<string>();
-    clients.forEach((c) => {
-      if (c.clientName) names.add(c.clientName.trim());
+    const filteredClients = (!isAdmin && restrictClients) ? clients.filter(c => allowedClients.includes(c.name || c.clientName)) : clients;
+    
+    filteredClients.forEach((c) => {
+      const nameToUse = c.name || c.clientName;
+      if (nameToUse) names.add(nameToUse.trim());
     });
     transactions.forEach((tx) => {
       if (tx.personName) names.add(tx.personName.trim());
     });
     return Array.from(names).sort();
-  }, [clients, transactions]);
+  }, [clients, transactions, isAdmin, restrictClients, allowedClients]);
 
 
   // Handle Edit/Open
@@ -376,13 +390,23 @@ export default function ClientTransactionsPage() {
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <PageHeader
-          title="Client Transactions"
+          title="Other Transactions"
           description="Keep aggregated records of manual payments (inflow/outflow) grouped by client/person."
         />
-        <Button onClick={() => handleOpenAddModal("")} className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-2">
-          <Plus className="w-4 h-4" />
-          Add Transaction
-        </Button>
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <Button onClick={() => setIsManageAccessOpen(true)} variant="outline" className="flex items-center gap-2 border-indigo-200 text-indigo-700 hover:bg-indigo-50">
+              <Shield className="w-4 h-4" />
+              Manage Access
+            </Button>
+          )}
+          {canAdd && (
+            <Button onClick={() => handleOpenAddModal("")} className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-2">
+              <Plus className="w-4 h-4" />
+              New Transaction
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -549,15 +573,17 @@ export default function ClientTransactionsPage() {
                           </span>
                         </td>
                         <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleOpenAddModal(summary.personName)}
-                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/20 dark:hover:bg-indigo-950/40 border-indigo-200/50"
-                          >
-                            <Plus className="w-3.5 h-3.5 mr-1" />
-                            Add entry
-                          </Button>
+                          {canAdd && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleOpenAddModal(summary.personName)}
+                              className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/20 dark:hover:bg-indigo-950/40 border-indigo-200/50"
+                            >
+                              <Plus className="w-3.5 h-3.5 mr-1" />
+                              Add entry
+                            </Button>
+                          )}
                         </td>
                       </tr>
 
@@ -575,7 +601,7 @@ export default function ClientTransactionsPage() {
                                     <th className="p-3">Description</th>
                                     <th className="p-3">Method</th>
                                     <th className="p-3">Remarks</th>
-                                    <th className="p-3 text-right pr-6">Actions</th>
+                                    {(canEdit || canDelete) && <th className="p-3 text-right pr-6">Actions</th>}
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-xs text-gray-600 dark:text-gray-300">
@@ -609,24 +635,30 @@ export default function ClientTransactionsPage() {
                                         </span>
                                       </td>
                                       <td className="p-3 max-w-xs truncate text-gray-400">{tx.remarks || "-"}</td>
-                                      <td className="p-3 text-right pr-6 whitespace-nowrap space-x-1">
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          onClick={() => handleOpenEditModal(tx)}
-                                          className="h-7 w-7 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/30"
-                                        >
-                                          <Pencil className="w-3.5 h-3.5" />
-                                        </Button>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          onClick={() => handleDelete(tx._id || tx.id || "")}
-                                          className="h-7 w-7 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30"
-                                        >
-                                          <Trash2 className="w-3.5 h-3.5" />
-                                        </Button>
-                                      </td>
+                                      {(canEdit || canDelete) && (
+                                        <td className="p-3 text-right pr-6 whitespace-nowrap space-x-1">
+                                          {canEdit && (
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              onClick={() => handleOpenEditModal(tx)}
+                                              className="h-7 w-7 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                                            >
+                                              <Pencil className="w-3.5 h-3.5" />
+                                            </Button>
+                                          )}
+                                          {canDelete && (
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              onClick={() => handleDelete(tx._id || tx.id || "")}
+                                              className="h-7 w-7 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                                            >
+                                              <Trash2 className="w-3.5 h-3.5" />
+                                            </Button>
+                                          )}
+                                        </td>
+                                      )}
                                     </tr>
                                   ))}
                                 </tbody>
@@ -650,7 +682,7 @@ export default function ClientTransactionsPage() {
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <Coins className="w-5 h-5 text-indigo-600" />
-              {editingTx ? "Edit Client Transaction" : "New Client Transaction"}
+              {editingTx ? "Edit Other Transaction" : "New Other Transaction"}
             </DialogTitle>
             <DialogDescription>
               {editingTx
@@ -795,6 +827,12 @@ export default function ClientTransactionsPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <ManageClientAccessModal 
+        isOpen={isManageAccessOpen} 
+        onClose={() => setIsManageAccessOpen(false)} 
+        clientNames={Array.from(new Set(transactions.map((tx) => tx.personName?.trim()).filter(Boolean))).sort()} 
+      />
     </div>
   );
 }

@@ -1053,7 +1053,7 @@ async def run_payroll_processing(db, month: str, year: int, performed_by: str = 
             
             # We only care about scheduled working days
             if date_str not in sunday_dates_set and date_str not in holiday_dates_set:
-                if not employee.get("activelyUsingHRMS", True):
+                if not emp.get("activelyUsingHRMS", True):
                     attendance_present_days += 1.0
                 elif date_str in leave_map:
                     leave_info = leave_map[date_str]
@@ -4313,7 +4313,7 @@ async def get_tasks(db, userId: str = None, role: str = None, skip: int = 0, lim
     
     # Exclude tasks belonging to a specific department (e.g. "HR")
     if exclude_department:
-        query["department"] = {"$ne": exclude_department}
+        query["department"] = {"$nin": [exclude_department.upper(), exclude_department.lower(), exclude_department.capitalize()]}
                 
     cursor = db.tasks.find(query).sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
@@ -7130,7 +7130,7 @@ async def calculate_sales_incentive(db, total_amount: float, invoice_amount: flo
         
     return 0.0, 0.0
 
-async def recalculate_sales_target(db, employee_id: str, month: str, year: int, target_type: str = "Monthly", week: Optional[int] = None):
+async def recalculate_sales_target(db, employee_id: str, month: str, year: int, target_type: str = "Monthly", week: Optional[int] = None, startDate: Optional[str] = None, endDate: Optional[str] = None):
     try:
         # 1. Calculate Achievement from First Paid Invoices
         emp = await get_employee(db, employee_id)

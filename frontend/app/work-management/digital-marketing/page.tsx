@@ -1988,7 +1988,7 @@ export default function MarketingReportsPage() {
     }
 
     const assocProject = projects.find((p: any) => String(p.id) === String(r.projectId) || String(p.clientId) === String(r.clientId));
-    if (assocProject && (assocProject.status === "on-hold" || assocProject.status === "onhold" || assocProject.status?.toLowerCase() === "on-hold")) {
+    if (assocProject && assocProject.status?.toLowerCase() !== "active") {
       return false;
     }
 
@@ -2085,7 +2085,7 @@ export default function MarketingReportsPage() {
       monthFilter.includes("all") || monthFilter.includes(r.month);
 
     const assocProj = projects.find((p: any) => String(p.id) === String(r.projectId) || String(p.clientId) === String(r.clientId));
-    if (assocProj && (assocProj.status === "on-hold" || assocProj.status === "onhold" || assocProj.status?.toLowerCase() === "on-hold")) {
+    if (assocProj && assocProj.status?.toLowerCase() !== "active") {
       return false;
     }
 
@@ -2338,6 +2338,8 @@ export default function MarketingReportsPage() {
   };
 
   // Replaced by getProjectNameForReport earlier
+  const selectedClientObject = clients.find((c: any) => c.id === selectedClientFilter);
+  const isSelectedClientActive = selectedClientObject && (selectedClientObject.status === "active" || selectedClientObject.status === "Active");
 
   return (
     <div className="space-y-6 flex flex-col h-[calc(100vh-100px)] overflow-hidden">
@@ -3194,7 +3196,7 @@ export default function MarketingReportsPage() {
 
                     const clientProjs = projects.filter((p) => String(p.clientId) === String(c.id || (c as any)._id) && p.department?.toLowerCase() === "digital marketing");
                     const filteredProjs = clientProjs.filter((p) => {
-                      if (p.status === "on-hold" || p.status === "onhold" || p.status?.toLowerCase() === "on-hold") return false;
+                      if (p.status?.toLowerCase() !== "active") return false;
                       if (!isFullAuthority || taskFilterType === "my") {
                         if (user?.id) {
                           return isProjectAssignedToUser(p, user.id, acceptedTransfers);
@@ -4230,77 +4232,79 @@ export default function MarketingReportsPage() {
                       </Button>
                     </div>
                   </div>
-                  <div id="daily-project-metrics-form" className="p-6 m-4 mt-8 bg-white rounded-2xl shadow-sm border border-slate-200">
-                    <div className="flex items-center gap-2 mb-6">
-                      <div className="w-8 h-8 rounded-full bg-brand-teal/10 flex items-center justify-center">
-                        <Settings className="w-4 h-4 text-brand-teal"/>
+                  {isSelectedClientActive && (
+                    <div id="daily-project-metrics-form" className="p-6 m-4 mt-8 bg-white rounded-2xl shadow-sm border border-slate-200">
+                      <div className="flex items-center gap-2 mb-6">
+                        <div className="w-8 h-8 rounded-full bg-brand-teal/10 flex items-center justify-center">
+                          <Settings className="w-4 h-4 text-brand-teal"/>
+                        </div>
+                        <h3 className="text-lg font-bold text-slate-800">Daily Project Metrics <span className="text-sm font-normal text-slate-500 ml-1">(Once per day)</span></h3>
                       </div>
-                      <h3 className="text-lg font-bold text-slate-800">Daily Project Metrics <span className="text-sm font-normal text-slate-500 ml-1">(Once per day)</span></h3>
-                    </div>
-                    <div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                        <div className="space-y-2">
-                          <Label className="text-slate-600 font-semibold">Date</Label>
-                          <Input 
-                            type="date"
-                            className="h-11 bg-slate-50/50 border-slate-200 hover:border-brand-teal/50 focus:border-brand-teal transition-colors text-sm font-bold text-slate-700"
-                            value={dailyMetricsStandalone.date || (dateRange?.from ? format(dateRange.from, 'yyyy-MM-dd') : "")}
-                            onChange={(e) => setDailyMetricsStandalone({...dailyMetricsStandalone, date: e.target.value})}
-                          />
+                      <div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                          <div className="space-y-2">
+                            <Label className="text-slate-600 font-semibold">Date</Label>
+                            <Input 
+                              type="date"
+                              className="h-11 bg-slate-50/50 border-slate-200 hover:border-brand-teal/50 focus:border-brand-teal transition-colors text-sm font-bold text-slate-700"
+                              value={dailyMetricsStandalone.date || (dateRange?.from ? format(dateRange.from, 'yyyy-MM-dd') : "")}
+                              onChange={(e) => setDailyMetricsStandalone({...dailyMetricsStandalone, date: e.target.value})}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-slate-600 font-semibold">Revenue (₹)</Label>
+                            <Input 
+                              type="number" step="0.01"
+                              className="h-11 bg-slate-50/50 border-slate-200 hover:border-brand-teal/50 focus:border-brand-teal transition-colors" 
+                              placeholder="0.00"
+                              value={dailyMetricsStandalone.revenue || ""}
+                              onChange={(e) => setDailyMetricsStandalone({...dailyMetricsStandalone, revenue: parseFloat(e.target.value) || 0})}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-slate-600 font-semibold">Followers</Label>
+                            <Input 
+                              type="number"
+                              className="h-11 bg-slate-50/50 border-slate-200 hover:border-brand-teal/50 focus:border-brand-teal transition-colors" 
+                              placeholder="0"
+                              value={dailyMetricsStandalone.followers || ""}
+                              onChange={(e) => setDailyMetricsStandalone({...dailyMetricsStandalone, followers: parseInt(e.target.value) || 0})}
+                            />
+                          </div>
                         </div>
-                        <div className="space-y-2">
-                          <Label className="text-slate-600 font-semibold">Revenue (₹)</Label>
-                          <Input 
-                            type="number" step="0.01"
-                            className="h-11 bg-slate-50/50 border-slate-200 hover:border-brand-teal/50 focus:border-brand-teal transition-colors" 
-                            placeholder="0.00"
-                            value={dailyMetricsStandalone.revenue || ""}
-                            onChange={(e) => setDailyMetricsStandalone({...dailyMetricsStandalone, revenue: parseFloat(e.target.value) || 0})}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-slate-600 font-semibold">Followers</Label>
-                          <Input 
-                            type="number"
-                            className="h-11 bg-slate-50/50 border-slate-200 hover:border-brand-teal/50 focus:border-brand-teal transition-colors" 
-                            placeholder="0"
-                            value={dailyMetricsStandalone.followers || ""}
-                            onChange={(e) => setDailyMetricsStandalone({...dailyMetricsStandalone, followers: parseInt(e.target.value) || 0})}
-                          />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div className="space-y-2">
+                            <Label className="text-slate-600 font-semibold">User Remark</Label>
+                            <Textarea
+                              className="min-h-[80px] bg-slate-50/50 border-slate-200 hover:border-brand-teal/50 focus:border-brand-teal transition-colors resize-y" 
+                              placeholder="Add user remark..."
+                              value={dailyMetricsStandalone.userRemark || ""}
+                              onChange={(e) => setDailyMetricsStandalone({...dailyMetricsStandalone, userRemark: e.target.value})}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-slate-600 font-semibold">Client Remark</Label>
+                            <Textarea
+                              className="min-h-[80px] bg-slate-50/50 border-slate-200 hover:border-brand-teal/50 focus:border-brand-teal transition-colors resize-y" 
+                              placeholder="Add client remark..."
+                              value={dailyMetricsStandalone.clientRemark || ""}
+                              onChange={(e) => setDailyMetricsStandalone({...dailyMetricsStandalone, clientRemark: e.target.value})}
+                            />
+                          </div>
                         </div>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                          <Label className="text-slate-600 font-semibold">User Remark</Label>
-                          <Textarea
-                            className="min-h-[80px] bg-slate-50/50 border-slate-200 hover:border-brand-teal/50 focus:border-brand-teal transition-colors resize-y" 
-                            placeholder="Add user remark..."
-                            value={dailyMetricsStandalone.userRemark || ""}
-                            onChange={(e) => setDailyMetricsStandalone({...dailyMetricsStandalone, userRemark: e.target.value})}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-slate-600 font-semibold">Client Remark</Label>
-                          <Textarea
-                            className="min-h-[80px] bg-slate-50/50 border-slate-200 hover:border-brand-teal/50 focus:border-brand-teal transition-colors resize-y" 
-                            placeholder="Add client remark..."
-                            value={dailyMetricsStandalone.clientRemark || ""}
-                            onChange={(e) => setDailyMetricsStandalone({...dailyMetricsStandalone, clientRemark: e.target.value})}
-                          />
-                        </div>
+                      <div className="pt-6 flex justify-end mt-6 border-t border-slate-100">
+                        <Button 
+                          className="bg-brand-teal hover:bg-brand-teal/90 text-white px-6 h-11 rounded-lg font-semibold shadow-sm transition-all active:scale-95"
+                          disabled={isSavingStandaloneMetrics}
+                          onClick={handleSaveStandaloneMetrics}
+                        >
+                          {isSavingStandaloneMetrics ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : null}
+                          Submit Metrics
+                        </Button>
                       </div>
                     </div>
-                    <div className="pt-6 flex justify-end mt-6 border-t border-slate-100">
-                      <Button 
-                        className="bg-brand-teal hover:bg-brand-teal/90 text-white px-6 h-11 rounded-lg font-semibold shadow-sm transition-all active:scale-95"
-                        disabled={isSavingStandaloneMetrics}
-                        onClick={handleSaveStandaloneMetrics}
-                      >
-                        {isSavingStandaloneMetrics ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : null}
-                        Submit Metrics
-                      </Button>
-                    </div>
-                  </div>
+                  )}
                 </div>
               )}
             </div>

@@ -31,14 +31,18 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
   const [customTaskName, setCustomTaskName] = useState<string>("");
   
   let userDept = "";
+  let userRole = "";
   if (typeof window !== "undefined") {
     const userStr = localStorage.getItem("user");
     if (userStr) {
       try {
-        userDept = (JSON.parse(userStr).department || "").toLowerCase().trim();
+        const parsed = JSON.parse(userStr);
+        userDept = (parsed.department || "").toLowerCase().trim();
+        userRole = parsed.role || "";
       } catch (e) {}
     }
   }
+  const isHR = userDept === 'hr' || userDept.includes('hr') || userDept.includes('human resources') || userDept.includes('human-resources');
   
   const [tasks, setTasks] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>(null);
@@ -88,7 +92,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
       const [tasksRes, settingsRes, attRes, globalProjRes] = await Promise.all([
         fetch(`${API_URL}/wm-tasks`),
         fetch(`${API_URL}/system-settings`),
-        fetch(`${API_URL}/attendance`),
+        fetch(`${API_URL}/attendance?userId=${userId}`),
         fetch(`${API_URL}/projects`)
       ]);
 
@@ -120,15 +124,23 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
       }
       if (tasksRes.ok) {
         let allTasks = [];
-        if (userDept === 'hr') {
-          const genTasksRes = await fetch(`${API_URL}/tasks?userId=${userId}`);
+        const roleParam = userRole ? `&role=${encodeURIComponent(userRole)}` : '';
+        if (isHR) {
+          const genTasksRes = await fetch(`${API_URL}/tasks?userId=${userId}${roleParam}&limit=10000`);
           if (genTasksRes.ok) {
             allTasks = await genTasksRes.json();
+          }
+          // Also include wm-tasks for HR users (they may have dev tasks assigned)
+          try {
+            const wmData = await tasksRes.json();
+            allTasks = [...allTasks, ...wmData];
+          } catch (e) {
+            // tasksRes body may already be consumed if it failed, ignore
           }
         } else {
           allTasks = await tasksRes.json();
           try {
-            const genTasksRes = await fetch(`${API_URL}/tasks?userId=${userId}`);
+            const genTasksRes = await fetch(`${API_URL}/tasks?userId=${userId}${roleParam}&limit=10000`);
             if (genTasksRes.ok) {
               const genTasks = await genTasksRes.json();
               allTasks = [...allTasks, ...genTasks];
@@ -140,7 +152,9 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
         let myTasks = allTasks.filter((t: any) => {
           const isAssigned = String(t.assignedToId) === String(userId) || 
                              (t.assignedToIds && t.assignedToIds.map(String).includes(String(userId)));
-          if (!isAssigned) return false;
+          const isHRTask = t.department === 'HR' || t.department?.toUpperCase() === 'HR';
+          const canShow = isAssigned || (isHR && isHRTask);
+          if (!canShow) return false;
           const statusLower = (t.status || "").toLowerCase().trim();
           if (statusLower === "completed" || statusLower === "onhold" || statusLower === "on hold" || statusLower === "approved") return false;
           
@@ -206,7 +220,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                 const dmProjects = projList.filter((p: any) => {
                   if (p.department && p.department.trim().toLowerCase() === 'digital marketing') {
                     const pStatus = (p.status || "").toLowerCase().trim();
-                    if (pStatus === "onhold" || pStatus === "on-hold" || pStatus === "on hold" || pStatus === "completed") return false;
+                    if (pStatus !== "active") return false;
                     return true;
                   }
                   return false;
@@ -347,8 +361,16 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
     const data: any = { type };
     if (type === "Work") {
       if (selectedTab === "hr_sales_work" && !isNewWorkTask) {
-        data.taskId = undefined;
-        data.value = activityValue;
+        if (taskId) {
+          // User selected an actual assigned task
+          data.taskId = taskId;
+          const selectedTask = tasks.find(t => t.id === taskId);
+          data.value = selectedTask ? selectedTask.title : activityValue;
+        } else {
+          // User selected a past work task (free-text)
+          data.taskId = undefined;
+          data.value = activityValue;
+        }
       } else if (selectedTab === "dm_other_work" && !isNewWorkTask) {
         data.taskId = taskId;
         const selectedTask = tasks.find(t => t.id === taskId);
@@ -559,8 +581,8 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                   <>
                     <TabsTrigger value="today_work" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Today's Work</TabsTrigger>
                     <TabsTrigger value="upcoming_work" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Upcoming Work</TabsTrigger>
-                    {userDept === 'creative' && (
-                      <TabsTrigger value="pending_task" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Pending Task</TabsTrigger>
+                    {(userDept === 'creative' || isHR) && (
+                      <TabsTrigger value="pending_task" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">Pending Tasks</TabsTrigger>
                     )}
                   </>
                 )}
@@ -664,29 +686,64 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                   <div className="space-y-3">
                     <Label className="text-base">Select Task</Label>
                     <div className="max-h-[500px] overflow-y-scroll flex flex-col gap-1.5 pr-2 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-slate-100/50 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-brand-teal/30 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-brand-teal/50 transition-colors" style={{ scrollbarWidth: 'thin', scrollbarColor: '#09A08A4D transparent' }}>
-                      {pastWorkTasks.map(topic => (
+                      {/* Show ALL assigned tasks since Sales only has one Work tab (no Today/Upcoming split) */}
+                      {tasks.length > 0 && tasks.map(t => (
                         <div 
-                          key={topic} 
+                          key={t.id} 
                           onClick={() => {
                             setIsNewWorkTask(false);
-                            setActivityValue(topic);
+                            setTaskId(t.id);
+                            setActivityValue(t.title);
                           }}
                           className={`px-3 py-1.5 rounded-lg cursor-pointer border transition-all duration-200 flex items-center justify-between min-h-[38px] ${
-                            activityValue === topic && !isNewWorkTask
+                            taskId === t.id && !isNewWorkTask
                               ? 'border-brand-teal bg-brand-teal/10 shadow-sm ring-1 ring-brand-teal' 
                               : 'border-border/50 hover:border-brand-teal/50 hover:bg-muted/30'
                           }`}
                         >
                           <div className="font-medium text-sm flex-1 flex items-center gap-2 min-w-0">
-                            <span className="whitespace-normal break-words" title={topic}>{topic}</span>
+                            <span className="whitespace-normal break-words" title={t.title}>{t.title}</span>
+                            {t.dueDate && (
+                              <span className="text-[10px] font-semibold bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap">
+                                {typeof t.dueDate === 'string' && t.dueDate.includes('T') ? t.dueDate.split('T')[0] : String(t.dueDate)}
+                              </span>
+                            )}
                           </div>
+                          {t.projectName && <div className="text-[11px] text-muted-foreground ml-3 bg-muted/40 px-1.5 py-0.5 rounded flex-shrink-0 max-w-[35%] line-clamp-1">{t.projectName}</div>}
                         </div>
                       ))}
+
+                      {/* Show past work tasks that aren't already in the assigned tasks list */}
+                      {(() => {
+                        const taskTitles = new Set(tasks.map(t => t.title));
+                        const filteredPastWork = pastWorkTasks.filter(topic => !taskTitles.has(topic));
+                        if (filteredPastWork.length === 0) return null;
+                        return filteredPastWork.map(topic => (
+                          <div 
+                            key={`past_${topic}`} 
+                            onClick={() => {
+                              setIsNewWorkTask(false);
+                              setTaskId("");
+                              setActivityValue(topic);
+                            }}
+                            className={`px-3 py-1.5 rounded-lg cursor-pointer border transition-all duration-200 flex items-center justify-between min-h-[38px] ${
+                              activityValue === topic && !taskId && !isNewWorkTask
+                                ? 'border-brand-teal bg-brand-teal/10 shadow-sm ring-1 ring-brand-teal' 
+                                : 'border-border/50 hover:border-brand-teal/50 hover:bg-muted/30'
+                            }`}
+                          >
+                            <div className="font-medium text-sm flex-1 flex items-center gap-2 min-w-0">
+                              <span className="whitespace-normal break-words" title={topic}>{topic}</span>
+                            </div>
+                          </div>
+                        ));
+                      })()}
                       
                       <div 
                         key="custom_work" 
                         onClick={() => {
                           setIsNewWorkTask(true);
+                          setTaskId("");
                           setActivityValue("");
                         }}
                         className={`px-3 py-1.5 mt-2 rounded-lg cursor-pointer border transition-all duration-200 flex items-center justify-between min-h-[38px] border-dashed ${

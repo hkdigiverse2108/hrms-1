@@ -57,7 +57,6 @@ _app_monitor_thread = None
 _stop_event = threading.Event()
 _main_loop = None
 
-_keyboard_controller = Controller()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Platform-specific imports & setup

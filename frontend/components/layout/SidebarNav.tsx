@@ -235,15 +235,23 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     }
 
     const companyFinanceChildren: MenuItem[] = [];
-    if (isAdmin || checkPermission('company-finance', 'canView')) {
+    if (isAdmin || checkPermission('company-finance-bank-transactions', 'canView') || checkPermission('company-finance-cash-transactions', 'canView')) {
       companyFinanceChildren.push(getItem(<Link href="/company-finance">Transactions</Link>, "/company-finance"));
+    }
+    if (isAdmin || checkPermission('company-finance-plan', 'canView')) {
       companyFinanceChildren.push(getItem(<Link href="/company-finance/plan">Plan</Link>, "/company-finance/plan"));
+    }
+    if (isAdmin || checkPermission('company-finance-summary', 'canView')) {
       companyFinanceChildren.push(getItem(<Link href="/company-finance/summary">Summary</Link>, "/company-finance/summary"));
-      companyFinanceChildren.push(getItem(<Link href="/company-finance/client-transactions">Client Transactions</Link>, "/company-finance/client-transactions"));
+    }
+    if (isAdmin || checkPermission('company-finance-client-transactions', 'canView')) {
+      companyFinanceChildren.push(getItem(<Link href="/company-finance/client-transactions">Other Transactions</Link>, "/company-finance/client-transactions"));
+    }
+    if (isAdmin || checkPermission('company-finance-logs', 'canView')) {
       companyFinanceChildren.push(getItem(<Link href="/company-finance/logs">Audit Logs</Link>, "/company-finance/logs"));
     }
 
-    if (isAdmin || companyFinanceChildren.length > 0) {
+    if (companyFinanceChildren.length > 0) {
       menuItems.push(getItem("Company Finance", "company-finance-sub", <Landmark className="w-5 h-5" />, companyFinanceChildren));
     }
 
@@ -409,14 +417,14 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
         {collapsed ? (
           <div className="flex items-center justify-center gap-1 w-full">
             <img src="/logo.png" alt="HK Icon" className="h-8 w-8 object-cover object-left shrink-0 rounded-lg" />
-            <button onClick={toggleCollapse} className="text-slate-600 hover:text-brand-teal p-0.5 hover:bg-slate-100 rounded transition-all shrink-0">
+            <button onClick={toggleCollapse} className="hidden lg:block text-slate-600 hover:text-brand-teal p-0.5 hover:bg-slate-100 rounded transition-all shrink-0">
               <MenuIcon className="w-4 h-4" />
             </button>
           </div>
         ) : (
           <div className="flex items-center justify-between w-full gap-2">
             <img src="/logo.png" alt="HariKrushn DigiVerse Logo" className="h-12 w-auto object-contain max-w-[160px]" />
-            <button onClick={toggleCollapse} className="text-slate-600 hover:text-brand-teal p-1 hover:bg-slate-100/50 rounded-md transition-all shrink-0">
+            <button onClick={toggleCollapse} className="hidden lg:block text-slate-600 hover:text-brand-teal p-1 hover:bg-slate-100/50 rounded-md transition-all shrink-0">
               <MenuIcon className="w-5 h-5" />
             </button>
           </div>

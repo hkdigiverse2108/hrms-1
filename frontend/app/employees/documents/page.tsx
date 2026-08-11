@@ -383,23 +383,37 @@ export default function EmployeeDocumentsPage() {
     }
   }
 
-  useEffect(() => {
-    const fetchPayrolls = async () => {
-      try {
-        const response = await fetch(`${API_URL}/payroll`)
-        if (response.ok) {
-          setPayrolls(await response.json())
+  const fetchPageData = async () => {
+    setLoading(true)
+    try {
+      const roleParam = isAdminOrHR ? 'Admin' : (user?.role || '');
+      const res = await fetch(`${API_URL}/documents-page-data?userId=${user?.id || user?.employeeId || ''}&role=${roleParam}`);
+      if (res.ok) {
+        const data = await res.json()
+        setDocumentRequests(data.requests || [])
+        setDocTypes(data.types || [])
+        setPayrolls(data.payroll || [])
+        
+        if (Array.isArray(data.templates)) {
+          setTemplates(data.templates)
+          if (data.templates.length > 0) {
+            setRequestFormData(prev => ({
+              ...prev,
+              documentType: prev.documentType || data.templates[0].name
+            }))
+          }
         }
-      } catch (err) {
-        console.error(err)
       }
+    } catch (err) {
+      console.error('Error fetching page data:', err)
+    } finally {
+      setLoading(false)
     }
-    
+  }
+
+  useEffect(() => {
     if (user) {
-      fetchRequests()
-      fetchDocTypes()
-      fetchPayrolls()
-      fetchTemplates()
+      fetchPageData();
     }
   }, [user, isAdminOrHR])
 

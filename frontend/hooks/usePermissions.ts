@@ -26,6 +26,8 @@ export function usePermissions(moduleName?: string) {
     canEdit: checkPermission(moduleName, 'canEdit'),
     canDelete: checkPermission(moduleName, 'canDelete'),
     canView: checkPermission(moduleName, 'canView'),
+    restrictClients: permissions?.find((p: any) => p.moduleName === moduleName)?.restrictClients || false,
+    allowedClients: permissions?.find((p: any) => p.moduleName === moduleName)?.allowedClients || [],
   } : null
 
   return {

@@ -38,8 +38,8 @@ export default function PayrollPage() {
   const [employees, setEmployees] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isProcessing, setIsProcessing] = useState(false)
-  const [selectedMonth, setSelectedMonth] = useState('May')
-  const [selectedYear, setSelectedYear] = useState('2026')
+  const [selectedMonth, setSelectedMonth] = useState(() => new Date().toLocaleString('en-US', { month: 'long' }))
+  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear().toString())
   
   const [isBreakdownOpen, setIsBreakdownOpen] = useState(false)
   const [selectedBreakdown, setSelectedBreakdown] = useState<any[]>([])
@@ -76,7 +76,16 @@ export default function PayrollPage() {
 
   const userStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null
   const user = userStr ? JSON.parse(userStr) : null
-  const isAdminOrHR = user?.role === 'Admin' || user?.designation?.toLowerCase() === 'hr'
+  const userRole = (user?.role || '').toLowerCase()
+  const userDesignation = (user?.designation || '').toLowerCase()
+  const userDept = (user?.department || '').toLowerCase()
+  
+  const isAdminOrHR = 
+    userRole.includes('admin') || 
+    userRole.includes('hr') || 
+    userDesignation.includes('hr') || 
+    userDept.includes('hr') ||
+    userDept.includes('human resources')
 
   const finalPayroll = isAdminOrHR 
     ? filteredPayroll 

@@ -385,7 +385,7 @@ export default function ActivityLogsPage() {
                               {log.action}
                             </span>
                           </td>
-                          <td className="py-4 px-4 text-slate-600 dark:text-slate-400 max-w-xl truncate">
+                          <td className="py-4 px-4 text-slate-600 dark:text-slate-400 max-w-xl break-words whitespace-pre-wrap">
                             {log.details}
                           </td>
                         </tr>

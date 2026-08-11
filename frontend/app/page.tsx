@@ -187,15 +187,12 @@ export default function DashboardPage() {
  
   useEffect(() => {
     if (user?.id) {
-      fetchStatus();
-      fetchHistory();
-      fetchDashboardData();
+      Promise.all([fetchStatus(), fetchHistory(), fetchDashboardData()]);
     }
 
     const handleUpdate = () => {
       if (user?.id) {
-        fetchStatus();
-        fetchHistory();
+        Promise.all([fetchStatus(), fetchHistory()]);
       }
     };
     window.addEventListener("attendance-update", handleUpdate);

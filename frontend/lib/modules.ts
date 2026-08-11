@@ -41,7 +41,7 @@ export const MODULES_CONFIG = [
       { moduleName: 'company-finance-transactions', displayName: 'Transactions', tabUrl: '/company-finance' },
       { moduleName: 'company-finance-plan', displayName: 'Plan', tabUrl: '/company-finance/plan' },
       { moduleName: 'company-finance-summary', displayName: 'Summary', tabUrl: '/company-finance/summary' },
-      { moduleName: 'company-finance-client-transactions', displayName: 'Client Transactions', tabUrl: '/company-finance/client-transactions' },
+      { moduleName: 'company-finance-client-transactions', displayName: 'Other Transactions', tabUrl: '/company-finance/client-transactions' },
       { moduleName: 'company-finance-audit-logs', displayName: 'Audit Logs', tabUrl: '/company-finance/logs' },
     ]
   },

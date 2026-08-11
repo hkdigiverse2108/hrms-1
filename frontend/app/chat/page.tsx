@@ -4401,10 +4401,12 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-[calc(100vh-95px)] sm:h-[calc(100vh-105px)] md:h-[calc(100vh-110px)] lg:h-[calc(100vh-95px)] w-full max-w-full min-w-0 bg-white border border-border rounded-xl overflow-hidden shadow-sm transition-all">
-      {/* Messages Sidebar */}
+      {/* Left Sidebar - Chat List */}
       <div className={cn(
-        "w-full sm:w-[290px] md:w-[320px] lg:w-[350px] xl:w-[380px] shrink-0 border-r border-border flex flex-col bg-gray-50/30 min-w-0 transition-all",
-        selectedChat && "hidden md:flex" // Hide list on mobile when chat is open
+        "w-full md:w-[280px] lg:w-[320px] xl:w-[340px] shrink-0 border-r border-border flex-col bg-gray-50/30 min-w-0 transition-all",
+        selectedChat 
+          ? (showRightSidebar ? "hidden xl:flex" : "hidden md:flex") 
+          : "flex"
       )}>
         <div className="p-6 space-y-4">
           <div className="flex items-center justify-between">
@@ -5888,10 +5890,11 @@ export default function ChatPage() {
                                                     <div className="relative flex items-center justify-between gap-2">
                                                       <div className="flex items-center gap-2 min-w-0">
                                                         <div className={cn(
-                                                          "w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 transition-all duration-300",
+                                                          "w-3.5 h-3.5 border flex items-center justify-center shrink-0 transition-all duration-300",
+                                                          msg.poll.isMultiple ? "rounded-sm" : "rounded-full",
                                                           hasVoted ? "border-emerald-500 bg-emerald-50" : "border-slate-300"
                                                         )}>
-                                                          {hasVoted && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
+                                                          {hasVoted && <div className={cn("bg-emerald-500", msg.poll.isMultiple ? "w-2 h-2 rounded-[1px]" : "w-1.5 h-1.5 rounded-full")} />}
                                                         </div>
                                                         <span className={cn(
                                                           "text-[12px] font-medium truncate",
@@ -6574,7 +6577,7 @@ export default function ChatPage() {
             )}
             {/* Right Sidebar - Shared Files Repository / Contact Info */}
             {selectedChat && showRightSidebar && (
-              <div className="hidden sm:flex w-full sm:w-[340px] lg:w-[380px] border-l border-border bg-white flex-col overflow-hidden animate-in slide-in-from-right duration-300 shrink-0">
+              <div className="flex w-[85%] md:w-[280px] lg:w-[320px] xl:w-[340px] border-l border-border bg-white flex-col overflow-hidden animate-in slide-in-from-right duration-300 shrink-0 absolute right-0 top-0 bottom-0 z-40 shadow-2xl md:relative md:z-auto md:shadow-none">
                 <div className="h-[88px] border-b border-border px-6 flex items-center justify-between bg-white shrink-0">
                   {sidebarContactUser ? (
                     <div className="flex items-center gap-2">

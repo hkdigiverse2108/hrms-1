@@ -238,7 +238,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
           const normalizeDate = (d: string) => d ? d.split(" ")[0].split("T")[0] : "";
           
           clients.forEach(client => {
-            const clientProjects = projects.filter((p: any) => p.clientId === client.id && p.department?.toLowerCase() === "digital marketing");
+            const clientProjects = projects.filter((p: any) => p.clientId === client.id && p.department?.toLowerCase() === "digital marketing" && p.status?.toLowerCase() === "active");
             const proj = clientProjects[0];
             
             if (proj) {

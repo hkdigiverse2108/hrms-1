@@ -753,7 +753,7 @@ export default function TaskManagementPage() {
         title="Task Management" 
         description="Track and manage all tasks in one simple task page."
       >
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto mt-4 sm:mt-0">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3 w-full sm:w-auto mt-4 sm:mt-0">
           
           {/* Combined Filter Settings Box (All | My Filter | Settings Icon) */}
           <div className="flex items-center bg-white border border-slate-200 rounded-lg p-1">

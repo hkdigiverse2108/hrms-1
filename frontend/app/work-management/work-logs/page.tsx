@@ -31,6 +31,10 @@ const ACTIVITY_META: Record<string, { label: string; color: string; bg: string; 
 
 export default function WorkLogsPage() {
   const { user, isLoading: isUserLoading } = useUser()
+  
+  const isAdmin = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'hr' || user?.designation?.toLowerCase() === 'hr'
+  const isTeamLeader = user?.designation?.toLowerCase().includes('team leader') || user?.designation?.toLowerCase().includes('head') || user?.role?.toLowerCase() === 'team leader'
+
 
   const [attendance, setAttendance] = useState<any[]>([])
   const [tasks, setTasks]           = useState<any[]>([])
@@ -75,17 +79,34 @@ export default function WorkLogsPage() {
   }
 
   const employeeOptions = useMemo(() => {
-    return employees
+    let emps = employees
+    if (isTeamLeader && !isAdmin && user) {
+      const userDept = user.department?.toLowerCase().trim() || ''
+      emps = emps.filter(e => {
+        const isSelf = String(e.id) === String(user.id) || String(e._id) === String(user._id)
+        if (isSelf) return true
+
+        const eDept = e.department?.toLowerCase().trim() || ''
+        if (!userDept || eDept !== userDept) return false
+
+        const rStr = (e.role || '').toLowerCase()
+        const dStr = (e.designation || '').toLowerCase()
+        const isHighLevel = ['team leader', 'manager', 'social media manager', 'head'].some(r => rStr.includes(r) || dStr.includes(r))
+        
+        return !isHighLevel && rStr !== 'admin'
+      })
+    }
+    return emps
+      .filter(e => e.name && e.name.trim() !== '')
       .map(e => ({ id: e.id || e._id, name: e.name }))
-      .sort((a, b) => a.name.localeCompare(b.name))
-  }, [employees])
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+  }, [employees, isAdmin, isTeamLeader, user])
 
   // ── filtered attendance rows ────────────────────────────────────────────────
   const filteredAttendance = useMemo(() => {
     if (!attendance.length || !user) return []
-    const isAdmin = user.role?.toLowerCase() === 'admin' || user.role?.toLowerCase() === 'hr' || user.designation?.toLowerCase() === 'hr'
 
-    let rows = [...attendance]
+    let rows = [...attendance].filter(a => a.employeeName && a.employeeName.trim() !== '')
 
     // date filter
     if (dateFilterPreset === 'today') {
@@ -106,14 +127,20 @@ export default function WorkLogsPage() {
     }
 
     // employee filter
-    if (!isAdmin) {
-      rows = rows.filter(a => a.employeeId === user.id || a.employeeId === user._id)
+    if (!isAdmin && !isTeamLeader) {
+      rows = rows.filter(a => String(a.employeeId) === String(user.id) || String(a.employeeId) === String(user._id))
+    } else if (isTeamLeader) {
+      const allowedIds = new Set(employeeOptions.map(e => String(e.id)))
+      rows = rows.filter(a => allowedIds.has(String(a.employeeId)))
+      if (filterEmployee !== 'All') {
+        rows = rows.filter(a => String(a.employeeId) === String(filterEmployee))
+      }
     } else if (filterEmployee !== 'All') {
-      rows = rows.filter(a => a.employeeId === filterEmployee)
+      rows = rows.filter(a => String(a.employeeId) === String(filterEmployee))
     }
 
     return rows
-  }, [attendance, user, dateFilterPreset, selectedDate, filterEmployee])
+  }, [attendance, user, dateFilterPreset, selectedDate, filterEmployee, isAdmin, isTeamLeader, employeeOptions])
 
   // ── parse a single attendance row into logs ─────────────────────────────────
   const parseLogs = (att: any) => {
@@ -223,7 +250,7 @@ export default function WorkLogsPage() {
           totalDurationStr: fmtMins(totalMins),
         }
       })
-      .sort((a, b) => a.employeeName.localeCompare(b.employeeName))
+      .sort((a, b) => (a.employeeName || '').localeCompare(b.employeeName || ''))
   }, [filteredAttendance, tasks, dateFilterPreset])
 
   // ── multi-day summary ───────────────────────────────────────────────────────
@@ -324,7 +351,7 @@ export default function WorkLogsPage() {
     }).sort((a, b) => {
       if (a.isOnline && !b.isOnline) return -1;
       if (!a.isOnline && b.isOnline) return 1;
-      return a.employeeName.localeCompare(b.employeeName);
+      return (a.employeeName || '').localeCompare(b.employeeName || '');
     });
   }, [singleDayData])
 
@@ -356,7 +383,7 @@ export default function WorkLogsPage() {
           description="Track and analyze employee activities with time breakdown"
         />
         <div className="flex flex-wrap items-center gap-3">
-          {user?.role?.toLowerCase() === 'admin' && (
+          {(isAdmin || isTeamLeader) && (
             <div className="flex items-center gap-2">
               <Users className="w-4 h-4 text-gray-500" />
               <SearchableSelect
@@ -445,7 +472,7 @@ export default function WorkLogsPage() {
           {/* Employee Activity Header & Toggle */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2 mt-6">
             <h3 className="text-lg font-bold text-slate-800">Employee Activity</h3>
-            {user?.role?.toLowerCase() === 'admin' && dateFilterPreset === 'today' && (
+            {(isAdmin || isTeamLeader) && dateFilterPreset === 'today' && (
               <Tabs value={viewMode} onValueChange={setViewMode} className="w-full sm:w-[300px]">
                 <TabsList className="bg-slate-100/70 p-1 rounded-xl shadow-inner border border-slate-200/60 inline-flex items-center gap-1">
                   <TabsTrigger value="current" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm data-[state=active]:border-slate-200/50 px-4 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap hover:bg-slate-200/50 border border-transparent h-auto">Current Activity</TabsTrigger>

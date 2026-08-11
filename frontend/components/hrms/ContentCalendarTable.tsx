@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
 import { useConfirm } from "@/context/ConfirmContext";
-import { Loader2, Plus, Trash2, Save, X, Check, Maximize, Minimize, Settings2, Download, History, Calendar as CalendarIcon, ChevronDownIcon, Copy } from "lucide-react";
+import { Loader2, Plus, Trash2, Save, X, Check, Maximize, Minimize, Settings2, Download, History, Calendar as CalendarIcon, ChevronDownIcon, Copy, Star, Lightbulb } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { Button } from "@/components/ui/button";
@@ -59,6 +59,7 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
   const [editForm, setEditForm] = useState<any>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [explanationMode, setExplanationMode] = useState(false);
   const { confirm } = useConfirm();
   const { user } = useUserContext();
 
@@ -650,6 +651,94 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
     }
   };
 
+  const handleToggleHighlight = async (entry: any) => {
+    try {
+      const currentUserId = user?.id || user?._id;
+      if (!currentUserId) {
+        toast.error("User session not found");
+        return;
+      }
+      
+      const currentList = Array.isArray(entry.highlightedByUserIds) ? entry.highlightedByUserIds : [];
+      let newList: string[];
+      let isHighlightedNow: boolean;
+      
+      if (currentList.includes(currentUserId)) {
+        newList = currentList.filter(id => id !== currentUserId);
+        isHighlightedNow = false;
+      } else {
+        newList = [...currentList, currentUserId];
+        isHighlightedNow = true;
+      }
+      
+      const res = await fetch(`${API_URL}/content-calendar/${entry.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ highlightedByUserIds: newList }),
+      });
+      if (res.ok) {
+        setEntries((prev) =>
+          prev.map((e) => (e.id === entry.id ? { ...e, highlightedByUserIds: newList } : e))
+        );
+        toast.success(isHighlightedNow ? "Row highlighted!" : "Highlight removed!");
+      } else {
+        toast.error("Failed to update highlight status");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to toggle highlight status");
+    }
+  };
+
+  const handleClearAllHighlights = async () => {
+    const currentUserId = user?.id || user?._id;
+    if (!currentUserId) {
+      toast.error("User session not found");
+      return;
+    }
+    
+    const highlightedEntries = entries.filter(e => 
+      Array.isArray(e.highlightedByUserIds) && e.highlightedByUserIds.includes(currentUserId)
+    );
+    
+    if (highlightedEntries.length === 0) {
+      toast.info("No highlighted rows to clear.");
+      return;
+    }
+    
+    
+    try {
+      setIsSaving(true);
+      await Promise.all(highlightedEntries.map(async (entry) => {
+        const currentList = Array.isArray(entry.highlightedByUserIds) ? entry.highlightedByUserIds : [];
+        const newList = currentList.filter(id => id !== currentUserId);
+        
+        await fetch(`${API_URL}/content-calendar/${entry.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ highlightedByUserIds: newList }),
+        });
+      }));
+      
+      setEntries(prev => prev.map(e => {
+        if (Array.isArray(e.highlightedByUserIds) && e.highlightedByUserIds.includes(currentUserId)) {
+          return {
+            ...e,
+            highlightedByUserIds: e.highlightedByUserIds.filter(id => id !== currentUserId)
+          };
+        }
+        return e;
+      }));
+      
+      toast.success("All highlights cleared!");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to clear some highlights");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
 
 
   const handleDownloadPdf = async () => {
@@ -1196,7 +1285,22 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
             <Download className="w-4 h-4 mr-1" />
             PDF
           </Button>
-          <Button onClick={handleAddRow} size="sm" className="bg-brand-teal hover:bg-teal-700">
+          <Button 
+            onClick={() => setExplanationMode(!explanationMode)} 
+            size="sm" 
+            variant={explanationMode ? "default" : "outline"} 
+            className={explanationMode ? "bg-amber-500 hover:bg-amber-600 text-white font-bold h-9" : "text-slate-700 h-9"}
+          >
+            <Lightbulb className="w-4 h-4 mr-1" />
+            {explanationMode ? "Explanation Mode: ON" : "Explanation Mode"}
+          </Button>
+          {explanationMode && entries.some(e => Array.isArray(e.highlightedByUserIds) && e.highlightedByUserIds.includes(user?.id || user?._id)) && (
+            <Button onClick={handleClearAllHighlights} size="sm" variant="outline" className="text-amber-600 border-amber-200 hover:bg-amber-50 hover:text-amber-700 h-9">
+              <Star className="w-4 h-4 mr-1 fill-current" />
+              Clear Highlights
+            </Button>
+          )}
+          <Button onClick={handleAddRow} size="sm" className="bg-brand-teal hover:bg-teal-700 h-9">
             <Plus className="w-4 h-4 mr-1" />
             Add Row
           </Button>
@@ -1488,8 +1592,10 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
                   </td>
                 </tr>
               ) : (
-                filteredEntries.map((entry) => {
+                 filteredEntries.map((entry) => {
                   const isEditing = editingId === entry.id;
+                  const currentUserId = user?.id || user?._id;
+                  const isRowHighlighted = !!(currentUserId && Array.isArray(entry.highlightedByUserIds) && entry.highlightedByUserIds.includes(currentUserId));
                   
                   let isDue = false;
                   if (entry.postingDate) {
@@ -1506,12 +1612,26 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
                   }
                   
                   return (
-                    <tr key={entry.id} id={`task-${entry.id}`} className={`transition-all duration-1000 ${isDue ? "bg-red-50 border-red-200" : "odd:bg-white even:bg-slate-50"}`}>
+                    <tr 
+                      key={entry.id} 
+                      id={`task-${entry.id}`} 
+                      className={`transition-all duration-1000 ${
+                        explanationMode && isRowHighlighted 
+                          ? "bg-amber-100/55 border-amber-300 hover:bg-amber-100/80 border-l-[6px] border-l-amber-600 font-semibold text-amber-950 shadow-sm" 
+                          : isDue 
+                            ? "bg-red-50 border-red-200" 
+                            : "odd:bg-white even:bg-slate-50"
+                      }`}
+                    >
                       {fieldKeys.map((key, index) => (
                         <td 
                           key={key} 
-                          className={`px-2 py-1 border border-slate-200 max-w-[200px] ${
+                          className={`px-2 py-1 border border-slate-200 max-w-[200px] transition-all duration-150 ${
                             index <= 2 ? "sticky z-10" : ""
+                          } ${
+                            explanationMode 
+                              ? "hover:bg-amber-200 hover:border-amber-500 hover:text-slate-950 hover:font-bold hover:shadow-md hover:scale-[1.015] hover:z-20 relative cursor-pointer" 
+                              : ""
                           }`}
                           style={{
                             left: index === 0 ? 0 : index === 1 ? '140px' : index === 2 ? '260px' : 'auto',
@@ -1719,6 +1839,17 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
                             </>
                           ) : (
                             <>
+                              {explanationMode && (
+                                <Button 
+                                  size="icon" 
+                                  variant="ghost" 
+                                  className={`h-6 w-6 ${isRowHighlighted ? "text-amber-500 hover:text-amber-600 hover:bg-amber-50" : "text-slate-400 hover:text-amber-500 hover:bg-slate-50"}`} 
+                                  onClick={() => handleToggleHighlight(entry)} 
+                                  title={isRowHighlighted ? "Remove Highlight" : "Highlight Row"}
+                                >
+                                  <Star className="h-3.5 w-3.5" style={{ fill: isRowHighlighted ? "currentColor" : "none" }} />
+                                </Button>
+                              )}
                               <Button size="icon" variant="ghost" className="h-6 w-6 text-slate-500 hover:text-brand-teal hover:bg-slate-50" onClick={() => handleOpenLogs(entry)} title="Activity Logs">
                                 <History className="h-3.5 w-3.5" />
                               </Button>

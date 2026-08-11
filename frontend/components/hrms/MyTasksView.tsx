@@ -483,14 +483,14 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
     };
 
     clients.forEach((client) => {
-      const clientProjects = projects.filter((p) => p.clientId === client.id && p.department?.toLowerCase() === "digital marketing" && p.status !== "on-hold" && p.status !== "onhold" && p.status?.toLowerCase() !== "on-hold");
+      const clientProjects = projects.filter((p) => p.clientId === client.id && p.department?.toLowerCase() === "digital marketing" && p.status?.toLowerCase() === "active");
       const proj = clientProjects[0];
 
       if (proj) {
         const dates = getPastDates(6);
         dates.forEach(dateStr => {
           const report = dailyReports.find(r => r.clientId === client.id && normalizeDate(r.date) === dateStr);
-          const isFilled = (val: any) => val !== undefined && val !== null && val !== 0 && val !== "" && val !== "0" && val !== 0.0;
+          const isFilled = (val: any) => val !== undefined && val !== null && val !== "";
           const isClientIssue = report?.remarks && report.remarks.toString().includes("[CLIENT ISSUE]");
 
           const metricsRecord = projectRemarks.find(r => r.projectId === proj.id && normalizeDate(r.date) === dateStr);
@@ -562,8 +562,8 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
         if (status === 'completed' || status === 'approved') return;
 
         total++;
-        if (status === 'in progress' || status === 'in_progress') inProgress++;
-        else if (status === 'pending review' || status === 'pending_review' || status === 'ready for review' || status === 'ready_for_review') pendingReview++;
+        if (status === 'in progress' || status === 'in_progress' || status === 'in-progress') inProgress++;
+        else if (status === 'pending review' || status === 'pending_review' || status === 'ready for review' || status === 'ready_for_review' || status === 'review') pendingReview++;
 
         const dueDateStr = t.dueDate || t.postingDate;
         if (dueDateStr) {

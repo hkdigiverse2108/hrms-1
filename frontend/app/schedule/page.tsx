@@ -218,17 +218,34 @@ export default function SchedulePage() {
   const syncUserProfile = React.useCallback(async () => {
     if (!user?.id) return;
     try {
-      const res = await fetch(`${API_URL}/employees/${user.id}`);
+      const [res, pRes] = await Promise.all([
+        fetch(`${API_URL}/employees/${user.id}`),
+        fetch(`${API_URL}/user-permissions/${user.id}`)
+      ]);
       if (res.ok) {
         const freshUser = await res.json();
         if (freshUser && !freshUser.detail) {
-          const pRes = await fetch(`${API_URL}/user-permissions/${user.id}`);
           const pData = pRes.ok ? await pRes.json() : { permissions: [] };
           if (updateUser) {
-            updateUser({
+            const newUserData = {
               ...freshUser,
               permissions: pData?.permissions || []
+            };
+            
+            // Prevent infinite loops by only updating if there are actual changes
+            const currentUserStr = JSON.stringify({
+              ...user,
+              // Exclude fields that might not be in freshUser or are handled differently
+              token: undefined
             });
+            const freshUserStr = JSON.stringify({
+              ...newUserData,
+              token: undefined
+            });
+            
+            if (currentUserStr !== freshUserStr) {
+              updateUser(newUserData);
+            }
           }
         }
       }

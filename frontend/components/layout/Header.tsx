@@ -367,13 +367,13 @@ export function Header() {
   return (
     <>
       <AntHeader 
-        className={`bg-white border-b border-border flex items-center justify-between px-6 sticky top-0 z-40 w-full shadow-2xs ${
+        className={`bg-white border-b border-border flex items-center justify-between px-3 sm:px-6 sticky top-0 z-40 w-full shadow-2xs ${
           (isSalesSection && todayFollowUpCount > 0) ? "mb-0" : "mb-6"
         }`}
-        style={{ height: '64px', padding: '0 24px', lineHeight: '64px', background: '#fff' }}
+        style={{ height: '64px', padding: 0, lineHeight: '64px', background: '#fff' }}
       >
         {/* Left - Search & Mobile Menu */}
-        <div className="flex-1 max-w-md flex items-center gap-4 h-full">
+        <div className="flex-1 max-w-md flex items-center gap-2 sm:gap-4 h-full">
           <Sheet>
             <SheetTrigger asChild>
               <button className="p-2 lg:hidden border border-border rounded-md hover:bg-muted transition-colors flex items-center justify-center">
@@ -388,9 +388,9 @@ export function Header() {
         </div>
  
         {/* Right - Profile & Actions */}
-        <div className="flex items-center gap-4 h-full">
+        <div className="flex items-center gap-2 sm:gap-4 h-full">
           {user && (
-            <div className="flex items-center gap-2 mr-2">
+            <div className="flex items-center gap-1 sm:gap-2 mr-1 sm:mr-2">
               <QuickActionsWidget 
                 user={user} 
                 hideConfigButton={true}
@@ -505,8 +505,8 @@ export function Header() {
           </Link>
           
           <div className="flex items-center">
-            <Link href="/profile" className="flex items-center gap-3 ml-2 border-l border-border pl-6 px-2 py-1 h-10 my-auto hover:bg-muted rounded-md transition-colors">
-              <div className="flex items-center gap-3">
+            <Link href="/profile" className="flex items-center gap-2 sm:gap-3 ml-1 sm:ml-2 border-l border-border pl-2 sm:pl-6 px-1 sm:px-2 py-1 h-10 my-auto hover:bg-muted rounded-md transition-colors">
+              <div className="flex items-center gap-2 sm:gap-3">
                 <div className="relative flex items-center justify-center">
                   {hasTargetedBanner && targetedBadgeStyle !== "none" && (
                     <div className={`absolute -inset-[2.5px] rounded-full shadow-sm ${BADGE_PRESETS[targetedBadgeStyle]?.class || BADGE_PRESETS.gold.class}`}></div>

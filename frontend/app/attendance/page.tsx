@@ -660,7 +660,7 @@ export default function AttendancePage() {
         title="Attendance List"
         description="View and manage attendance records for the organization."
       >
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto mt-4 sm:mt-0">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap items-center gap-3 w-full sm:w-auto mt-4 sm:mt-0">
           <Dialog open={recoverModalOpen} onOpenChange={setRecoverModalOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" className="shadow-sm w-full sm:w-auto font-medium">

@@ -73,7 +73,7 @@ const AVAILABLE_ACTIONS: AvailableAction[] = [
   { id: 'finance_transactions', label: 'Transactions', path: '/company-finance', icon: Landmark, category: 'Company Finance', perm: 'company-finance' },
   { id: 'finance_plan', label: 'Plan', path: '/company-finance/plan', icon: Landmark, category: 'Company Finance', perm: 'company-finance' },
   { id: 'finance_summary', label: 'Summary', path: '/company-finance/summary', icon: Landmark, category: 'Company Finance', perm: 'company-finance' },
-  { id: 'finance_client_transactions', label: 'Client Transactions', path: '/company-finance/client-transactions', icon: Landmark, category: 'Company Finance', perm: 'company-finance' },
+  { id: 'finance_client_transactions', label: 'Other Transactions', path: '/company-finance/client-transactions', icon: Landmark, category: 'Company Finance', perm: 'company-finance' },
   { id: 'finance_logs', label: 'Audit Logs', path: '/company-finance/logs', icon: Landmark, category: 'Company Finance', perm: 'company-finance' },
 
   { id: 'workspace_seating', label: 'Seating Arrangement', path: '/workspace/seating', icon: MonitorPlay, category: 'Workspace', perm: 'seating-arrangement' },

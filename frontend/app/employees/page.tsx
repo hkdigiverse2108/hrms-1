@@ -45,11 +45,39 @@ import isSameOrBefore from "dayjs/plugin/isSameOrBefore";
 dayjs.extend(isSameOrAfter);
 dayjs.extend(isSameOrBefore);
 
+const BADGE_PRESETS: Record<string, { label: string; class: string }> = {
+  gold: {
+    label: "Golden Star",
+    class: "bg-gradient-to-tr from-yellow-400 via-amber-300 to-yellow-600 animate-pulse",
+  },
+  rainbow: {
+    label: "Rainbow Spinner",
+    class: "bg-gradient-to-r from-amber-400 via-rose-500 to-indigo-500 animate-spin",
+  },
+  emerald: {
+    label: "Emerald Neon",
+    class: "bg-gradient-to-r from-emerald-400 via-teal-500 to-cyan-500 animate-pulse",
+  },
+  rose: {
+    label: "Rose Diamond",
+    class: "bg-gradient-to-r from-rose-400 via-pink-500 to-purple-600 animate-pulse",
+  },
+  indigo: {
+    label: "Cyber Blue",
+    class: "bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-600 animate-spin",
+  },
+  none: {
+    label: "None",
+    class: "",
+  }
+};
+
 const COLUMN_OPTIONS = [
   { key: "firstName", label: "First Name", default: false },
   { key: "middleName", label: "Middle Name", default: false },
   { key: "lastName", label: "Last Name", default: false },
   { key: "name", label: "Employee Name", default: true },
+  { key: "email", label: "Email Address", default: true },
   { key: "phone", label: "Phone Number", default: false },
   { key: "password", label: "Password", default: true },
   { key: "dob", label: "Date of Birth", default: false },
@@ -95,6 +123,7 @@ export default function EmployeeListPage() {
   const { confirm } = useConfirm();
   const [employees, setEmployees] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [employeeRings, setEmployeeRings] = useState<Record<string, { style: string; label: string; class: string }>>({});
 
   const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
@@ -124,22 +153,29 @@ export default function EmployeeListPage() {
   };
 
   const renderCell = (emp: any, colKey: string) => {
+    const ring = employeeRings[emp.id] || employeeRings[emp._id] || employeeRings[emp.employeeId];
     switch (colKey) {
       case "name": {
-        const isTargeted = targetedEmployeeIds.has(emp.id);
         return (
           <div className="flex items-center gap-3">
             <div className="relative flex items-center justify-center">
-              {isTargeted && (
-                <div className="absolute -inset-[2.5px] rounded-full bg-gradient-to-tr from-yellow-400 via-amber-300 to-yellow-600 shadow-sm animate-pulse"></div>
+              {ring && (
+                <div className={`absolute -inset-[2.5px] rounded-full shadow-sm ${ring.class}`}></div>
               )}
-              <Avatar className={`relative z-10 w-9 h-9 ${isTargeted ? 'border-2 border-white' : ''}`}>
+              <Avatar className={`relative z-10 w-9 h-9 ${ring ? 'border-2 border-white' : ''}`}>
                 <AvatarImage src={getAvatarUrl(emp.profilePhoto, emp.name)} alt={emp.name} />
                 <AvatarFallback>{emp.name?.charAt(0) || "U"}</AvatarFallback>
               </Avatar>
             </div>
             <div>
-              <div className="font-semibold text-foreground">{emp.name}</div>
+              <div className="flex items-center gap-2">
+                <div className="font-semibold text-foreground">{emp.name}</div>
+                {ring && (
+                  <span className="inline-flex items-center text-[9px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded uppercase tracking-wide">
+                    {ring.label}
+                  </span>
+                )}
+              </div>
               <div className="text-xs text-muted-foreground">
                 {emp.role?.toLowerCase().includes('admin')
                   ? emp.designation || emp.role
@@ -147,12 +183,15 @@ export default function EmployeeListPage() {
                     ? `${emp.designation} ${emp.sub_department || emp.subDepartment}`
                     : (emp.designation && emp.department)
                       ? `${emp.designation} ${emp.department}`
-                      : emp.designation || emp.email}
+                      : emp.designation || ""}
               </div>
+              <div className="text-[11px] text-slate-400 mt-0.5">{emp.email}</div>
             </div>
           </div>
         );
       }
+      case "email":
+        return <span className="text-muted-foreground text-xs">{emp.email}</span>;
       case "employeeId":
         return <span className="font-medium">{emp.employeeId}</span>;
       case "gender":
@@ -446,20 +485,21 @@ export default function EmployeeListPage() {
 
   const fetchEmployees = async () => {
     try {
-      const response = await fetch(`${API_URL}/employees?include_inactive=true`);
+      const [response, settingsRes] = await Promise.all([
+        fetch(`${API_URL}/employees?include_inactive=true`),
+        fetch(`${API_URL}/system-settings`)
+      ]);
       if (!response.ok) throw new Error("Failed to fetch employees");
       const data = await response.json();
       setEmployees(data);
       
-      // Fetch settings for banners
-      const settingsRes = await fetch(`${API_URL}/system-settings`);
+      // Process settings for banners
       if (settingsRes.ok) {
         const settingsData = await settingsRes.json();
         const banners = settingsData.dashboardBanners || [];
         const todayStr = dayjs().format('YYYY-MM-DD');
         const active = banners.filter((b: any) => {
           if (!b.isActive) return false;
-          if (!b.employeeId || b.employeeId === "all") return false;
           const hasStartDate = !!b.startDate;
           const hasEndDate = !!b.endDate;
           if (!hasStartDate && !hasEndDate) return true;
@@ -467,8 +507,30 @@ export default function EmployeeListPage() {
           if (!hasStartDate && hasEndDate) return dayjs(todayStr).isSameOrBefore(b.endDate);
           return dayjs(todayStr).isSameOrAfter(b.startDate) && dayjs(todayStr).isSameOrBefore(b.endDate);
         });
+        
+        const ringsMap: Record<string, { style: string; label: string; class: string }> = {};
         const targetedSet = new Set<string>();
-        active.forEach((b: any) => targetedSet.add(b.employeeId));
+        
+        active.forEach((b: any) => {
+          const style = b.badgeStyle || "gold";
+          if (style !== "none") {
+            const preset = BADGE_PRESETS[style] || BADGE_PRESETS.gold;
+            const ringInfo = { style, label: preset.label, class: preset.class };
+            
+            if (b.employeeId && b.employeeId !== "all") {
+              ringsMap[b.employeeId] = ringInfo;
+              targetedSet.add(b.employeeId);
+            }
+            if (b.employeeIds && Array.isArray(b.employeeIds)) {
+              b.employeeIds.forEach((id: string) => {
+                ringsMap[id] = ringInfo;
+                targetedSet.add(id);
+              });
+            }
+          }
+        });
+        
+        setEmployeeRings(ringsMap);
         setTargetedEmployeeIds(targetedSet);
       }
     } catch (err: any) {
