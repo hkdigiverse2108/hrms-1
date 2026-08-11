@@ -483,7 +483,7 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
     };
 
     clients.forEach((client) => {
-      const clientProjects = projects.filter((p) => p.clientId === client.id && p.department?.toLowerCase() === "digital marketing" && p.status !== "on-hold" && p.status !== "onhold" && p.status?.toLowerCase() !== "on-hold");
+      const clientProjects = projects.filter((p) => p.clientId === client.id && p.department?.toLowerCase() === "digital marketing" && p.status?.toLowerCase() === "active");
       const proj = clientProjects[0];
 
       if (proj) {
