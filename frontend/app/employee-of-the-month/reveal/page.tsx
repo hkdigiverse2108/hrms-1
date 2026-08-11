@@ -8,6 +8,7 @@ import { API_URL } from "@/lib/config";
 import { useUser } from "@/hooks/useUser";
 import { Spin } from "antd";
 import { motion } from "framer-motion";
+import dayjs from "dayjs";
 
 // Canvas Confetti Generator for Grand Finale & Visual Effects
 const triggerConfetti = (isGrandFinale = false) => {
@@ -288,6 +289,35 @@ export default function AuditoriumRevealPage() {
   // Admin Role Permission Check
   const isAdmin = user && ["admin", "super admin", "superadmin", "administrator", "founder"].includes(String(user.role || "").toLowerCase().trim());
 
+  // Scheduled Reveal Time Locking State
+  const [scheduledRevealTime, setScheduledRevealTime] = useState<string | null>(null);
+  const [isLocked, setIsLocked] = useState<boolean>(false);
+  const [adminUnlocked, setAdminUnlocked] = useState<boolean>(false);
+  const [countdownText, setCountdownText] = useState<string>("");
+
+  useEffect(() => {
+    if (!scheduledRevealTime || adminUnlocked) return;
+    const updateCountdown = () => {
+      const now = new Date().getTime();
+      const target = new Date(scheduledRevealTime).getTime();
+      const diff = target - now;
+      if (diff <= 0) {
+        setIsLocked(false);
+        setCountdownText("");
+      } else {
+        setIsLocked(true);
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const secs = Math.floor((diff % (1000 * 60)) / 1000);
+        setCountdownText(`${String(hours).padStart(2, '0')}h : ${String(mins).padStart(2, '0')}m : ${String(secs).padStart(2, '0')}s`);
+      }
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [scheduledRevealTime, adminUnlocked]);
+
   useEffect(() => {
     fetchLeaderboardAndCriteria();
   }, [monthYearParam]);
@@ -418,6 +448,17 @@ export default function AuditoriumRevealPage() {
   const fetchLeaderboardAndCriteria = async () => {
     setLoading(true);
     try {
+      const cfgRes = await fetch(`${API_URL}/eom/month-config?month_year=${monthYearParam}`);
+      if (cfgRes.ok) {
+        const cfgData = await cfgRes.json();
+        if (cfgData.revealDateTime) {
+          setScheduledRevealTime(cfgData.revealDateTime);
+          if (new Date() < new Date(cfgData.revealDateTime)) {
+            setIsLocked(true);
+          }
+        }
+      }
+
       const res = await fetch(`${API_URL}/eom/leaderboard?month_year=${monthYearParam}`);
       if (res.ok) {
         const data = await res.json();
@@ -760,6 +801,59 @@ export default function AuditoriumRevealPage() {
           >
             <ArrowLeft className="w-4 h-4" /> Return to Dashboard
           </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (isLocked && !adminUnlocked) {
+    return (
+      <div className="fixed inset-0 z-[999999] bg-[#0A0D18] flex flex-col items-center justify-center p-6 text-center select-none">
+        <div className="max-w-md w-full bg-slate-900/90 border border-amber-500/30 rounded-3xl p-8 shadow-2xl backdrop-blur-xl space-y-6 relative overflow-hidden">
+          <div className="w-20 h-20 bg-amber-500/10 rounded-full flex items-center justify-center mx-auto border border-amber-400/20 shadow-inner">
+            <Trophy className="w-10 h-10 text-amber-400 animate-pulse" />
+          </div>
+
+          <div className="space-y-2">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/20 text-amber-300 text-xs font-bold rounded-full border border-amber-400/30 uppercase tracking-widest">
+              🔒 Auditorium Reveal Locked
+            </span>
+            <h2 className="text-2xl font-black text-white">Event Scheduled</h2>
+            <p className="text-sm text-slate-400">
+              The Grand Auditorium Reveal for <span className="text-amber-400 font-bold">{monthYearParam}</span> is locked until the scheduled time.
+            </p>
+          </div>
+
+          {scheduledRevealTime && (
+            <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-1">
+              <div className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Scheduled Date & Time</div>
+              <div className="text-base font-black text-amber-300">
+                {dayjs(scheduledRevealTime).format("DD MMMM YYYY • hh:mm A")}
+              </div>
+              {countdownText && (
+                <div className="text-lg font-mono font-bold text-cyan-400 mt-2">
+                  Reveals in: {countdownText}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="pt-4 flex flex-col gap-3">
+            {isAdmin && (
+              <button
+                onClick={() => setAdminUnlocked(true)}
+                className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-sm rounded-xl shadow-lg shadow-amber-500/30 transition-all uppercase tracking-wider cursor-pointer"
+              >
+                🔓 Override Unlock (Admin Access)
+              </button>
+            )}
+            <Link
+              href="/employee-of-the-month"
+              className="inline-flex items-center justify-center gap-2 text-xs text-slate-400 hover:text-white transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" /> Return to Dashboard
+            </Link>
+          </div>
         </div>
       </div>
     );

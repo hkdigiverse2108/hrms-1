@@ -303,7 +303,17 @@ async def update_employee(db, employee_id: str, employee_update: schemas.Employe
         name = f"{first} {last}"
         if middle:
             name = f"{first} {middle} {last}"
-        update_data["name"] = name
+    # Single Team Leader per department validation
+    target_dept = update_data.get("department", existing.get("department", ""))
+    target_desig = update_data.get("designation", existing.get("designation", ""))
+    target_role = update_data.get("role", existing.get("role", ""))
+    await validate_single_team_leader_per_dept(
+        db,
+        department=target_dept,
+        designation=target_desig,
+        role=target_role,
+        exclude_employee_id=employee_id
+    )
 
     # Diff updates
     log_details, diffs = format_field_changes(existing, update_data, f"Employee '{existing.get('name')}'")
@@ -1476,7 +1486,41 @@ def sync_active_bond(data: dict):
             data["bondStartDate"] = None
             data["bondEndDate"] = None
 
+async def validate_single_team_leader_per_dept(db, department: str = None, designation: str = None, role: str = None, exclude_employee_id: str = None):
+    desig_str = (designation or "").strip().lower()
+    role_str = (role or "").strip().lower()
+    is_tl = any(k in desig_str or k in role_str for k in ["team leader", "tl", "team lead", "lead", "head"])
+    
+    if not is_tl or not department or not department.strip():
+        return
+
+    dept_clean = department.strip()
+    query = {
+        "status": {"$ne": "inactive"},
+        "department": {"$regex": f"^{re.escape(dept_clean)}$", "$options": "i"},
+        "$or": [
+            {"designation": {"$regex": "team leader|tl|team lead|lead|head", "$options": "i"}},
+            {"role": {"$regex": "team leader|tl|team lead|lead|head", "$options": "i"}}
+        ]
+    }
+    if exclude_employee_id:
+        try:
+            query["_id"] = {"$ne": ObjectId(exclude_employee_id)}
+        except Exception:
+            query["_id"] = {"$ne": exclude_employee_id}
+
+    existing_tl = await db.employees.find_one(query)
+    if existing_tl:
+        tl_name = existing_tl.get("name") or f"{existing_tl.get('firstName', '')} {existing_tl.get('lastName', '')}".strip() or "Employee"
+        raise ValueError(f"Department '{dept_clean}' already has an active Team Leader ({tl_name}). Only 1 Team Leader per department is allowed.")
+
 async def create_employee(db, employee: schemas.EmployeeCreate, performed_by: str = "System", user_name: str = "System User"):
+    await validate_single_team_leader_per_dept(
+        db,
+        department=employee.department,
+        designation=employee.designation,
+        role=employee.role
+    )
     is_admin = employee.role and employee.role.lower() == "admin"
     
     if not is_admin:

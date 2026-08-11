@@ -270,26 +270,35 @@ async def get_month_config(month_year: str):
         return {
             "month_year": month_year,
             "isConfigured": False,
-            "selectedEmployeeIds": None
+            "selectedEmployeeIds": None,
+            "revealDateTime": None
         }
     return {
         "month_year": month_year,
         "isConfigured": True,
-        "selectedEmployeeIds": config.get("selectedEmployeeIds", [])
+        "selectedEmployeeIds": config.get("selectedEmployeeIds", []),
+        "revealDateTime": config.get("revealDateTime", None)
     }
 
-async def save_month_config(month_year: str, selected_employee_ids: list):
-    doc = {
-        "month_year": month_year,
-        "selectedEmployeeIds": selected_employee_ids,
-        "updatedAt": datetime.now(IST)
-    }
+async def save_month_config(month_year: str, selected_employee_ids: list = None, reveal_date_time: str = None):
+    existing = await db.eom_month_config.find_one({"month_year": month_year}) or {}
+    update_fields = {"updatedAt": datetime.now(IST)}
+    if selected_employee_ids is not None:
+        update_fields["selectedEmployeeIds"] = selected_employee_ids
+    else:
+        update_fields["selectedEmployeeIds"] = existing.get("selectedEmployeeIds", None)
+    
+    if reveal_date_time is not None:
+        update_fields["revealDateTime"] = reveal_date_time
+    elif "revealDateTime" in existing:
+        update_fields["revealDateTime"] = existing["revealDateTime"]
+
     await db.eom_month_config.update_one(
         {"month_year": month_year},
-        {"$set": doc},
+        {"$set": update_fields},
         upsert=True
     )
-    return doc
+    return await get_month_config(month_year)
 
 async def clone_criteria(from_month_year: str, to_month_year: str):
     source_criteria = await db.eom_criteria.find({"month_year": from_month_year}).sort("order", 1).to_list(length=100)
@@ -416,8 +425,8 @@ async def get_eom_attendance_stats(month_year: str, max_score: float = 15.0):
     emp_distinct_dates = {}
 
     for r in att_records:
-        emp_id = str(r.get("employeeId") or "")
-        emp_name = str(r.get("employeeName") or "").strip().lower()
+        emp_id = str(r.get("employeeId") or r.get("employee_id") or r.get("empId") or r.get("userId") or r.get("user_id") or "").strip()
+        emp_name = str(r.get("employeeName") or r.get("employee_name") or r.get("name") or "").strip().lower()
         st = str(r.get("status", "")).lower().strip()
         check_in = str(r.get("checkIn", "")).strip()
         punches = r.get("punches", [])
@@ -446,15 +455,19 @@ async def get_eom_attendance_stats(month_year: str, max_score: float = 15.0):
         val = 0.5 if is_half else (1.0 if is_present else 0.0)
 
         if val > 0:
+            keys_to_add = set()
             if emp_id:
-                if emp_id not in emp_distinct_dates:
-                    emp_distinct_dates[emp_id] = {}
-                emp_distinct_dates[emp_id][d_str] = max(emp_distinct_dates[emp_id].get(d_str, 0.0), val)
-            
+                keys_to_add.add(emp_id)
             if emp_name:
-                if emp_name not in emp_distinct_dates:
-                    emp_distinct_dates[emp_name] = {}
-                emp_distinct_dates[emp_name][d_str] = max(emp_distinct_dates[emp_name].get(d_str, 0.0), val)
+                keys_to_add.add(emp_name)
+                parts_name = emp_name.split()
+                if len(parts_name) >= 2:
+                    keys_to_add.add(f"{parts_name[0]} {parts_name[-1]}")
+
+            for k in keys_to_add:
+                if k not in emp_distinct_dates:
+                    emp_distinct_dates[k] = {}
+                emp_distinct_dates[k][d_str] = max(emp_distinct_dates[k].get(d_str, 0.0), val)
 
     for key, dates_dict in emp_distinct_dates.items():
         emp_present_map[key] = sum(dates_dict.values())
@@ -527,15 +540,251 @@ async def get_eom_attendance_stats(month_year: str, max_score: float = 15.0):
     except Exception as err:
         print("Error processing approved leave deductions for EOM:", err)
 
+    now_dt = datetime.now()
+    is_current_month = (year == now_dt.year and month == now_dt.month)
+
+    max_present = max(emp_present_map.values()) if emp_present_map else 0.0
+
+    if is_current_month:
+        sundays_so_far = sum(1 for d_idx in range(1, now_dt.day + 1) if date(year, month, d_idx).weekday() == 6)
+        holidays_so_far = sum(1 for h in unique_company_holidays if int(h.split("-")[2]) <= now_dt.day)
+        working_days_so_far = max(1, now_dt.day - sundays_so_far - holidays_so_far)
+        effective_working_days = max(working_days_so_far, int(round(max_present)))
+    else:
+        effective_working_days = total_working_days
+
     return {
         "month_year": month_year,
         "totalDaysInMonth": num_days,
         "sundays": sundays,
         "companyHolidays": total_company_holidays_count,
-        "totalWorkingDays": total_working_days,
+        "totalWorkingDays": effective_working_days,
+        "fullMonthWorkingDays": total_working_days,
         "maxScore": max_score,
-        "formula": f"Score = (Present Days / {total_working_days} Working Days) * {max_score} pts",
+        "formula": f"Score = (Present Days / {effective_working_days} Working Days) * {max_score} pts",
         "employeeStats": emp_present_map
+    }
+
+async def get_eom_discipline_stats(month_year: str, max_score: float = 10.0):
+    """
+    Auto-calculate Discipline score based on HRMS Penalty amounts in db.remarks for given month (Strict Month-Wise).
+    Highest Penalty (₹) gets 0.0 points.
+    0 Penalty (₹) gets max_score.
+    """
+    try:
+        parts = month_year.split("-")
+        year, month = int(parts[0]), int(parts[1])
+    except Exception:
+        year, month = datetime.now().year, datetime.now().month
+
+    penalty_types = await db.penalty_types.find().to_list(length=100)
+    pt_names = [p["name"].lower() for p in penalty_types]
+
+    remarks_cursor = db.remarks.find({
+        "isDeleted": {"$nin": [True, "true", "True"]}
+    })
+    all_remarks = await remarks_cursor.to_list(length=20000)
+
+    def is_matching_month(r_date):
+        if not r_date:
+            return False
+        if isinstance(r_date, (datetime, date)):
+            return r_date.year == year and r_date.month == month
+        s = str(r_date).strip()
+        if s.startswith(f"{year:04d}-{month:02d}"):
+            return True
+        if f"-{month:02d}-{year:04d}" in s or f"/{month:02d}/{year:04d}" in s:
+            return True
+        try:
+            from dateutil.parser import parse
+            dt = parse(s)
+            return dt.year == year and dt.month == month
+        except Exception:
+            return False
+
+    emp_penalty_map = {}
+    for r in all_remarks:
+        if not is_matching_month(r.get("date")):
+            continue
+
+        emp_id = str(r.get("employeeId") or r.get("employee_id") or "").strip()
+        emp_name = str(r.get("employeeName") or r.get("employee_name") or r.get("name") or "").strip().lower()
+
+        r_type = str(r.get("type", "")).lower().strip()
+        p_amount = float(r.get("amount") or r.get("penaltyAmount") or 0.0)
+
+        if p_amount == 0 and (r_type in pt_names or r_type == "late punch-in"):
+            pt_obj = next((p for p in penalty_types if p["name"].lower() == r_type), None)
+            if pt_obj and pt_obj.get("amount"):
+                p_amount = float(pt_obj["amount"])
+
+        if p_amount > 0 or r_type in pt_names or r_type == "late punch-in":
+            keys = set()
+            if emp_id:
+                keys.add(emp_id)
+            if emp_name:
+                keys.add(emp_name)
+            for k in keys:
+                emp_penalty_map[k] = emp_penalty_map.get(k, 0.0) + p_amount
+
+    return {
+        "month_year": month_year,
+        "maxScore": max_score,
+        "employeePenaltyAmounts": emp_penalty_map,
+        "formula": f"Strict Month ({month:02d}/{year}): Highest Penalty Amount (₹) receives 0 pts, 0 Penalty receives {max_score} pts using Equal Interval Rank formula"
+    }
+
+async def get_eom_work_completion_stats(month_year: str, max_score: float = 10.0):
+    """
+    Auto-calculate Work Completion score based on Days Verified x Avg Rating in employee daily reports for given month (Strict Month-Wise).
+    """
+    try:
+        parts = month_year.split("-")
+        year, month = int(parts[0]), int(parts[1])
+    except Exception:
+        now_dt = datetime.now()
+        year, month = now_dt.year, now_dt.month
+
+    reports_cursor = db.employee_daily_reports.find({
+        "rating": {"$exists": True, "$ne": None}
+    })
+    reports = await reports_cursor.to_list(length=20000)
+
+    if not reports:
+        reports_cursor = db.daily_reports.find({
+            "rating": {"$exists": True, "$ne": None}
+        })
+        reports = await reports_cursor.to_list(length=20000)
+
+    def is_matching_month(r_date):
+        if not r_date:
+            return False
+        if isinstance(r_date, (datetime, date)):
+            return r_date.year == year and r_date.month == month
+        s = str(r_date).strip()
+        if s.startswith(f"{year:04d}-{month:02d}"):
+            return True
+        if f"-{month:02d}-{year:04d}" in s or f"/{month:02d}/{year:04d}" in s:
+            return True
+        try:
+            from dateutil.parser import parse
+            dt = parse(s)
+            return dt.year == year and dt.month == month
+        except Exception:
+            return False
+
+    emp_report_stats = {}
+    for r in reports:
+        if not is_matching_month(r.get("date")):
+            continue
+
+        emp_id = str(r.get("employeeId") or r.get("employee_id") or "").strip()
+        emp_name = str(r.get("employeeName") or r.get("name") or "").strip().lower()
+        try:
+            rating_val = float(r.get("rating") or 0.0)
+        except (TypeError, ValueError):
+            rating_val = 0.0
+
+        if rating_val > 0:
+            keys = set()
+            if emp_id:
+                keys.add(emp_id)
+            if emp_name:
+                keys.add(emp_name)
+
+            for k in keys:
+                if k not in emp_report_stats:
+                    emp_report_stats[k] = {"totalRating": 0.0, "daysVerified": 0}
+                emp_report_stats[k]["totalRating"] += rating_val
+                emp_report_stats[k]["daysVerified"] += 1
+
+    result_stats = {}
+    for k, v in emp_report_stats.items():
+        cnt = v["daysVerified"]
+        avg_r = (v["totalRating"] / cnt) if cnt > 0 else 0.0
+        factor = cnt * avg_r
+        result_stats[k] = {
+            "daysVerified": cnt,
+            "avgRating": round(avg_r, 1),
+            "factor": round(factor, 2)
+        }
+
+    return {
+        "month_year": month_year,
+        "maxScore": max_score,
+        "employeeStats": result_stats,
+        "formula": f"Strict Month ({month:02d}/{year}): Factor = Days Verified x Avg Rating. Ranked using Equal Interval Rank formula up to {max_score} pts"
+    }
+
+async def get_eom_work_dedication_stats(month_year: str, max_score: float = 10.0):
+    """
+    Auto-calculate Work Dedication score based on total logged hours in daily reports for given month (Strict Month-Wise).
+    """
+    try:
+        parts = month_year.split("-")
+        year, month = int(parts[0]), int(parts[1])
+    except Exception:
+        now_dt = datetime.now()
+        year, month = now_dt.year, now_dt.month
+
+    reports_cursor = db.employee_daily_reports.find({})
+    reports = await reports_cursor.to_list(length=20000)
+
+    if not reports:
+        reports_cursor = db.daily_reports.find({})
+        reports = await reports_cursor.to_list(length=20000)
+
+    def is_matching_month(r_date):
+        if not r_date:
+            return False
+        if isinstance(r_date, (datetime, date)):
+            return r_date.year == year and r_date.month == month
+        s = str(r_date).strip()
+        if s.startswith(f"{year:04d}-{month:02d}"):
+            return True
+        if f"-{month:02d}-{year:04d}" in s or f"/{month:02d}/{year:04d}" in s:
+            return True
+        try:
+            from dateutil.parser import parse
+            dt = parse(s)
+            return dt.year == year and dt.month == month
+        except Exception:
+            return False
+
+    emp_hours_map = {}
+    for r in reports:
+        if not is_matching_month(r.get("date")):
+            continue
+
+        emp_id = str(r.get("employeeId") or r.get("employee_id") or "").strip()
+        emp_name = str(r.get("employeeName") or r.get("name") or "").strip().lower()
+        
+        hrs = 0.0
+        for k in ["workHours", "totalHours", "hours", "loggedHours", "hoursWorked"]:
+            if r.get(k) is not None:
+                try:
+                    hrs = float(r.get(k))
+                    break
+                except (TypeError, ValueError):
+                    pass
+        
+        if hrs == 0.0:
+            hrs = 8.0
+
+        keys = set()
+        if emp_id:
+            keys.add(emp_id)
+        if emp_name:
+            keys.add(emp_name)
+
+        for k in keys:
+            emp_hours_map[k] = emp_hours_map.get(k, 0.0) + hrs
+
+    return {
+        "month_year": month_year,
+        "maxScore": max_score,
+        "employeeHours": emp_hours_map,
+        "formula": f"Strict Month ({month:02d}/{year}): Total Logged Hours ranked using Equal Interval Rank formula up to {max_score} pts"
     }
 
 async def calculate_eom_leaderboard(month_year: str):
@@ -578,21 +827,33 @@ async def calculate_eom_leaderboard(month_year: str):
             cid = str(crit.get("id"))
             max_sc = float(crit.get("maxScore", 0))
             cat = str(crit.get("category", "+ve")).lower().strip()
+            entry_type = str(crit.get("entryType", "direct")).lower().strip()
+            c_name_lower = str(crit.get("name", "")).lower()
             key = (cid, emp_id)
             sub_list = submitted_scores.get(key, [])
             
             if sub_list:
-                avg_sc = sum(sub_list) / len(sub_list)
+                if entry_type == "direct":
+                    avg_sc = sub_list[-1]
+                else:
+                    avg_sc = sum(sub_list) / len(sub_list)
+            elif "discipline" in c_name_lower:
+                # Auto-fetch penalties for month if no manual score submitted
+                try:
+                    penalties = await db.penalties.find({
+                        "employeeId": emp_id,
+                        "date": {"$regex": f"^{re.escape(month_year)}"}
+                    }).to_list(length=100)
+                    total_pen_amt = sum(float(p.get("amount", 0)) for p in penalties)
+                    avg_sc = min(max_sc, total_pen_amt)
+                except Exception:
+                    avg_sc = 0.0
             else:
                 avg_sc = 0.0
             
             avg_sc = min(avg_sc, max_sc) # Cap at maxScore
             c_scores[cid] = round(avg_sc, 2)
-            
-            if cat == "-ve":
-                total_score += max(0.0, max_sc - avg_sc)
-            else:
-                total_score += avg_sc
+            total_score += avg_sc
 
         leaderboard.append({
             "employeeId": emp_id,
@@ -759,11 +1020,19 @@ async def get_weekly_meeting_detail(meeting_id: str):
         emp_query = [{"_id": ObjectId(pid)} if len(pid) == 24 else {"_id": pid} for pid in participant_ids]
         raw_emps = await db.employees.find({"$or": emp_query}).to_list(length=500)
         for emp in raw_emps:
+            desig = (emp.get("designation") or "").strip()
+            role = (emp.get("role") or "").strip()
+            desig_lower = desig.lower()
+            role_lower = role.lower()
+            is_tl = any(term in desig_lower or term in role_lower for term in ["team leader", "tl", "team lead", "lead", "head"])
             participants.append({
                 "id": str(emp.get("_id")),
                 "name": emp.get("name") or f"{emp.get('firstName', '')} {emp.get('lastName', '')}".strip() or "Employee",
-                "designation": emp.get("designation", ""),
-                "department": emp.get("department", "")
+                "designation": desig,
+                "department": emp.get("department") or "General",
+                "subDepartment": emp.get("subDepartment") or emp.get("sub_department") or "",
+                "role": role,
+                "isTeamLeader": is_tl
             })
 
     return {
@@ -826,6 +1095,120 @@ async def delete_weekly_meeting(meeting_id: str):
     await db.weekly_topics.delete_many({"meetingId": meeting_id})
     await db.weekly_entries.delete_many({"meetingId": meeting_id})
     return True
+
+async def calculate_team_eom_average(month_year: str, department: str):
+    eom_board = await db.eom_leaderboards.find_one({"monthYear": month_year})
+    if not eom_board or not eom_board.get("leaderboard"):
+        try:
+            eom_board = await calculate_eom_leaderboard(month_year)
+        except Exception:
+            eom_board = None
+
+    if not eom_board or not eom_board.get("leaderboard"):
+        return 0.0
+
+    dept_clean = department.strip().lower()
+    dept_scores = []
+    for item in eom_board["leaderboard"]:
+        emp_dept = str(item.get("department") or "General").strip().lower()
+        if emp_dept == dept_clean:
+            dept_scores.append(float(item.get("totalScore", 0)))
+
+    if not dept_scores:
+        return 0.0
+
+    team_avg = sum(dept_scores) / len(dept_scores)
+    return round(team_avg, 2)
+
+async def declare_weekly_team_result(week_meeting_ids: list, month_year: str):
+    if not week_meeting_ids:
+        raise ValueError("At least one weekly meeting must be selected.")
+
+    eom_board = await db.eom_leaderboards.find_one({"monthYear": month_year})
+    if not eom_board or not eom_board.get("leaderboard"):
+        try:
+            eom_board = await calculate_eom_leaderboard(month_year)
+        except Exception:
+            pass
+
+    if not eom_board or not eom_board.get("leaderboard"):
+        raise ValueError(f"EOM evaluation for {month_year} has not been completed yet! Please complete Employee of the Month scoring first.")
+
+    meetings = []
+    for mid in week_meeting_ids:
+        detail = await get_weekly_meeting_detail(mid)
+        if detail:
+            meetings.append(detail)
+
+    if not meetings:
+        raise ValueError("None of the selected weekly meetings were found.")
+
+    department_data = {}
+
+    for m in meetings:
+        m_id = m["id"]
+        entries_map = {e["employeeId"]: e.get("sumMarks", 0) for e in m.get("entries", [])}
+        for p in m.get("participants", []):
+            dept = (p.get("department") or "General").strip()
+            if dept not in department_data:
+                department_data[dept] = {
+                    "department": dept,
+                    "teamLeaders": [],
+                    "members": [],
+                    "meetingScores": {},
+                    "eomAverage": 0.0,
+                    "grandTotal": 0.0
+                }
+            
+            if not any(existing["id"] == p["id"] for existing in department_data[dept]["members"] + department_data[dept]["teamLeaders"]):
+                if p.get("isTeamLeader"):
+                    department_data[dept]["teamLeaders"].append(p)
+                else:
+                    department_data[dept]["members"].append(p)
+
+            p_score = entries_map.get(p["id"], 0)
+            department_data[dept]["meetingScores"][m_id] = department_data[dept]["meetingScores"].get(m_id, 0) + p_score
+
+    result_teams = []
+    for dept, data in department_data.items():
+        eom_avg = await calculate_team_eom_average(month_year, dept)
+        data["eomAverage"] = eom_avg
+
+        weekly_sum = sum(data["meetingScores"].values())
+        data["weeklyTotal"] = round(weekly_sum, 2)
+        data["grandTotal"] = round(weekly_sum + eom_avg, 2)
+        result_teams.append(data)
+
+    result_teams.sort(key=lambda x: x["grandTotal"], reverse=True)
+    for rank, t in enumerate(result_teams, start=1):
+        t["rank"] = rank
+
+    doc = {
+        "monthYear": month_year,
+        "weekMeetingIds": week_meeting_ids,
+        "declaredAt": datetime.now(IST),
+        "teams": result_teams
+    }
+
+    await db.team_declared_results.update_one(
+        {"monthYear": month_year},
+        {"$set": doc},
+        upsert=True
+    )
+
+    doc["id"] = str(doc.get("_id", month_year))
+    if "_id" in doc:
+        del doc["_id"]
+
+    return doc
+
+async def get_team_declared_result(month_year: str):
+    doc = await db.team_declared_results.find_one({"monthYear": month_year})
+    if doc:
+        doc["id"] = str(doc.get("_id", doc.get("id")))
+        if "_id" in doc:
+            del doc["_id"]
+    return doc
 
 async def update_weekly_participants(meeting_id: str, participant_ids: list):
     mid_obj = ObjectId(meeting_id) if len(meeting_id) == 24 else meeting_id

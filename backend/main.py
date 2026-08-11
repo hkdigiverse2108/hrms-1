@@ -1153,7 +1153,10 @@ async def create_employee(employee: schemas.EmployeeCreate, request: Request, db
             if actor_level > 0 and target_level < actor_level:
                 raise HTTPException(status_code=403, detail="You do not have permission to create this role")
 
-    return await crud.create_employee(db, employee, performed_by=performed_by, user_name=user_name)
+    try:
+        return await crud.create_employee(db, employee, performed_by=performed_by, user_name=user_name)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
 
 @app.put("/employees/{employee_id}", response_model=schemas.Employee)
 async def update_employee(employee_id: str, employee_update: schemas.EmployeeUpdate, request: Request, db=Depends(get_db)):
@@ -1179,10 +1182,13 @@ async def update_employee(employee_id: str, employee_update: schemas.EmployeeUpd
                     raise HTTPException(status_code=403, detail="You cannot modify a profile with a higher role")
                 if new_role_level < actor_level:
                     raise HTTPException(status_code=403, detail="You cannot assign a role higher than your own")
-    updated = await crud.update_employee(db, employee_id, employee_update, performed_by=performed_by, user_name=user_name)
-    if not updated:
-        raise HTTPException(status_code=404, detail="Employee not found")
-    return updated
+    try:
+        updated = await crud.update_employee(db, employee_id, employee_update, performed_by=performed_by, user_name=user_name)
+        if not updated:
+            raise HTTPException(status_code=404, detail="Employee not found")
+        return updated
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
 
 @app.delete("/employees/{employee_id}")
 async def delete_employee(employee_id: str, request: Request, db=Depends(get_db)):
@@ -5070,6 +5076,34 @@ async def get_eom_month_config_endpoint(month_year: str = Query(...)):
 async def get_eom_attendance_stats_endpoint(month_year: str = Query(...), maxScore: float = Query(15.0)):
     return await eom_service.get_eom_attendance_stats(month_year, maxScore)
 
+@app.get("/eom/discipline-stats")
+async def get_eom_discipline_stats_endpoint(month_year: str = Query(...), maxScore: float = Query(10.0)):
+    return await eom_service.get_eom_discipline_stats(month_year, maxScore)
+
+@app.get("/eom/work-completion-stats")
+async def get_eom_work_completion_stats_endpoint(month_year: str = Query(...), maxScore: float = Query(10.0)):
+    return await eom_service.get_eom_work_completion_stats(month_year, maxScore)
+
+@app.get("/eom/work-dedication-stats")
+async def get_eom_work_dedication_stats_endpoint(month_year: str = Query(...), maxScore: float = Query(10.0)):
+    return await eom_service.get_eom_work_dedication_stats(month_year, maxScore)
+
+@app.post("/eom/reveal-schedule")
+async def save_eom_reveal_schedule_endpoint(
+    request: Request,
+    token_payload: dict = Depends(auth.require_auth)
+):
+    admin_hr_roles = {"admin", "super admin", "superadmin", "administrator", "founder", "hr", "hr manager", "hr lead"}
+    role = str(token_payload.get("role", "")).lower().strip()
+    if role not in admin_hr_roles:
+        raise HTTPException(status_code=403, detail="Only Admin or HR can schedule reveal time.")
+    data = await request.json()
+    month_year = data.get("month_year")
+    reveal_date_time = data.get("revealDateTime")
+    if not month_year:
+        raise HTTPException(status_code=400, detail="month_year is required")
+    return await eom_service.save_month_config(month_year, reveal_date_time=reveal_date_time)
+
 @app.post("/eom/month-config")
 async def save_eom_month_config_endpoint(
     request: Request,
@@ -5191,6 +5225,28 @@ async def save_weekly_entries_endpoint(
     data = await request.json()
     entries = data.get("entries", [])
     return await eom_service.save_weekly_entries(meeting_id, entries)
+
+@app.post("/weekly-meetings/declare-result")
+async def declare_weekly_team_result_endpoint(
+    request: Request,
+    token_payload: dict = Depends(auth.require_auth)
+):
+    if not _is_admin_or_hr(token_payload):
+        raise HTTPException(status_code=403, detail="Only Admin or HR can declare results.")
+    data = await request.json()
+    week_ids = data.get("weekMeetingIds", [])
+    month_year = data.get("monthYear", "")
+    try:
+        return await eom_service.declare_weekly_team_result(week_ids, month_year)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+
+@app.get("/weekly-meetings/declared-results/{month_year}")
+async def get_team_declared_result_endpoint(month_year: str):
+    res = await eom_service.get_team_declared_result(month_year)
+    if not res:
+        raise HTTPException(status_code=404, detail=f"No declared team result found for {month_year}")
+    return res
 
 
 if __name__ == "__main__":

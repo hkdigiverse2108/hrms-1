@@ -2,21 +2,21 @@
 
 import React, { useState, useEffect } from "react";
 import dayjs from "dayjs";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { 
   Award, 
   Plus, 
   Calendar, 
   Users, 
   Save, 
-  Trash2, 
-  CheckCircle2, 
-  Edit3, 
-  FileText,
-  ChevronRight,
+  Trash2,
+  Edit3,
   Settings,
   Sparkles,
   ArrowUpDown,
-  UserPlus
+  UserPlus,
+  Play
 } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import { useUser } from "@/hooks/useUser";
@@ -35,6 +35,9 @@ interface Participant {
   name: string;
   designation?: string;
   department?: string;
+  subDepartment?: string;
+  role?: string;
+  isTeamLeader?: boolean;
 }
 
 interface WeeklyEntry {
@@ -46,6 +49,7 @@ interface WeeklyEntry {
 }
 
 export default function EmployeeOfWeekPage() {
+  const router = useRouter();
   const { user } = useUser();
   const isAdmin = user && ["admin", "super admin", "superadmin", "administrator", "founder", "hr"].includes(String(user.role || "").toLowerCase().trim());
 
@@ -57,6 +61,7 @@ export default function EmployeeOfWeekPage() {
   const [saving, setSaving] = useState(false);
   const [savingRowMap, setSavingRowMap] = useState<Record<string, boolean>>({});
   const [sortBy, setSortBy] = useState<"total" | "name">("total");
+  const [viewMode, setViewMode] = useState<"grouped" | "flat">("grouped");
 
   // Form states for meeting entries
   const [marksState, setMarksState] = useState<Record<string, Record<string, number>>>({}); // { empId: { topicId: score } }
@@ -85,6 +90,48 @@ export default function EmployeeOfWeekPage() {
   // Delete Confirmation Modal State
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Declare Result Modal State
+  const [declareModalVisible, setDeclareModalVisible] = useState(false);
+  const [declareMonthYear, setDeclareMonthYear] = useState<string>(dayjs().format("YYYY-MM"));
+  const [selectedMeetingIdsForDeclare, setSelectedMeetingIdsForDeclare] = useState<string[]>([]);
+  const [declaring, setDeclaring] = useState(false);
+
+  const handleDeclareResult = async () => {
+    if (selectedMeetingIdsForDeclare.length === 0) {
+      toast.error("Please select at least 1 weekly meeting to declare!");
+      return;
+    }
+    setDeclaring(true);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_URL}/weekly-meetings/declare-result`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: token ? (token.startsWith("Bearer ") ? token : `Bearer ${token}`) : ""
+        },
+        body: JSON.stringify({
+          weekMeetingIds: selectedMeetingIdsForDeclare,
+          monthYear: declareMonthYear
+        })
+      });
+
+      if (res.ok) {
+        toast.success("Team Result Declared Successfully!");
+        setDeclareModalVisible(false);
+        router.push(`/team-of-the-month/reveal?month_year=${declareMonthYear}`);
+      } else {
+        const err = await res.json();
+        toast.error(err.detail || "Failed to declare team result");
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error("Error declaring team result");
+    } finally {
+      setDeclaring(false);
+    }
+  };
 
   useEffect(() => {
     fetchEmployees();
@@ -354,6 +401,61 @@ export default function EmployeeOfWeekPage() {
     return meetingDetail.topics.reduce((acc: number, t: Topic) => acc + (Number(t.maxMarks) || 0), 0);
   };
 
+  // Check if participant is a Team Leader
+  const isTL = (p: Participant) => {
+    if (p.isTeamLeader) return true;
+    const d = (p.designation || "").toLowerCase();
+    const r = (p.role || "").toLowerCase();
+    return ["team leader", "tl", "team lead", "lead", "head"].some(term => d.includes(term) || r.includes(term));
+  };
+
+  interface DepartmentGroup {
+    department: string;
+    teamLeaders: Participant[];
+    members: Participant[];
+    allParticipants: Participant[];
+  }
+
+  // Group participants by Department / Team
+  const getGroupedParticipants = (): DepartmentGroup[] => {
+    if (!meetingDetail || !meetingDetail.participants) return [];
+    
+    const map: Record<string, Participant[]> = {};
+    meetingDetail.participants.forEach((p: Participant) => {
+      const dept = (p.department || "General").trim();
+      if (!map[dept]) map[dept] = [];
+      map[dept].push(p);
+    });
+
+    const groupKeys = Object.keys(map).sort();
+    return groupKeys.map(dept => {
+      const rawList = map[dept];
+      const teamLeaders = rawList.filter(isTL);
+      const members = rawList.filter(p => !isTL(p));
+
+      const sortFn = (a: Participant, b: Participant) => {
+        const tlA = isTL(a) ? 1 : 0;
+        const tlB = isTL(b) ? 1 : 0;
+        if (tlB !== tlA) return tlB - tlA;
+
+        if (sortBy === "total") {
+          const scoreA = calculateEmployeeSum(a.id);
+          const scoreB = calculateEmployeeSum(b.id);
+          if (scoreB !== scoreA) return scoreB - scoreA;
+        }
+        return (a.name || "").localeCompare(b.name || "");
+      };
+
+      const sortedAll = [...rawList].sort(sortFn);
+      return {
+        department: dept,
+        teamLeaders,
+        members,
+        allParticipants: sortedAll
+      };
+    });
+  };
+
   // Sorted participants (Default: Highest Total Score first)
   const getSortedParticipants = () => {
     if (!meetingDetail || !meetingDetail.participants) return [];
@@ -490,7 +592,7 @@ export default function EmployeeOfWeekPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50/50 p-3 sm:p-6 space-y-4 sm:space-y-6">
+    <div className="min-h-screen bg-slate-50/50 p-3 sm:p-6 space-y-4 sm:space-y-6 pb-20">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-4 sm:p-6 rounded-2xl shadow-xs border border-slate-200/80">
         <div className="flex items-center gap-3">
@@ -506,6 +608,22 @@ export default function EmployeeOfWeekPage() {
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           {isAdmin && (
             <>
+              <button
+                onClick={() => setDeclareModalVisible(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg shadow-amber-500/30 transition-all border border-amber-300 uppercase tracking-wider cursor-pointer"
+              >
+                <Sparkles className="w-4 h-4 fill-slate-950" />
+                Declare Team Result
+              </button>
+
+              <Link
+                href={`/team-of-the-month/reveal?month_year=${dayjs().format("YYYY-MM")}`}
+                className="flex items-center gap-2 px-3.5 py-2 bg-slate-900 text-amber-400 text-xs sm:text-sm font-bold rounded-xl border border-amber-500/40 hover:bg-slate-800 transition-all cursor-pointer"
+              >
+                <Play className="w-4 h-4 text-amber-400" />
+                Auditorium Reveal
+              </Link>
+
               <button
                 onClick={fetchMasterTopics}
                 className="flex items-center gap-2 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-all border border-slate-200 cursor-pointer"
@@ -570,6 +688,32 @@ export default function EmployeeOfWeekPage() {
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
+              {/* View Mode Segmented Control */}
+              <div className="flex items-center p-0.5 bg-slate-200/80 rounded-xl text-xs font-bold border border-slate-300">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("grouped")}
+                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                    viewMode === "grouped"
+                      ? "bg-white text-blue-700 shadow-xs font-black"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  🏢 Grouped by Team
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("flat")}
+                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                    viewMode === "flat"
+                      ? "bg-white text-blue-700 shadow-xs font-black"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  📋 Flat List
+                </button>
+              </div>
+
               <button
                 onClick={() => setSortBy(prev => prev === "total" ? "name" : "total")}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-bold rounded-xl transition-all cursor-pointer"
@@ -647,103 +791,137 @@ export default function EmployeeOfWeekPage() {
 
                   {/* Focus Task & Commitment Headers */}
                   <th className="py-3 px-4 min-w-[200px] border-r border-slate-200/40">Focus Task (Next Meet)</th>
-                  <th className="py-3 px-4 min-w-[200px] border-r border-slate-200/40">Commitment</th>
-                  <th className="py-3 px-4 text-right min-w-[90px] sticky right-0 bg-slate-100 z-30">Action</th>
+                  <th className="py-3 px-4 min-w-[200px]">Commitment</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                {getSortedParticipants().map((p: Participant, idx: number) => {
-                  const empId = p.id;
-                  const empSum = calculateEmployeeSum(empId);
-                  const isSavingRow = savingRowMap[empId];
-                  const totalMax = calculateTotalMaxMarks();
+                {(() => {
+                  const renderRow = (p: Participant, idx: number) => {
+                    const empId = p.id;
+                    const empSum = calculateEmployeeSum(empId);
+                    const isSavingRow = savingRowMap[empId];
+                    const totalMax = calculateTotalMaxMarks();
 
-                  return (
-                    <tr key={empId} className="hover:bg-slate-50/80 transition-colors group">
-                      {/* Sticky Frozen Cell # */}
-                      <td className="sticky left-0 z-20 bg-white group-hover:bg-slate-100 px-2 py-3 w-[40px] min-w-[40px] max-w-[40px] text-center text-slate-400 font-mono text-xs">
-                        {idx + 1}
-                      </td>
+                    return (
+                      <tr key={empId} className="hover:bg-slate-50/80 transition-colors group">
+                        {/* Sticky Frozen Cell # */}
+                        <td className="sticky left-0 z-20 bg-white group-hover:bg-slate-100 px-2 py-3 w-[40px] min-w-[40px] max-w-[40px] text-center text-slate-400 font-mono text-xs">
+                          {idx + 1}
+                        </td>
 
-                      {/* Sticky Frozen Cell Employee Name */}
-                      <td className="sticky left-[40px] z-20 bg-white group-hover:bg-slate-100 px-3 sm:px-4 py-3 border-r border-slate-300 shadow-[4px_0_8px_-2px_rgba(0,0,0,0.12)]">
-                        <div className="font-bold text-slate-800 text-xs sm:text-sm truncate max-w-[130px] sm:max-w-none">{p.name}</div>
-                        <div className="text-[10px] text-slate-400 font-normal truncate">{p.designation || p.department || "Staff"}</div>
-                      </td>
+                        {/* Sticky Frozen Cell Employee Name */}
+                        <td className="sticky left-[40px] z-20 bg-white group-hover:bg-slate-100 px-3 sm:px-4 py-3 border-r border-slate-300 shadow-[4px_0_8px_-2px_rgba(0,0,0,0.12)]">
+                          <div className="font-bold text-slate-800 text-xs sm:text-sm truncate max-w-[130px] sm:max-w-none flex items-center gap-1.5">
+                            <span>{p.name}</span>
+                            {isTL(p) && (
+                              <span className="bg-amber-100 text-amber-900 text-[10px] px-1.5 py-0.5 rounded-md font-black border border-amber-300 shrink-0 shadow-2xs">
+                                👑 TL
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-normal truncate">{p.designation || p.department || "Staff"}</div>
+                        </td>
 
-                      {/* Topic Marks Input Cells */}
-                      {meetingDetail.topics.map((t: Topic) => {
-                        const topicId = String(t.id);
-                        const currentVal = marksState[empId]?.[topicId] ?? "";
-                        const numVal = Number(currentVal);
-                        const isExceeded = currentVal !== "" && !isNaN(numVal) && numVal > t.maxMarks;
+                        {/* Topic Marks Input Cells */}
+                        {meetingDetail.topics.map((t: Topic) => {
+                          const topicId = String(t.id);
+                          const rawVal = marksState[empId]?.[topicId];
+                          const currentVal = rawVal !== undefined && rawVal !== null ? String(rawVal) : "";
+                          const numVal = currentVal !== "" ? Number(currentVal) : NaN;
+                          const isExceeded = !isNaN(numVal) && numVal > Number(t.maxMarks);
 
-                        return (
-                          <td key={topicId} className="py-3 px-2 text-center border-r border-slate-100">
-                            <div className="flex flex-col items-center gap-0.5">
-                              <input
-                                type="number"
-                                min="0"
-                                max={t.maxMarks}
-                                step="0.1"
-                                value={currentVal}
-                                onChange={(e) => handleMarksChange(empId, topicId, Number(e.target.value))}
-                                placeholder="0"
-                                className={`w-20 sm:w-24 px-2 py-1.5 border rounded-lg text-center font-bold text-xs focus:outline-none transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
-                                  isExceeded
-                                    ? "bg-rose-50 border-rose-500 text-rose-700 ring-1 ring-rose-500"
-                                    : "bg-slate-50 border-slate-200 text-slate-800 focus:border-blue-500"
-                                }`}
-                              />
-                              {isExceeded && (
-                                <span className="text-[10px] text-rose-600 font-bold">⚠️ Max {t.maxMarks}</span>
+                          return (
+                            <td key={topicId} className="py-3 px-2 text-center border-r border-slate-100">
+                              <div className="flex flex-col items-center gap-0.5">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max={t.maxMarks}
+                                  step="0.1"
+                                  value={currentVal}
+                                  onChange={(e) => handleMarksChange(empId, topicId, Number(e.target.value))}
+                                  placeholder="0"
+                                  className={`w-20 sm:w-24 px-2 py-1.5 border rounded-lg text-center font-bold text-xs focus:outline-none transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                                    isExceeded
+                                      ? "bg-rose-50 border-rose-500 text-rose-700 ring-1 ring-rose-500"
+                                      : "bg-slate-50 border-slate-200 text-slate-800 focus:border-blue-500"
+                                  }`}
+                                />
+                                {isExceeded && (
+                                  <span className="text-[10px] text-rose-600 font-bold">⚠️ Max {t.maxMarks}</span>
+                                )}
+                              </div>
+                            </td>
+                          );
+                        })}
+
+                        {/* Live Total Sum Cell */}
+                        <td className="py-3.5 px-4 text-center bg-emerald-50/40 font-extrabold text-emerald-800 text-xs sm:text-sm border-r border-slate-200/40">
+                          {empSum} <span className="text-[11px] text-emerald-600/70 font-semibold">/ {totalMax}</span>
+                        </td>
+
+                        {/* Focus Task Note Input */}
+                        <td className="py-2 px-3 border-r border-slate-100">
+                          <textarea
+                            rows={2}
+                            value={focusTaskNotes[empId] || ""}
+                            onChange={(e) => setFocusTaskNotes({ ...focusTaskNotes, [empId]: e.target.value })}
+                            placeholder="Focus task notes..."
+                            className="w-full p-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 font-medium"
+                          />
+                        </td>
+
+                        {/* Commitment Note Input */}
+                        <td className="py-2 px-3">
+                          <textarea
+                            rows={2}
+                            value={commitmentNotes[empId] || ""}
+                            onChange={(e) => setCommitmentNotes({ ...commitmentNotes, [empId]: e.target.value })}
+                            placeholder="Commitment notes..."
+                            className="w-full p-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 font-medium"
+                          />
+                        </td>
+                      </tr>
+                    );
+                  };
+
+                  if (viewMode === "grouped") {
+                    const groups = getGroupedParticipants();
+                    const totalCols = 5 + (meetingDetail.topics?.length || 0);
+
+                    return groups.map((group) => (
+                      <React.Fragment key={`group-sec-${group.department}`}>
+                        {/* Department Group Header Banner */}
+                        <tr className="bg-slate-800 text-white font-bold border-y-2 border-slate-700 sticky z-10">
+                          <td colSpan={totalCols} className="px-4 py-2.5 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 shadow-inner">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2 text-xs sm:text-sm font-black text-amber-400 uppercase tracking-wider">
+                                <Users className="w-4 h-4 text-amber-400 shrink-0" />
+                                <span>{group.department} Team</span>
+                                <span className="text-slate-300 font-medium text-xs normal-case">
+                                  ({group.allParticipants.length} {group.allParticipants.length === 1 ? 'Member' : 'Members'})
+                                </span>
+                              </div>
+                              {group.teamLeaders.length > 0 ? (
+                                <div className="flex items-center gap-1.5 text-xs bg-amber-400 text-slate-950 px-3 py-1 rounded-full font-extrabold shadow-sm">
+                                  <span>👑 Team Leader:</span>
+                                  <span>{group.teamLeaders.map(tl => tl.name).join(", ")}</span>
+                                </div>
+                              ) : (
+                                <span className="text-[11px] text-slate-400 font-normal italic">No assigned Team Leader</span>
                               )}
                             </div>
                           </td>
-                        );
-                      })}
+                        </tr>
 
-                      {/* Live Total Sum Cell */}
-                      <td className="py-3.5 px-4 text-center bg-emerald-50/40 font-extrabold text-emerald-800 text-xs sm:text-sm border-r border-slate-200/40">
-                        {empSum} <span className="text-[11px] text-emerald-600/70 font-semibold">/ {totalMax}</span>
-                      </td>
+                        {/* Team Member Rows */}
+                        {group.allParticipants.map((p: Participant, idx: number) => renderRow(p, idx))}
+                      </React.Fragment>
+                    ));
+                  }
 
-                      {/* Focus Task Note Input */}
-                      <td className="py-2 px-3 border-r border-slate-100">
-                        <textarea
-                          rows={2}
-                          value={focusTaskNotes[empId] || ""}
-                          onChange={(e) => setFocusTaskNotes({ ...focusTaskNotes, [empId]: e.target.value })}
-                          placeholder="Focus task notes..."
-                          className="w-full p-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 font-medium"
-                        />
-                      </td>
-
-                      {/* Commitment Note Input */}
-                      <td className="py-2 px-3 border-r border-slate-100">
-                        <textarea
-                          rows={2}
-                          value={commitmentNotes[empId] || ""}
-                          onChange={(e) => setCommitmentNotes({ ...commitmentNotes, [empId]: e.target.value })}
-                          placeholder="Commitment notes..."
-                          className="w-full p-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 font-medium"
-                        />
-                      </td>
-
-                      {/* Row Action Cell */}
-                      <td className="py-3.5 px-4 text-right sticky right-0 bg-white group-hover:bg-slate-100 z-20">
-                        <button
-                          onClick={() => handleSaveSingleRow(empId)}
-                          disabled={isSavingRow}
-                          className="flex items-center gap-1 ml-auto px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg shadow-xs transition-all cursor-pointer shrink-0"
-                        >
-                          <Save className="w-3.5 h-3.5" />
-                          Save
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
+                  return getSortedParticipants().map((p: Participant, idx: number) => renderRow(p, idx));
+                })()}
               </tbody>
             </table>
           </div>
@@ -1014,6 +1192,88 @@ export default function EmployeeOfWeekPage() {
           </p>
           <div className="text-xs text-rose-600 bg-rose-50 p-3 rounded-xl border border-rose-200 font-medium">
             ⚠️ <strong>Warning:</strong> All evaluated marks, focus task notes, commitment notes, and topics for this meeting will be permanently deleted. This action cannot be undone.
+          </div>
+        </div>
+      </Modal>
+
+      {/* Declare Team Result Modal */}
+      <Modal
+        title={
+          <div className="flex items-center gap-2 text-slate-800 font-bold">
+            <Sparkles className="w-5 h-5 text-amber-500" />
+            <span>Declare Team of the Month Result</span>
+          </div>
+        }
+        open={declareModalVisible}
+        onCancel={() => setDeclareModalVisible(false)}
+        footer={null}
+        destroyOnHidden
+        centered
+      >
+        <div className="space-y-4 py-2">
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">Target Evaluation Month</label>
+            <DatePicker
+              picker="month"
+              allowClear={false}
+              value={dayjs(declareMonthYear, "YYYY-MM")}
+              onChange={(date, dateString) => {
+                if (dateString) {
+                  const formatted = Array.isArray(dateString) ? dateString[0] : dateString;
+                  setDeclareMonthYear(formatted);
+                }
+              }}
+              className="w-full font-bold text-slate-700 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Select Weekly Meetings to Include ({selectedMeetingIdsForDeclare.length} selected)
+            </label>
+            <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-xl p-2 space-y-1.5 bg-slate-50">
+              {meetings.length === 0 ? (
+                <div className="text-xs text-slate-400 p-2 text-center">No weekly meetings available</div>
+              ) : (
+                meetings.map((m) => (
+                  <label
+                    key={m.id}
+                    className="flex items-center gap-2.5 p-2 bg-white rounded-lg border border-slate-200 hover:bg-slate-100 cursor-pointer text-xs font-medium"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedMeetingIdsForDeclare.includes(m.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedMeetingIdsForDeclare([...selectedMeetingIdsForDeclare, m.id]);
+                        } else {
+                          setSelectedMeetingIdsForDeclare(selectedMeetingIdsForDeclare.filter((id) => id !== m.id));
+                        }
+                      }}
+                      className="rounded text-amber-600 focus:ring-amber-500"
+                    />
+                    <span>Meeting on {dayjs(m.meetingDate).format("DD-MM-YYYY")}</span>
+                    <span className="text-[10px] text-slate-400 ml-auto">({m.participantEmployeeIds?.length || 0} participants)</span>
+                  </label>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              onClick={() => setDeclareModalVisible(false)}
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleDeclareResult}
+              disabled={declaring}
+              className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black rounded-xl shadow-md cursor-pointer"
+            >
+              {declaring ? "Declaring..." : "Confirm & Declare Result"}
+            </button>
           </div>
         </div>
       </Modal>

@@ -78,6 +78,9 @@ export default function EmployeeOfMonthPage() {
   const [selectedMonthYear, setSelectedMonthYear] = useState<string>(defaultMonthYear);
 
   const [criteria, setCriteria] = useState<Criterion[]>([]);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [revealDateTime, setRevealDateTime] = useState<string | null>(null);
+  const [savingRevealTime, setSavingRevealTime] = useState(false);
   const [masterCriteria, setMasterCriteria] = useState<Criterion[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
@@ -108,6 +111,36 @@ export default function EmployeeOfMonthPage() {
   useEffect(() => {
     fetchCriteriaAndLeaderboard();
   }, [selectedMonthYear]);
+
+  const handleSaveRevealSchedule = async (dateTimeStr: string) => {
+    setSavingRevealTime(true);
+    try {
+      const token = localStorage.getItem("token");
+      const headers = {
+        "Content-Type": "application/json",
+        Authorization: token ? (token.startsWith("Bearer ") ? token : `Bearer ${token}`) : ""
+      };
+      const res = await fetch(`${API_URL}/eom/reveal-schedule`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          month_year: selectedMonthYear,
+          revealDateTime: dateTimeStr
+        })
+      });
+      if (res.ok) {
+        setRevealDateTime(dateTimeStr);
+        toast.success(`Auditorium Reveal scheduled for ${dayjs(dateTimeStr).format("DD-MMM-YYYY hh:mm A")}`);
+      } else {
+        toast.error("Failed to save reveal schedule");
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error("Error saving reveal schedule");
+    } finally {
+      setSavingRevealTime(false);
+    }
+  };
 
   const fetchEmployees = async () => {
     try {
@@ -161,6 +194,7 @@ export default function EmployeeOfMonthPage() {
       const cfgRes = await fetch(`${API_URL}/eom/month-config?month_year=${selectedMonthYear}`, { headers });
       if (cfgRes.ok) {
         const cfgData = await cfgRes.json();
+        setRevealDateTime(cfgData.revealDateTime || null);
         if (cfgData.isConfigured && Array.isArray(cfgData.selectedEmployeeIds)) {
           setSelectedEmpIds(cfgData.selectedEmployeeIds);
         } else {
@@ -459,13 +493,29 @@ export default function EmployeeOfMonthPage() {
           </Link>
 
           {(isAdmin || isHR) && (
-            <Link
-              href={`/employee-of-the-month/reveal?month_year=${selectedMonthYear}`}
-              className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg shadow-amber-500/30 transition-all hover:scale-105 active:scale-95 border border-amber-300 uppercase tracking-wider cursor-pointer"
-            >
-              <Play className="w-4 h-4 fill-slate-950 text-slate-950" />
-              Auditorium Reveal
-            </Link>
+            <div className="flex items-center gap-2">
+              <DatePicker
+                showTime={{ format: 'hh:mm A', use12Hours: true }}
+                format="YYYY-MM-DD hh:mm A"
+                placeholder="Schedule Reveal Time"
+                value={revealDateTime ? dayjs(revealDateTime) : null}
+                onChange={(date, dateString) => {
+                  const val = Array.isArray(dateString) ? dateString[0] : dateString;
+                  if (val) {
+                    handleSaveRevealSchedule(dayjs(val, "YYYY-MM-DD hh:mm A").toISOString());
+                  }
+                }}
+                className="font-bold text-slate-700 text-xs border-amber-300 rounded-xl bg-amber-50/50"
+                style={{ height: '38px' }}
+              />
+              <Link
+                href={`/employee-of-the-month/reveal?month_year=${selectedMonthYear}`}
+                className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg shadow-amber-500/30 transition-all hover:scale-105 active:scale-95 border border-amber-300 uppercase tracking-wider cursor-pointer"
+              >
+                <Play className="w-4 h-4 fill-slate-950 text-slate-950" />
+                Auditorium Reveal
+              </Link>
+            </div>
           )}
         </div>
       </div>
@@ -487,20 +537,20 @@ export default function EmployeeOfMonthPage() {
         {(isAdmin || isHR) && (
           <div className="flex items-center gap-2">
             <button
-              onClick={handleCloneLastMonth}
+              onClick={() => handleCloneLastMonth()}
               disabled={cloning}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold rounded-lg shadow-sm"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-slate-700 hover:bg-slate-50 text-xs font-semibold rounded-lg border border-slate-300 shadow-sm transition-all"
             >
               <Copy className="w-3.5 h-3.5" />
-              Copy Criteria from Last Month
+              {cloning ? "Copying..." : "Copy Criteria from Last Month"}
             </button>
             <button
               onClick={handleSaveCriteria}
               disabled={saving}
-              className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 text-white hover:bg-emerald-700 text-xs font-bold rounded-lg shadow-sm transition-all"
             >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              Save Month Criteria ({selectedMonthYear})
+              <Check className="w-3.5 h-3.5" />
+              {saving ? "Saving..." : `Save Month Criteria (${selectedMonthYear})`}
             </button>
           </div>
         )}
@@ -534,7 +584,10 @@ export default function EmployeeOfMonthPage() {
         /* Criteria Setup Table for Selected Month */
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden space-y-4 p-6">
           <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold text-slate-800">Parameters Configuration ({selectedMonthYear})</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-bold text-slate-800">Parameters Configuration ({selectedMonthYear})</h2>
+              <span className="text-xs text-slate-500 font-medium">(Drag & Drop rows to reorder parameters)</span>
+            </div>
             {(isAdmin || isHR) && (
               <button
                 onClick={handleAddCriterion}
@@ -562,8 +615,34 @@ export default function EmployeeOfMonthPage() {
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
                 {criteria.map((item, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="py-3.5 px-4 text-slate-400 font-mono text-xs">{idx + 1}</td>
+                  <tr
+                    key={idx}
+                    draggable={!!(isAdmin || isHR)}
+                    onDragStart={(e) => {
+                      setDraggedIndex(idx);
+                      e.dataTransfer.effectAllowed = "move";
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = "move";
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (draggedIndex === null || draggedIndex === idx) return;
+                      const updated = [...criteria];
+                      const [movedItem] = updated.splice(draggedIndex, 1);
+                      updated.splice(idx, 0, movedItem);
+                      const reindexed = updated.map((cItem, i) => ({ ...cItem, order: i + 1 }));
+                      setCriteria(reindexed);
+                      setDraggedIndex(null);
+                      toast.success("Criteria reordered! Click 'Save Month Criteria' to save changes.");
+                    }}
+                    className={`hover:bg-amber-50/40 transition-colors ${draggedIndex === idx ? "opacity-40 bg-amber-100 border-2 border-dashed border-amber-400" : ""}`}
+                  >
+                    <td className="py-3.5 px-4 text-slate-500 font-mono text-xs cursor-grab active:cursor-grabbing select-none" title="Drag to reorder">
+                      {(isAdmin || isHR) && <span className="mr-1.5 text-slate-400 font-bold">⋮⋮</span>}
+                      {idx + 1}
+                    </td>
                     <td className="py-3.5 px-4">
                       {item.isFixed && !isAdmin && !isHR ? (
                         <span className="font-bold text-slate-800">{item.name}</span>

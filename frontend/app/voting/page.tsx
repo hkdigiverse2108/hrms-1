@@ -167,10 +167,10 @@ export default function ElectionsListPage() {
         {isAdminOrHR && (
           <Link
             href="/voting/create"
-            className="shrink-0 inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 text-white font-medium rounded-xl shadow-lg shadow-teal-500/20 hover:from-teal-700 hover:to-emerald-700 transition-all duration-200 whitespace-nowrap"
+            className="shrink-0 inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 !text-white font-bold rounded-xl shadow-lg shadow-teal-500/20 hover:from-teal-700 hover:to-emerald-700 transition-all duration-200 whitespace-nowrap"
           >
-            <Plus className="w-5 h-5" />
-            Create Election
+            <Plus className="w-5 h-5 !text-white" />
+            <span className="!text-white">Create Election</span>
           </Link>
         )}
       </div>
@@ -235,10 +235,10 @@ export default function ElectionsListPage() {
           {isAdminOrHR && (
             <Link
               href="/voting/create"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-xl text-sm font-medium hover:bg-teal-700 transition-colors shadow"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 !text-white rounded-xl text-sm font-bold hover:bg-teal-700 transition-colors shadow"
             >
-              <Plus className="w-4 h-4" />
-              Create First Election
+              <Plus className="w-4 h-4 !text-white" />
+              <span className="!text-white">Create First Election</span>
             </Link>
           )}
         </div>
