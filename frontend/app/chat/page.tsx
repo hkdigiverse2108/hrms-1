@@ -5607,20 +5607,6 @@ export default function ChatPage() {
                           variant="ghost"
                           size="icon"
                           className="text-white hover:bg-white/20 h-8 w-8 rounded-full"
-                          onClick={() => {
-                            if (selectedMessageIds.length === 0) return;
-                            setMessageToDelete(null);
-                            setShowDeleteConfirm(true);
-                          }}
-                          disabled={selectedMessageIds.length === 0}
-                          title="Delete selected"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-white hover:bg-white/20 h-8 w-8 rounded-full"
                           onClick={handleForwardSelectedMessages}
                           disabled={selectedMessageIds.length === 0}
                           title="Forward selected"
@@ -7767,21 +7753,6 @@ export default function ChatPage() {
               <button
                 type="button"
                 onClick={() => {
-                  if (selectedMessageIds.length > 0) {
-                    setShowDeleteConfirm(true);
-                    setMessageToDelete(null);
-                  }
-                  setContextMenu(null);
-                }}
-                disabled={selectedMessageIds.length === 0}
-                className="w-full flex items-center gap-3 px-3 py-2.5 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-lg text-left transition-colors disabled:opacity-50"
-              >
-                <Trash2 className="w-4 h-4 text-red-500" />
-                Delete ({selectedMessageIds.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => {
                   exitSelectionMode();
                   setContextMenu(null);
                 }}
@@ -7871,17 +7842,6 @@ export default function ChatPage() {
               >
                 <Download className="w-4 h-4 text-slate-400" />
                 Save as
-              </button>
-
-              <DropdownMenuSeparator className="my-1" />
-
-              <button
-                type="button"
-                onClick={() => { enterSelectionMode(); toggleMessageSelection(contextMenu.msg.id); setContextMenu(null); }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-lg text-left transition-colors"
-              >
-                <Trash2 className="w-4 h-4 text-red-500" />
-                Delete
               </button>
             </>
           )}
