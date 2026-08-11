@@ -7,6 +7,7 @@ import { Trophy, ArrowLeft, Sparkles, Crown, Flame, ShieldAlert, Zap, RefreshCw,
 import { API_URL } from "@/lib/config";
 import { useUser } from "@/hooks/useUser";
 import { Spin } from "antd";
+// @ts-ignore
 import { motion } from "framer-motion";
 import dayjs from "dayjs";
 
@@ -1099,7 +1100,7 @@ export default function AuditoriumRevealPage() {
                         layout="position"
                         transition={{ type: "spring", stiffness: 260, damping: 30 }}
                         key={emp.employeeId}
-                        ref={(el) => {
+                        ref={(el: HTMLTableRowElement | null) => {
                           rowRefs.current[emp.employeeId] = el as any;
                         }}
                         className={`${
