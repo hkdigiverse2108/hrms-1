@@ -179,14 +179,14 @@ export default function LeavePage() {
 
   useEffect(() => {
     if (user?.id) {
-      fetchPageData();
+      fetchPageData(user.id);
     }
   }, [user?.id]);
 
-  const fetchPageData = async () => {
+  const fetchPageData = async (userId: string) => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_URL}/leave-page-data?userId=${user?.id}`);
+      const res = await fetch(`${API_URL}/leave-page-data?userId=${userId}`);
       if (res.ok) {
         const data = await res.json();
         
