@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { 
   Download, 
@@ -90,6 +90,7 @@ export default function EmployeeAttendanceListPage() {
   const [view, setView] = useState<"list" | "calendar">("list");
   const [attendance, setAttendance] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
+  const adminIdsRef = useRef<Set<string>>(new Set());
 
   // Filter out admin and inactive employees from the attendance list
   const nonAdminEmployees = useMemo(() => 

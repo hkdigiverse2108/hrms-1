@@ -2560,7 +2560,13 @@ export default function ChatPage() {
         setEmployees(await res.json());
       }
     } catch (err) {
-      console.error("Error fetching employees:", err);
+      console.warn("Retrying fetchEmployees in 2s:", err);
+      setTimeout(() => {
+        fetch(`${API_URL}/employees`, { cache: 'no-store' })
+          .then(r => r.ok ? r.json() : null)
+          .then(data => data && setEmployees(data))
+          .catch(() => {});
+      }, 2000);
     }
   };
 
@@ -2943,7 +2949,15 @@ export default function ChatPage() {
         setChatGroups(await res.json());
       }
     } catch (err) {
-      console.error("Error fetching groups:", err);
+      console.warn("Retrying fetchGroups in 2s:", err);
+      setTimeout(() => {
+        if (user?.id) {
+          fetch(`${API_URL}/chat/groups/${user.id}`, { cache: 'no-store' })
+            .then(r => r.ok ? r.json() : null)
+            .then(data => data && setChatGroups(data))
+            .catch(() => {});
+        }
+      }, 2000);
     }
   }, [user]);
 
@@ -3862,6 +3876,89 @@ export default function ChatPage() {
     } else {
       navigator.clipboard.writeText(url);
       toast.success("Link copied to clipboard!");
+    }
+  };
+
+  const handleCopyMsg = async (msg: any) => {
+    if (!msg) return;
+    try {
+      if (msg.attachmentUrl || msg.fileUrl) {
+        const rawUrl = msg.attachmentUrl || msg.fileUrl;
+        const fullUrl = rawUrl.startsWith('http') ? rawUrl : `${API_URL}${rawUrl}`;
+
+        try {
+          const response = await fetch(fullUrl);
+          const blob = await response.blob();
+          
+          if (blob.type.startsWith('image/')) {
+            let copied = false;
+            const ClipboardItemClass = (typeof window !== 'undefined' && (window as any).ClipboardItem) || (globalThis as any).ClipboardItem;
+
+            if (ClipboardItemClass) {
+              // Try direct ClipboardItem write with native format
+              try {
+                await navigator.clipboard.write([
+                  new ClipboardItemClass({ [blob.type]: blob })
+                ]);
+                copied = true;
+              } catch {
+                // Browser requires image/png for ClipboardItem (e.g. Chrome/Edge requirement for JPEG/WEBP/GIF)
+              }
+
+              if (!copied) {
+                // Convert any image format (JPEG, WEBP, GIF, BMP, SVG) to standard PNG blob via Canvas
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.src = URL.createObjectURL(blob);
+                await new Promise((resolve) => {
+                  img.onload = () => resolve(true);
+                  img.onerror = () => resolve(false);
+                });
+
+                const canvas = document.createElement('canvas');
+                canvas.width = img.naturalWidth || 300;
+                canvas.height = img.naturalHeight || 300;
+                const ctx = canvas.getContext('2d');
+                ctx?.drawImage(img, 0, 0);
+
+                const pngBlob = await new Promise<Blob | null>((resolve) =>
+                  canvas.toBlob((b) => resolve(b), 'image/png')
+                );
+
+                if (pngBlob) {
+                  await navigator.clipboard.write([
+                    new ClipboardItemClass({ 'image/png': pngBlob })
+                  ]);
+                  copied = true;
+                }
+              }
+            }
+
+            if (copied) {
+              toast.success("Image copied to clipboard!");
+              return;
+            }
+          }
+        } catch (imgErr) {
+          console.warn("Direct image copy fallback to URL:", imgErr);
+        }
+
+        const copyContent = msg.text ? `${msg.text}\n${fullUrl}` : fullUrl;
+        await navigator.clipboard.writeText(copyContent);
+        toast.success("Copied image link to clipboard!");
+        return;
+      }
+
+      if (msg.text) {
+        await navigator.clipboard.writeText(msg.text);
+        toast.success("Text copied!");
+        return;
+      }
+
+      toast.info("Nothing to copy");
+    } catch (err) {
+      console.error("Copy error:", err);
+      toast.error("Failed to copy");
     }
   };
 
@@ -5510,24 +5607,32 @@ export default function ChatPage() {
                           variant="ghost"
                           size="icon"
                           className="text-white hover:bg-white/20 h-8 w-8 rounded-full"
-                          onClick={() => {
-                            if (selectedMessageIds.length === 0) return;
-                            setMessageToDelete(null);
-                            setShowDeleteConfirm(true);
-                          }}
+                          onClick={handleForwardSelectedMessages}
                           disabled={selectedMessageIds.length === 0}
-                          title="Delete selected"
+                          title="Forward selected"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Forward className="w-4 h-4" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon"
                           className="text-white hover:bg-white/20 h-8 w-8 rounded-full"
-                          onClick={handleForwardSelectedMessages}
+                          onClick={() => {
+                            const msgs = currentMessages.filter(m => selectedMessageIds.includes(m.id));
+                            if (msgs.length === 1) {
+                              handleCopyMsg(msgs[0]);
+                            } else if (msgs.length > 1) {
+                              const textToCopy = msgs.map(m => m.text || (m.attachmentUrl ? `${API_URL}${m.attachmentUrl}` : '')).filter(Boolean).join('\n---\n');
+                              if (textToCopy) {
+                                navigator.clipboard.writeText(textToCopy);
+                                toast.success(`${msgs.length} messages copied!`);
+                              }
+                            }
+                          }}
                           disabled={selectedMessageIds.length === 0}
+                          title="Copy selected"
                         >
-                          <Forward className="w-4 h-4" />
+                          <Copy className="w-4 h-4" />
                         </Button>
                         <Button
                           variant="ghost"
@@ -7175,15 +7280,6 @@ export default function ChatPage() {
                 <Trash2 className="w-4 h-4 mr-3 text-slate-500" />
                 Delete for me
               </Button>
-              {canDeleteForEveryone() && (
-                <Button
-                  onClick={() => { confirmDeleteMessage('everyone'); if (isSelectionMode) exitSelectionMode(); }}
-                  className="w-full justify-start text-sm font-semibold text-red-600 bg-white hover:bg-red-50 border border-slate-200 rounded-xl py-5 px-4 shadow-none"
-                >
-                  <Trash2 className="w-4 h-4 mr-3 text-red-500" />
-                  Delete for everyone
-                </Button>
-              )}
               <Button
                 variant="ghost"
                 onClick={() => { setShowDeleteConfirm(false); if (isSelectionMode) exitSelectionMode(); }}
@@ -7657,21 +7753,6 @@ export default function ChatPage() {
               <button
                 type="button"
                 onClick={() => {
-                  if (selectedMessageIds.length > 0) {
-                    setShowDeleteConfirm(true);
-                    setMessageToDelete(null);
-                  }
-                  setContextMenu(null);
-                }}
-                disabled={selectedMessageIds.length === 0}
-                className="w-full flex items-center gap-3 px-3 py-2.5 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-lg text-left transition-colors disabled:opacity-50"
-              >
-                <Trash2 className="w-4 h-4 text-red-500" />
-                Delete ({selectedMessageIds.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => {
                   exitSelectionMode();
                   setContextMenu(null);
                 }}
@@ -7699,9 +7780,8 @@ export default function ChatPage() {
               <button
                 type="button"
                 onClick={async () => {
-                  if (contextMenu.msg.text) {
-                    navigator.clipboard.writeText(contextMenu.msg.text);
-                    toast.success("Copied!");
+                  if (contextMenu?.msg) {
+                    await handleCopyMsg(contextMenu.msg);
                   }
                   setContextMenu(null);
                 }}
@@ -7762,17 +7842,6 @@ export default function ChatPage() {
               >
                 <Download className="w-4 h-4 text-slate-400" />
                 Save as
-              </button>
-
-              <DropdownMenuSeparator className="my-1" />
-
-              <button
-                type="button"
-                onClick={() => { enterSelectionMode(); toggleMessageSelection(contextMenu.msg.id); setContextMenu(null); }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-lg text-left transition-colors"
-              >
-                <Trash2 className="w-4 h-4 text-red-500" />
-                Delete
               </button>
             </>
           )}
