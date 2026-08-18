@@ -23,9 +23,11 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/comp
 import dayjs from "dayjs";
 import isSameOrAfter from "dayjs/plugin/isSameOrAfter";
 import isSameOrBefore from "dayjs/plugin/isSameOrBefore";
+import customParseFormat from "dayjs/plugin/customParseFormat";
 
 dayjs.extend(isSameOrAfter);
 dayjs.extend(isSameOrBefore);
+dayjs.extend(customParseFormat);
 
 import { useUserContext } from "@/context/UserContext";
 import { API_URL, getAvatarUrl } from "@/lib/config";
@@ -195,7 +197,7 @@ export default function LeavePage() {
             const [d, m, y] = dateStr.split("-").map(Number);
             return new Date(y, m - 1, d).getTime();
           };
-          const sorted = data.leaves.sort((a: any, b: any) => parseDDMMYYYY(b.appliedOn) - parseDDMMYYYY(a.appliedOn));
+          const sorted = data.leaves.sort((a: any, b: any) => parseDDMMYYYY(b.start_date) - parseDDMMYYYY(a.start_date));
           setLeaves(sorted);
         }
         
