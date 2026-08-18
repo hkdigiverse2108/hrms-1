@@ -3161,7 +3161,14 @@ async def get_all_leave_requests(db, skip: int = 0, limit: int = 100):
     return leaves
 
 async def get_user_leave_requests(db, employee_id: str, skip: int = 0, limit: int = 100):
-    cursor = db.leave_requests.find({"employee_id": employee_id}).sort("requested_on", -1).skip(skip).limit(limit)
+    from bson import ObjectId
+    try:
+        obj_id = ObjectId(employee_id)
+        query = {"$or": [{"employee_id": employee_id}, {"employee_id": obj_id}]}
+    except Exception:
+        query = {"employee_id": employee_id}
+    
+    cursor = db.leave_requests.find(query).sort("requested_on", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     leaves = [fix_id(row) for row in rows]
     for leave in leaves:
