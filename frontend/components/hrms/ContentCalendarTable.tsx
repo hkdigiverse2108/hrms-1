@@ -664,7 +664,7 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
       let isHighlightedNow: boolean;
       
       if (currentList.includes(currentUserId)) {
-        newList = currentList.filter(id => id !== currentUserId);
+        newList = currentList.filter((id: string) => id !== currentUserId);
         isHighlightedNow = false;
       } else {
         newList = [...currentList, currentUserId];
@@ -711,7 +711,7 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
       setIsSaving(true);
       await Promise.all(highlightedEntries.map(async (entry) => {
         const currentList = Array.isArray(entry.highlightedByUserIds) ? entry.highlightedByUserIds : [];
-        const newList = currentList.filter(id => id !== currentUserId);
+        const newList = currentList.filter((id: string) => id !== currentUserId);
         
         await fetch(`${API_URL}/content-calendar/${entry.id}`, {
           method: "PUT",
@@ -724,7 +724,7 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
         if (Array.isArray(e.highlightedByUserIds) && e.highlightedByUserIds.includes(currentUserId)) {
           return {
             ...e,
-            highlightedByUserIds: e.highlightedByUserIds.filter(id => id !== currentUserId)
+            highlightedByUserIds: e.highlightedByUserIds.filter((id: string) => id !== currentUserId)
           };
         }
         return e;
@@ -1180,6 +1180,7 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
                 <SelectItem value="all">All Types</SelectItem>
                 <SelectItem value="Post">Post</SelectItem>
                 <SelectItem value="Reel">Reel</SelectItem>
+                <SelectItem value="Story">Story</SelectItem>
               </SelectContent>
             </Select>
             <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
@@ -1651,6 +1652,7 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
                                 <SelectContent>
                                   <SelectItem value="Post">Post</SelectItem>
                                   <SelectItem value="Reel">Reel</SelectItem>
+                                  <SelectItem value="Story">Story</SelectItem>
                                 </SelectContent>
                               </Select>
                             ) : key === "isApproved" ? (
