@@ -273,9 +273,19 @@ export default function AttendancePage() {
     return result;
   }, [attendance, selectedEmployeeId, selectedDate, searchQuery]);
 
+  const monthlyFilteredAttendance = useMemo(() => {
+    return filteredAttendance.filter((a: any) => {
+      if (!a.date) return false;
+      const recordDate = dayjs(a.date);
+      return recordDate.isValid() && 
+             recordDate.month() === calendarMonth.month() && 
+             recordDate.year() === calendarMonth.year();
+    });
+  }, [filteredAttendance, calendarMonth]);
+
   useEffect(() => {
-    calculateStats(filteredAttendance);
-  }, [filteredAttendance]);
+    calculateStats(monthlyFilteredAttendance);
+  }, [monthlyFilteredAttendance]);
  
   const formatToHhMm = (totalMinutes: number) => {
     if (!totalMinutes || totalMinutes <= 0) return "-";
@@ -343,9 +353,9 @@ export default function AttendancePage() {
       });
     });
  
-    const avgMinutes = presentDays > 0 ? (totalMinutes / presentDays) : 0;
+    const avgMinutes = presentDays > 0 ? Math.round(totalMinutes / presentDays) : 0;
     const avgH = Math.floor(avgMinutes / 60);
-    const avgM = Math.round(avgMinutes % 60);
+    const avgM = avgMinutes % 60;
 
     const workH = Math.floor(totalMinutes / 60);
     const workM = totalMinutes % 60;
@@ -355,9 +365,9 @@ export default function AttendancePage() {
  
     setStats({
       presentDays,
-      avgHours: `${avgH}h ${avgM}m`,
-      totalWorkTime: `${workH}h ${workM}m`,
-      totalBreakTime: `${breakH}h ${breakM}m`
+      avgHours: `${avgH}h ${avgM.toString().padStart(2, '0')}m`,
+      totalWorkTime: `${workH}h ${workM.toString().padStart(2, '0')}m`,
+      totalBreakTime: `${breakH}h ${breakM.toString().padStart(2, '0')}m`
     });
   };
 
