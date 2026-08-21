@@ -104,9 +104,9 @@ export default function AttendancePage() {
   });
   const [recoveryForm, setRecoveryForm] = useState({
     date: dayjs(getISTNow()).format("YYYY-MM-DD"),
-    type: "break", // "break" or "punch-out"
-    recordedBreakIn: "13:00:00",
-    actualBreakOut: "14:00:00",
+    type: "work", // "work" or "punch-out"
+    startTime: "13:00:00",
+    endTime: "14:00:00",
     actualPunchOut: "18:30:00",
     reason: ""
   });
@@ -508,12 +508,12 @@ export default function AttendancePage() {
       return;
     }
     try {
-      const startObj = dayjs(`2000-01-01 ${recoveryForm.recordedBreakIn}`);
-      const endObj = dayjs(`2000-01-01 ${recoveryForm.actualBreakOut}`);
+      const startObj = dayjs(`2000-01-01 ${recoveryForm.startTime}`);
+      const endObj = dayjs(`2000-01-01 ${recoveryForm.endTime}`);
       let diffMins = 0;
       if (startObj.isValid() && endObj.isValid()) {
         diffMins = endObj.diff(startObj, 'minute');
-        if (diffMins < 0) diffMins = 0;
+        if (diffMins < 0) diffMins += 24 * 60;
       }
 
       const res = await fetch(`${API_URL}/time-recovery`, {
@@ -525,10 +525,10 @@ export default function AttendancePage() {
           date: recoveryForm.date,
           late_minutes: 0,
           recovery_minutes: diffMins,
-          recovery_type: "break",
-          start_time: recoveryForm.recordedBreakIn,
-          end_time: recoveryForm.actualBreakOut,
-          reason: `Break-In: ${recoveryForm.recordedBreakIn}, Actual Break-Out: ${recoveryForm.actualBreakOut}. ${recoveryForm.reason}`,
+          recovery_type: "work",
+          start_time: recoveryForm.startTime,
+          end_time: recoveryForm.endTime,
+          reason: `Start Time: ${recoveryForm.startTime}, End Time: ${recoveryForm.endTime}. ${recoveryForm.reason}`,
           status: "pending"
         })
       });
@@ -684,7 +684,7 @@ export default function AttendancePage() {
               <DialogHeader>
                 <DialogTitle className="text-xl font-bold">Recover Time Request</DialogTitle>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Submit a request to recover your missing break-out time for your attendance record.
+                  Submit a request to recover missing work time (e.g. if you were working but marked on break).
                 </p>
               </DialogHeader>
               <div className="space-y-4 py-2">
@@ -700,27 +700,27 @@ export default function AttendancePage() {
                 </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2 flex flex-col">
-                      <label className="text-sm font-medium text-foreground">Recorded Break-In</label>
-                      <Select value={recoveryForm.recordedBreakIn} onValueChange={(v) => setRecoveryForm({...recoveryForm, recordedBreakIn: v})}>
+                      <label className="text-sm font-medium text-foreground">Start Time</label>
+                      <Select value={recoveryForm.startTime} onValueChange={(v) => setRecoveryForm({...recoveryForm, startTime: v})}>
                         <SelectTrigger className="w-full h-9">
-                          <SelectValue placeholder="Recorded Break-In" />
+                          <SelectValue placeholder="Start Time" />
                         </SelectTrigger>
                         <SelectContent className="max-h-[250px]">
                           {TIME_OPTIONS.map(opt => (
-                            <SelectItem key={`breakin-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
+                            <SelectItem key={`start-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-2 flex flex-col">
-                      <label className="text-sm font-medium text-foreground">Actual Break-Out Time</label>
-                      <Select value={recoveryForm.actualBreakOut} onValueChange={(v) => setRecoveryForm({...recoveryForm, actualBreakOut: v})}>
+                      <label className="text-sm font-medium text-foreground">End Time</label>
+                      <Select value={recoveryForm.endTime} onValueChange={(v) => setRecoveryForm({...recoveryForm, endTime: v})}>
                         <SelectTrigger className="w-full h-9">
-                          <SelectValue placeholder="Actual Break-Out Time" />
+                          <SelectValue placeholder="End Time" />
                         </SelectTrigger>
                         <SelectContent className="max-h-[250px]">
                           {TIME_OPTIONS.map(opt => (
-                            <SelectItem key={`breakout-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
+                            <SelectItem key={`end-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
