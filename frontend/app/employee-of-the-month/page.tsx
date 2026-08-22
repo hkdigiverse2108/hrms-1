@@ -420,20 +420,24 @@ export default function EmployeeOfMonthPage() {
     return name.includes(q) || dept.includes(q) || role.includes(q);
   });
 
+  const currentUserId = String(user?.id || user?._id || "");
+  const assignedCriteriaForUser = criteria.filter(c => 
+    c.assignedPersonIds && c.assignedPersonIds.includes(currentUserId)
+  );
+
   return (
     <div className="min-h-screen bg-slate-50/50 p-6 space-y-6">
       {contextHolder}
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80">
-        <div className="space-y-1">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-gradient-to-tr from-amber-500 to-amber-400 text-white rounded-xl shadow-md shadow-amber-500/20">
-              <Trophy className="w-6 h-6" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Employee of the Month</h1>
-              <p className="text-sm text-slate-500">Per-month parameters, history tracking & live auditorium reveal</p>
-            </div>
+
+      {/* Header Bar */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80">
+        <div className="flex items-center gap-3">
+          <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl">
+            <Trophy className="w-6 h-6" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-slate-800">Employee of the Month (EOM)</h1>
+            <p className="text-xs text-slate-500">Configure parameters, evaluate scores, and reveal monthly winners</p>
           </div>
         </div>
 
@@ -485,14 +489,14 @@ export default function EmployeeOfMonthPage() {
           />
 
           <Link
-            href="/employee-of-the-month/score-entry"
+            href={`/employee-of-the-month/score-entry?month_year=${selectedMonthYear}`}
             className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 text-white text-sm font-semibold rounded-xl hover:bg-slate-900 transition-all shadow-sm"
           >
             <Edit className="w-4 h-4" />
             Score Submissions
           </Link>
 
-          {(isAdmin || isHR) && (
+          {isAdmin && (
             <div className="flex items-center gap-2">
               <DatePicker
                 showTime={{ format: 'hh:mm A', use12Hours: true }}
@@ -519,6 +523,34 @@ export default function EmployeeOfMonthPage() {
           )}
         </div>
       </div>
+
+      {/* Assigned Criteria Alert Banner for Current Evaluator / HR */}
+      {assignedCriteriaForUser.length > 0 && (
+        <div className="p-4 rounded-xl border bg-gradient-to-r from-blue-50 via-indigo-50 to-blue-50 border-blue-200 text-blue-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <UserCheck className="w-5 h-5 text-blue-600 shrink-0" />
+            <div>
+              <span className="font-bold text-sm">
+                You are assigned to evaluate {assignedCriteriaForUser.length} parameter{assignedCriteriaForUser.length > 1 ? "s" : ""} in {selectedMonthYear}:
+              </span>
+              <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                {assignedCriteriaForUser.map((c, i) => (
+                  <Tag key={i} color="blue" className="font-bold text-xs rounded-md">
+                    {c.name} ({c.maxScore} pts)
+                  </Tag>
+                ))}
+              </div>
+            </div>
+          </div>
+          <Link
+            href={`/employee-of-the-month/score-entry?month_year=${selectedMonthYear}`}
+            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all shrink-0 cursor-pointer"
+          >
+            <Edit className="w-3.5 h-3.5" />
+            Enter Assigned Scores Now
+          </Link>
+        </div>
+      )}
 
       {/* Max Score Total Banner for Selected Month */}
       <div className="p-4 rounded-xl border bg-emerald-50 border-emerald-200 text-emerald-900 flex items-center justify-between transition-all">
@@ -567,20 +599,22 @@ export default function EmployeeOfMonthPage() {
         >
           Parameters Configuration ({selectedMonthYear})
         </button>
-        <button
-          onClick={() => setActiveTab("leaderboard")}
-          className={`pb-3 text-sm font-semibold border-b-2 transition-all ${activeTab === "leaderboard"
-              ? "border-amber-500 text-amber-600"
-              : "border-transparent text-slate-500 hover:text-slate-700"
-            }`}
-        >
-          Month Standings ({leaderboard.length})
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => setActiveTab("leaderboard")}
+            className={`pb-3 text-sm font-semibold border-b-2 transition-all ${activeTab === "leaderboard"
+                ? "border-amber-500 text-amber-600"
+                : "border-transparent text-slate-500 hover:text-slate-700"
+              }`}
+          >
+            Month Standings ({leaderboard.length})
+          </button>
+        )}
       </div>
 
       {loading ? (
         <div className="py-20 text-center"><Spin size="large" /></div>
-      ) : activeTab === "criteria" ? (
+      ) : activeTab === "criteria" || !isAdmin ? (
         /* Criteria Setup Table for Selected Month */
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden space-y-4 p-6">
           <div className="flex items-center justify-between">
@@ -644,17 +678,24 @@ export default function EmployeeOfMonthPage() {
                       {idx + 1}
                     </td>
                     <td className="py-3.5 px-4">
-                      {item.isFixed && !isAdmin && !isHR ? (
-                        <span className="font-bold text-slate-800">{item.name}</span>
-                      ) : (
-                        <input
-                          type="text"
-                          value={item.name}
-                          onChange={(e) => handleNameChange(idx, e.target.value)}
-                          disabled={!isAdmin && !isHR}
-                          className="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-semibold focus:outline-none focus:border-amber-500 w-52"
-                        />
-                      )}
+                      <div className="flex items-center gap-2">
+                        {item.isFixed && !isAdmin && !isHR ? (
+                          <span className="font-bold text-slate-800">{item.name}</span>
+                        ) : (
+                          <input
+                            type="text"
+                            value={item.name}
+                            onChange={(e) => handleNameChange(idx, e.target.value)}
+                            disabled={!isAdmin && !isHR}
+                            className="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-semibold focus:outline-none focus:border-amber-500 w-52"
+                          />
+                        )}
+                        {item.assignedPersonIds?.includes(currentUserId) && (
+                          <Tag color="blue" className="font-bold text-[10px] rounded-md shrink-0">
+                            Assigned to You
+                          </Tag>
+                        )}
+                      </div>
                     </td>
                     <td className="py-3.5 px-4">
                       {(isAdmin || isHR) ? (

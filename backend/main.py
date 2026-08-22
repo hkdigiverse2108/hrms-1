@@ -5063,8 +5063,12 @@ async def get_eom_reveal_order_endpoint(month_year: str = Query(...)):
     return await eom_service.get_eom_reveal_order(month_year)
 
 @app.get("/eom/scores")
-async def get_eom_scores_endpoint(month_year: str = Query(...), criteriaId: Optional[str] = Query(None)):
-    return await eom_service.get_scores(month_year, criteriaId)
+async def get_eom_scores_endpoint(
+    month_year: str = Query(...),
+    criteriaId: Optional[str] = Query(None),
+    scoredBy: Optional[str] = Query(None)
+):
+    return await eom_service.get_scores(month_year, criteriaId, scored_by=scoredBy)
 
 @app.get("/eom/leaderboard")
 async def get_eom_leaderboard_endpoint(month_year: str = Query(...)):

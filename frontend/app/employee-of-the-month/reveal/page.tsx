@@ -104,6 +104,7 @@ interface Criterion {
   id: string;
   name: string;
   maxScore: number;
+  entryType?: string;
   category?: string;
 }
 
@@ -635,11 +636,7 @@ export default function AuditoriumRevealPage() {
       revealedCols.forEach(col => {
         const sc = emp.criteriaScores?.[col.id] ?? 0;
         colScores[col.id] = sc.toFixed(2);
-        if (col.category === "-ve") {
-          stageTotal += Math.max(0, (Number(col.maxScore) || 0) - sc);
-        } else {
-          stageTotal += sc;
-        }
+        stageTotal += sc;
       });
 
       return {
@@ -656,11 +653,7 @@ export default function AuditoriumRevealPage() {
       prevCols.forEach(col => {
         const sc = emp.criteriaScores?.[col.id] ?? 0;
         colScores[col.id] = sc.toFixed(2);
-        if (col.category === "-ve") {
-          prevSum += Math.max(0, (Number(col.maxScore) || 0) - sc);
-        } else {
-          prevSum += sc;
-        }
+        prevSum += sc;
       });
 
       const isFinaleRevealed = finaleRevealedIds.has(emp.employeeId);
@@ -668,9 +661,8 @@ export default function AuditoriumRevealPage() {
       if (isFinaleRevealed) {
         const finalSc = emp.criteriaScores?.[finalCol.id] ?? 0;
         colScores[finalCol.id] = finalSc.toFixed(2);
-        const finalContrib = finalCol.category === "-ve" ? Math.max(0, (Number(finalCol.maxScore) || 0) - finalSc) : finalSc;
         return {
-          stageTotal: Number((prevSum + finalContrib).toFixed(2)),
+          stageTotal: Number((prevSum + finalSc).toFixed(2)),
           colScores,
           isFinaleRevealed: true
         };
