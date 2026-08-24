@@ -4820,11 +4820,30 @@ async def update_bulk_module_permissions(request: schemas.ModuleBulkUpdateReques
 # STV VOTING SYSTEM MODULE ENDPOINTS
 # ==========================================
 
-def _is_admin_or_hr(token_payload: dict) -> bool:
+async def _is_admin_or_hr(token_payload: dict) -> bool:
+    if not token_payload:
+        return False
     role = str(token_payload.get("role", "")).lower().strip()
     admin_hr_roles = {"admin", "super admin", "superadmin", "administrator", "founder", "hr", "hr manager", "hr lead", "hr executive", "human resources"}
-    if role in admin_hr_roles or "hr" in role:
+    if role in admin_hr_roles or "hr" in role or "admin" in role:
         return True
+    user_id = str(token_payload.get("sub", "")).strip()
+    if user_id:
+        try:
+            from bson import ObjectId
+            filter_q = {"_id": ObjectId(user_id)} if (len(user_id) == 24 and ObjectId.is_valid(user_id)) else {"_id": user_id}
+            u_doc = await database.db.employees.find_one(filter_q)
+            if not u_doc:
+                u_doc = await database.db.employees.find_one({"id": user_id})
+            if u_doc:
+                u_role = str(u_doc.get("role") or "").lower().strip()
+                u_desig = str(u_doc.get("designation") or "").lower().strip()
+                u_dept = str(u_doc.get("department") or "").lower().strip()
+                combined = f"{u_role} {u_desig} {u_dept}"
+                if any(k in combined for k in ["admin", "super admin", "superadmin", "administrator", "founder", "hr", "human resources"]):
+                    return True
+        except Exception as e:
+            print(f"Error in _is_admin_or_hr: {e}", flush=True)
     return False
 
 
@@ -4833,7 +4852,7 @@ async def create_election_endpoint(
     data: schemas.ElectionCreate,
     token_payload: dict = Depends(auth.require_auth)
 ):
-    if not _is_admin_or_hr(token_payload):
+    if not await _is_admin_or_hr(token_payload):
         raise HTTPException(status_code=403, detail="Only Admin or HR can create elections.")
     user_id = token_payload.get("sub")
     return await crud.create_election(data, user_id)
@@ -4864,7 +4883,7 @@ async def delete_election_endpoint(
     election_id: str,
     token_payload: dict = Depends(auth.require_auth)
 ):
-    if not _is_admin_or_hr(token_payload):
+    if not await _is_admin_or_hr(token_payload):
         raise HTTPException(status_code=403, detail="Only Admin or HR can delete elections.")
     deleted = await crud.soft_delete_election(election_id)
     if not deleted:
@@ -4901,7 +4920,7 @@ async def run_election_stv_endpoint(
     election_id: str,
     token_payload: dict = Depends(auth.require_auth)
 ):
-    if not _is_admin_or_hr(token_payload):
+    if not await _is_admin_or_hr(token_payload):
         raise HTTPException(status_code=403, detail="Only Admin or HR can run STV calculation.")
     try:
         result = await crud.run_stv_round_calculation(election_id)
@@ -4915,7 +4934,7 @@ async def get_election_rounds_endpoint(
     election_id: str,
     token_payload: dict = Depends(auth.require_auth)
 ):
-    if not _is_admin_or_hr(token_payload):
+    if not await _is_admin_or_hr(token_payload):
         raise HTTPException(status_code=403, detail="Only Admin or HR can view round calculation details.")
     rounds = await crud.get_election_rounds_history(election_id)
     return rounds
@@ -4926,7 +4945,7 @@ async def get_election_result_endpoint(
     election_id: str,
     token_payload: dict = Depends(auth.require_auth)
 ):
-    if not _is_admin_or_hr(token_payload):
+    if not await _is_admin_or_hr(token_payload):
         raise HTTPException(status_code=403, detail="Only Admin or HR can view election results.")
     election = await crud.get_election_by_id(election_id)
     if not election:
@@ -4939,7 +4958,7 @@ async def get_voter_ballots_admin_endpoint(
     election_id: str,
     token_payload: dict = Depends(auth.require_auth)
 ):
-    if not _is_admin_or_hr(token_payload):
+    if not await _is_admin_or_hr(token_payload):
         raise HTTPException(status_code=403, detail="Only Admin or HR can view individual voter ballots.")
     ballots = await crud.get_admin_voter_ballots(election_id)
     return ballots
@@ -4958,7 +4977,7 @@ async def save_eom_master_criteria_endpoint(
     request: Request,
     token_payload: dict = Depends(auth.require_auth)
 ):
-    if not _is_admin_or_hr(token_payload):
+    if not await _is_admin_or_hr(token_payload):
         raise HTTPException(status_code=403, detail="Only Admin or HR can manage EOM master template.")
     data = await request.json()
     criteria_list = data.get("criteria", [])
@@ -4980,7 +4999,7 @@ async def save_eom_criteria_endpoint(
     request: Request,
     token_payload: dict = Depends(auth.require_auth)
 ):
-    if not _is_admin_or_hr(token_payload):
+    if not await _is_admin_or_hr(token_payload):
         raise HTTPException(status_code=403, detail="Only Admin or HR can manage EOM criteria.")
     data = await request.json()
     month_year = data.get("month_year")
@@ -4999,7 +5018,7 @@ async def clone_eom_criteria_endpoint(
     request: Request,
     token_payload: dict = Depends(auth.require_auth)
 ):
-    if not _is_admin_or_hr(token_payload):
+    if not await _is_admin_or_hr(token_payload):
         raise HTTPException(status_code=403, detail="Only Admin or HR can clone criteria.")
     data = await request.json()
     from_month = data.get("from_month_year")
@@ -5101,7 +5120,7 @@ async def save_eom_reveal_schedule_endpoint(
     request: Request,
     token_payload: dict = Depends(auth.require_auth)
 ):
-    if not _is_admin_or_hr(token_payload):
+    if not await _is_admin_or_hr(token_payload):
         raise HTTPException(status_code=403, detail="Only Admin or HR can schedule reveal time.")
     data = await request.json()
     month_year = data.get("month_year")
@@ -5115,7 +5134,7 @@ async def save_eom_month_config_endpoint(
     request: Request,
     token_payload: dict = Depends(auth.require_auth)
 ):
-    if not _is_admin_or_hr(token_payload):
+    if not await _is_admin_or_hr(token_payload):
         raise HTTPException(status_code=403, detail="Only Admin or HR can configure participating employees.")
     data = await request.json()
     month_year = data.get("month_year")
@@ -5136,7 +5155,7 @@ async def save_weekly_master_topics_endpoint(
     request: Request,
     token_payload: dict = Depends(auth.require_auth)
 ):
-    if not _is_admin_or_hr(token_payload):
+    if not await _is_admin_or_hr(token_payload):
         raise HTTPException(status_code=403, detail="Only Admin or HR can configure master topics.")
     data = await request.json()
     topics = data.get("topics", [])
@@ -5151,7 +5170,7 @@ async def create_weekly_meeting_endpoint(
     request: Request,
     token_payload: dict = Depends(auth.require_auth)
 ):
-    if not _is_admin_or_hr(token_payload):
+    if not await _is_admin_or_hr(token_payload):
         raise HTTPException(status_code=403, detail="Only Admin or HR can create weekly meetings.")
     data = await request.json()
     meeting_date = data.get("meetingDate")
@@ -5176,7 +5195,7 @@ async def delete_weekly_meeting_endpoint(
     meeting_id: str,
     token_payload: dict = Depends(auth.require_auth)
 ):
-    if not _is_admin_or_hr(token_payload):
+    if not await _is_admin_or_hr(token_payload):
         raise HTTPException(status_code=403, detail="Only Admin or HR can delete weekly meetings.")
     return {"success": await eom_service.delete_weekly_meeting(meeting_id)}
 
@@ -5186,7 +5205,7 @@ async def update_weekly_participants_endpoint(
     request: Request,
     token_payload: dict = Depends(auth.require_auth)
 ):
-    if not _is_admin_or_hr(token_payload):
+    if not await _is_admin_or_hr(token_payload):
         raise HTTPException(status_code=403, detail="Only Admin or HR can update meeting participants.")
     data = await request.json()
     participant_ids = data.get("participantEmployeeIds", [])
@@ -5198,7 +5217,7 @@ async def save_weekly_topics_endpoint(
     request: Request,
     token_payload: dict = Depends(auth.require_auth)
 ):
-    if not _is_admin_or_hr(token_payload):
+    if not await _is_admin_or_hr(token_payload):
         raise HTTPException(status_code=403, detail="Only Admin or HR can edit topics.")
     data = await request.json()
     topics = data.get("topics", [])
@@ -5219,7 +5238,7 @@ async def declare_weekly_team_result_endpoint(
     request: Request,
     token_payload: dict = Depends(auth.require_auth)
 ):
-    if not _is_admin_or_hr(token_payload):
+    if not await _is_admin_or_hr(token_payload):
         raise HTTPException(status_code=403, detail="Only Admin or HR can declare results.")
     data = await request.json()
     week_ids = data.get("weekMeetingIds", [])
