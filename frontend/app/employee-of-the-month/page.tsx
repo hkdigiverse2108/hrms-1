@@ -47,8 +47,14 @@ export default function EmployeeOfMonthPage() {
   const { user } = useUser();
   const [modal, contextHolder] = Modal.useModal();
 
-  const isAdmin = user && ["admin", "super admin", "superadmin", "administrator", "founder"].includes(String(user.role || "").toLowerCase().trim());
-  const isHR = user && ["hr", "hr manager", "hr lead"].includes(String(user.role || "").toLowerCase().trim());
+  const isAdmin = Boolean(user && ["admin", "super admin", "superadmin", "administrator", "founder"].includes(String(user.role || "").toLowerCase().trim()));
+  const isHR = Boolean(
+    user && (
+      ["hr", "hr manager", "hr lead", "hr executive", "human resources"].includes(String(user.role || "").toLowerCase().trim()) ||
+      String(user.designation || "").toLowerCase().includes("hr") ||
+      String(user.department || "").toLowerCase().includes("hr")
+    )
+  );
 
   const isEmpAdmin = (emp: any) => {
     const r = String(emp.role || emp.designation || "").toLowerCase().trim();
@@ -496,7 +502,7 @@ export default function EmployeeOfMonthPage() {
             Score Submissions
           </Link>
 
-          {isAdmin && (
+          {(isAdmin || isHR) && (
             <div className="flex items-center gap-2">
               <DatePicker
                 showTime={{ format: 'hh:mm A', use12Hours: true }}
@@ -599,7 +605,7 @@ export default function EmployeeOfMonthPage() {
         >
           Parameters Configuration ({selectedMonthYear})
         </button>
-        {isAdmin && (
+        {(isAdmin || isHR) && (
           <button
             onClick={() => setActiveTab("leaderboard")}
             className={`pb-3 text-sm font-semibold border-b-2 transition-all ${activeTab === "leaderboard"
@@ -614,7 +620,7 @@ export default function EmployeeOfMonthPage() {
 
       {loading ? (
         <div className="py-20 text-center"><Spin size="large" /></div>
-      ) : activeTab === "criteria" || !isAdmin ? (
+      ) : activeTab === "criteria" || (!isAdmin && !isHR) ? (
         /* Criteria Setup Table for Selected Month */
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden space-y-4 p-6">
           <div className="flex items-center justify-between">

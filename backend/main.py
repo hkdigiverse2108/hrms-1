@@ -4822,8 +4822,10 @@ async def update_bulk_module_permissions(request: schemas.ModuleBulkUpdateReques
 
 def _is_admin_or_hr(token_payload: dict) -> bool:
     role = str(token_payload.get("role", "")).lower().strip()
-    admin_hr_roles = {"admin", "super admin", "superadmin", "administrator", "founder", "hr", "hr manager", "hr lead"}
-    return role in admin_hr_roles
+    admin_hr_roles = {"admin", "super admin", "superadmin", "administrator", "founder", "hr", "hr manager", "hr lead", "hr executive", "human resources"}
+    if role in admin_hr_roles or "hr" in role:
+        return True
+    return False
 
 
 @app.post("/elections", response_model=schemas.ElectionOut)
@@ -5099,9 +5101,7 @@ async def save_eom_reveal_schedule_endpoint(
     request: Request,
     token_payload: dict = Depends(auth.require_auth)
 ):
-    admin_hr_roles = {"admin", "super admin", "superadmin", "administrator", "founder", "hr", "hr manager", "hr lead"}
-    role = str(token_payload.get("role", "")).lower().strip()
-    if role not in admin_hr_roles:
+    if not _is_admin_or_hr(token_payload):
         raise HTTPException(status_code=403, detail="Only Admin or HR can schedule reveal time.")
     data = await request.json()
     month_year = data.get("month_year")
@@ -5115,18 +5115,7 @@ async def save_eom_month_config_endpoint(
     request: Request,
     token_payload: dict = Depends(auth.require_auth)
 ):
-    admin_hr_roles = {"admin", "super admin", "superadmin", "administrator", "founder", "hr", "hr manager", "hr lead"}
-    role = str(token_payload.get("role", "")).lower().strip()
-    if role not in admin_hr_roles:
-        user_id = token_payload.get("sub")
-        if user_id:
-            from bson import ObjectId
-            u_doc = await database.db.employees.find_one({"_id": ObjectId(user_id) if len(user_id) == 24 else user_id})
-            if u_doc:
-                u_role = str(u_doc.get("role") or u_doc.get("designation") or "").lower().strip()
-                if u_role in admin_hr_roles:
-                    role = u_role
-    if role not in admin_hr_roles:
+    if not _is_admin_or_hr(token_payload):
         raise HTTPException(status_code=403, detail="Only Admin or HR can configure participating employees.")
     data = await request.json()
     month_year = data.get("month_year")
@@ -5137,13 +5126,6 @@ async def save_eom_month_config_endpoint(
 
 
 # --- EMPLOYEE OF THE WEEK (EOW) ENDPOINTS ---
-
-def _is_admin_or_hr(token_payload: dict):
-    admin_hr_roles = {"admin", "super admin", "superadmin", "administrator", "founder", "hr", "hr manager", "hr lead"}
-    role = str(token_payload.get("role", "")).lower().strip()
-    if role in admin_hr_roles:
-        return True
-    return True
 
 @app.get("/weekly-meetings/master-topics")
 async def get_weekly_master_topics_endpoint():

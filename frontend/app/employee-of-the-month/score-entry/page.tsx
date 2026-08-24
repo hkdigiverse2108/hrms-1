@@ -90,10 +90,17 @@ export default function ScoreEntryPage() {
         const cData: Criterion[] = await cRes.json();
         
         const uId = String(user?.id || user?._id || "");
-        const isAdmin = user && ["admin", "super admin", "superadmin", "administrator", "founder"].includes(String(user.role || "").toLowerCase().trim());
+        const isAdmin = Boolean(user && ["admin", "super admin", "superadmin", "administrator", "founder"].includes(String(user.role || "").toLowerCase().trim()));
+        const isHR = Boolean(
+          user && (
+            ["hr", "hr manager", "hr lead", "hr executive", "human resources"].includes(String(user.role || "").toLowerCase().trim()) ||
+            String(user.designation || "").toLowerCase().includes("hr") ||
+            String(user.department || "").toLowerCase().includes("hr")
+          )
+        );
 
         accessibleCriteria = cData.filter(c => {
-          if (isAdmin) return true;
+          if (isAdmin || isHR) return true;
           if (!c.assignedPersonIds || c.assignedPersonIds.length === 0) return true;
           return c.assignedPersonIds.includes(uId);
         });
