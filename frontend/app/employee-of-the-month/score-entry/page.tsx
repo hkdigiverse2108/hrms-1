@@ -15,6 +15,7 @@ interface Criterion {
   maxScore: number;
   isFixed: boolean;
   assignedPersonIds: string[];
+  entryType?: "direct" | "multi_admin" | string;
   category?: string;
 }
 
@@ -89,10 +90,17 @@ export default function ScoreEntryPage() {
         const cData: Criterion[] = await cRes.json();
         
         const uId = String(user?.id || user?._id || "");
-        const isAdmin = user && ["admin", "super admin", "superadmin", "administrator", "founder"].includes(String(user.role || "").toLowerCase().trim());
+        const isAdmin = Boolean(user && ["admin", "super admin", "superadmin", "administrator", "founder"].includes(String(user.role || "").toLowerCase().trim()));
+        const isHR = Boolean(
+          user && (
+            ["hr", "hr manager", "hr lead", "hr executive", "human resources"].includes(String(user.role || "").toLowerCase().trim()) ||
+            String(user.designation || "").toLowerCase().includes("hr") ||
+            String(user.department || "").toLowerCase().includes("hr")
+          )
+        );
 
         accessibleCriteria = cData.filter(c => {
-          if (isAdmin) return true;
+          if (isAdmin || isHR) return true;
           if (!c.assignedPersonIds || c.assignedPersonIds.length === 0) return true;
           return c.assignedPersonIds.includes(uId);
         });
@@ -290,6 +298,116 @@ export default function ScoreEntryPage() {
     setCalculatedRankMap(updatedRanks);
   };
 
+  const handleAutoCalculateForCriterion = async (crit: Criterion) => {
+    if (!crit) return;
+    const nameLower = crit.name.toLowerCase();
+
+    if (nameLower.includes("attendance")) {
+      return handleAutoFillAttendance();
+    }
+    if (nameLower.includes("discipline") || nameLower.includes("penalty")) {
+      return handleAutoFillDiscipline();
+    }
+    if (nameLower.includes("work completion") || (nameLower.includes("work") && !nameLower.includes("dedication") && !nameLower.includes("hours"))) {
+      return handleAutoFillWorkCompletion();
+    }
+    if (nameLower.includes("work dedication") || nameLower.includes("dedication") || nameLower.includes("hours")) {
+      return handleAutoFillWorkDedication();
+    }
+    if (nameLower.includes("vote")) {
+      return handleAutoFillVote();
+    }
+
+    // Dynamic Equal Interval Calculation for ANY parameter (EAT, Supportive, Communication, Performance, or any custom criterion)
+    if (employees.length === 0) return;
+    const maxScore = Number(crit.maxScore) || 10;
+    const isLowerBetter = crit.category === "-ve";
+
+    // Check if quantities/ratings/counts are entered
+    const hasQty = employees.some(emp => {
+      const eId = String(emp.id || emp._id);
+      const q = rawQuantityMap[eId]?.[crit.id];
+      return q !== undefined && q !== "" && !isNaN(Number(q));
+    });
+
+    if (hasQty) {
+      const listWithQty = employees.map(emp => {
+        const eId = String(emp.id || emp._id);
+        const qVal = rawQuantityMap[eId]?.[crit.id];
+        const parsed = qVal !== undefined && qVal !== "" && !isNaN(Number(qVal)) ? Number(qVal) : null;
+        return { eId, qty: parsed };
+      });
+
+      listWithQty.sort((a, b) => {
+        if (a.qty === null && b.qty === null) return 0;
+        if (a.qty === null) return 1;
+        if (b.qty === null) return -1;
+        return isLowerBetter ? a.qty - b.qty : b.qty - a.qty;
+      });
+
+      const N = employees.length;
+      const interval = N > 1 ? maxScore / (N - 1) : 0;
+      const nextScores = { ...scoresMap };
+      const nextRanks = { ...calculatedRankMap };
+
+      employees.forEach(emp => {
+        const eId = String(emp.id || emp._id);
+        if (!nextScores[eId]) nextScores[eId] = {};
+        if (!nextRanks[eId]) nextRanks[eId] = {};
+
+        const item = listWithQty.find(x => x.eId === eId);
+        if (item && item.qty !== null) {
+          const idx = listWithQty.findIndex(x => x.eId === eId);
+          let rankIndex = idx;
+          for (let j = 0; j < idx; j++) {
+            if (listWithQty[j].qty === item.qty) {
+              rankIndex = j;
+              break;
+            }
+          }
+          const calculatedRank = rankIndex + 1;
+          const rawScore = maxScore - (rankIndex * interval);
+          const calcScore = Math.max(0, Math.min(maxScore, Math.round(rawScore * 100) / 100));
+
+          nextRanks[eId][crit.id] = calculatedRank;
+          nextScores[eId][crit.id] = calcScore;
+        }
+      });
+
+      setScoresMap(nextScores);
+      setCalculatedRankMap(nextRanks);
+      toast.success(`${crit.name} scores auto-calculated from values (${crit.category || "+ve"} Equal Interval formula)!`);
+    } else {
+      // Check if manual ranks were entered
+      const hasRanks = employees.some(emp => {
+        const eId = String(emp.id || emp._id);
+        const r = calculatedRankMap[eId]?.[crit.id];
+        return r !== undefined && r !== "" && !isNaN(Number(r)) && Number(r) > 0;
+      });
+
+      if (hasRanks) {
+        const N = employees.length;
+        const interval = N > 1 ? maxScore / (N - 1) : 0;
+        const nextScores = { ...scoresMap };
+
+        employees.forEach(emp => {
+          const eId = String(emp.id || emp._id);
+          const r = Number(calculatedRankMap[eId]?.[crit.id]);
+          if (r > 0) {
+            const rawScore = maxScore - ((r - 1) * interval);
+            const calcScore = Math.max(0, Math.min(maxScore, Math.round(rawScore * 100) / 100));
+            if (!nextScores[eId]) nextScores[eId] = {};
+            nextScores[eId][crit.id] = calcScore;
+          }
+        });
+        setScoresMap(nextScores);
+        toast.success(`${crit.name} scores auto-calculated from ranks (${crit.category || "+ve"} Equal Interval formula)!`);
+      } else {
+        toast.info(`Enter values (Quantity/Rating/Count) or Ranks for ${crit.name} in the table, then click Auto-Calculate to compute scores!`);
+      }
+    }
+  };
+
   const handleAutoFillVote = () => {
     const voteCrit = criteria.find(c => c.name.toLowerCase().includes("vote"));
     if (!voteCrit) {
@@ -312,10 +430,12 @@ export default function ScoreEntryPage() {
     const N = employees.length;
     const interval = N > 1 ? maxVoteScore / (N - 1) : 0;
     const nextMap = { ...scoresMap };
+    const nextRanks = { ...calculatedRankMap };
 
     employees.forEach(emp => {
       const eId = String(emp.id || emp._id);
       if (!nextMap[eId]) nextMap[eId] = {};
+      if (!nextRanks[eId]) nextRanks[eId] = {};
       const idx = listWithQty.findIndex(x => x.eId === eId);
       if (idx !== -1) {
         const item = listWithQty[idx];
@@ -326,13 +446,16 @@ export default function ScoreEntryPage() {
             break;
           }
         }
+        const calculatedRank = rankIndex + 1;
         const rawScore = maxVoteScore - (rankIndex * interval);
         const calcScore = Math.max(0, Math.min(maxVoteScore, Math.round(rawScore * 100) / 100));
         nextMap[eId][voteCrit.id] = calcScore;
+        nextRanks[eId][voteCrit.id] = calculatedRank;
       }
     });
 
     setScoresMap(nextMap);
+    setCalculatedRankMap(nextRanks);
     toast.success(`Vote scores auto-calculated (${voteCrit.category || "+ve"} Rank Steps)!`);
   };
 
@@ -358,10 +481,14 @@ export default function ScoreEntryPage() {
     const N = employees.length;
     const interval = N > 1 ? maxAttScore / (N - 1) : 0;
     const nextMap = { ...scoresMap };
+    const nextRanks = { ...calculatedRankMap };
+    const nextQty = { ...rawQuantityMap };
 
     employees.forEach((emp) => {
       const eId = String(emp.id || emp._id);
       if (!nextMap[eId]) nextMap[eId] = {};
+      if (!nextRanks[eId]) nextRanks[eId] = {};
+      if (!nextQty[eId]) nextQty[eId] = {};
 
       const idx = listWithDays.findIndex(x => x.eId === eId);
       if (idx !== -1) {
@@ -373,13 +500,18 @@ export default function ScoreEntryPage() {
             break;
           }
         }
+        const calculatedRank = rankIndex + 1;
         const rawScore = maxAttScore - (rankIndex * interval);
         const calcScore = Math.max(0, Math.min(maxAttScore, Math.round(rawScore * 100) / 100));
         nextMap[eId][attCrit.id] = calcScore;
+        nextRanks[eId][attCrit.id] = calculatedRank;
+        nextQty[eId][attCrit.id] = item.presentDays;
       }
     });
 
     setScoresMap(nextMap);
+    setCalculatedRankMap(nextRanks);
+    setRawQuantityMap(nextQty);
     toast.success(`Attendance scores auto-calculated (${attCrit.category || "+ve"} Rank Steps)!`);
   };
 
@@ -422,10 +554,14 @@ export default function ScoreEntryPage() {
       const N = employees.length;
       const interval = N > 1 ? maxDiscScore / (N - 1) : 0;
       const nextMap = { ...scoresMap };
+      const nextRanks = { ...calculatedRankMap };
+      const nextQty = { ...rawQuantityMap };
 
       employees.forEach(emp => {
         const eId = String(emp.id || emp._id);
         if (!nextMap[eId]) nextMap[eId] = {};
+        if (!nextRanks[eId]) nextRanks[eId] = {};
+        if (!nextQty[eId]) nextQty[eId] = {};
 
         const idx = listWithPenalty.findIndex(x => x.eId === eId);
         if (idx !== -1) {
@@ -437,13 +573,18 @@ export default function ScoreEntryPage() {
               break;
             }
           }
+          const calculatedRank = rankIndex + 1;
           const rawScore = maxDiscScore - (rankIndex * interval);
           const calcScore = Math.max(0, Math.min(maxDiscScore, Math.round(rawScore * 100) / 100));
           nextMap[eId][discCrit.id] = calcScore;
+          nextRanks[eId][discCrit.id] = calculatedRank;
+          nextQty[eId][discCrit.id] = item.penalty;
         }
       });
 
       setScoresMap(nextMap);
+      setCalculatedRankMap(nextRanks);
+      setRawQuantityMap(nextQty);
       toast.success(`Discipline scores auto-calculated (${discCrit.category || "-ve"} Rank Steps)!`);
     } catch (e) {
       console.error(e);
@@ -498,10 +639,14 @@ export default function ScoreEntryPage() {
       const N = employees.length;
       const interval = N > 1 ? maxWorkScore / (N - 1) : 0;
       const nextMap = { ...scoresMap };
+      const nextRanks = { ...calculatedRankMap };
+      const nextQty = { ...rawQuantityMap };
 
       employees.forEach(emp => {
         const eId = String(emp.id || emp._id);
         if (!nextMap[eId]) nextMap[eId] = {};
+        if (!nextRanks[eId]) nextRanks[eId] = {};
+        if (!nextQty[eId]) nextQty[eId] = {};
 
         const idx = listWithFactor.findIndex(x => x.eId === eId);
         if (idx !== -1) {
@@ -513,13 +658,18 @@ export default function ScoreEntryPage() {
               break;
             }
           }
+          const calculatedRank = rankIndex + 1;
           const rawScore = maxWorkScore - (rankIndex * interval);
           const calcScore = Math.max(0, Math.min(maxWorkScore, Math.round(rawScore * 100) / 100));
           nextMap[eId][workCrit.id] = calcScore;
+          nextRanks[eId][workCrit.id] = calculatedRank;
+          nextQty[eId][workCrit.id] = item.factor;
         }
       });
 
       setScoresMap(nextMap);
+      setCalculatedRankMap(nextRanks);
+      setRawQuantityMap(nextQty);
       toast.success(`Work Completion scores auto-calculated (${workCrit.category || "+ve"} Rank Steps)!`);
     } catch (e) {
       console.error(e);
@@ -569,10 +719,14 @@ export default function ScoreEntryPage() {
       const N = employees.length;
       const interval = N > 1 ? maxDedScore / (N - 1) : 0;
       const nextMap = { ...scoresMap };
+      const nextRanks = { ...calculatedRankMap };
+      const nextQty = { ...rawQuantityMap };
 
       employees.forEach(emp => {
         const eId = String(emp.id || emp._id);
         if (!nextMap[eId]) nextMap[eId] = {};
+        if (!nextRanks[eId]) nextRanks[eId] = {};
+        if (!nextQty[eId]) nextQty[eId] = {};
 
         const idx = listWithHours.findIndex(x => x.eId === eId);
         if (idx !== -1) {
@@ -584,13 +738,18 @@ export default function ScoreEntryPage() {
               break;
             }
           }
+          const calculatedRank = rankIndex + 1;
           const rawScore = maxDedScore - (rankIndex * interval);
           const calcScore = Math.max(0, Math.min(maxDedScore, Math.round(rawScore * 100) / 100));
           nextMap[eId][dedCrit.id] = calcScore;
+          nextRanks[eId][dedCrit.id] = calculatedRank;
+          nextQty[eId][dedCrit.id] = item.hours;
         }
       });
 
       setScoresMap(nextMap);
+      setCalculatedRankMap(nextRanks);
+      setRawQuantityMap(nextQty);
       toast.success(`Work Dedication scores auto-calculated (${dedCrit.category || "+ve"} Rank Steps)!`);
     } catch (e) {
       console.error(e);
@@ -779,7 +938,7 @@ export default function ScoreEntryPage() {
           </Link>
           <div>
             <h1 className="text-lg sm:text-xl font-bold text-slate-800">Evaluator Score Submissions</h1>
-            <p className="text-xs text-slate-500">Step-by-step evaluation per parameter with Category-aware Auto-Calculations</p>
+            <p className="text-xs text-slate-500">Step-by-step evaluation per parameter with Category-aware Auto-Calculations & Multi-Admin Averaging</p>
           </div>
         </div>
 
@@ -881,45 +1040,50 @@ export default function ScoreEntryPage() {
 
           {/* Stepper Navigation Banner */}
           {criteria.length > 0 && (
-            <div className="bg-gradient-to-r from-amber-500/10 via-amber-400/5 to-amber-500/10 border border-amber-200 p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="bg-gradient-to-r from-amber-500/10 via-amber-400/5 to-amber-500/10 border border-amber-200 p-4 rounded-xl flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 shadow-xs">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-amber-500 text-slate-950 font-black flex items-center justify-center text-sm shadow-sm shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 font-black flex items-center justify-center text-sm shadow-sm shrink-0">
                   {currentStepIndex + 1}/{criteria.length}
                 </div>
                 <div>
                   <div className="text-xs font-bold text-amber-800 uppercase tracking-wider">
                     Current Parameter ({currentStepIndex + 1} of {criteria.length})
                   </div>
-                  <div className="text-base font-black text-slate-900 flex items-center gap-2">
+                  <div className="text-base font-black text-slate-900 flex items-center gap-2 flex-wrap">
                     <span>{criteria[currentStepIndex]?.name}</span>
                     <Tag color="gold" className="font-bold rounded-md text-xs">
                       Max {criteria[currentStepIndex]?.maxScore} pts
                     </Tag>
                     {criteria[currentStepIndex]?.category && (
                       <Tag color={criteria[currentStepIndex]?.category === "-ve" ? "rose" : "emerald"} className="font-bold rounded-md text-xs">
-                        Category: {criteria[currentStepIndex]?.category}
+                        Category: {criteria[currentStepIndex]?.category} ({criteria[currentStepIndex]?.category === "-ve" ? "Lower is better" : "Higher is better"})
+                      </Tag>
+                    )}
+                    {criteria[currentStepIndex]?.entryType === "multi_admin" && (
+                      <Tag color="purple" className="font-bold rounded-md text-xs">
+                        👥 Multi-Admin Average Mode
                       </Tag>
                     )}
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => setCurrentStepIndex(prev => Math.max(0, prev - 1))}
                   disabled={currentStepIndex === 0}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl border border-slate-300 transition-all disabled:opacity-40 cursor-pointer"
+                  className="flex items-center gap-1 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl border border-slate-300 transition-all disabled:opacity-40 cursor-pointer"
                 >
                   <ChevronLeft className="w-4 h-4" />
-                  Previous
+                  Prev
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setCurrentStepIndex(prev => Math.min(criteria.length - 1, prev + 1))}
                   disabled={currentStepIndex === criteria.length - 1}
-                  className="flex items-center gap-1.5 px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-sm transition-all disabled:opacity-40 cursor-pointer"
+                  className="flex items-center gap-1 px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-sm transition-all disabled:opacity-40 cursor-pointer"
                 >
                   Next
                   <ChevronRight className="w-4 h-4" />
@@ -945,10 +1109,10 @@ export default function ScoreEntryPage() {
                     const isAtt = c.name.toLowerCase().includes("attendance");
                     const isVote = c.name.toLowerCase().includes("vote");
                     return (
-                      <th key={c.id} className={`py-3 px-3 text-center min-w-[145px] border-r border-slate-200/40 ${isVote ? 'bg-purple-50/70' : isAtt ? 'bg-blue-50/70' : ''}`}>
+                      <th key={c.id} className={`py-3 px-3 text-center min-w-[160px] border-r border-slate-200/40 ${isVote ? 'bg-purple-50/70' : isAtt ? 'bg-blue-50/70' : 'bg-amber-50/40'}`}>
                         <div className="flex flex-col items-center justify-center gap-0.5">
                           <span className="font-bold">{c.name}</span>
-                          {isVote && <span className="text-[10px] text-purple-700 font-extrabold uppercase tracking-tight">Quantity & Rank Mode</span>}
+                          <span className="text-[10px] text-slate-500 font-semibold">Value / Rank & Score Calculation</span>
                           <span className="text-[10px] text-amber-600 font-bold lowercase">(max {c.maxScore} pts)</span>
                         </div>
                       </th>
@@ -978,101 +1142,69 @@ export default function ScoreEntryPage() {
                         const numVal = Number(currentVal);
                         const isExceeded = currentVal !== "" && !isNaN(numVal) && numVal > c.maxScore;
                         const isAttendanceCell = c.name.toLowerCase().includes("attendance");
-                        const isVoteCell = c.name.toLowerCase().includes("vote");
                         const presentDays = getPresentDaysForEmp(emp, attendanceStats.employeeStats);
-
-                        if (isVoteCell) {
-                          const currentQty = rawQuantityMap[empId]?.[c.id] ?? "";
-                          const currentRank = calculatedRankMap[empId]?.[c.id] ?? "";
-
-                          return (
-                            <td key={c.id} className="py-3 px-2 text-center border-r border-slate-100 bg-purple-50/20">
-                              <div className="flex flex-col items-center gap-1.5 min-w-[145px]">
-                                {/* Quantity (Votes) Input */}
-                                <div className="flex items-center gap-1">
-                                  <span className="text-[10px] text-purple-800 font-bold shrink-0">Votes:</span>
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    step="1"
-                                    value={currentQty}
-                                    onChange={(e) => handleQuantityChange(empId, c, e.target.value)}
-                                    placeholder="0"
-                                    className="w-16 px-1.5 py-1 border border-purple-300 rounded-md text-center font-bold text-xs bg-white text-purple-900 focus:outline-none focus:ring-1 focus:ring-purple-500 shadow-xs"
-                                  />
-                                </div>
-
-                                {/* Rank & Score Info Badge Row */}
-                                <div className="flex items-center justify-center gap-1.5">
-                                  {currentRank !== "" && !isNaN(Number(currentRank)) ? (
-                                    <span className="text-[10px] font-black text-amber-800 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded-md shadow-2xs">
-                                      #{currentRank}
-                                    </span>
-                                  ) : (
-                                    <input
-                                      type="number"
-                                      min="1"
-                                      value={currentRank}
-                                      onChange={(e) => handleRankChange(empId, c, e.target.value)}
-                                      placeholder="Rank"
-                                      className="w-12 px-1 py-0.5 border border-slate-200 rounded-md text-center text-[10px] font-bold bg-white text-slate-700"
-                                    />
-                                  )}
-
-                                  <div className="flex items-center gap-0.5">
-                                    <span className="text-[10px] text-slate-500 font-bold">Pts:</span>
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      max={c.maxScore}
-                                      step="0.01"
-                                      value={currentVal}
-                                      onChange={(e) => handleScoreChange(empId, c.id, e.target.value)}
-                                      placeholder="0"
-                                      className={`w-14 px-1 py-0.5 border rounded-md text-center font-bold text-xs focus:outline-none ${
-                                        isExceeded
-                                          ? "bg-rose-50 border-rose-500 text-rose-700 ring-1 ring-rose-500"
-                                          : "bg-white border-slate-300 text-slate-900 focus:border-amber-500"
-                                      }`}
-                                    />
-                                  </div>
-                                </div>
-
-                                {isExceeded && (
-                                  <span className="text-[10px] text-rose-600 font-bold">
-                                    ⚠️ Max {c.maxScore}
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                          );
-                        }
+                        const currentQty = rawQuantityMap[empId]?.[c.id] ?? "";
+                        const currentRank = calculatedRankMap[empId]?.[c.id] ?? "";
 
                         return (
                           <td key={c.id} className="py-3 px-2 text-center border-r border-slate-100">
-                            <div className="flex flex-col items-center gap-1">
-                              <input
-                                type="number"
-                                min="0"
-                                max={c.maxScore}
-                                step="0.01"
-                                value={currentVal}
-                                onChange={(e) => handleScoreChange(empId, c.id, e.target.value)}
-                                placeholder="0"
-                                className={`w-20 sm:w-24 px-2 py-1.5 border rounded-lg text-center font-bold text-xs focus:outline-none transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
-                                  isExceeded
-                                    ? "bg-rose-50 border-rose-500 text-rose-700 ring-1 ring-rose-500"
-                                    : isAttendanceCell
-                                    ? "bg-blue-50/80 border-blue-300 text-blue-900 focus:border-blue-500"
-                                    : "bg-slate-50 border-slate-200 text-slate-800 focus:border-amber-500"
-                                }`}
-                              />
-
-                              {isAttendanceCell && (
-                                <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded-md border border-blue-200 mt-0.5 inline-block whitespace-nowrap">
-                                  📅 {presentDays} Days
+                            <div className="flex flex-col items-center gap-1.5 min-w-[160px]">
+                              {/* Quantity / Value / Count Input */}
+                              <div className="flex items-center gap-1">
+                                <span className="text-[10px] text-slate-600 font-bold shrink-0">
+                                  {isAttendanceCell ? "Days:" : "Value:"}
                                 </span>
-                              )}
+                                {isAttendanceCell ? (
+                                  <span className="font-bold text-xs text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
+                                    {presentDays}
+                                  </span>
+                                ) : (
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    value={currentQty}
+                                    onChange={(e) => handleQuantityChange(empId, c, e.target.value)}
+                                    placeholder="0"
+                                    className="w-16 px-1.5 py-1 border border-slate-300 rounded-md text-center font-bold text-xs bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-2xs"
+                                  />
+                                )}
+                              </div>
+
+                              {/* Rank & Score Info Row */}
+                              <div className="flex items-center justify-center gap-1.5">
+                                {currentRank !== "" && !isNaN(Number(currentRank)) ? (
+                                  <span className="text-[10px] font-black text-amber-800 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded-md shadow-2xs">
+                                    #{currentRank}
+                                  </span>
+                                ) : (
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={currentRank}
+                                    onChange={(e) => handleRankChange(empId, c, e.target.value)}
+                                    placeholder="Rank"
+                                    className="w-12 px-1 py-0.5 border border-slate-200 rounded-md text-center text-[10px] font-bold bg-white text-slate-700 focus:outline-none"
+                                  />
+                                )}
+
+                                <div className="flex items-center gap-0.5">
+                                  <span className="text-[10px] text-slate-500 font-bold">Pts:</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max={c.maxScore}
+                                    step="0.01"
+                                    value={currentVal}
+                                    onChange={(e) => handleScoreChange(empId, c.id, e.target.value)}
+                                    placeholder="0"
+                                    className={`w-14 px-1 py-0.5 border rounded-md text-center font-bold text-xs focus:outline-none ${
+                                      isExceeded
+                                        ? "bg-rose-50 border-rose-500 text-rose-700 ring-1 ring-rose-500"
+                                        : "bg-white border-slate-300 text-slate-900 focus:border-amber-500"
+                                    }`}
+                                  />
+                                </div>
+                              </div>
 
                               {isExceeded && (
                                 <span className="text-[10px] text-rose-600 font-bold">

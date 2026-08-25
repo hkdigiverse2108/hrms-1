@@ -350,11 +350,13 @@ async def save_score(month_year: str, criteria_id: str, employee_id: str, score:
     )
     return doc
 
-async def get_scores(month_year: str, criteria_id: str = None):
+async def get_scores(month_year: str, criteria_id: str = None, scored_by: str = None):
     query = {"month_year": month_year}
     if criteria_id:
         query["criteriaId"] = criteria_id
-    scores = await db.eom_scores.find(query).to_list(length=2000)
+    if scored_by:
+        query["scoredBy"] = scored_by
+    scores = await db.eom_scores.find(query).to_list(length=5000)
     for s in scores:
         s["id"] = str(s.get("_id", s.get("id")))
         if "_id" in s:

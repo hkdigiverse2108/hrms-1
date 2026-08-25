@@ -51,7 +51,17 @@ interface WeeklyEntry {
 export default function EmployeeOfWeekPage() {
   const router = useRouter();
   const { user } = useUser();
-  const isAdmin = user && ["admin", "super admin", "superadmin", "administrator", "founder", "hr"].includes(String(user.role || "").toLowerCase().trim());
+  const isRoleAdmin = Boolean(
+    user && ["admin", "super admin", "superadmin", "administrator", "founder"].includes(String(user.role || "").toLowerCase().trim())
+  );
+  const isHR = Boolean(
+    user && (
+      ["hr", "hr manager", "hr lead", "hr executive", "human resources"].includes(String(user.role || "").toLowerCase().trim()) ||
+      String(user.designation || "").toLowerCase().includes("hr") ||
+      String(user.department || "").toLowerCase().includes("hr")
+    )
+  );
+  const isAdmin = isRoleAdmin || isHR;
 
   const [meetings, setMeetings] = useState<any[]>([]);
   const [selectedMeetingId, setSelectedMeetingId] = useState<string>("");
