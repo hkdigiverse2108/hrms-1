@@ -720,7 +720,8 @@ async def get_eom_work_completion_stats(month_year: str, max_score: float = 10.0
 
 async def get_eom_work_dedication_stats(month_year: str, max_score: float = 10.0):
     """
-    Auto-calculate Work Dedication score based on total logged hours in daily reports for given month (Strict Month-Wise).
+    Auto-calculate Work Dedication score based on total logged/worked hours in attendance table for given month (Strict Month-Wise).
+    Fallback to daily reports if no attendance records found.
     """
     try:
         parts = month_year.split("-")
@@ -728,13 +729,6 @@ async def get_eom_work_dedication_stats(month_year: str, max_score: float = 10.0
     except Exception:
         now_dt = datetime.now()
         year, month = now_dt.year, now_dt.month
-
-    reports_cursor = db.employee_daily_reports.find({})
-    reports = await reports_cursor.to_list(length=20000)
-
-    if not reports:
-        reports_cursor = db.daily_reports.find({})
-        reports = await reports_cursor.to_list(length=20000)
 
     def is_matching_month(r_date):
         if not r_date:
@@ -753,25 +747,60 @@ async def get_eom_work_dedication_stats(month_year: str, max_score: float = 10.0
         except Exception:
             return False
 
+    def parse_attendance_hours(r):
+        sec = r.get("accumulatedWorkSeconds")
+        if sec is not None and isinstance(sec, (int, float)) and sec > 0:
+            return float(sec) / 3600.0
+
+        wh = r.get("workHours")
+        if wh and isinstance(wh, str) and wh.strip() not in ["--", "None", "null", ""]:
+            s = wh.strip()
+            hrs = 0.0
+            if "h" in s:
+                parts = s.split("h")
+                try:
+                    hrs += float(parts[0].strip())
+                except Exception:
+                    pass
+                if len(parts) > 1 and "m" in parts[1]:
+                    m_part = parts[1].replace("m", "").strip()
+                    try:
+                        hrs += float(m_part) / 60.0
+                    except Exception:
+                        pass
+                if hrs > 0:
+                    return hrs
+            else:
+                try:
+                    val = float(s)
+                    if val > 0:
+                        return val
+                except Exception:
+                    pass
+
+        status = str(r.get("status") or "").strip().lower()
+        if status in ["present", "active", "logged", "on break"]:
+            return 8.0
+        return 0.0
+
     emp_hours_map = {}
-    for r in reports:
+
+    # 1. Fetch from attendance collection
+    att_cursor = db.attendance.find({})
+    att_records = await att_cursor.to_list(length=30000)
+
+    matched_att_count = 0
+    for r in att_records:
         if not is_matching_month(r.get("date")):
             continue
 
-        emp_id = str(r.get("employeeId") or r.get("employee_id") or "").strip()
-        emp_name = str(r.get("employeeName") or r.get("name") or "").strip().lower()
-        
-        hrs = 0.0
-        for k in ["workHours", "totalHours", "hours", "loggedHours", "hoursWorked"]:
-            if r.get(k) is not None:
-                try:
-                    hrs = float(r.get(k))
-                    break
-                except (TypeError, ValueError):
-                    pass
-        
-        if hrs == 0.0:
-            hrs = 8.0
+        hrs = parse_attendance_hours(r)
+        if hrs <= 0:
+            continue
+
+        matched_att_count += 1
+        emp_id = str(r.get("employeeId") or "").strip()
+        emp_name = str(r.get("employeeName") or "").strip().lower()
 
         keys = set()
         if emp_id:
@@ -780,13 +809,49 @@ async def get_eom_work_dedication_stats(month_year: str, max_score: float = 10.0
             keys.add(emp_name)
 
         for k in keys:
-            emp_hours_map[k] = emp_hours_map.get(k, 0.0) + hrs
+            emp_hours_map[k] = round(emp_hours_map.get(k, 0.0) + hrs, 2)
+
+    # 2. Fallback to daily reports if no attendance data for the month
+    if matched_att_count == 0:
+        reports_cursor = db.employee_daily_reports.find({})
+        reports = await reports_cursor.to_list(length=20000)
+        if not reports:
+            reports_cursor = db.daily_reports.find({})
+            reports = await reports_cursor.to_list(length=20000)
+
+        for r in reports:
+            if not is_matching_month(r.get("date")):
+                continue
+
+            emp_id = str(r.get("employeeId") or r.get("employee_id") or "").strip()
+            emp_name = str(r.get("employeeName") or r.get("name") or "").strip().lower()
+
+            hrs = 0.0
+            for k in ["workHours", "totalHours", "hours", "loggedHours", "hoursWorked"]:
+                if r.get(k) is not None:
+                    try:
+                        hrs = float(r.get(k))
+                        break
+                    except (TypeError, ValueError):
+                        pass
+
+            if hrs == 0.0:
+                hrs = 8.0
+
+            keys = set()
+            if emp_id:
+                keys.add(emp_id)
+            if emp_name:
+                keys.add(emp_name)
+
+            for k in keys:
+                emp_hours_map[k] = round(emp_hours_map.get(k, 0.0) + hrs, 2)
 
     return {
         "month_year": month_year,
         "maxScore": max_score,
         "employeeHours": emp_hours_map,
-        "formula": f"Strict Month ({month:02d}/{year}): Total Logged Hours ranked using Equal Interval Rank formula up to {max_score} pts"
+        "formula": f"Strict Month ({month:02d}/{year}): Total Logged Hours from Attendance ranked using Equal Interval Rank formula up to {max_score} pts"
     }
 
 async def calculate_eom_leaderboard(month_year: str):
