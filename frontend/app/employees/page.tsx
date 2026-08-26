@@ -249,7 +249,7 @@ export default function EmployeeListPage() {
           <span className={`inline-flex px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-md border ${
             emp.workMode === 'WFH' ? 'bg-indigo-50 text-indigo-700 border-indigo-100' :
             emp.workMode === 'Hybrid' ? 'bg-purple-50 text-purple-700 border-purple-100' :
-            emp.workMode === 'WHO' ? 'bg-gray-100 text-gray-700 border-gray-200' :
+            emp.workMode === 'WFO' ? 'bg-gray-100 text-gray-700 border-gray-200' :
             'bg-gray-50 text-gray-400 border-gray-100'
           }`}>
             {emp.workMode || '-'}

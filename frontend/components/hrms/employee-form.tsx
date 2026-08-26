@@ -565,7 +565,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
                 value={formData.workMode} 
                 onValueChange={(v: string) => handleChange('workMode', v)} 
                 options={[
-                  { label: 'WHO', value: 'WHO' },
+                  { label: 'WFO', value: 'WHO' },
                   { label: 'WFH', value: 'WFH' },
                   { label: 'Hybrid', value: 'Hybrid' }
                 ]} 
