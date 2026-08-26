@@ -257,8 +257,9 @@ export default function AuditoriumRevealPage() {
   const totalStages = criteriaList.length > 0 ? criteriaList.length : 1;
   const isFinalStage = activeStageIndex === totalStages - 1;
 
-  // Grand Finale Step-by-Step Bottom-Up Reveal State & Highlight Tracker
+  // Grand Finale Step-by-Step Reveal State & Highlight Tracker
   const [finaleRevealedIds, setFinaleRevealedIds] = useState<Set<string>>(new Set());
+  const [finaleRevealQueue, setFinaleRevealQueue] = useState<Candidate[]>([]);
   const [justRevealedEmpId, setJustRevealedEmpId] = useState<string | null>(null);
   // Candidate currently mid-suspense-oscillation — position is teasing, score is still HIDDEN
   const [oscillatingEmpId, setOscillatingEmpId] = useState<string | null>(null);
@@ -296,6 +297,32 @@ export default function AuditoriumRevealPage() {
   const [isLocked, setIsLocked] = useState<boolean>(false);
   const [adminUnlocked, setAdminUnlocked] = useState<boolean>(false);
   const [countdownText, setCountdownText] = useState<string>("");
+
+  // Helper to generate Grand Finale Reveal Sequence:
+  // Non-Top-5 candidates (Rank 6..N) are revealed in a completely RANDOM order so no one can predict who comes next.
+  // Top 5 candidates are held back and revealed at the very end in countdown order (Rank 5 -> 4 -> 3 -> Top 2 Showdown).
+  const generateRevealQueue = (candList: Candidate[]): Candidate[] => {
+    if (!candList || candList.length === 0) return [];
+    const sorted = [...candList].sort((a, b) => b.totalScore - a.totalScore);
+
+    if (sorted.length <= 5) {
+      return sorted.slice(2).reverse();
+    }
+
+    // Top 5 are sorted[0..4] (Ranks 1 to 5)
+    // Non-top 5 are sorted[5..] (Ranks 6 to N)
+    const nonTop5 = [...sorted.slice(5)];
+    // Fisher-Yates shuffle for non-top-5 candidates
+    for (let i = nonTop5.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [nonTop5[i], nonTop5[j]] = [nonTop5[j], nonTop5[i]];
+    }
+
+    // Top 5 countdown: Rank 5 (index 4), Rank 4 (index 3), Rank 3 (index 2)
+    const top5Countdown = [sorted[4], sorted[3], sorted[2]];
+
+    return [...nonTop5, ...top5Countdown];
+  };
 
   useEffect(() => {
     if (!scheduledRevealTime || adminUnlocked) return;
@@ -469,6 +496,7 @@ export default function AuditoriumRevealPage() {
 
         setCriteriaList(rawCriteria);
         setCandidates(rawLeaderboard);
+        setFinaleRevealQueue(generateRevealQueue(rawLeaderboard));
       }
     } catch (e) {
       console.error(e);
@@ -559,7 +587,7 @@ export default function AuditoriumRevealPage() {
         triggerConfetti(false);
       }, 400);
     } else {
-      // LAST STAGE (Final Column / Grand Finale): Run 5 random position tease oscillations!
+      // LAST STAGE (Final Column / Grand Finale): Random reveal for ranks 6..N, then Top 5 countdown!
       if (isWinnerAnnounced) return;
 
       const N = finaleTargetOrder.length;
@@ -573,14 +601,20 @@ export default function AuditoriumRevealPage() {
       });
       setPrevRanksMap(rankMap);
 
-      if (currentRevealedCount < N - 2) {
-        const targetCandidateToReveal = finaleTargetOrder[N - 1 - currentRevealedCount];
-        if (targetCandidateToReveal) {
-          const startRank = prevRanksMap[targetCandidateToReveal.employeeId] || N;
-          const targetRank = N - currentRevealedCount;
+      // Ensure reveal queue is populated
+      const queue = finaleRevealQueue.length > 0 ? finaleRevealQueue : generateRevealQueue(candidates);
+      if (finaleRevealQueue.length === 0 && queue.length > 0) {
+        setFinaleRevealQueue(queue);
+      }
 
-          // Trigger slot machine suspense oscillation (5 random rank jumps -> targetRank)!
-          triggerSuspenseOscillation(targetCandidateToReveal.employeeId, startRank, targetRank, () => {
+      if (currentRevealedCount < N - 2) {
+        const targetCandidateToReveal = queue[currentRevealedCount];
+        if (targetCandidateToReveal) {
+          const startRank = rankMap[targetCandidateToReveal.employeeId] || N;
+          const targetFinalRank = finaleTargetOrder.findIndex(c => c.employeeId === targetCandidateToReveal.employeeId) + 1;
+
+          // Trigger slot machine suspense oscillation (5 random rank jumps -> targetFinalRank)!
+          triggerSuspenseOscillation(targetCandidateToReveal.employeeId, startRank, targetFinalRank, () => {
             const nextSet = new Set(finaleRevealedIds);
             nextSet.add(targetCandidateToReveal.employeeId);
             setFinaleRevealedIds(nextSet);
@@ -625,6 +659,7 @@ export default function AuditoriumRevealPage() {
     setUsedCategoryKeys(new Set());
     setTriggeredBreakStages(new Set());
     setIsDrumrollActive(false);
+    setFinaleRevealQueue(generateRevealQueue(candidates));
   };
 
   const getDisplayedEmployeeData = (emp: Candidate) => {
