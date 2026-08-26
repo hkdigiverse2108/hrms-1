@@ -326,6 +326,8 @@ async def clone_criteria(from_month_year: str, to_month_year: str):
         cloned.append(doc)
     return cloned
 
+from pymongo import UpdateOne
+
 async def save_score(month_year: str, criteria_id: str, employee_id: str, score: float, raw_quantity: float = None, calculated_rank: int = None, scored_by: str = "System"):
     doc = {
         "month_year": month_year,
@@ -342,13 +344,57 @@ async def save_score(month_year: str, criteria_id: str, employee_id: str, score:
         {
             "month_year": month_year,
             "criteriaId": criteria_id,
-            "employeeId": employee_id,
-            "scoredBy": scored_by
+            "employeeId": employee_id
         },
         {"$set": doc},
         upsert=True
     )
     return doc
+
+async def bulk_save_all_matrix(month_year: str, scores_list: list, scored_by: str = "System"):
+    if not scores_list:
+        return {"savedCount": 0}
+
+    now_ist = datetime.now(IST)
+    ops = []
+    for item in scores_list:
+        c_id = str(item.get("criteriaId"))
+        e_id = str(item.get("employeeId"))
+        sc = float(item.get("score", 0))
+        raw_qty = item.get("rawQuantity")
+        calc_rank = item.get("calculatedRank")
+
+        doc = {
+            "month_year": month_year,
+            "criteriaId": c_id,
+            "employeeId": e_id,
+            "scoredBy": scored_by,
+            "score": sc,
+            "rawQuantity": raw_qty,
+            "calculatedRank": calc_rank,
+            "submittedAt": now_ist
+        }
+
+        ops.append(
+            UpdateOne(
+                {
+                    "month_year": month_year,
+                    "criteriaId": c_id,
+                    "employeeId": e_id
+                },
+                {"$set": doc},
+                upsert=True
+            )
+        )
+
+    if ops:
+        res = await db.eom_scores.bulk_write(ops, ordered=False)
+        return {
+            "savedCount": len(ops),
+            "upsertedCount": res.upserted_count,
+            "modifiedCount": res.modified_count
+        }
+    return {"savedCount": 0}
 
 async def get_scores(month_year: str, criteria_id: str = None, scored_by: str = None):
     query = {"month_year": month_year}
@@ -356,7 +402,7 @@ async def get_scores(month_year: str, criteria_id: str = None, scored_by: str = 
         query["criteriaId"] = criteria_id
     if scored_by:
         query["scoredBy"] = scored_by
-    scores = await db.eom_scores.find(query).to_list(length=5000)
+    scores = await db.eom_scores.find(query).sort("submittedAt", 1).to_list(length=5000)
     for s in scores:
         s["id"] = str(s.get("_id", s.get("id")))
         if "_id" in s:

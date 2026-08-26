@@ -5079,6 +5079,24 @@ async def save_eom_bulk_scores_endpoint(
         scored_by=actor_name
     )
 
+@app.post("/eom/save-all-matrix")
+async def save_eom_all_matrix_endpoint(
+    request: Request,
+    token_payload: dict = Depends(auth.require_auth)
+):
+    data = await request.json()
+    month_year = data.get("month_year")
+    scores_list = data.get("scores", [])
+    if not month_year or not isinstance(scores_list, list):
+        raise HTTPException(status_code=400, detail="month_year and scores list are required")
+
+    actor_id, actor_name = await get_actor_from_request(request, database.db)
+    return await eom_service.bulk_save_all_matrix(
+        month_year=month_year,
+        scores_list=scores_list,
+        scored_by=actor_name
+    )
+
 @app.get("/eom/reveal-order")
 async def get_eom_reveal_order_endpoint(month_year: str = Query(...)):
     return await eom_service.get_eom_reveal_order(month_year)

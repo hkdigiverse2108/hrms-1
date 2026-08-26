@@ -873,7 +873,7 @@ export default function ScoreEntryPage() {
         Authorization: token ? (token.startsWith("Bearer ") ? token : `Bearer ${token}`) : ""
       };
 
-      const savePromises: Promise<any>[] = [];
+      const allScoresToSave: any[] = [];
 
       for (const emp of employees) {
         const empId = String(emp.id || emp._id);
@@ -884,26 +884,34 @@ export default function ScoreEntryPage() {
             const rawQty = rawQuantityMap[empId]?.[c.id];
             const calcRank = calculatedRankMap[empId]?.[c.id];
 
-            savePromises.push(
-              fetch(`${API_URL}/eom/scores`, {
-                method: "POST",
-                headers,
-                body: JSON.stringify({
-                  month_year: selectedMonthYear,
-                  criteriaId: c.id,
-                  employeeId: empId,
-                  score: Number(sc),
-                  rawQuantity: rawQty !== undefined && rawQty !== "" ? Number(rawQty) : null,
-                  calculatedRank: calcRank !== undefined && calcRank !== "" ? Number(calcRank) : null
-                })
-              })
-            );
+            allScoresToSave.push({
+              criteriaId: c.id,
+              employeeId: empId,
+              score: Number(sc),
+              rawQuantity: rawQty !== undefined && rawQty !== "" ? Number(rawQty) : null,
+              calculatedRank: calcRank !== undefined && calcRank !== "" ? Number(calcRank) : null
+            });
           }
         }
       }
 
-      await Promise.all(savePromises);
-      toast.success("All matrix scores saved successfully!");
+      const res = await fetch(`${API_URL}/eom/save-all-matrix`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          month_year: selectedMonthYear,
+          scores: allScoresToSave
+        })
+      });
+
+      if (res.ok) {
+        const resData = await res.json();
+        toast.success(`All ${resData.savedCount || allScoresToSave.length} matrix scores saved successfully!`);
+        fetchData();
+      } else {
+        const err = await res.json().catch(() => ({ detail: "Failed to save" }));
+        toast.error(err.detail || "Failed to save matrix scores");
+      }
     } catch (e) {
       console.error(e);
       toast.error("Error saving matrix scores");

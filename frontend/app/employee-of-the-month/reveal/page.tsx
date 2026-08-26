@@ -906,8 +906,8 @@ export default function AuditoriumRevealPage() {
         <div className="absolute bottom-20 left-1/4 text-amber-400/30 text-xs font-mono animate-pulse">&lt;reveal_stage index={activeStageIndex} /&gt;</div>
       </div>
 
-      {/* Auditorium Top Bar Header */}
-      <div className="relative z-10 flex flex-wrap items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
+      {/* Auditorium Top Bar Header - Fixed / Sticky at Top */}
+      <div className="sticky top-0 z-50 flex flex-wrap items-center justify-between gap-4 border-b border-slate-800/80 pb-4 bg-[#0A0D18]/95 backdrop-blur-xl -mx-4 -mt-4 px-4 py-3 sm:-mx-8 sm:-mt-8 sm:px-8 sm:py-4 shadow-lg">
         <div className="flex items-center gap-3">
           <Link
             href="/employee-of-the-month"
@@ -1076,33 +1076,31 @@ export default function AuditoriumRevealPage() {
                 <Trophy className="w-4 h-4 text-amber-400" /> DASHBOARD
               </h2>
               <div className="flex items-center gap-2 flex-wrap">
-                {/* {activeStageIndex >= totalStages - 1 && top1 && top2 && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-rose-500/20 via-amber-500/20 to-rose-500/20 border border-rose-500/50 rounded-full text-[11px] font-black text-rose-300 animate-pulse shadow-lg">
-                    <Flame className="w-3.5 h-3.5 text-amber-400" />
-                    HIGH STAKES SHOWDOWN — LEADER MARGIN: {(top1.stageTotal - top2.stageTotal).toFixed(2)} PTS!
-                  </span>
-                )} */}
                 <span className="text-xs font-mono text-cyan-300 bg-cyan-950/70 border border-cyan-800 px-3 py-1 rounded-full font-bold shadow-inner">
                   {currentRevealedCols.length} OF {totalStages} CRITERIA REVEALED
                 </span>
               </div>
             </div>
 
-            <div ref={tableScrollContainerRef} className="overflow-x-auto rounded-2xl border border-slate-800 max-h-[580px] overflow-y-auto scroll-smooth">
-              <table className="w-full text-left text-xs sm:text-sm border-collapse">
-                <thead>
-                  <tr className="bg-slate-900/90 border-b border-slate-800 text-slate-400 font-extrabold uppercase tracking-wider text-[11px]">
-                    <th className="py-3.5 px-4 w-[70px] text-center">RANK</th>
-                    <th className="py-3.5 px-4 min-w-[200px]">EMPLOYEE</th>
+            <div ref={tableScrollContainerRef} className="overflow-x-auto rounded-2xl border border-slate-800 max-h-[580px] overflow-y-auto scroll-smooth relative">
+              <table className="w-full text-left text-xs sm:text-sm border-separate border-spacing-0">
+                <thead className="sticky top-0 z-30 shadow-md">
+                  <tr className="bg-[#0E1322] text-slate-400 font-extrabold uppercase tracking-wider text-[11px]">
+                    <th className="py-3.5 px-4 w-[70px] min-w-[70px] max-w-[70px] text-center sticky left-0 top-0 z-40 bg-[#0E1322] border-b-2 border-slate-700 border-r border-slate-800 shadow-[1px_0_0_0_#1e293b]">
+                      RANK
+                    </th>
+                    <th className="py-3.5 px-4 w-[240px] min-w-[240px] max-w-[240px] sticky left-[70px] top-0 z-40 bg-[#0E1322] border-b-2 border-slate-700 border-r-2 border-slate-700/80 shadow-[4px_0_10px_-2px_rgba(0,0,0,0.6)]">
+                      EMPLOYEE
+                    </th>
 
                     {currentRevealedCols.map((c) => (
-                      <th key={c.id} className="py-3.5 px-4 text-center min-w-[130px] border-l border-slate-800/60 bg-slate-900/40">
+                      <th key={c.id} className="py-3.5 px-4 text-center min-w-[130px] border-b-2 border-slate-700 border-l border-slate-800/60 bg-[#0E1322]">
                         <span className="text-slate-200 font-black block">{c.name.toUpperCase()}</span>
                         <span className="text-[10px] text-slate-500 font-mono">({c.maxScore})</span>
                       </th>
                     ))}
 
-                    <th className="py-3.5 px-4 text-right min-w-[130px] border-l border-slate-800 bg-slate-900/80">
+                    <th className="py-3.5 px-4 text-right min-w-[130px] border-b-2 border-slate-700 border-l border-slate-800 bg-[#0E1322]">
                       PROGRESSIVE TOTAL
                     </th>
                   </tr>
@@ -1122,6 +1120,25 @@ export default function AuditoriumRevealPage() {
                     const unrevealedCount = candidates.length - finaleRevealedIds.size;
                     const isTop5Unrevealed = isFinalStage && !emp.isFinaleRevealed && unrevealedCount <= 5;
 
+                    // Solid background color for frozen sticky columns to prevent see-through
+                    const stickyCellBg = isTeasingRow
+                      ? "bg-[#3D3012]"
+                      : isJustRevealed && rankShifted
+                      ? climbedUp
+                        ? "bg-[#0E382A]"
+                        : "bg-[#3E1620]"
+                      : isJustRevealed
+                      ? "bg-[#382B10]"
+                      : isTop5Unrevealed
+                      ? "bg-[#2A2315]"
+                      : isRank1
+                      ? "bg-[#201D17]"
+                      : isRank2
+                      ? "bg-[#0F1B27]"
+                      : isRank3
+                      ? "bg-[#261912]"
+                      : "bg-[#111625]";
+
                     return (
                       <motion.tr
                         layout="position"
@@ -1130,7 +1147,7 @@ export default function AuditoriumRevealPage() {
                         ref={(el: HTMLTableRowElement | null) => {
                           rowRefs.current[emp.employeeId] = el as any;
                         }}
-                        className={`${
+                        className={`transition-colors duration-200 border-b border-slate-800/60 ${
                           isTeasingRow
                             ? "bg-gradient-to-r from-amber-500/40 via-yellow-400/35 to-amber-500/40 border-l-4 border-l-amber-300 border-r-4 border-r-amber-300 shadow-2xl shadow-amber-500/40 text-amber-100 font-black z-50 relative ring-2 ring-amber-400/90 brightness-125"
                             : isJustRevealed && rankShifted
@@ -1156,7 +1173,8 @@ export default function AuditoriumRevealPage() {
                             : ""
                         }`}
                       >
-                        <td className="py-3.5 px-4 text-center">
+                        {/* Frozen Column 1: RANK */}
+                        <td className={`py-3.5 px-4 text-center sticky left-0 z-20 w-[70px] min-w-[70px] max-w-[70px] ${stickyCellBg} border-r border-slate-800/80 border-b border-slate-800/60 shadow-[1px_0_0_0_#1e293b]`}>
                           <span
                             className={`inline-flex items-center justify-center w-7 h-7 rounded-xl font-black text-xs font-mono ${
                               isJustRevealed
@@ -1174,10 +1192,11 @@ export default function AuditoriumRevealPage() {
                           </span>
                         </td>
 
-                        <td className="py-3.5 px-4">
+                        {/* Frozen Column 2: EMPLOYEE (Name & Designation) */}
+                        <td className={`py-3.5 px-4 sticky left-[70px] z-20 w-[240px] min-w-[240px] max-w-[240px] ${stickyCellBg} border-r-2 border-slate-700/80 border-b border-slate-800/60 shadow-[4px_0_10px_-2px_rgba(0,0,0,0.6)]`}>
                           <div className="flex items-center gap-2.5">
                             <div
-                              className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${
+                              className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
                                 isJustRevealed || isRank1
                                   ? "bg-amber-400 text-slate-950 font-black"
                                   : "bg-slate-800 text-slate-300"
@@ -1185,7 +1204,7 @@ export default function AuditoriumRevealPage() {
                             >
                               {emp.name.charAt(0)}
                             </div>
-                            <div className="truncate max-w-[150px] sm:max-w-[240px]">
+                            <div className="truncate max-w-[170px]">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <p className={`font-bold text-xs sm:text-sm truncate ${isJustRevealed ? "text-amber-200 font-black" : isRank1 ? "text-amber-200 font-extrabold" : "text-slate-200"}`}>
                                   {emp.name}
