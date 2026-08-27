@@ -415,6 +415,7 @@ async def lifespan(app):
             {'moduleName': 'research', 'displayName': 'Research', 'tabUrl': '/work-management/research'},
             {'moduleName': 'seating-arrangement', 'displayName': 'Seating Arrangement', 'tabUrl': '/workspace/seating'},
             {'moduleName': 'resource-management', 'displayName': 'Resource Management', 'tabUrl': '/workspace/resource'},
+            {'moduleName': 'voting', 'displayName': 'Elections', 'tabUrl': '/voting'},
             {'moduleName': 'remarks', 'displayName': 'Penalty', 'tabUrl': '/penalty'},
             {'moduleName': 'review', 'displayName': 'Remarks', 'tabUrl': '/remarks'},
             {'moduleName': 'invoice', 'displayName': 'Invoice', 'tabUrl': '/invoice'},

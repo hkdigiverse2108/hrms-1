@@ -10843,8 +10843,8 @@ async def submit_ballot(election_id: str, voter_id: str, preferences: List[str])
         raise ValueError("Election is completed. Voting is closed.")
 
     max_pref = el.get("maxPreferences", 5)
-    total_candidates = len(el.get("candidates", []))
-    required_count = min(max_pref, total_candidates)
+    candidates_count = await db.candidates.count_documents({"electionId": election_id})
+    required_count = min(max_pref, candidates_count) if candidates_count > 0 else max_pref
     if len(preferences) != required_count:
         raise ValueError(f"You must select exactly {required_count} candidate preferences.")
 
