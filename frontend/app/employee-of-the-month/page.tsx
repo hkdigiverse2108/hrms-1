@@ -605,7 +605,7 @@ export default function EmployeeOfMonthPage() {
         >
           Parameters Configuration ({selectedMonthYear})
         </button>
-        {(isAdmin || isHR) && (
+        {isAdmin && (
           <button
             onClick={() => setActiveTab("leaderboard")}
             className={`pb-3 text-sm font-semibold border-b-2 transition-all ${activeTab === "leaderboard"
@@ -620,7 +620,7 @@ export default function EmployeeOfMonthPage() {
 
       {loading ? (
         <div className="py-20 text-center"><Spin size="large" /></div>
-      ) : activeTab === "criteria" || (!isAdmin && !isHR) ? (
+      ) : activeTab === "criteria" || !isAdmin ? (
         /* Criteria Setup Table for Selected Month */
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden space-y-4 p-6">
           <div className="flex items-center justify-between">
