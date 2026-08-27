@@ -20,6 +20,7 @@ import {
 import { API_URL } from "@/lib/config";
 import { Spin, Tag, Tabs, Table, Avatar, Progress } from "antd";
 import { toast } from "sonner";
+import { useUser } from "@/hooks/useUser";
 
 interface Candidate {
   id: string;
@@ -77,6 +78,7 @@ export default function ElectionResultsPage() {
   const params = useParams();
   const router = useRouter();
   const electionId = params.id as string;
+  const { user, isLoading: userLoading } = useUser();
 
   const [election, setElection] = useState<Election | null>(null);
   const [rounds, setRounds] = useState<ElectionRound[]>([]);
@@ -87,6 +89,17 @@ export default function ElectionResultsPage() {
   // Round Navigation State
   const [currentRoundIdx, setCurrentRoundIdx] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!userLoading && user) {
+      const role = String(user.role || "").toLowerCase().trim();
+      const isAdmin = ["admin", "super admin", "superadmin", "administrator", "founder"].includes(role) || user.name === "Admin Admin";
+      if (!isAdmin) {
+        toast.error("Only Administrators can view election audit and calculations.");
+        router.push("/voting");
+      }
+    }
+  }, [user, userLoading, router]);
 
   useEffect(() => {
     if (electionId) {

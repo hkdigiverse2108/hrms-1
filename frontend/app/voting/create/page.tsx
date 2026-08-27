@@ -8,6 +8,8 @@ import { API_URL } from "@/lib/config";
 import { Select, Input, Spin } from "antd";
 import { toast } from "sonner";
 
+import { useUser } from "@/hooks/useUser";
+
 interface Employee {
   id?: string;
   _id?: string;
@@ -30,6 +32,7 @@ const MONTHS = [
 
 export default function CreateElectionPage() {
   const router = useRouter();
+  const { user, isLoading: userLoading } = useUser();
   const [loading, setLoading] = useState(false);
   const [employeesLoading, setEmployeesLoading] = useState(true);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -45,6 +48,17 @@ export default function CreateElectionPage() {
     new Date().getFullYear()
   );
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!userLoading && user) {
+      const role = String(user.role || "").toLowerCase().trim();
+      const isAdmin = ["admin", "super admin", "superadmin", "administrator", "founder"].includes(role) || user.name === "Admin Admin";
+      if (!isAdmin) {
+        toast.error("Only Administrators can create elections.");
+        router.push("/voting");
+      }
+    }
+  }, [user, userLoading, router]);
 
   useEffect(() => {
     fetchEmployees();

@@ -74,8 +74,11 @@ export default function ElectionsListPage() {
   const [selectedYear, setSelectedYear] = useState<number | undefined>(undefined);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
 
-  const isAdminOrHR = user && ["admin", "super admin", "superadmin", "administrator", "founder", "hr", "hr manager", "hr lead"]
-    .includes(String(user.role || "").toLowerCase().trim());
+  const isElectionAdmin = user && (
+    ["admin", "super admin", "superadmin", "administrator", "founder"].includes(
+      String(user.role || "").toLowerCase().trim()
+    ) || user.name === "Admin Admin"
+  );
 
   const fetchElections = async () => {
     setLoading(true);
@@ -164,7 +167,7 @@ export default function ElectionsListPage() {
           </div>
         </div>
 
-        {isAdminOrHR && (
+        {isElectionAdmin && (
           <Link
             href="/voting/create"
             className="shrink-0 inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 !text-white font-bold rounded-xl shadow-lg shadow-teal-500/20 hover:from-teal-700 hover:to-emerald-700 transition-all duration-200 whitespace-nowrap"
@@ -232,7 +235,7 @@ export default function ElectionsListPage() {
               ? "No elections match the selected month/year filters."
               : "No voting events have been created yet."}
           </p>
-          {isAdminOrHR && (
+          {isElectionAdmin && (
             <Link
               href="/voting/create"
               className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 !text-white rounded-xl text-sm font-bold hover:bg-teal-700 transition-colors shadow"
@@ -269,7 +272,7 @@ export default function ElectionsListPage() {
                       )}
                     </div>
 
-                    {isAdminOrHR && (
+                    {isElectionAdmin && (
                       <button
                         onClick={() => handleDelete(election.id, election.title)}
                         className="text-slate-400 hover:text-red-500 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
@@ -351,7 +354,7 @@ export default function ElectionsListPage() {
                     </div>
                   )}
 
-                  {isAdminOrHR && (
+                  {isElectionAdmin && (
                     <Link
                       href={`/voting/${election.id}/results`}
                       className="inline-flex items-center gap-1 py-2 px-3 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"

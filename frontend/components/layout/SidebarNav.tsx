@@ -346,7 +346,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (isAdmin || checkPermission('employee-of-week', 'canView')) {
       electionsAwardsChildren.push(getItem(<Link href="/employee-of-the-week">Team Leader of the Week</Link>, "/employee-of-the-week"));
     }
-    if (isAdmin || (isModuleEnabled('voting') && checkPermission('voting', 'canView'))) {
+    if (isAdmin || checkPermission('voting', 'canView')) {
       electionsAwardsChildren.push(getItem(<Link href="/voting">Elections</Link>, "/voting"));
     }
 

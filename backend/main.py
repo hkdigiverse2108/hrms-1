@@ -4820,12 +4820,12 @@ async def update_bulk_module_permissions(request: schemas.ModuleBulkUpdateReques
 # STV VOTING SYSTEM MODULE ENDPOINTS
 # ==========================================
 
-async def _is_admin_or_hr(token_payload: dict) -> bool:
+async def _is_admin(token_payload: dict) -> bool:
     if not token_payload:
         return False
     role = str(token_payload.get("role", "")).lower().strip()
-    admin_hr_roles = {"admin", "super admin", "superadmin", "administrator", "founder", "hr", "hr manager", "hr lead", "hr executive", "human resources"}
-    if role in admin_hr_roles or "hr" in role or "admin" in role:
+    admin_roles = {"admin", "super admin", "superadmin", "administrator", "founder"}
+    if role in admin_roles or role == "admin":
         return True
     user_id = str(token_payload.get("sub", "")).strip()
     if user_id:
@@ -4837,13 +4837,10 @@ async def _is_admin_or_hr(token_payload: dict) -> bool:
                 u_doc = await database.db.employees.find_one({"id": user_id})
             if u_doc:
                 u_role = str(u_doc.get("role") or "").lower().strip()
-                u_desig = str(u_doc.get("designation") or "").lower().strip()
-                u_dept = str(u_doc.get("department") or "").lower().strip()
-                combined = f"{u_role} {u_desig} {u_dept}"
-                if any(k in combined for k in ["admin", "super admin", "superadmin", "administrator", "founder", "hr", "human resources"]):
+                if u_role in admin_roles or u_role == "admin" or u_doc.get("name") == "Admin Admin":
                     return True
         except Exception as e:
-            print(f"Error in _is_admin_or_hr: {e}", flush=True)
+            print(f"Error in _is_admin: {e}", flush=True)
     return False
 
 
@@ -4852,8 +4849,8 @@ async def create_election_endpoint(
     data: schemas.ElectionCreate,
     token_payload: dict = Depends(auth.require_auth)
 ):
-    if not await _is_admin_or_hr(token_payload):
-        raise HTTPException(status_code=403, detail="Only Admin or HR can create elections.")
+    if not await _is_admin(token_payload):
+        raise HTTPException(status_code=403, detail="Only Administrators can create elections.")
     user_id = token_payload.get("sub")
     return await crud.create_election(data, user_id)
 
@@ -4883,8 +4880,8 @@ async def delete_election_endpoint(
     election_id: str,
     token_payload: dict = Depends(auth.require_auth)
 ):
-    if not await _is_admin_or_hr(token_payload):
-        raise HTTPException(status_code=403, detail="Only Admin or HR can delete elections.")
+    if not await _is_admin(token_payload):
+        raise HTTPException(status_code=403, detail="Only Administrators can delete elections.")
     deleted = await crud.soft_delete_election(election_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Election not found or already deleted.")
@@ -4920,8 +4917,8 @@ async def run_election_stv_endpoint(
     election_id: str,
     token_payload: dict = Depends(auth.require_auth)
 ):
-    if not await _is_admin_or_hr(token_payload):
-        raise HTTPException(status_code=403, detail="Only Admin or HR can run STV calculation.")
+    if not await _is_admin(token_payload):
+        raise HTTPException(status_code=403, detail="Only Administrators can run STV calculation.")
     try:
         result = await crud.run_stv_round_calculation(election_id)
         return result
@@ -4934,8 +4931,8 @@ async def get_election_rounds_endpoint(
     election_id: str,
     token_payload: dict = Depends(auth.require_auth)
 ):
-    if not await _is_admin_or_hr(token_payload):
-        raise HTTPException(status_code=403, detail="Only Admin or HR can view round calculation details.")
+    if not await _is_admin(token_payload):
+        raise HTTPException(status_code=403, detail="Only Administrators can view round calculation details.")
     rounds = await crud.get_election_rounds_history(election_id)
     return rounds
 
@@ -4945,8 +4942,6 @@ async def get_election_result_endpoint(
     election_id: str,
     token_payload: dict = Depends(auth.require_auth)
 ):
-    if not await _is_admin_or_hr(token_payload):
-        raise HTTPException(status_code=403, detail="Only Admin or HR can view election results.")
     election = await crud.get_election_by_id(election_id)
     if not election:
         raise HTTPException(status_code=404, detail="Election not found.")
@@ -4958,8 +4953,8 @@ async def get_voter_ballots_admin_endpoint(
     election_id: str,
     token_payload: dict = Depends(auth.require_auth)
 ):
-    if not await _is_admin_or_hr(token_payload):
-        raise HTTPException(status_code=403, detail="Only Admin or HR can view individual voter ballots.")
+    if not await _is_admin(token_payload):
+        raise HTTPException(status_code=403, detail="Only Administrators can view individual voter ballots.")
     ballots = await crud.get_admin_voter_ballots(election_id)
     return ballots
 

@@ -123,8 +123,9 @@ export default function BallotVotePage() {
   };
 
   const handleSubmitVote = () => {
-    if (preferences.length === 0) {
-      toast.error("Please select at least 1 candidate preference before submitting.");
+    const requiredCount = Math.min(election?.maxPreferences || 1, election?.candidates?.length || 1);
+    if (preferences.length < requiredCount) {
+      toast.error(`Please select all ${requiredCount} candidate preferences before submitting (પૂરા ${requiredCount} ઉમેદવારો પસંદ કરવા જરૂરી છે).`);
       return;
     }
     setShowConfirmDialog(true);
@@ -201,8 +202,8 @@ export default function BallotVotePage() {
               <Tag color={isAlreadySubmitted ? "blue" : "green"} className="rounded-full px-3 py-0.5 font-semibold text-xs">
                 {isAlreadySubmitted ? "Vote Cast & Locked" : "Voting Open"}
               </Tag>
-              <span className="text-xs text-slate-400 font-medium">
-                Max {election.maxPreferences} Choices Allowed
+              <span className="text-xs text-slate-500 font-semibold bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full">
+                Must select exactly {election.maxPreferences} choices ({preferences.length} / {election.maxPreferences})
               </span>
             </div>
             <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
@@ -351,11 +352,13 @@ export default function BallotVotePage() {
           <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800 flex justify-end">
             <button
               onClick={handleSubmitVote}
-              disabled={submitting || preferences.length === 0}
+              disabled={submitting}
               className="px-8 py-3 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white rounded-2xl text-sm font-bold shadow-lg shadow-teal-500/20 disabled:opacity-50 transition-all duration-200 flex items-center gap-2"
             >
               {submitting ? <Spin size="small" /> : <CheckCircle2 className="w-5 h-5" />}
-              Submit & Lock Vote
+              {preferences.length < Math.min(election.maxPreferences || 1, election.candidates?.length || 1)
+                ? `Select ${Math.min(election.maxPreferences || 1, election.candidates?.length || 1) - preferences.length} More Preference(s)`
+                : "Submit & Lock Vote"}
             </button>
           </div>
         )}
