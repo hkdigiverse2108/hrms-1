@@ -408,7 +408,7 @@ export default function ScoreEntryPage() {
     }
   };
 
-  const handleAutoFillVote = () => {
+  const handleAutoFillVote = async () => {
     const voteCrit = criteria.find(c => c.name.toLowerCase().includes("vote"));
     if (!voteCrit) {
       toast.error("No Vote criterion found");
@@ -416,47 +416,51 @@ export default function ScoreEntryPage() {
     }
     if (employees.length === 0) return;
 
-    const maxVoteScore = Number(voteCrit.maxScore) || 10;
-    const isLowerBetter = voteCrit.category === "-ve";
+    try {
+      const token = localStorage.getItem("token");
+      const headers = { Authorization: token ? (token.startsWith("Bearer ") ? token : `Bearer ${token}`) : "" };
+      const maxVoteScore = Number(voteCrit.maxScore) || 10;
+      const isLowerBetter = voteCrit.category === "-ve";
 
-    const listWithQty = employees.map(emp => {
-      const eId = String(emp.id || emp._id);
-      const qty = Number(rawQuantityMap[eId]?.[voteCrit.id]) || 0;
-      return { eId, qty };
-    });
-
-    listWithQty.sort((a, b) => isLowerBetter ? a.qty - b.qty : b.qty - a.qty);
-
-    const N = employees.length;
-    const interval = N > 1 ? maxVoteScore / (N - 1) : 0;
-    const nextMap = { ...scoresMap };
-    const nextRanks = { ...calculatedRankMap };
-
-    employees.forEach(emp => {
-      const eId = String(emp.id || emp._id);
-      if (!nextMap[eId]) nextMap[eId] = {};
-      if (!nextRanks[eId]) nextRanks[eId] = {};
-      const idx = listWithQty.findIndex(x => x.eId === eId);
-      if (idx !== -1) {
-        const item = listWithQty[idx];
-        let rankIndex = idx;
-        for (let j = 0; j < idx; j++) {
-          if (listWithQty[j].qty === item.qty) {
-            rankIndex = j;
-            break;
-          }
-        }
-        const calculatedRank = rankIndex + 1;
-        const rawScore = maxVoteScore - (rankIndex * interval);
-        const calcScore = Math.max(0, Math.min(maxVoteScore, Math.round(rawScore * 100) / 100));
-        nextMap[eId][voteCrit.id] = calcScore;
-        nextRanks[eId][voteCrit.id] = calculatedRank;
+      const res = await fetch(`${API_URL}/eom/vote-stats?month_year=${selectedMonthYear}&maxScore=${maxVoteScore}`, { headers });
+      if (!res.ok) {
+        toast.error("Failed to fetch election voting data");
+        return;
       }
-    });
+      const data = await res.json();
+      const voteMap = data.employeeVoteCounts || {};
+      const rankMap = data.employeeRanks || {};
+      const scoreMap = data.employeeScores || {};
 
-    setScoresMap(nextMap);
-    setCalculatedRankMap(nextRanks);
-    toast.success(`Vote scores auto-calculated (${voteCrit.category || "+ve"} Rank Steps)!`);
+      const nextMap = { ...scoresMap };
+      const nextRanks = { ...calculatedRankMap };
+      const nextQty = { ...rawQuantityMap };
+
+      employees.forEach((emp, fallbackIdx) => {
+        const eId = String(emp.id || emp._id);
+        const eName = (emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`).trim().toLowerCase();
+
+        if (!nextMap[eId]) nextMap[eId] = {};
+        if (!nextRanks[eId]) nextRanks[eId] = {};
+        if (!nextQty[eId]) nextQty[eId] = {};
+
+        const votes = voteMap[eId] ?? voteMap[eName] ?? 0;
+        const rank = rankMap[eId] ?? rankMap[eName] ?? (fallbackIdx + 1);
+        const score = scoreMap[eId] ?? scoreMap[eName] ?? 0;
+
+        nextQty[eId][voteCrit.id] = votes;
+        nextRanks[eId][voteCrit.id] = rank;
+        nextMap[eId][voteCrit.id] = score;
+      });
+
+      setScoresMap(nextMap);
+      setCalculatedRankMap(nextRanks);
+      setRawQuantityMap(nextQty);
+      toast.success(`Vote scores auto-calculated from STV Election Rounds (${data.electionTitle || "STV Rounds"})!`);
+    } catch (e) {
+      console.error(e);
+      toast.error("Error auto-calculating Vote scores");
+    }
   };
 
   const handleAutoFillAttendance = () => {
@@ -1076,7 +1080,18 @@ export default function ScoreEntryPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                {criteria[currentStepIndex] && (
+                  <button
+                    type="button"
+                    onClick={() => handleAutoCalculateForCriterion(criteria[currentStepIndex])}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-slate-950 text-xs font-black rounded-xl shadow-sm transition-all cursor-pointer"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Auto-Calculate {criteria[currentStepIndex]?.name}
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={() => setCurrentStepIndex(prev => Math.max(0, prev - 1))}

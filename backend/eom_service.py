@@ -900,6 +900,161 @@ async def get_eom_work_dedication_stats(month_year: str, max_score: float = 10.0
         "formula": f"Strict Month ({month:02d}/{year}): Total Logged Hours from Attendance ranked using Equal Interval Rank formula up to {max_score} pts"
     }
 
+async def get_eom_vote_stats(month_year: str, max_score: float = 10.0):
+    """
+    Fetch voting and election preference statistics for Employee of the Month.
+    """
+    month_names = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+    try:
+        parts = month_year.split("-")
+        year_num = int(parts[0])
+        month_num = int(parts[1])
+        month_name = month_names[month_num - 1]
+    except Exception:
+        year_num = 2026
+        month_name = "August"
+
+    # Find election for the given month/year
+    election = await db.elections.find_one({
+        "isDeleted": {"$ne": True},
+        "$or": [
+            {"electionMonth": month_name, "electionYear": year_num},
+            {"electionMonth": {"$regex": f"^{month_name}$", "$options": "i"}},
+            {"title": {"$regex": month_name, "$options": "i"}},
+            {"title": {"$regex": month_year, "$options": "i"}}
+        ]
+    })
+
+    emp_votes_map = {}
+    emp_rank_map = {}
+    emp_score_map = {}
+    total_ballots = 0
+    election_title = None
+    election_id = None
+
+    if election:
+        election_id = str(election.get("_id") or election.  get("id"))
+        election_title = election.get("title")
+
+        # Import crud for STV rounds history
+        import crud
+        rounds = await crud.get_election_rounds_history(election_id)
+        if not rounds:
+            valid_b = await db.ballots.count_documents({"electionId": election_id, "isSubmitted": True})
+            if valid_b > 0:
+                await crud.run_stv_round_calculation(election_id)
+                rounds = await crud.get_election_rounds_history(election_id)
+
+        # Fetch candidates
+        candidates = await db.candidates.find({"electionId": election_id}).to_list(length=200)
+        cand_to_emp = {str(c["_id"]): str(c.get("employee_id", "")) for c in candidates}
+        cand_to_name = {str(c["_id"]): str(c.get("name", "")).strip().lower() for c in candidates}
+
+        # Initialize all candidates with 0 votes
+        for c in candidates:
+            e_id = str(c.get("employee_id", ""))
+            e_name = str(c.get("name", "")).strip().lower()
+            if e_id:
+                emp_votes_map[e_id] = 0
+            if e_name:
+                emp_votes_map[e_name] = 0
+
+        # Ballots count
+        ballots_cnt = await db.ballots.count_documents({"electionId": election_id, "isSubmitted": True})
+        total_ballots = ballots_cnt
+
+        # 1. Round 1 tally gives exact initial votes for Value column
+        r1 = rounds[0] if rounds else None
+        r1_tally = r1.get("tally", {}) if r1 else {}
+        for cid, info in r1_tally.items():
+            cid_str = str(cid)
+            v_cnt = info.get("votes", 0) if isinstance(info, dict) else int(info)
+            e_id = cand_to_emp.get(cid_str)
+            e_name = cand_to_name.get(cid_str)
+            if e_id:
+                emp_votes_map[e_id] = v_cnt
+            if e_name:
+                emp_votes_map[e_name] = v_cnt
+
+        # Filter candidates and elimination order to only include participating employees in EOM for this month
+        cfg = await get_month_config(month_year)
+        selected_ids = None
+        if cfg.get("isConfigured") and cfg.get("selectedEmployeeIds") is not None:
+            selected_ids = set(str(x) for x in cfg.get("selectedEmployeeIds", []))
+
+        part_candidates = [c for c in candidates if (selected_ids is None or str(c.get("employee_id", "")) in selected_ids)]
+        valid_cand_ids = set(str(c["_id"]) for c in part_candidates)
+
+        # 2. STV Round-by-Round Elimination Sequence for Ranks
+        elimination_order = []
+        if rounds:
+            last_round = rounds[-1]
+            winner_id = str(last_round.get("winnerCandidateId") or "")
+            if winner_id and winner_id in valid_cand_ids:
+                elimination_order.append(winner_id)
+
+            # Runner up (candidates active in last round)
+            last_tally = last_round.get("tally", {})
+            active_sorted = sorted(
+                last_tally.items(),
+                key=lambda x: (x[1].get("votes", 0) if isinstance(x[1], dict) else int(x[1])),
+                reverse=True
+            )
+            for cid, info in active_sorted:
+                cid_str = str(cid)
+                v = info.get("votes", 0) if isinstance(info, dict) else int(info)
+                if cid_str != winner_id and cid_str not in elimination_order and cid_str in valid_cand_ids and v > 0:
+                    elimination_order.append(cid_str)
+
+            # From second to last round down to round 2
+            for r in reversed(rounds):
+                if r.get("roundNumber") != 1:
+                    elim_ids = [str(x) for x in r.get("eliminatedCandidateIds", [])]
+                    for cid in elim_ids:
+                        if cid not in elimination_order and cid in valid_cand_ids:
+                            elimination_order.append(cid)
+
+            # Round 1 zero-vote eliminated candidates at the bottom
+            r1_zero_elim = [str(x) for x in rounds[0].get("eliminatedCandidateIds", [])]
+            for cid in r1_zero_elim:
+                if cid not in elimination_order and cid in valid_cand_ids:
+                    elimination_order.append(cid)
+
+        # Any remaining participating candidates
+        for c in part_candidates:
+            cid_str = str(c["_id"])
+            if cid_str not in elimination_order:
+                elimination_order.append(cid_str)
+
+        # Compute STV Ranks and Equal Interval Scores
+        N = len(elimination_order)
+        interval = max_score / (N - 1) if N > 1 else 0
+
+        for rank_idx, cid_str in enumerate(elimination_order):
+            e_id = cand_to_emp.get(cid_str)
+            e_name = cand_to_name.get(cid_str)
+            calculated_rank = rank_idx + 1
+            calculated_score = max(0.0, min(max_score, round(max_score - (rank_idx * interval), 2)))
+
+            if e_id:
+                emp_rank_map[e_id] = calculated_rank
+                emp_score_map[e_id] = calculated_score
+            if e_name:
+                emp_rank_map[e_name] = calculated_rank
+                emp_score_map[e_name] = calculated_score
+
+    return {
+        "month_year": month_year,
+        "maxScore": max_score,
+        "electionId": election_id,
+        "electionTitle": election_title,
+        "totalBallots": total_ballots,
+        "employeeVoteCounts": emp_votes_map,
+        "employeeRanks": emp_rank_map,
+        "employeeScores": emp_score_map,
+        "formula": f"STV Election ({election_title or month_name}): Exact Round-by-Round STV Elimination Standing with Round 1 Votes"
+    }
+
 async def calculate_eom_leaderboard(month_year: str):
     criteria_list = await get_or_init_criteria(month_year)
     scores_list = await get_scores(month_year)

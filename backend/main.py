@@ -5129,6 +5129,10 @@ async def get_eom_work_completion_stats_endpoint(month_year: str = Query(...), m
 async def get_eom_work_dedication_stats_endpoint(month_year: str = Query(...), maxScore: float = Query(10.0)):
     return await eom_service.get_eom_work_dedication_stats(month_year, maxScore)
 
+@app.get("/eom/vote-stats")
+async def get_eom_vote_stats_endpoint(month_year: str = Query(...), maxScore: float = Query(10.0)):
+    return await eom_service.get_eom_vote_stats(month_year, maxScore)
+
 @app.post("/eom/reveal-schedule")
 async def save_eom_reveal_schedule_endpoint(
     request: Request,
