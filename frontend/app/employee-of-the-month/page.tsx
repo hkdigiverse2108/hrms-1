@@ -426,9 +426,12 @@ export default function EmployeeOfMonthPage() {
     return name.includes(q) || dept.includes(q) || role.includes(q);
   });
 
-  const currentUserId = String(user?.id || user?._id || "");
+  const currentUserId = String(user?.id || user?._id || user?.employeeId || "");
   const assignedCriteriaForUser = criteria.filter(c => 
-    c.assignedPersonIds && c.assignedPersonIds.includes(currentUserId)
+    c.assignedPersonIds && c.assignedPersonIds.some((pid: string) => {
+      const pidStr = String(pid).trim();
+      return pidStr === currentUserId || pidStr === String(user?.id) || pidStr === String(user?._id) || pidStr === String(user?.employeeId);
+    })
   );
 
   return (
@@ -496,6 +499,7 @@ export default function EmployeeOfMonthPage() {
 
           <Link
             href={`/employee-of-the-month/score-entry?month_year=${selectedMonthYear}`}
+            prefetch={false}
             className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 text-white text-sm font-semibold rounded-xl hover:bg-slate-900 transition-all shadow-sm"
           >
             <Edit className="w-4 h-4" />
@@ -520,6 +524,7 @@ export default function EmployeeOfMonthPage() {
               />
               <Link
                 href={`/employee-of-the-month/reveal?month_year=${selectedMonthYear}`}
+                prefetch={false}
                 className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg shadow-amber-500/30 transition-all hover:scale-105 active:scale-95 border border-amber-300 uppercase tracking-wider cursor-pointer"
               >
                 <Play className="w-4 h-4 fill-slate-950 text-slate-950" />
@@ -550,6 +555,7 @@ export default function EmployeeOfMonthPage() {
           </div>
           <Link
             href={`/employee-of-the-month/score-entry?month_year=${selectedMonthYear}`}
+            prefetch={false}
             className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all shrink-0 cursor-pointer"
           >
             <Edit className="w-3.5 h-3.5" />

@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import dayjs from "dayjs";
 import { ArrowLeft, Save, Calendar, CheckCircle2, AlertCircle, Award, Check, Sparkles, Info, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { API_URL } from "@/lib/config";
@@ -24,10 +25,10 @@ const getPresentDaysForEmp = (emp: any, stats: Record<string, number> = {}) => {
   const eId = String(emp.id || emp._id || '').trim();
   const rawName = String(emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`).trim();
   const lowerName = rawName.toLowerCase();
-  
+
   if (eId && stats[eId] !== undefined) return stats[eId];
   if (lowerName && stats[lowerName] !== undefined) return stats[lowerName];
-  
+
   const firstName = String(emp.firstName || rawName.split(' ')[0] || '').trim().toLowerCase();
   const lastName = String(emp.lastName || rawName.split(' ').slice(-1)[0] || '').trim().toLowerCase();
   const firstLast = `${firstName} ${lastName}`.trim();
@@ -46,10 +47,20 @@ const getPresentDaysForEmp = (emp: any, stats: Record<string, number> = {}) => {
 };
 
 export default function ScoreEntryPage() {
+  return (
+    <Suspense fallback={<div className="p-10 text-center"><Spin size="large" /></div>}>
+      <ScoreEntryContent />
+    </Suspense>
+  );
+}
+
+function ScoreEntryContent() {
   const { user } = useUser();
+  const searchParams = useSearchParams();
+  const urlMonth = searchParams?.get("month_year");
   const now = new Date();
-  const defaultMonthYear = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  
+  const defaultMonthYear = urlMonth || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
   const [selectedMonthYear, setSelectedMonthYear] = useState<string>(defaultMonthYear);
   const [criteria, setCriteria] = useState<Criterion[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
@@ -73,44 +84,72 @@ export default function ScoreEntryPage() {
   const [currentStepIndex, setCurrentStepIndex] = useState<number>(0);
   const [viewMode, setViewMode] = useState<"stepper" | "matrix">("stepper");
 
+  const isFetchingRef = React.useRef(false);
+
   useEffect(() => {
     fetchData();
   }, [selectedMonthYear]);
 
   const fetchData = async () => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
       const headers = { Authorization: token ? (token.startsWith("Bearer ") ? token : `Bearer ${token}`) : "" };
 
-      // 1. Fetch Criteria
-      const cRes = await fetch(`${API_URL}/eom/criteria?month_year=${selectedMonthYear}`, { headers });
+      // Resolve user immediately from state or localStorage
+      const storedUserStr = typeof window !== "undefined" ? localStorage.getItem("user") : null;
+      let currentUser = user;
+      if (!currentUser && storedUserStr) {
+        try {
+          currentUser = JSON.parse(storedUserStr);
+        } catch (_) { }
+      }
+
+      // Parallel Concurrent Fetching
+      const [cRes, eRes, cfgRes, attRes, sRes] = await Promise.all([
+        fetch(`${API_URL}/eom/criteria?month_year=${selectedMonthYear}`, { headers }),
+        fetch(`${API_URL}/employees`),
+        fetch(`${API_URL}/eom/month-config?month_year=${selectedMonthYear}`, { headers }),
+        fetch(`${API_URL}/eom/attendance-stats?month_year=${selectedMonthYear}&maxScore=15.0`, { headers }),
+        fetch(`${API_URL}/eom/scores?month_year=${selectedMonthYear}`, { headers })
+      ]);
+
+      // 1. Process Criteria
       let accessibleCriteria: Criterion[] = [];
       if (cRes.ok) {
         const cData: Criterion[] = await cRes.json();
-        
-        const uId = String(user?.id || user?._id || "");
-        const isAdmin = Boolean(user && ["admin", "super admin", "superadmin", "administrator", "founder"].includes(String(user.role || "").toLowerCase().trim()));
+
+        const uId = String(currentUser?.id || currentUser?._id || currentUser?.employeeId || "");
+        const userRole = String(currentUser?.role || "").toLowerCase().trim();
+        const isAdmin = Boolean(currentUser && ["admin", "super admin", "superadmin", "administrator", "founder"].includes(userRole));
         const isHR = Boolean(
-          user && (
-            ["hr", "hr manager", "hr lead", "hr executive", "human resources"].includes(String(user.role || "").toLowerCase().trim()) ||
-            String(user.designation || "").toLowerCase().includes("hr") ||
-            String(user.department || "").toLowerCase().includes("hr")
+          currentUser && (
+            ["hr", "hr manager", "hr lead", "hr executive", "human resources"].includes(userRole) ||
+            String(currentUser.designation || "").toLowerCase().includes("hr") ||
+            String(currentUser.department || "").toLowerCase().includes("hr")
           )
         );
 
         accessibleCriteria = cData.filter(c => {
-          if (isAdmin || isHR) return true;
-          if (!c.assignedPersonIds || c.assignedPersonIds.length === 0) return true;
-          return c.assignedPersonIds.includes(uId);
+          if (isAdmin) return true;
+          // If a parameter has assigned evaluators, only assigned persons see it
+          if (c.assignedPersonIds && c.assignedPersonIds.length > 0) {
+            return c.assignedPersonIds.some((pid: string) => {
+              const pidStr = String(pid).trim();
+              return pidStr === uId || pidStr === String(currentUser?.id) || pidStr === String(currentUser?._id) || pidStr === String(currentUser?.employeeId);
+            });
+          }
+          // Direct criteria without assigned persons can be evaluated by Admin or HR
+          return isHR;
         });
 
         setCriteria(accessibleCriteria);
       }
 
-      // 2. Fetch Employees
-      const eRes = await fetch(`${API_URL}/employees`);
-      let empData = [];
+      // 2. Process Employees & Month Configuration
+      let empData: any[] = [];
       if (eRes.ok) {
         empData = await eRes.json();
       }
@@ -122,44 +161,48 @@ export default function ScoreEntryPage() {
       };
       empData = empData.filter((e: any) => !isEmpAdmin(e));
 
-      // Fetch Month Config for Participating Employees
-      const cfgRes = await fetch(`${API_URL}/eom/month-config?month_year=${selectedMonthYear}`, { headers });
       if (cfgRes.ok) {
         const cfgData = await cfgRes.json();
-        if (cfgData.isConfigured && Array.isArray(cfgData.selectedEmployeeIds)) {
-          const selIds: string[] = cfgData.selectedEmployeeIds;
-          empData = empData.filter((e: any) => selIds.includes(String(e.id || e._id)));
+        if (cfgData.isConfigured && Array.isArray(cfgData.selectedEmployeeIds) && cfgData.selectedEmployeeIds.length > 0) {
+          const selIds = new Set(cfgData.selectedEmployeeIds.map((x: any) => String(x)));
+          empData = empData.filter((e: any) => selIds.has(String(e.id || e._id)));
         }
       }
       setEmployees(empData);
 
-      // 3. Fetch Attendance Stats for Month
-      const attCrit = accessibleCriteria.find(c => c.name.toLowerCase().includes("attendance"));
-      const maxAttScore = attCrit ? attCrit.maxScore : 15.0;
-
-      const attRes = await fetch(`${API_URL}/eom/attendance-stats?month_year=${selectedMonthYear}&maxScore=${maxAttScore}`, { headers });
-      let attData: { totalWorkingDays: number; formula: string; employeeStats: Record<string, number> } = { totalWorkingDays: 26, formula: "", employeeStats: {} };
+      // 3. Process Attendance Stats
       if (attRes.ok) {
-        attData = await attRes.json();
+        const attData = await attRes.json();
         setAttendanceStats(attData);
       }
 
-      // 4. Fetch All Existing Scores for the Month
-      const sRes = await fetch(`${API_URL}/eom/scores?month_year=${selectedMonthYear}`, { headers });
+      // 4. Process Existing Scores
       if (sRes.ok) {
         const sData = await sRes.json();
         const map: Record<string, Record<string, number | "">> = {};
         const qMap: Record<string, Record<string, number | "">> = {};
         const rMap: Record<string, Record<string, number | "">> = {};
+
+        const currentActorName = String(user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`).trim().toLowerCase();
+        const currentUserId = String(user?.id || user?._id || "");
+
         sData.forEach((s: any) => {
           const eId = String(s.employeeId);
           const cId = String(s.criteriaId);
+          const scoredBy = String(s.scoredBy || "").trim().toLowerCase();
+          const evaluatorId = String(s.evaluatorId || "");
+
+          const isOwn = (evaluatorId && evaluatorId === currentUserId) || (scoredBy && scoredBy === currentActorName);
+
           if (!map[eId]) map[eId] = {};
           if (!qMap[eId]) qMap[eId] = {};
           if (!rMap[eId]) rMap[eId] = {};
-          map[eId][cId] = s.score;
-          if (s.rawQuantity !== undefined && s.rawQuantity !== null) qMap[eId][cId] = s.rawQuantity;
-          if (s.calculatedRank !== undefined && s.calculatedRank !== null) rMap[eId][cId] = s.calculatedRank;
+
+          if (isOwn || map[eId][cId] === undefined) {
+            map[eId][cId] = s.score;
+            if (s.rawQuantity !== undefined && s.rawQuantity !== null) qMap[eId][cId] = s.rawQuantity;
+            if (s.calculatedRank !== undefined && s.calculatedRank !== null) rMap[eId][cId] = s.calculatedRank;
+          }
         });
 
         setScoresMap(map);
@@ -171,6 +214,7 @@ export default function ScoreEntryPage() {
       toast.error("Failed to load evaluator matrix data");
     } finally {
       setLoading(false);
+      isFetchingRef.current = false;
     }
   };
 
@@ -597,9 +641,9 @@ export default function ScoreEntryPage() {
   };
 
   const handleAutoFillWorkCompletion = async () => {
-    const workCrit = criteria.find(c => 
-      c.name.toLowerCase().includes("work completion") || 
-      c.name.toLowerCase().includes("work") || 
+    const workCrit = criteria.find(c =>
+      c.name.toLowerCase().includes("work completion") ||
+      c.name.toLowerCase().includes("work") ||
       c.name.toLowerCase().includes("task")
     );
     if (!workCrit) {
@@ -682,8 +726,8 @@ export default function ScoreEntryPage() {
   };
 
   const handleAutoFillWorkDedication = async () => {
-    const dedCrit = criteria.find(c => 
-      c.name.toLowerCase().includes("work dedication") || 
+    const dedCrit = criteria.find(c =>
+      c.name.toLowerCase().includes("work dedication") ||
       c.name.toLowerCase().includes("dedication")
     );
     if (!dedCrit) {
@@ -802,57 +846,6 @@ export default function ScoreEntryPage() {
     return nameA.localeCompare(nameB);
   });
 
-  const handleSaveRow = async (empId: string) => {
-    const empScores = scoresMap[empId] || {};
-    
-    // Check validation first
-    for (const c of criteria) {
-      const val = Number(empScores[c.id]);
-      if (empScores[c.id] !== undefined && empScores[c.id] !== "" && val > c.maxScore) {
-        toast.error(`${c.name} score (${val}) exceeds Max Score of ${c.maxScore}!`);
-        return;
-      }
-    }
-
-    setSavingMap(prev => ({ ...prev, [empId]: true }));
-    try {
-      const token = localStorage.getItem("token");
-      const headers = {
-        "Content-Type": "application/json",
-        Authorization: token ? (token.startsWith("Bearer ") ? token : `Bearer ${token}`) : ""
-      };
-
-      const savePromises = criteria.map(async (c) => {
-        const sc = empScores[c.id];
-        if (sc !== undefined && sc !== "") {
-          const rawQty = rawQuantityMap[empId]?.[c.id];
-          const calcRank = calculatedRankMap[empId]?.[c.id];
-
-          await fetch(`${API_URL}/eom/scores`, {
-            method: "POST",
-            headers,
-            body: JSON.stringify({
-              month_year: selectedMonthYear,
-              criteriaId: c.id,
-              employeeId: empId,
-              score: Number(sc),
-              rawQuantity: rawQty !== undefined && rawQty !== "" ? Number(rawQty) : null,
-              calculatedRank: calcRank !== undefined && calcRank !== "" ? Number(calcRank) : null
-            })
-          });
-        }
-      });
-
-      await Promise.all(savePromises);
-      toast.success("Scores saved successfully!");
-    } catch (e) {
-      console.error(e);
-      toast.error("Error saving scores");
-    } finally {
-      setSavingMap(prev => ({ ...prev, [empId]: false }));
-    }
-  };
-
   const handleSaveAll = async () => {
     // Check validation across all entries
     for (const emp of employees) {
@@ -927,13 +920,13 @@ export default function ScoreEntryPage() {
   const voteCritObj = criteria.find(c => c.name.toLowerCase().includes("vote"));
   const attendanceCritObj = criteria.find(c => c.name.toLowerCase().includes("attendance"));
   const disciplineCritObj = criteria.find(c => c.name.toLowerCase().includes("discipline"));
-  const workCompletionCritObj = criteria.find(c => 
-    c.name.toLowerCase().includes("work completion") || 
-    c.name.toLowerCase().includes("work") || 
+  const workCompletionCritObj = criteria.find(c =>
+    c.name.toLowerCase().includes("work completion") ||
+    c.name.toLowerCase().includes("work") ||
     c.name.toLowerCase().includes("task")
   );
-  const workDedicationCritObj = criteria.find(c => 
-    c.name.toLowerCase().includes("work dedication") || 
+  const workDedicationCritObj = criteria.find(c =>
+    c.name.toLowerCase().includes("work dedication") ||
     c.name.toLowerCase().includes("dedication")
   );
 
@@ -944,6 +937,7 @@ export default function ScoreEntryPage() {
         <div className="flex items-center gap-3">
           <Link
             href="/employee-of-the-month"
+            prefetch={false}
             className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-colors shrink-0"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -1220,11 +1214,10 @@ export default function ScoreEntryPage() {
                                     value={currentVal}
                                     onChange={(e) => handleScoreChange(empId, c.id, e.target.value)}
                                     placeholder="0"
-                                    className={`w-14 px-1 py-0.5 border rounded-md text-center font-bold text-xs focus:outline-none ${
-                                      isExceeded
+                                    className={`w-14 px-1 py-0.5 border rounded-md text-center font-bold text-xs focus:outline-none ${isExceeded
                                         ? "bg-rose-50 border-rose-500 text-rose-700 ring-1 ring-rose-500"
                                         : "bg-white border-slate-300 text-slate-900 focus:border-amber-500"
-                                    }`}
+                                      }`}
                                   />
                                 </div>
                               </div>

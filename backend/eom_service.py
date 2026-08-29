@@ -328,32 +328,47 @@ async def clone_criteria(from_month_year: str, to_month_year: str):
 
 from pymongo import UpdateOne
 
-async def save_score(month_year: str, criteria_id: str, employee_id: str, score: float, raw_quantity: float = None, calculated_rank: int = None, scored_by: str = "System"):
+async def save_score(month_year: str, criteria_id: str, employee_id: str, score: float, raw_quantity: float = None, calculated_rank: int = None, scored_by: str = "System", evaluator_id: str = None):
+    criteria_doc = await db.eom_criteria.find_one({"_id": ObjectId(criteria_id) if len(criteria_id) == 24 else criteria_id}) or {}
+    is_multi_admin = criteria_doc.get("entryType") == "multi_admin" or len(criteria_doc.get("assignedPersonIds", [])) > 0
+
     doc = {
         "month_year": month_year,
         "criteriaId": criteria_id,
         "employeeId": employee_id,
         "scoredBy": scored_by,
+        "evaluatorId": evaluator_id or scored_by,
         "score": float(score),
         "rawQuantity": raw_quantity,
         "calculatedRank": calculated_rank,
         "submittedAt": datetime.now(IST)
     }
-    
+
+    filter_query = {
+        "month_year": month_year,
+        "criteriaId": criteria_id,
+        "employeeId": employee_id
+    }
+    if is_multi_admin:
+        filter_query["scoredBy"] = scored_by
+
     await db.eom_scores.update_one(
-        {
-            "month_year": month_year,
-            "criteriaId": criteria_id,
-            "employeeId": employee_id
-        },
+        filter_query,
         {"$set": doc},
         upsert=True
     )
     return doc
 
-async def bulk_save_all_matrix(month_year: str, scores_list: list, scored_by: str = "System"):
+async def bulk_save_all_matrix(month_year: str, scores_list: list, scored_by: str = "System", evaluator_id: str = None):
     if not scores_list:
         return {"savedCount": 0}
+
+    criteria_docs = await db.eom_criteria.find({"month_year": month_year}).to_list(length=100)
+    multi_admin_crit_ids = set(
+        str(c.get("_id") or c.get("id"))
+        for c in criteria_docs
+        if c.get("entryType") == "multi_admin" or len(c.get("assignedPersonIds", [])) > 0
+    )
 
     now_ist = datetime.now(IST)
     ops = []
@@ -369,19 +384,24 @@ async def bulk_save_all_matrix(month_year: str, scores_list: list, scored_by: st
             "criteriaId": c_id,
             "employeeId": e_id,
             "scoredBy": scored_by,
+            "evaluatorId": evaluator_id or scored_by,
             "score": sc,
             "rawQuantity": raw_qty,
             "calculatedRank": calc_rank,
             "submittedAt": now_ist
         }
 
+        filter_query = {
+            "month_year": month_year,
+            "criteriaId": c_id,
+            "employeeId": e_id
+        }
+        if c_id in multi_admin_crit_ids:
+            filter_query["scoredBy"] = scored_by
+
         ops.append(
             UpdateOne(
-                {
-                    "month_year": month_year,
-                    "criteriaId": c_id,
-                    "employeeId": e_id
-                },
+                filter_query,
                 {"$set": doc},
                 upsert=True
             )

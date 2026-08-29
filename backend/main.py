@@ -4960,6 +4960,44 @@ async def get_voter_ballots_admin_endpoint(
     return ballots
 
 
+async def _is_admin(token_payload: dict) -> bool:
+    if not token_payload:
+        return False
+    admin_roles = {"admin", "super admin", "superadmin", "administrator", "founder"}
+    role = str(token_payload.get("role", "")).lower().strip()
+    if role in admin_roles:
+        return True
+    user_id = token_payload.get("sub")
+    if user_id:
+        from bson import ObjectId
+        from database import db
+        user = await db.employees.find_one({"_id": ObjectId(user_id) if len(user_id) == 24 else user_id})
+        if user and str(user.get("role", "")).lower().strip() in admin_roles:
+            return True
+    return False
+
+async def _is_admin_or_hr(token_payload: dict) -> bool:
+    if not token_payload:
+        return False
+    allowed_roles = {"admin", "super admin", "superadmin", "administrator", "founder", "hr", "human resources", "hr manager"}
+    role = str(token_payload.get("role", "")).lower().strip()
+    if role in allowed_roles:
+        return True
+    user_id = token_payload.get("sub")
+    if user_id:
+        from bson import ObjectId
+        from database import db
+        user = await db.employees.find_one({"_id": ObjectId(user_id) if len(user_id) == 24 else user_id})
+        if user and str(user.get("role", "")).lower().strip() in allowed_roles:
+            return True
+        # Also check user_permissions
+        perms = await db.user_permissions.find_one({"employeeId": user_id})
+        if perms:
+            for p in perms.get("permissions", []):
+                if p.get("moduleName") in ["employee-of-the-month", "eom"] and (p.get("canEdit") is True or p.get("canCreate") is True):
+                    return True
+    return False
+
 # --- EMPLOYEE OF THE MONTH (EOM) ENDPOINTS ---
 
 import eom_service
@@ -5047,7 +5085,8 @@ async def save_eom_score_endpoint(
         score=score,
         raw_quantity=raw_quantity,
         calculated_rank=calculated_rank,
-        scored_by=actor_name
+        scored_by=actor_name,
+        evaluator_id=actor_id
     )
 
 @app.post("/eom/bulk-scores")
@@ -5090,7 +5129,8 @@ async def save_eom_all_matrix_endpoint(
     return await eom_service.bulk_save_all_matrix(
         month_year=month_year,
         scores_list=scores_list,
-        scored_by=actor_name
+        scored_by=actor_name,
+        evaluator_id=actor_id
     )
 
 @app.get("/eom/reveal-order")
