@@ -2386,7 +2386,13 @@ async def get_employee_attendance_page_data(request: Request, db=Depends(get_db)
     }
 
 @app.get("/my-tasks-view-data")
-async def get_my_tasks_view_data(userId: Optional[str] = None, role: Optional[str] = None, db=Depends(get_db)):
+@redis_manager.cached_api(namespace="hrms:tasks", ttl=60)
+async def get_my_tasks_view_data(
+    request: Request,
+    userId: Optional[str] = None,
+    role: Optional[str] = None,
+    db=Depends(get_db)
+):
     """Clubbed endpoint for the MyTasksView component. Replaces 8 separate calls."""
     from datetime import datetime, timedelta
     start_date = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
@@ -2651,29 +2657,37 @@ async def delete_marketing_monthly_report(report_id: str, db=Depends(get_db)):
     return {"message": "Monthly report deleted"}
 # Chat Endpoints
 @app.get("/chat/messages/{sender_id}/{receiver_id}", response_model=List[schemas.ChatMessage])
-async def read_chat_messages(sender_id: str, receiver_id: str, group_id: Optional[str] = None, db=Depends(get_db)):
+@redis_manager.cached_api(namespace="hrms:chat", ttl=30)
+async def read_chat_messages(request: Request, sender_id: str, receiver_id: str, group_id: Optional[str] = None, db=Depends(get_db)):
     return await crud.get_messages(db, sender_id, receiver_id, group_id)
 
 @app.get("/chat/groups/{user_id}", response_model=List[schemas.ChatGroup])
-async def read_chat_groups(user_id: str, db=Depends(get_db)):
+@redis_manager.cached_api(namespace="hrms:chat", ttl=30)
+async def read_chat_groups(request: Request, user_id: str, db=Depends(get_db)):
     return await crud.get_chat_groups(db, user_id)
 
 @app.post("/chat/groups", response_model=schemas.ChatGroup)
 async def create_chat_group(group: schemas.ChatGroupCreate, db=Depends(get_db)):
-    return await crud.create_chat_group(db, group)
+    res = await crud.create_chat_group(db, group)
+    await redis_manager.invalidate_namespace("hrms:chat")
+    return res
 
 @app.put("/chat/groups/{group_id}", response_model=schemas.ChatGroup)
 async def update_chat_group(group_id: str, group: schemas.ChatGroupUpdate, db=Depends(get_db)):
-    return await crud.update_chat_group(db, group_id, group)
+    res = await crud.update_chat_group(db, group_id, group)
+    await redis_manager.invalidate_namespace("hrms:chat")
+    return res
 
 @app.delete("/chat/groups/{group_id}")
 async def delete_chat_group(group_id: str, db=Depends(get_db)):
     await crud.delete_chat_group(db, group_id)
+    await redis_manager.invalidate_namespace("hrms:chat")
     return {"message": "Group deleted successfully"}
 
 @app.post("/chat/messages", response_model=schemas.ChatMessage)
 async def create_chat_message(message: schemas.ChatMessageCreate, db=Depends(get_db)):
     saved_msg = await crud.create_message(db, message)
+    await redis_manager.invalidate_namespace("hrms:chat")
     
     # Broadcast to active clients in real-time
     try:
