@@ -1935,13 +1935,16 @@ async def create_project(project: schemas.ProjectCreate, db=Depends(get_db)):
 
 @app.put("/projects/{project_id}", response_model=schemas.Project)
 async def update_project(project_id: str, project_update: schemas.ProjectUpdate, db=Depends(get_db)):
-    return await crud.update_project(db, project_id, project_update)
+    res = await crud.update_project(db, project_id, project_update)
+    await redis_manager.invalidate_namespace("hrms:work")
+    return res
 
 @app.delete("/projects/{project_id}")
 async def delete_project(project_id: str, db=Depends(get_db)):
     success = await crud.delete_project(db, project_id)
     if not success:
         raise HTTPException(status_code=404, detail="Project not found")
+    await redis_manager.invalidate_namespace("hrms:work")
     return {"message": "Project deleted successfully"}
 
 @app.put("/projects/{project_id}/modules/notebook", response_model=schemas.Project)

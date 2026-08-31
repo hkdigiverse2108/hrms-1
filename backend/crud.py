@@ -3917,6 +3917,7 @@ async def get_projects(db, userId: str = None, role: str = None, skip: int = 0, 
     rows = await cursor.to_list(length=limit)
     
     today_date = get_now().date()
+    expired_ids = []
     for row in rows:
         if row.get("isPaymentReceived") and row.get("nextPaymentDate"):
             try:
@@ -3924,9 +3925,12 @@ async def get_projects(db, userId: str = None, role: str = None, skip: int = 0, 
                 next_payment = datetime.strptime(row["nextPaymentDate"], "%Y-%m-%d").date()
                 if today_date > next_payment:
                     row["isPaymentReceived"] = False
-                    await db.projects.update_one({"_id": row["_id"]}, {"$set": {"isPaymentReceived": False}})
+                    expired_ids.append(row["_id"])
             except Exception:
                 pass
+
+    if expired_ids:
+        await db.projects.update_many({"_id": {"$in": expired_ids}}, {"$set": {"isPaymentReceived": False}})
                 
     return [fix_id(row) for row in rows]
 
