@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 from contextlib import asynccontextmanager
-import crud, schemas, database, auth
+import crud, schemas, database, auth, redis_manager
 import uvicorn
 import os
 import uuid
@@ -697,6 +697,11 @@ async def lifespan(app):
     except Exception as e:
         print(f"[Database Indexing] Failed to create indexes: {e}", flush=True)
 
+    try:
+        await redis_manager.init_redis()
+    except Exception as e:
+        print(f"[Redis Init Warning] {e}", flush=True)
+
     reminder_task = asyncio.create_task(content_calendar_reminder_task())
     feedback_task = asyncio.create_task(feedback_reminder_task())
     monthly_report_task = asyncio.create_task(monthly_report_scheduler_task())
@@ -705,6 +710,11 @@ async def lifespan(app):
     auto_present_task = asyncio.create_task(auto_mark_present_inactive_hrms_users_task())
     yield
     # --- Shutdown ---
+    try:
+        await redis_manager.close_redis()
+    except Exception as e:
+        print(f"[Redis Shutdown Warning] {e}", flush=True)
+
     try:
         import input_tracker
         input_tracker.stop_tracker()
@@ -1108,7 +1118,8 @@ async def get_system_time():
     }
 
 @app.get("/employees", response_model=List[schemas.Employee])
-async def read_employees(skip: int = 0, limit: int = 10000, include_inactive: bool = False, db=Depends(get_db)):
+@redis_manager.cached_api(namespace="hrms:employees", ttl=300)
+async def read_employees(request: Request, skip: int = 0, limit: int = 10000, include_inactive: bool = False, db=Depends(get_db)):
     return await crud.get_employees(db, skip=skip, limit=limit, include_inactive=include_inactive)
 
 @app.get("/employees/{employee_id}", response_model=schemas.Employee)
@@ -1155,7 +1166,9 @@ async def create_employee(employee: schemas.EmployeeCreate, request: Request, db
                 raise HTTPException(status_code=403, detail="You do not have permission to create this role")
 
     try:
-        return await crud.create_employee(db, employee, performed_by=performed_by, user_name=user_name)
+        created = await crud.create_employee(db, employee, performed_by=performed_by, user_name=user_name)
+        await redis_manager.invalidate_namespace("hrms:employees")
+        return created
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
 
@@ -1187,6 +1200,7 @@ async def update_employee(employee_id: str, employee_update: schemas.EmployeeUpd
         updated = await crud.update_employee(db, employee_id, employee_update, performed_by=performed_by, user_name=user_name)
         if not updated:
             raise HTTPException(status_code=404, detail="Employee not found")
+        await redis_manager.invalidate_namespace("hrms:employees")
         return updated
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
@@ -1265,7 +1279,9 @@ async def transfer_responsibilities(payload: dict, request: Request, db=Depends(
 
 # Attendance Endpoints
 @app.get("/attendance", response_model=List[schemas.Attendance])
+@redis_manager.cached_api(namespace="hrms:attendance", ttl=60)
 async def read_attendance(
+    request: Request,
     userId: Optional[str] = None,
     role: Optional[str] = None,
     skip: int = 0, 
@@ -1297,13 +1313,14 @@ async def punch_in(employee_id: str, request: Request, payload: Optional[schemas
     )
     if not result:
         raise HTTPException(status_code=400, detail="Punch in failed")
+    await redis_manager.invalidate_namespace("hrms:attendance")
     return result
-
-
 
 @app.post("/attendance", response_model=schemas.Attendance)
 async def create_attendance(attendance: schemas.AttendanceCreate, db=Depends(get_db)):
-    return await crud.create_manual_attendance(db, attendance)
+    res = await crud.create_manual_attendance(db, attendance)
+    await redis_manager.invalidate_namespace("hrms:attendance")
+    return res
 
 @app.put("/attendance/{attendance_id}", response_model=schemas.Attendance)
 async def update_attendance(attendance_id: str, attendance_update: schemas.AttendanceUpdate, request: Request, db=Depends(get_db)):
@@ -1311,6 +1328,7 @@ async def update_attendance(attendance_id: str, attendance_update: schemas.Atten
     updated = await crud.update_attendance(db, attendance_id, attendance_update, performed_by=performed_by, user_name=user_name)
     if not updated:
         raise HTTPException(status_code=404, detail="Attendance record not found")
+    await redis_manager.invalidate_namespace("hrms:attendance")
     return updated
 
 @app.delete("/attendance/{attendance_id}")
@@ -1318,9 +1336,8 @@ async def delete_attendance(attendance_id: str, db=Depends(get_db)):
     success = await crud.delete_attendance(db, attendance_id)
     if not success:
         raise HTTPException(status_code=404, detail="Attendance record not found")
+    await redis_manager.invalidate_namespace("hrms:attendance")
     return {"message": "Attendance record deleted successfully"}
-
-
 
 @app.post("/attendance/multi-delete")
 async def delete_multiple_attendance(request: dict, db=Depends(get_db)):
@@ -1328,6 +1345,7 @@ async def delete_multiple_attendance(request: dict, db=Depends(get_db)):
     if not attendance_ids:
         raise HTTPException(status_code=400, detail="List of IDs required")
     await crud.delete_multiple_attendance(db, attendance_ids)
+    await redis_manager.invalidate_namespace("hrms:attendance")
     return {"message": f"Deleted {len(attendance_ids)} records"}
 
 @app.post("/attendance/punch-out/{employee_id}")
@@ -1337,6 +1355,7 @@ async def punch_out(employee_id: str, request: Request, payload: Optional[schema
     result = await crud.punch_out(db, employee_id, punch_out_time=punch_out_time, performed_by=performed_by, user_name=user_name)
     if not result:
         raise HTTPException(status_code=400, detail="Punch out failed")
+    await redis_manager.invalidate_namespace("hrms:attendance")
     return result
 
 @app.post("/attendance/break-in/{employee_id}")
@@ -1344,6 +1363,7 @@ async def break_in(employee_id: str, db=Depends(get_db)):
     result = await crud.break_in(db, employee_id)
     if not result:
         raise HTTPException(status_code=400, detail="Break in failed")
+    await redis_manager.invalidate_namespace("hrms:attendance")
     return result
 
 @app.post("/attendance/break-out/{employee_id}")
@@ -1351,31 +1371,38 @@ async def break_out(employee_id: str, resume_task: bool = False, db=Depends(get_
     result = await crud.break_out(db, employee_id, resume_task=resume_task)
     if not result:
         raise HTTPException(status_code=400, detail="Break out failed")
+    await redis_manager.invalidate_namespace("hrms:attendance")
     return result
 
 # Leave Endpoints
 @app.get("/leaves", response_model=List[schemas.LeaveRequest])
-async def read_leave_requests(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
+@redis_manager.cached_api(namespace="hrms:leave", ttl=120)
+async def read_leave_requests(request: Request, skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_all_leave_requests(db, skip=skip, limit=limit)
 
 @app.get("/leaves/employee/{employee_id}", response_model=List[schemas.LeaveRequest])
-async def read_user_leave_requests(employee_id: str, skip: int = 0, limit: int = 10000, db=Depends(get_db)):
+@redis_manager.cached_api(namespace="hrms:leave", ttl=120)
+async def read_user_leave_requests(request: Request, employee_id: str, skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_user_leave_requests(db, employee_id, skip=skip, limit=limit)
 
 @app.post("/leaves", response_model=schemas.LeaveRequest)
 async def create_leave_request(leave: schemas.LeaveRequestCreate, request: Request, db=Depends(get_db)):
     performed_by, user_name = await get_actor_from_request(request, db)
-    return await crud.create_leave_request(db, leave, performed_by=performed_by, user_name=user_name)
+    res = await crud.create_leave_request(db, leave, performed_by=performed_by, user_name=user_name)
+    await redis_manager.invalidate_namespace("hrms:leave")
+    return res
 
 @app.put("/leaves/{leave_id}", response_model=schemas.LeaveRequest)
 async def update_leave_request(leave_id: str, leave_update: schemas.LeaveRequestUpdate, request: Request, db=Depends(get_db)):
     performed_by, user_name = await get_actor_from_request(request, db)
-    return await crud.update_leave_request(db, leave_id, leave_update.dict(exclude_unset=True), performed_by=performed_by, user_name=user_name)
+    res = await crud.update_leave_request(db, leave_id, leave_update.dict(exclude_unset=True), performed_by=performed_by, user_name=user_name)
+    await redis_manager.invalidate_namespace("hrms:leave")
+    return res
 
 @app.patch("/leaves/{leave_id}/status", response_model=schemas.LeaveRequest)
 async def update_leave_status(leave_id: str, update_data: schemas.LeaveRequestUpdate, request: Request, db=Depends(get_db)):
     performed_by, user_name = await get_actor_from_request(request, db)
-    return await crud.update_leave_request_status(
+    res = await crud.update_leave_request_status(
         db, 
         leave_id, 
         update_data.status, 
@@ -1388,6 +1415,8 @@ async def update_leave_status(leave_id: str, update_data: schemas.LeaveRequestUp
         performed_by=performed_by,
         user_name=user_name
     )
+    await redis_manager.invalidate_namespace("hrms:leave")
+    return res
 
 @app.delete("/leaves/{leave_id}")
 async def delete_leave_request(leave_id: str, request: Request, db=Depends(get_db)):
@@ -1841,7 +1870,8 @@ async def delete_event(event_id: str, db=Depends(get_db)): return await crud.del
 
 # Client Endpoints
 @app.get("/clients", response_model=List[schemas.Client])
-async def read_clients(skip: int = 0, limit: int = 10000, userId: str = None, role: str = None, db=Depends(get_db)):
+@redis_manager.cached_api(namespace="hrms:work", ttl=180)
+async def read_clients(request: Request, skip: int = 0, limit: int = 10000, userId: str = None, role: str = None, db=Depends(get_db)):
     user_info = {"sub": userId, "role": role} if userId else None
     return await crud.get_clients(db, skip=skip, limit=limit, user_info=user_info)
 
@@ -1854,40 +1884,54 @@ async def read_client(client_id: str, db=Depends(get_db)):
 
 @app.post("/clients", response_model=schemas.Client)
 async def create_client(client: schemas.ClientCreate, db=Depends(get_db)):
-    return await crud.create_client(db, client=client)
+    res = await crud.create_client(db, client=client)
+    await redis_manager.invalidate_namespace("hrms:work")
+    return res
 
 @app.put("/clients/{client_id}", response_model=schemas.Client)
 async def update_client(client_id: str, client_update: schemas.ClientUpdate, db=Depends(get_db)):
     print("DEBUG: update_client incoming payload:", client_update.dict(exclude_unset=True))
-    return await crud.update_client(db, client_id, client_update)
+    res = await crud.update_client(db, client_id, client_update)
+    await redis_manager.invalidate_namespace("hrms:work")
+    return res
 
 @app.post("/clients/{client_id}/meetings", response_model=schemas.Client)
 async def add_client_meeting(client_id: str, meeting: schemas.Meeting, performedBy: Optional[str] = None, userName: Optional[str] = None, db=Depends(get_db)):
-    return await crud.add_client_meeting(db, client_id, meeting, performedBy=performedBy, userName=userName)
+    res = await crud.add_client_meeting(db, client_id, meeting, performedBy=performedBy, userName=userName)
+    await redis_manager.invalidate_namespace("hrms:work")
+    return res
 
 @app.put("/clients/{client_id}/meetings/{meeting_idx}", response_model=schemas.Client)
 async def update_client_meeting(client_id: str, meeting_idx: int, meeting: schemas.Meeting, performedBy: Optional[str] = None, userName: Optional[str] = None, db=Depends(get_db)):
-    return await crud.update_client_meeting(db, client_id, meeting_idx, meeting, performedBy=performedBy, userName=userName)
+    res = await crud.update_client_meeting(db, client_id, meeting_idx, meeting, performedBy=performedBy, userName=userName)
+    await redis_manager.invalidate_namespace("hrms:work")
+    return res
 
 @app.delete("/clients/{client_id}/meetings/{meeting_idx}", response_model=schemas.Client)
 async def delete_client_meeting(client_id: str, meeting_idx: int, performedBy: Optional[str] = None, userName: Optional[str] = None, db=Depends(get_db)):
-    return await crud.delete_client_meeting(db, client_id, meeting_idx, performedBy=performedBy, userName=userName)
+    res = await crud.delete_client_meeting(db, client_id, meeting_idx, performedBy=performedBy, userName=userName)
+    await redis_manager.invalidate_namespace("hrms:work")
+    return res
 
 @app.delete("/clients/{client_id}")
 async def delete_client(client_id: str, db=Depends(get_db)):
     success = await crud.delete_client(db, client_id)
     if not success:
         raise HTTPException(status_code=404, detail="Client not found")
+    await redis_manager.invalidate_namespace("hrms:work")
     return {"message": "Client deleted successfully"}
 
 # Project Endpoints
 @app.get("/projects")
-async def read_projects(userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 10000, db=Depends(get_db)):
+@redis_manager.cached_api(namespace="hrms:work", ttl=180)
+async def read_projects(request: Request, userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_projects(db, userId=userId, role=role, skip=skip, limit=limit)
 
 @app.post("/projects", response_model=schemas.Project)
 async def create_project(project: schemas.ProjectCreate, db=Depends(get_db)):
-    return await crud.create_project(db, project=project)
+    res = await crud.create_project(db, project=project)
+    await redis_manager.invalidate_namespace("hrms:work")
+    return res
 
 @app.put("/projects/{project_id}", response_model=schemas.Project)
 async def update_project(project_id: str, project_update: schemas.ProjectUpdate, db=Depends(get_db)):
@@ -1922,12 +1966,14 @@ async def add_project_finance_follow_up(project_id: str, follow_up: schemas.Fina
 # WM Task Endpoints
 # General Task Endpoints
 @app.get("/tasks", response_model=List[schemas.Task])
-async def get_tasks_api(userId: str = None, role: str = None, skip: int = 0, limit: int = 100, db=Depends(get_db)):
+@redis_manager.cached_api(namespace="hrms:tasks", ttl=60)
+async def get_tasks_api(request: Request, userId: str = None, role: str = None, skip: int = 0, limit: int = 100, db=Depends(get_db)):
     return await crud.get_tasks(db, userId, role, skip, limit)
 
 @app.post("/tasks", response_model=schemas.Task)
 async def create_task_api(task: schemas.TaskCreate, db=Depends(get_db)):
     new_task = await crud.create_task(db, task)
+    await redis_manager.invalidate_namespace("hrms:tasks")
     await ws_manager.broadcast_all("task_update", {"taskId": str(new_task.get("id"))})
     return new_task
 
@@ -1936,6 +1982,7 @@ async def update_task_api(task_id: str, task: schemas.TaskUpdate, db=Depends(get
     updated = await crud.update_task(db, task_id, task)
     if not updated:
         raise HTTPException(status_code=404, detail="Task not found")
+    await redis_manager.invalidate_namespace("hrms:tasks")
     await ws_manager.broadcast_all("task_update", {"taskId": task_id})
     return updated
 
@@ -1944,6 +1991,7 @@ async def delete_task_api(task_id: str, db=Depends(get_db)):
     success = await crud.delete_task(db, task_id)
     if not success:
         raise HTTPException(status_code=404, detail="Task not found")
+    await redis_manager.invalidate_namespace("hrms:tasks")
     await ws_manager.broadcast_all("task_update", {"taskId": task_id})
     return {"message": "Task deleted successfully"}
 
@@ -4443,8 +4491,10 @@ async def delete_gallery_entry(gallery_id: str, db=Depends(get_db)):
     return {"status": "success"}
 
 # --- Company Finance Endpoints ---
-@app.get("/company-finance/transactions", response_model=dict)
+@app.get("/company-finance/transactions")
+@redis_manager.cached_api(namespace="hrms:finance", ttl=180)
 async def get_finance_transactions_endpoint(
+    request: Request,
     paymentMethod: Optional[str] = None,
     payment_method: Optional[str] = None,
     type: Optional[str] = None,
@@ -4457,13 +4507,16 @@ async def get_finance_transactions_endpoint(
 
 @app.post("/company-finance/transactions", response_model=schemas.FinanceTransaction)
 async def create_finance_transaction_endpoint(tx: schemas.FinanceTransactionCreate, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
-    return await crud.create_finance_transaction(db, tx.model_dump(), current_user)
+    res = await crud.create_finance_transaction(db, tx.model_dump(), current_user)
+    await redis_manager.invalidate_namespace("hrms:finance")
+    return res
 
 @app.put("/company-finance/transactions/{tx_id}", response_model=schemas.FinanceTransaction)
 async def update_finance_transaction_endpoint(tx_id: str, tx_update: schemas.FinanceTransactionUpdate, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
     updated = await crud.update_finance_transaction(db, tx_id, tx_update.model_dump(exclude_unset=True), current_user)
     if not updated:
         raise HTTPException(status_code=404, detail="Transaction not found")
+    await redis_manager.invalidate_namespace("hrms:finance")
     return updated
 
 @app.delete("/company-finance/transactions/{tx_id}")
@@ -4471,38 +4524,49 @@ async def delete_finance_transaction_endpoint(tx_id: str, db=Depends(get_db), cu
     success = await crud.delete_finance_transaction(db, tx_id, current_user)
     if not success:
         raise HTTPException(status_code=404, detail="Transaction not found")
+    await redis_manager.invalidate_namespace("hrms:finance")
     return {"message": "Transaction deleted successfully"}
 
 @app.get("/company-finance/balances", response_model=schemas.FinanceBalance)
-async def get_finance_balances_endpoint(db=Depends(get_db)):
+@redis_manager.cached_api(namespace="hrms:finance", ttl=180)
+async def get_finance_balances_endpoint(request: Request, db=Depends(get_db)):
     return await crud.get_finance_balances(db)
 
 @app.put("/company-finance/balances", response_model=schemas.FinanceBalance)
 async def update_finance_balances_endpoint(payload: dict, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
-    return await crud.update_finance_balances(db, payload, current_user)
+    res = await crud.update_finance_balances(db, payload, current_user)
+    await redis_manager.invalidate_namespace("hrms:finance")
+    return res
 
 @app.get("/company-finance/monthly-plans/{month}")
-async def get_monthly_plan_endpoint(month: str, db=Depends(get_db)):
+@redis_manager.cached_api(namespace="hrms:finance", ttl=180)
+async def get_monthly_plan_endpoint(request: Request, month: str, db=Depends(get_db)):
     return await crud.get_monthly_plan(db, month)
 
 @app.post("/company-finance/monthly-plans/{month}")
 async def save_monthly_plan_endpoint(month: str, payload: dict, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
-    return await crud.save_monthly_plan(db, month, payload.get("values", {}), current_user)
+    res = await crud.save_monthly_plan(db, month, payload.get("values", {}), current_user)
+    await redis_manager.invalidate_namespace("hrms:finance")
+    return res
 
 @app.get("/company-finance/plans", response_model=dict)
-async def get_finance_plans_endpoint(db=Depends(get_db)):
+@redis_manager.cached_api(namespace="hrms:finance", ttl=180)
+async def get_finance_plans_endpoint(request: Request, db=Depends(get_db)):
     plans = await crud.get_finance_plans(db)
     return {"plans": plans}
 
 @app.post("/company-finance/plans", response_model=schemas.FinancePlan)
 async def create_finance_plan_endpoint(plan: schemas.FinancePlanCreate, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
-    return await crud.create_finance_plan(db, plan.model_dump(), current_user)
+    res = await crud.create_finance_plan(db, plan.model_dump(), current_user)
+    await redis_manager.invalidate_namespace("hrms:finance")
+    return res
 
 @app.put("/company-finance/plans/{plan_id}", response_model=schemas.FinancePlan)
 async def update_finance_plan_endpoint(plan_id: str, plan_update: schemas.FinancePlanUpdate, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
     updated = await crud.update_finance_plan(db, plan_id, plan_update.model_dump(exclude_unset=True), current_user)
     if not updated:
         raise HTTPException(status_code=404, detail="Plan not found")
+    await redis_manager.invalidate_namespace("hrms:finance")
     return updated
 
 @app.delete("/company-finance/plans/{plan_id}")
@@ -4510,6 +4574,7 @@ async def delete_finance_plan_endpoint(plan_id: str, db=Depends(get_db), current
     success = await crud.delete_finance_plan(db, plan_id, current_user)
     if not success:
         raise HTTPException(status_code=404, detail="Plan not found")
+    await redis_manager.invalidate_namespace("hrms:finance")
     return {"message": "Plan deleted successfully"}
 
 @app.get("/company-finance/summary", response_model=schemas.FinanceSummary)
@@ -4688,10 +4753,13 @@ async def delete_client_transaction_endpoint(tx_id: str, db=Depends(get_db)):
 # --- Training / Courses API ---
 @app.post("/courses", response_model=schemas.CourseResponse)
 async def create_course(course: schemas.CourseCreate, db=Depends(get_db)):
-    return await crud.create_course(db, course)
+    res = await crud.create_course(db, course)
+    await redis_manager.invalidate_namespace("hrms:training")
+    return res
 
 @app.get("/courses", response_model=List[schemas.CourseResponse])
-async def get_courses(db=Depends(get_db)):
+@redis_manager.cached_api(namespace="hrms:training", ttl=180)
+async def get_courses(request: Request, db=Depends(get_db)):
     return await crud.get_courses(db)
 
 @app.get("/courses/{course_id}")
@@ -4713,6 +4781,7 @@ async def update_course(course_id: str, course: schemas.CourseUpdate, db=Depends
     updated = await crud.update_course(db, course_id, course)
     if not updated:
         raise HTTPException(status_code=404, detail="Course not found")
+    await redis_manager.invalidate_namespace("hrms:training")
     return updated
 
 @app.delete("/courses/{course_id}")
@@ -4720,6 +4789,7 @@ async def delete_course(course_id: str, db=Depends(get_db)):
     success = await crud.delete_course(db, course_id)
     if not success:
         raise HTTPException(status_code=404, detail="Course not found")
+    await redis_manager.invalidate_namespace("hrms:training")
     return {"message": "Course deleted successfully"}
 
 @app.post("/course-modules", response_model=schemas.CourseModuleResponse)
@@ -5126,12 +5196,14 @@ async def save_eom_all_matrix_endpoint(
         raise HTTPException(status_code=400, detail="month_year and scores list are required")
 
     actor_id, actor_name = await get_actor_from_request(request, database.db)
-    return await eom_service.bulk_save_all_matrix(
+    res = await eom_service.bulk_save_all_matrix(
         month_year=month_year,
         scores_list=scores_list,
         scored_by=actor_name,
         evaluator_id=actor_id
     )
+    await redis_manager.invalidate_namespace("hrms:eom")
+    return res
 
 @app.get("/eom/reveal-order")
 async def get_eom_reveal_order_endpoint(month_year: str = Query(...)):
@@ -5146,7 +5218,8 @@ async def get_eom_scores_endpoint(
     return await eom_service.get_scores(month_year, criteriaId, scored_by=scoredBy)
 
 @app.get("/eom/leaderboard")
-async def get_eom_leaderboard_endpoint(month_year: str = Query(...)):
+@redis_manager.cached_api(namespace="hrms:eom", ttl=180)
+async def get_eom_leaderboard_endpoint(request: Request, month_year: str = Query(...)):
     return await eom_service.calculate_eom_leaderboard(month_year)
 
 @app.get("/eom/month-config")
@@ -5154,23 +5227,28 @@ async def get_eom_month_config_endpoint(month_year: str = Query(...)):
     return await eom_service.get_month_config(month_year)
 
 @app.get("/eom/attendance-stats")
-async def get_eom_attendance_stats_endpoint(month_year: str = Query(...), maxScore: float = Query(15.0)):
+@redis_manager.cached_api(namespace="hrms:eom", ttl=180)
+async def get_eom_attendance_stats_endpoint(request: Request, month_year: str = Query(...), maxScore: float = Query(15.0)):
     return await eom_service.get_eom_attendance_stats(month_year, maxScore)
 
 @app.get("/eom/discipline-stats")
-async def get_eom_discipline_stats_endpoint(month_year: str = Query(...), maxScore: float = Query(10.0)):
+@redis_manager.cached_api(namespace="hrms:eom", ttl=180)
+async def get_eom_discipline_stats_endpoint(request: Request, month_year: str = Query(...), maxScore: float = Query(10.0)):
     return await eom_service.get_eom_discipline_stats(month_year, maxScore)
 
 @app.get("/eom/work-completion-stats")
-async def get_eom_work_completion_stats_endpoint(month_year: str = Query(...), maxScore: float = Query(10.0)):
+@redis_manager.cached_api(namespace="hrms:eom", ttl=180)
+async def get_eom_work_completion_stats_endpoint(request: Request, month_year: str = Query(...), maxScore: float = Query(10.0)):
     return await eom_service.get_eom_work_completion_stats(month_year, maxScore)
 
 @app.get("/eom/work-dedication-stats")
-async def get_eom_work_dedication_stats_endpoint(month_year: str = Query(...), maxScore: float = Query(10.0)):
+@redis_manager.cached_api(namespace="hrms:eom", ttl=180)
+async def get_eom_work_dedication_stats_endpoint(request: Request, month_year: str = Query(...), maxScore: float = Query(10.0)):
     return await eom_service.get_eom_work_dedication_stats(month_year, maxScore)
 
 @app.get("/eom/vote-stats")
-async def get_eom_vote_stats_endpoint(month_year: str = Query(...), maxScore: float = Query(10.0)):
+@redis_manager.cached_api(namespace="hrms:eom", ttl=180)
+async def get_eom_vote_stats_endpoint(request: Request, month_year: str = Query(...), maxScore: float = Query(10.0)):
     return await eom_service.get_eom_vote_stats(month_year, maxScore)
 
 @app.post("/eom/reveal-schedule")
