@@ -772,12 +772,12 @@ async def get_eom_work_completion_stats(month_year: str, max_score: float = 10.0
     result_stats = {}
     for k, v in emp_report_stats.items():
         cnt = v["daysVerified"]
-        avg_r = (v["totalRating"] / cnt) if cnt > 0 else 0.0
-        factor = cnt * avg_r
+        avg_r = round((v["totalRating"] / cnt), 1) if cnt > 0 else 0.0
+        factor = round(cnt * avg_r, 2)
         result_stats[k] = {
             "daysVerified": cnt,
-            "avgRating": round(avg_r, 1),
-            "factor": round(factor, 2)
+            "avgRating": avg_r,
+            "factor": factor
         }
 
     return {
@@ -1463,6 +1463,37 @@ async def declare_weekly_team_result(week_meeting_ids: list, month_year: str):
             p_score = entries_map.get(p["id"], 0)
             department_data[dept]["meetingScores"][m_id] = department_data[dept]["meetingScores"].get(m_id, 0) + p_score
 
+    # Compute individual participants breakdown across all meetings
+    participants_map = {}
+    meetings_info = []
+    for m in meetings:
+        m_id = m["id"]
+        meetings_info.append({"id": m_id, "meetingDate": m.get("meetingDate")})
+        entries_map = {e["employeeId"]: e.get("sumMarks", 0) for e in m.get("entries", [])}
+        for p in m.get("participants", []):
+            p_id = p["id"]
+            if p_id not in participants_map:
+                participants_map[p_id] = {
+                    "id": p_id,
+                    "name": p.get("name") or "Employee",
+                    "department": p.get("department") or "General",
+                    "designation": p.get("designation") or "",
+                    "role": p.get("role") or "",
+                    "isTeamLeader": p.get("isTeamLeader", False),
+                    "meetingScores": {},
+                    "totalScore": 0.0
+                }
+            p_score = entries_map.get(p_id, 0)
+            participants_map[p_id]["meetingScores"][m_id] = p_score
+
+    result_participants = list(participants_map.values())
+    for p in result_participants:
+        p["totalScore"] = round(sum(p["meetingScores"].values()), 2)
+
+    result_participants.sort(key=lambda x: x["totalScore"], reverse=True)
+    for rank, p in enumerate(result_participants, start=1):
+        p["rank"] = rank
+
     result_teams = []
     for dept, data in department_data.items():
         eom_avg = await calculate_team_eom_average(month_year, dept)
@@ -1480,6 +1511,8 @@ async def declare_weekly_team_result(week_meeting_ids: list, month_year: str):
     doc = {
         "monthYear": month_year,
         "weekMeetingIds": week_meeting_ids,
+        "meetingsInfo": meetings_info,
+        "participants": result_participants,
         "declaredAt": datetime.now(IST),
         "teams": result_teams
     }
@@ -1504,6 +1537,50 @@ async def get_team_declared_result(month_year: str):
         doc["id"] = str(doc.get("_id", doc.get("id")))
         if "_id" in doc:
             del doc["_id"]
+
+        # Backfill participants and meetingsInfo if missing from legacy records
+        if not doc.get("participants") and doc.get("weekMeetingIds"):
+            try:
+                meetings = []
+                for mid in doc["weekMeetingIds"]:
+                    detail = await get_weekly_meeting_detail(mid)
+                    if detail:
+                        meetings.append(detail)
+                
+                meetings_info = []
+                participants_map = {}
+                for m in meetings:
+                    m_id = m["id"]
+                    meetings_info.append({"id": m_id, "meetingDate": m.get("meetingDate")})
+                    entries_map = {e["employeeId"]: e.get("sumMarks", 0) for e in m.get("entries", [])}
+                    for p in m.get("participants", []):
+                        p_id = p["id"]
+                        if p_id not in participants_map:
+                            participants_map[p_id] = {
+                                "id": p_id,
+                                "name": p.get("name") or "Employee",
+                                "department": p.get("department") or "General",
+                                "designation": p.get("designation") or "",
+                                "role": p.get("role") or "",
+                                "isTeamLeader": p.get("isTeamLeader", False),
+                                "meetingScores": {},
+                                "totalScore": 0.0
+                            }
+                        p_score = entries_map.get(p_id, 0)
+                        participants_map[p_id]["meetingScores"][m_id] = p_score
+
+                result_participants = list(participants_map.values())
+                for p in result_participants:
+                    p["totalScore"] = round(sum(p["meetingScores"].values()), 2)
+                result_participants.sort(key=lambda x: x["totalScore"], reverse=True)
+                for rank, p in enumerate(result_participants, start=1):
+                    p["rank"] = rank
+
+                doc["meetingsInfo"] = meetings_info
+                doc["participants"] = result_participants
+            except Exception as e:
+                print("Error backfilling participants in get_team_declared_result:", e)
+
     return doc
 
 async def update_weekly_participants(meeting_id: str, participant_ids: list):
