@@ -88,7 +88,7 @@ function ScoreEntryContent() {
 
   useEffect(() => {
     fetchData();
-  }, [selectedMonthYear]);
+  }, [selectedMonthYear, user]);
 
   const fetchData = async () => {
     if (isFetchingRef.current) return;
@@ -183,26 +183,98 @@ function ScoreEntryContent() {
         const qMap: Record<string, Record<string, number | "">> = {};
         const rMap: Record<string, Record<string, number | "">> = {};
 
-        const currentActorName = String(user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`).trim().toLowerCase();
-        const currentUserId = String(user?.id || user?._id || "");
+        const currentActorName = String(currentUser?.name || `${currentUser?.firstName || ''} ${currentUser?.lastName || ''}`).trim().toLowerCase();
+        const currentUserId = String(currentUser?.id || currentUser?._id || currentUser?.employeeId || "").trim().toLowerCase();
 
-        sData.forEach((s: any) => {
+        // Helper to check if criterion is multi-admin
+        const isMultiAdminCrit = (crit: Criterion) => {
+          return crit.entryType === "multi_admin" || (Array.isArray(crit.assignedPersonIds) && crit.assignedPersonIds.length > 0);
+        };
+
+        // Helper to check if current logged-in user is an assigned evaluator for this criterion
+        const isUserAssignedToCrit = (crit: Criterion) => {
+          if (!isMultiAdminCrit(crit)) return false;
+          if (!Array.isArray(crit.assignedPersonIds) || crit.assignedPersonIds.length === 0) return false;
+          return crit.assignedPersonIds.some((pid: string) => {
+            const p = String(pid).trim().toLowerCase();
+            return (
+              (currentUserId && p === currentUserId) ||
+              (currentActorName && p === currentActorName)
+            );
+          });
+        };
+
+        // Group scores by criteriaId and employeeId
+        const scoresByCritEmp: Record<string, Record<string, any[]>> = {};
+        (Array.isArray(sData) ? sData : []).forEach((s: any) => {
           const eId = String(s.employeeId);
           const cId = String(s.criteriaId);
-          const scoredBy = String(s.scoredBy || "").trim().toLowerCase();
-          const evaluatorId = String(s.evaluatorId || "");
+          if (!scoresByCritEmp[cId]) scoresByCritEmp[cId] = {};
+          if (!scoresByCritEmp[cId][eId]) scoresByCritEmp[cId][eId] = [];
+          scoresByCritEmp[cId][eId].push(s);
+        });
 
-          const isOwn = (evaluatorId && evaluatorId === currentUserId) || (scoredBy && scoredBy === currentActorName);
+        accessibleCriteria.forEach((crit) => {
+          const cId = crit.id;
+          const isMulti = isMultiAdminCrit(crit);
+          const isAssigned = isUserAssignedToCrit(crit);
 
-          if (!map[eId]) map[eId] = {};
-          if (!qMap[eId]) qMap[eId] = {};
-          if (!rMap[eId]) rMap[eId] = {};
+          empData.forEach((emp: any) => {
+            const eId = String(emp.id || emp._id);
+            if (!map[eId]) map[eId] = {};
+            if (!qMap[eId]) qMap[eId] = {};
+            if (!rMap[eId]) rMap[eId] = {};
 
-          if (isOwn || map[eId][cId] === undefined) {
-            map[eId][cId] = s.score;
-            if (s.rawQuantity !== undefined && s.rawQuantity !== null) qMap[eId][cId] = s.rawQuantity;
-            if (s.calculatedRank !== undefined && s.calculatedRank !== null) rMap[eId][cId] = s.calculatedRank;
-          }
+            const empCritScores = scoresByCritEmp[cId]?.[eId] || [];
+
+            if (isMulti) {
+              if (isAssigned) {
+                // Find current user's own submitted score
+                const ownScore = empCritScores.find((s: any) => {
+                  const scoredBy = String(s.scoredBy || "").trim().toLowerCase();
+                  const evaluatorId = String(s.evaluatorId || "").trim().toLowerCase();
+                  return (
+                    (currentUserId && evaluatorId === currentUserId) ||
+                    (currentActorName && scoredBy === currentActorName)
+                  );
+                });
+
+                if (ownScore) {
+                  // User has already given their score -> show their own score
+                  map[eId][cId] = ownScore.score;
+                  if (ownScore.rawQuantity !== undefined && ownScore.rawQuantity !== null) qMap[eId][cId] = ownScore.rawQuantity;
+                  if (ownScore.calculatedRank !== undefined && ownScore.calculatedRank !== null) rMap[eId][cId] = ownScore.calculatedRank;
+                } else {
+                  // User has NOT given marks yet -> keep completely BLANK
+                  map[eId][cId] = "";
+                  qMap[eId][cId] = "";
+                  rMap[eId][cId] = "";
+                }
+              } else {
+                // If viewing by someone NOT assigned (e.g. Admin viewer), show the average/formula score of submitted scores
+                if (empCritScores.length > 0) {
+                  const avgScore = empCritScores.reduce((sum, item) => sum + (Number(item.score) || 0), 0) / empCritScores.length;
+                  map[eId][cId] = Math.round(avgScore * 100) / 100;
+                  const firstWithRank = empCritScores.find(item => item.calculatedRank !== undefined && item.calculatedRank !== null);
+                  if (firstWithRank) rMap[eId][cId] = firstWithRank.calculatedRank;
+                  const firstWithQty = empCritScores.find(item => item.rawQuantity !== undefined && item.rawQuantity !== null);
+                  if (firstWithQty) qMap[eId][cId] = firstWithQty.rawQuantity;
+                } else {
+                  map[eId][cId] = "";
+                  qMap[eId][cId] = "";
+                  rMap[eId][cId] = "";
+                }
+              }
+            } else {
+              // Direct entry / Single admin criterion -> load latest saved score
+              if (empCritScores.length > 0) {
+                const latestScore = empCritScores[empCritScores.length - 1];
+                map[eId][cId] = latestScore.score;
+                if (latestScore.rawQuantity !== undefined && latestScore.rawQuantity !== null) qMap[eId][cId] = latestScore.rawQuantity;
+                if (latestScore.calculatedRank !== undefined && latestScore.calculatedRank !== null) rMap[eId][cId] = latestScore.calculatedRank;
+              }
+            }
+          });
         });
 
         setScoresMap(map);
