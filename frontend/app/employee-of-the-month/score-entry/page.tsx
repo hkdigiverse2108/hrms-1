@@ -403,15 +403,23 @@ function ScoreEntryContent() {
     };
     setCalculatedRankMap(nextRankMap);
 
-    const { updatedScores, updatedRanks } = computeHybridScoresForCriteria(
-      crit,
-      employees,
-      rawQuantityMap,
-      nextRankMap,
-      scoresMap
-    );
-    setScoresMap(updatedScores);
-    setCalculatedRankMap(updatedRanks);
+    const maxScore = Number(crit.maxScore) || 20;
+    const N = employees.length;
+    const interval = N > 1 ? maxScore / (N - 1) : 0;
+
+    const nextScores = { ...scoresMap };
+    if (!nextScores[empId]) nextScores[empId] = {};
+
+    if (val !== "" && !isNaN(Number(val)) && Number(val) > 0) {
+      const r = Number(val);
+      const rawScore = maxScore - ((r - 1) * interval);
+      const calcScore = Math.max(0, Math.min(maxScore, Math.round(rawScore * 100) / 100));
+      nextScores[empId][crit.id] = calcScore;
+    } else if (val === "") {
+      nextScores[empId][crit.id] = "";
+    }
+
+    setScoresMap(nextScores);
   };
 
   const handleAutoCalculateForCriterion = async (crit: Criterion) => {
@@ -900,14 +908,36 @@ function ScoreEntryContent() {
     return Math.round(sumVal * 100) / 100;
   };
 
-  // Sorted employees list (Default: Highest Total Score first)
+  const currentCriterion = criteria[currentStepIndex];
+
+  // Sorted employees list: Always sorted by Current Active Parameter's Rank (Rank 1 to last rank)
   const sortedEmployees = [...employees].sort((a, b) => {
     const aId = String(a.id || a._id);
     const bId = String(b.id || b._id);
 
-    if (sortBy === "total") {
-      const scoreA = getEmpTotalScore(aId);
-      const scoreB = getEmpTotalScore(bId);
+    if (currentCriterion) {
+      const critId = currentCriterion.id;
+      const rankA = calculatedRankMap[aId]?.[critId];
+      const rankB = calculatedRankMap[bId]?.[critId];
+
+      const hasRankA = rankA !== undefined && rankA !== "" && !isNaN(Number(rankA)) && Number(rankA) > 0;
+      const hasRankB = rankB !== undefined && rankB !== "" && !isNaN(Number(rankB)) && Number(rankB) > 0;
+
+      if (hasRankA && hasRankB) {
+        if (Number(rankA) !== Number(rankB)) {
+          return Number(rankA) - Number(rankB); // Ascending Rank: Rank 1 first, Rank 2 next...
+        }
+      } else if (hasRankA) {
+        return -1; // Ranked employees appear first
+      } else if (hasRankB) {
+        return 1;
+      }
+
+      // If ranks not explicitly set, sort by highest score in this criterion
+      const valA = scoresMap[aId]?.[critId];
+      const valB = scoresMap[bId]?.[critId];
+      const scoreA = valA !== undefined && valA !== "" ? Number(valA) : -1;
+      const scoreB = valB !== undefined && valB !== "" ? Number(valB) : -1;
       if (scoreB !== scoreA) {
         return scoreB - scoreA;
       }
@@ -1261,20 +1291,18 @@ function ScoreEntryContent() {
 
                               {/* Rank & Score Info Row */}
                               <div className="flex items-center justify-center gap-1.5">
-                                {currentRank !== "" && !isNaN(Number(currentRank)) ? (
-                                  <span className="text-[10px] font-black text-amber-800 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded-md shadow-2xs">
-                                    #{currentRank}
-                                  </span>
-                                ) : (
+                                <div className="flex items-center gap-0.5">
+                                  <span className="text-[10px] text-amber-700 font-bold">#</span>
                                   <input
                                     type="number"
                                     min="1"
+                                    max={employees.length}
                                     value={currentRank}
                                     onChange={(e) => handleRankChange(empId, c, e.target.value)}
                                     placeholder="Rank"
-                                    className="w-12 px-1 py-0.5 border border-slate-200 rounded-md text-center text-[10px] font-bold bg-white text-slate-700 focus:outline-none"
+                                    className="w-12 px-1 py-0.5 border border-amber-300 bg-amber-50/60 rounded-md text-center font-bold text-xs text-amber-900 focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-2xs"
                                   />
-                                )}
+                                </div>
 
                                 <div className="flex items-center gap-0.5">
                                   <span className="text-[10px] text-slate-500 font-bold">Pts:</span>
