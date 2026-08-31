@@ -2000,7 +2000,9 @@ async def read_task_activities(task_id: str, db=Depends(get_db)):
     return await crud.get_task_activities(db, task_id)
 
 @app.get("/dev-board-data")
+@redis_manager.cached_api(namespace="hrms:tasks", ttl=60)
 async def get_dev_board_data(
+    request: Request,
     userId: Optional[str] = None, 
     role: Optional[str] = None,
     db=Depends(get_db)
