@@ -2057,7 +2057,9 @@ async def get_dev_board_data(
 # These endpoints reduce multiple frontend API calls into a single request per page.
 
 @app.get("/dashboard-data")
+@redis_manager.cached_api(namespace="hrms:dashboard", ttl=60)
 async def get_dashboard_data(
+    request: Request,
     userId: Optional[str] = None,
     role: Optional[str] = None,
     db=Depends(get_db)
@@ -2105,7 +2107,9 @@ async def get_dashboard_data(
     return response
 
 @app.get("/attendance-page-data")
+@redis_manager.cached_api(namespace="hrms:attendance", ttl=60)
 async def get_attendance_page_data(
+    request: Request,
     userId: Optional[str] = None,
     role: Optional[str] = None,
     db=Depends(get_db)
@@ -2143,7 +2147,8 @@ async def get_attendance_page_data(
     }
 
 @app.get("/hr-tasks-data")
-async def get_hr_tasks_data(db=Depends(get_db)):
+@redis_manager.cached_api(namespace="hrms:tasks", ttl=60)
+async def get_hr_tasks_data(request: Request, db=Depends(get_db)):
     """Clubbed endpoint for the HR Tasks page. Replaces 4 separate calls."""
     import asyncio
     results = await asyncio.gather(
@@ -2168,7 +2173,9 @@ async def get_hr_tasks_data(db=Depends(get_db)):
     }
 
 @app.get("/leave-page-data")
+@redis_manager.cached_api(namespace="hrms:leave", ttl=60)
 async def get_leave_page_data(
+    request: Request,
     userId: Optional[str] = None,
     db=Depends(get_db)
 ):
@@ -2192,7 +2199,8 @@ async def get_leave_page_data(
     }
 
 @app.get("/sales-page-data")
-async def get_sales_page_data(db=Depends(get_db)):
+@redis_manager.cached_api(namespace="hrms:sales", ttl=60)
+async def get_sales_page_data(request: Request, db=Depends(get_db)):
     """Clubbed endpoint for the Sales page. Replaces 5 separate calls."""
     import asyncio
     results = await asyncio.gather(
@@ -2219,7 +2227,8 @@ async def get_sales_page_data(db=Depends(get_db)):
     }
 
 @app.get("/work-logs-data")
-async def get_work_logs_data(db=Depends(get_db)):
+@redis_manager.cached_api(namespace="hrms:work", ttl=60)
+async def get_work_logs_data(request: Request, db=Depends(get_db)):
     """Clubbed endpoint for the Work Logs page. Replaces 3 separate calls."""
     import asyncio
     results = await asyncio.gather(
@@ -2242,7 +2251,9 @@ async def get_work_logs_data(db=Depends(get_db)):
     }
 
 @app.get("/research-page-data")
+@redis_manager.cached_api(namespace="hrms:work", ttl=60)
 async def get_research_page_data(
+    request: Request,
     userId: Optional[str] = None,
     role: Optional[str] = None,
     db=Depends(get_db)
@@ -2282,7 +2293,9 @@ async def get_research_page_data(
     }
 
 @app.get("/projects-page-data")
+@redis_manager.cached_api(namespace="hrms:work", ttl=60)
 async def get_projects_page_data(
+    request: Request,
     userId: Optional[str] = None,
     role: Optional[str] = None,
     db=Depends(get_db)
@@ -2313,7 +2326,9 @@ async def get_projects_page_data(
     }
 
 @app.get("/my-tasks-page-data")
+@redis_manager.cached_api(namespace="hrms:tasks", ttl=60)
 async def get_my_tasks_page_data(
+    request: Request,
     userId: Optional[str] = None,
     role: Optional[str] = None,
     db=Depends(get_db)
@@ -2340,7 +2355,8 @@ async def get_my_tasks_page_data(
     }
 
 @app.get("/employee-attendance-page-data")
-async def get_employee_attendance_page_data(db=Depends(get_db)):
+@redis_manager.cached_api(namespace="hrms:attendance", ttl=60)
+async def get_employee_attendance_page_data(request: Request, db=Depends(get_db)):
     """Clubbed endpoint for the Employee Attendance page. Replaces 6 separate calls."""
     import asyncio
     results = await asyncio.gather(
