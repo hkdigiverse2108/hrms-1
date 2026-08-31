@@ -6862,8 +6862,15 @@ async def create_employee_daily_report(db, report: schemas.EmployeeDailyReportCr
     performedBy = report_dict.get("performedBy", None)
     userName = report_dict.get("userName", None)
     
-    result = await db.employee_daily_reports.insert_one(report_dict)
-    report_dict["id"] = str(result.inserted_id)
+    emp_id = report_dict.get("employeeId")
+    rep_date = report_dict.get("date")
+    existing = await db.employee_daily_reports.find_one({"employeeId": emp_id, "date": rep_date})
+    if existing:
+        await db.employee_daily_reports.update_one({"_id": existing["_id"]}, {"$set": report_dict})
+        report_dict["id"] = str(existing["_id"])
+    else:
+        result = await db.employee_daily_reports.insert_one(report_dict)
+        report_dict["id"] = str(result.inserted_id)
     
     # Log activity
     status = report_dict.get("status", "Submitted")

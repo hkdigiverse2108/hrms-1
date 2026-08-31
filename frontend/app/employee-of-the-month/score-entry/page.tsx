@@ -68,6 +68,12 @@ function ScoreEntryContent() {
   const [scoresMap, setScoresMap] = useState<Record<string, Record<string, number | "">>>({});
   const [rawQuantityMap, setRawQuantityMap] = useState<Record<string, Record<string, number | "">>>({});
   const [calculatedRankMap, setCalculatedRankMap] = useState<Record<string, Record<string, number | "">>>({});
+  const [loadingAutoCalcMap, setLoadingAutoCalcMap] = useState<Record<string, boolean>>({});
+
+  const setLoadingCalc = (key: string, isBusy: boolean) => {
+    setLoadingAutoCalcMap(prev => ({ ...prev, [key]: isBusy }));
+  };
+
   const [attendanceStats, setAttendanceStats] = useState<{
     totalWorkingDays: number;
     totalDaysInMonth?: number;
@@ -595,52 +601,57 @@ function ScoreEntryContent() {
     }
     if (employees.length === 0) return;
 
-    const maxAttScore = Number(attCrit.maxScore) || 10;
-    const isLowerBetter = attCrit.category === "-ve";
+    setLoadingCalc("attendance", true);
+    try {
+      const maxAttScore = Number(attCrit.maxScore) || 10;
+      const isLowerBetter = attCrit.category === "-ve";
 
-    const listWithDays = employees.map((emp) => {
-      const eId = String(emp.id || emp._id);
-      const presentDays = getPresentDaysForEmp(emp, attendanceStats.employeeStats);
-      return { eId, presentDays };
-    });
+      const listWithDays = employees.map((emp) => {
+        const eId = String(emp.id || emp._id);
+        const presentDays = getPresentDaysForEmp(emp, attendanceStats.employeeStats);
+        return { eId, presentDays };
+      });
 
-    listWithDays.sort((a, b) => isLowerBetter ? a.presentDays - b.presentDays : b.presentDays - a.presentDays);
+      listWithDays.sort((a, b) => isLowerBetter ? a.presentDays - b.presentDays : b.presentDays - a.presentDays);
 
-    const N = employees.length;
-    const interval = N > 1 ? maxAttScore / (N - 1) : 0;
-    const nextMap = { ...scoresMap };
-    const nextRanks = { ...calculatedRankMap };
-    const nextQty = { ...rawQuantityMap };
+      const N = employees.length;
+      const interval = N > 1 ? maxAttScore / (N - 1) : 0;
+      const nextMap = { ...scoresMap };
+      const nextRanks = { ...calculatedRankMap };
+      const nextQty = { ...rawQuantityMap };
 
-    employees.forEach((emp) => {
-      const eId = String(emp.id || emp._id);
-      if (!nextMap[eId]) nextMap[eId] = {};
-      if (!nextRanks[eId]) nextRanks[eId] = {};
-      if (!nextQty[eId]) nextQty[eId] = {};
+      employees.forEach((emp) => {
+        const eId = String(emp.id || emp._id);
+        if (!nextMap[eId]) nextMap[eId] = {};
+        if (!nextRanks[eId]) nextRanks[eId] = {};
+        if (!nextQty[eId]) nextQty[eId] = {};
 
-      const idx = listWithDays.findIndex(x => x.eId === eId);
-      if (idx !== -1) {
-        const item = listWithDays[idx];
-        let rankIndex = idx;
-        for (let j = 0; j < idx; j++) {
-          if (listWithDays[j].presentDays === item.presentDays) {
-            rankIndex = j;
-            break;
+        const idx = listWithDays.findIndex(x => x.eId === eId);
+        if (idx !== -1) {
+          const item = listWithDays[idx];
+          let rankIndex = idx;
+          for (let j = 0; j < idx; j++) {
+            if (listWithDays[j].presentDays === item.presentDays) {
+              rankIndex = j;
+              break;
+            }
           }
+          const calculatedRank = rankIndex + 1;
+          const rawScore = maxAttScore - (rankIndex * interval);
+          const calcScore = Math.max(0, Math.min(maxAttScore, Math.round(rawScore * 100) / 100));
+          nextMap[eId][attCrit.id] = calcScore;
+          nextRanks[eId][attCrit.id] = calculatedRank;
+          nextQty[eId][attCrit.id] = item.presentDays;
         }
-        const calculatedRank = rankIndex + 1;
-        const rawScore = maxAttScore - (rankIndex * interval);
-        const calcScore = Math.max(0, Math.min(maxAttScore, Math.round(rawScore * 100) / 100));
-        nextMap[eId][attCrit.id] = calcScore;
-        nextRanks[eId][attCrit.id] = calculatedRank;
-        nextQty[eId][attCrit.id] = item.presentDays;
-      }
-    });
+      });
 
-    setScoresMap(nextMap);
-    setCalculatedRankMap(nextRanks);
-    setRawQuantityMap(nextQty);
-    toast.success(`Attendance scores auto-calculated (${attCrit.category || "+ve"} Rank Steps)!`);
+      setScoresMap(nextMap);
+      setCalculatedRankMap(nextRanks);
+      setRawQuantityMap(nextQty);
+      toast.success(`Attendance scores auto-calculated (${attCrit.category || "+ve"} Rank Steps)!`);
+    } finally {
+      setLoadingCalc("attendance", false);
+    }
   };
 
   const handleAutoFillDiscipline = async () => {
@@ -651,6 +662,7 @@ function ScoreEntryContent() {
     }
     if (employees.length === 0) return;
 
+    setLoadingCalc("discipline", true);
     try {
       const token = localStorage.getItem("token");
       const headers = { Authorization: token ? (token.startsWith("Bearer ") ? token : `Bearer ${token}`) : "" };
@@ -717,6 +729,8 @@ function ScoreEntryContent() {
     } catch (e) {
       console.error(e);
       toast.error("Error auto-calculating Discipline scores");
+    } finally {
+      setLoadingCalc("discipline", false);
     }
   };
 
@@ -732,6 +746,7 @@ function ScoreEntryContent() {
     }
     if (employees.length === 0) return;
 
+    setLoadingCalc("work_completion", true);
     try {
       const token = localStorage.getItem("token");
       const headers = { Authorization: token ? (token.startsWith("Bearer ") ? token : `Bearer ${token}`) : "" };
@@ -802,6 +817,8 @@ function ScoreEntryContent() {
     } catch (e) {
       console.error(e);
       toast.error("Error auto-calculating Work Completion scores");
+    } finally {
+      setLoadingCalc("work_completion", false);
     }
   };
 
@@ -816,6 +833,7 @@ function ScoreEntryContent() {
     }
     if (employees.length === 0) return;
 
+    setLoadingCalc("work_dedication", true);
     try {
       const token = localStorage.getItem("token");
       const headers = { Authorization: token ? (token.startsWith("Bearer ") ? token : `Bearer ${token}`) : "" };
@@ -882,6 +900,8 @@ function ScoreEntryContent() {
     } catch (e) {
       console.error(e);
       toast.error("Error auto-calculating Work Dedication scores");
+    } finally {
+      setLoadingCalc("work_dedication", false);
     }
   };
 
@@ -1054,50 +1074,55 @@ function ScoreEntryContent() {
           {voteCritObj && (
             <button
               onClick={handleAutoFillVote}
-              className="flex items-center gap-1.5 px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs"
+              disabled={loadingAutoCalcMap["vote"]}
+              className="flex items-center gap-1.5 px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs disabled:opacity-50"
             >
-              <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-              Auto-Calculate Vote
+              {loadingAutoCalcMap["vote"] ? <Spin size="small" /> : <Sparkles className="w-3.5 h-3.5 text-purple-600" />}
+              {loadingAutoCalcMap["vote"] ? "Calculating..." : "Auto-Calculate Vote"}
             </button>
           )}
 
           {attendanceCritObj && (
             <button
               onClick={handleAutoFillAttendance}
-              className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs"
+              disabled={loadingAutoCalcMap["attendance"]}
+              className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs disabled:opacity-50"
             >
-              <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-              Auto-Calculate Attendance
+              {loadingAutoCalcMap["attendance"] ? <Spin size="small" /> : <Sparkles className="w-3.5 h-3.5 text-blue-600" />}
+              {loadingAutoCalcMap["attendance"] ? "Calculating..." : "Auto-Calculate Attendance"}
             </button>
           )}
 
           {disciplineCritObj && (
             <button
               onClick={handleAutoFillDiscipline}
-              className="flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-900 border border-rose-200 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs"
+              disabled={loadingAutoCalcMap["discipline"]}
+              className="flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-900 border border-rose-200 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs disabled:opacity-50"
             >
-              <Sparkles className="w-3.5 h-3.5 text-rose-600" />
-              Auto-Calculate Discipline
+              {loadingAutoCalcMap["discipline"] ? <Spin size="small" /> : <Sparkles className="w-3.5 h-3.5 text-rose-600" />}
+              {loadingAutoCalcMap["discipline"] ? "Calculating..." : "Auto-Calculate Discipline"}
             </button>
           )}
 
           {workCompletionCritObj && (
             <button
               onClick={handleAutoFillWorkCompletion}
-              className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs"
+              disabled={loadingAutoCalcMap["work_completion"]}
+              className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs disabled:opacity-50"
             >
-              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-              Auto-Calculate Work Completion
+              {loadingAutoCalcMap["work_completion"] ? <Spin size="small" /> : <Sparkles className="w-3.5 h-3.5 text-emerald-600" />}
+              {loadingAutoCalcMap["work_completion"] ? "Calculating..." : "Auto-Calculate Work Completion"}
             </button>
           )}
 
           {workDedicationCritObj && (
             <button
               onClick={handleAutoFillWorkDedication}
-              className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs"
+              disabled={loadingAutoCalcMap["work_dedication"]}
+              className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs disabled:opacity-50"
             >
-              <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-              Auto-Calculate Work Dedication
+              {loadingAutoCalcMap["work_dedication"] ? <Spin size="small" /> : <Sparkles className="w-3.5 h-3.5 text-amber-600" />}
+              {loadingAutoCalcMap["work_dedication"] ? "Calculating..." : "Auto-Calculate Work Dedication"}
             </button>
           )}
 
@@ -1181,10 +1206,11 @@ function ScoreEntryContent() {
                   <button
                     type="button"
                     onClick={() => handleAutoCalculateForCriterion(criteria[currentStepIndex])}
-                    className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-slate-950 text-xs font-black rounded-xl shadow-sm transition-all cursor-pointer"
+                    disabled={loadingAutoCalcMap[criteria[currentStepIndex]?.id]}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-slate-950 text-xs font-black rounded-xl shadow-sm transition-all cursor-pointer disabled:opacity-50"
                   >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    Auto-Calculate {criteria[currentStepIndex]?.name}
+                    {loadingAutoCalcMap[criteria[currentStepIndex]?.id] ? <Spin size="small" /> : <Sparkles className="w-3.5 h-3.5" />}
+                    {loadingAutoCalcMap[criteria[currentStepIndex]?.id] ? "Calculating..." : `Auto-Calculate ${criteria[currentStepIndex]?.name}`}
                   </button>
                 )}
 

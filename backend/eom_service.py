@@ -744,7 +744,7 @@ async def get_eom_work_completion_stats(month_year: str, max_score: float = 10.0
         except Exception:
             return False
 
-    emp_report_stats = {}
+    emp_date_ratings = {}
     for r in reports:
         if not is_matching_month(r.get("date")):
             continue
@@ -757,6 +757,9 @@ async def get_eom_work_completion_stats(month_year: str, max_score: float = 10.0
             rating_val = 0.0
 
         if rating_val > 0:
+            raw_d = r.get("date")
+            d_str = raw_d.strftime("%Y-%m-%d") if isinstance(raw_d, (datetime, date)) else str(raw_d).split("T")[0].split(" ")[0].strip()
+
             keys = set()
             if emp_id:
                 keys.add(emp_id)
@@ -764,15 +767,16 @@ async def get_eom_work_completion_stats(month_year: str, max_score: float = 10.0
                 keys.add(emp_name)
 
             for k in keys:
-                if k not in emp_report_stats:
-                    emp_report_stats[k] = {"totalRating": 0.0, "daysVerified": 0}
-                emp_report_stats[k]["totalRating"] += rating_val
-                emp_report_stats[k]["daysVerified"] += 1
+                if k not in emp_date_ratings:
+                    emp_date_ratings[k] = {}
+                if d_str not in emp_date_ratings[k] or rating_val > emp_date_ratings[k][d_str]:
+                    emp_date_ratings[k][d_str] = rating_val
 
     result_stats = {}
-    for k, v in emp_report_stats.items():
-        cnt = v["daysVerified"]
-        avg_r = round((v["totalRating"] / cnt), 1) if cnt > 0 else 0.0
+    for k, date_map in emp_date_ratings.items():
+        cnt = len(date_map)
+        total_val = sum(date_map.values())
+        avg_r = round((total_val / cnt), 1) if cnt > 0 else 0.0
         factor = round(cnt * avg_r, 2)
         result_stats[k] = {
             "daysVerified": cnt,
