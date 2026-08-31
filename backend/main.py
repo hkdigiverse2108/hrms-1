@@ -5090,13 +5090,18 @@ async def _is_admin_or_hr(token_payload: dict) -> bool:
         from bson import ObjectId
         from database import db
         user = await db.employees.find_one({"_id": ObjectId(user_id) if len(user_id) == 24 else user_id})
-        if user and str(user.get("role", "")).lower().strip() in allowed_roles:
-            return True
+        if not user:
+            user = await db.employees.find_one({"id": user_id})
+        if user:
+            u_role = str(user.get("role", "")).lower().strip()
+            u_dept = str(user.get("department", "")).lower().strip()
+            if u_role in allowed_roles or u_dept in ["hr", "human resources", "hr department"]:
+                return True
         # Also check user_permissions
-        perms = await db.user_permissions.find_one({"employeeId": user_id})
+        perms = await db.user_permissions.find_one({"employeeId": str(user_id)})
         if perms:
             for p in perms.get("permissions", []):
-                if p.get("moduleName") in ["employee-of-the-month", "eom"] and (p.get("canEdit") is True or p.get("canCreate") is True):
+                if p.get("moduleName") in ["employee-of-the-month", "eom", "eow", "weekly-meetings", "employee-of-the-week"] and (p.get("canEdit") is True or p.get("canCreate") is True):
                     return True
     return False
 
