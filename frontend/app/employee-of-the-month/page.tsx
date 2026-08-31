@@ -506,7 +506,7 @@ export default function EmployeeOfMonthPage() {
             Score Submissions
           </Link>
 
-          {isAdmin && (
+          {isAdmin && !isHR && (
             <div className="flex items-center gap-2">
               <DatePicker
                 showTime={{ format: 'hh:mm A', use12Hours: true }}

@@ -171,6 +171,8 @@ export default function EmployeeOfWeekPage() {
       const res = await fetch(`${API_URL}/weekly-meetings`);
       if (res.ok) {
         const data = await res.json();
+        // Sort chronologically date-wise (oldest date to newest date)
+        data.sort((a: any, b: any) => (a.meetingDate || "").localeCompare(b.meetingDate || ""));
         setMeetings(data);
         if (data.length > 0 && !selectedMeetingId) {
           setSelectedMeetingId(data[0].id);
@@ -626,13 +628,15 @@ export default function EmployeeOfWeekPage() {
                 Declare Team Result
               </button>
 
-              <Link
-                href={`/team-of-the-month/reveal?month_year=${dayjs().format("YYYY-MM")}`}
-                className="flex items-center gap-2 px-3.5 py-2 bg-slate-900 text-amber-400 text-xs sm:text-sm font-bold rounded-xl border border-amber-500/40 hover:bg-slate-800 transition-all cursor-pointer"
-              >
-                <Play className="w-4 h-4 text-amber-400" />
-                Auditorium Reveal
-              </Link>
+              {!isHR && (
+                <Link
+                  href={`/team-of-the-month/reveal?month_year=${dayjs().format("YYYY-MM")}`}
+                  className="flex items-center gap-2 px-3.5 py-2 bg-slate-900 text-amber-400 text-xs sm:text-sm font-bold rounded-xl border border-amber-500/40 hover:bg-slate-800 transition-all cursor-pointer"
+                >
+                  <Play className="w-4 h-4 text-amber-400" />
+                  Auditorium Reveal
+                </Link>
+              )}
 
               <button
                 onClick={fetchMasterTopics}

@@ -1193,7 +1193,7 @@ async def get_eom_month_history():
 # --- EMPLOYEE OF THE WEEK (EOW) ---
 
 async def get_weekly_meetings():
-    meetings = await db.weekly_meetings.find({}).sort("meetingDate", -1).to_list(length=200)
+    meetings = await db.weekly_meetings.find({}).sort("meetingDate", 1).to_list(length=200)
     result = []
     for m in meetings:
         mid = str(m.get("_id", m.get("id")))
@@ -1441,6 +1441,9 @@ async def declare_weekly_team_result(week_meeting_ids: list, month_year: str):
     if not meetings:
         raise ValueError("None of the selected weekly meetings were found.")
 
+    # Sort meetings chronologically date-wise (oldest date to newest date)
+    meetings.sort(key=lambda m: m.get("meetingDate") or "")
+
     department_data = {}
 
     for m in meetings:
@@ -1551,6 +1554,7 @@ async def get_team_declared_result(month_year: str):
                     if detail:
                         meetings.append(detail)
                 
+                meetings.sort(key=lambda m: m.get("meetingDate") or "")
                 meetings_info = []
                 participants_map = {}
                 for m in meetings:
