@@ -1520,73 +1520,103 @@ async def mark_all_notifications_read(employee_id: str, db=Depends(get_db)):
 
 # Department Endpoints
 @app.get("/departments", response_model=List[schemas.Department])
-async def read_departments(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
+@redis_manager.cached_api(namespace="hrms:settings", ttl=600)
+async def read_departments(request: Request, skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_departments(db, skip=skip, limit=limit)
 
 @app.post("/departments", response_model=schemas.Department)
 async def create_department(department: schemas.DepartmentCreate, db=Depends(get_db)):
-    return await crud.create_department(db, department)
+    res = await crud.create_department(db, department)
+    await redis_manager.invalidate_namespace("hrms:settings")
+    return res
 
 @app.put("/departments/{department_id}", response_model=schemas.Department)
 async def update_department(department_id: str, department_update: schemas.DepartmentUpdate, db=Depends(get_db)):
-    return await crud.update_department(db, department_id, department_update)
+    res = await crud.update_department(db, department_id, department_update)
+    await redis_manager.invalidate_namespace("hrms:settings")
+    return res
 
 @app.delete("/departments/{department_id}")
 async def delete_department(department_id: str, db=Depends(get_db)):
     await crud.delete_department(db, department_id)
+    await redis_manager.invalidate_namespace("hrms:settings")
     return {"message": "Department deleted successfully"}
 
 # SubDepartment Endpoints
 @app.get("/sub-departments", response_model=List[schemas.SubDepartment])
-async def read_sub_departments(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
+@redis_manager.cached_api(namespace="hrms:settings", ttl=600)
+async def read_sub_departments(request: Request, skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_sub_departments(db, skip=skip, limit=limit)
 
 @app.post("/sub-departments", response_model=schemas.SubDepartment)
 async def create_sub_department(sub_department: schemas.SubDepartmentCreate, db=Depends(get_db)):
-    return await crud.create_sub_department(db, sub_department)
+    res = await crud.create_sub_department(db, sub_department)
+    await redis_manager.invalidate_namespace("hrms:settings")
+    return res
 
 @app.put("/sub-departments/{sub_department_id}", response_model=schemas.SubDepartment)
 async def update_sub_department(sub_department_id: str, sub_department_update: schemas.SubDepartmentUpdate, db=Depends(get_db)):
-    return await crud.update_sub_department(db, sub_department_id, sub_department_update)
+    res = await crud.update_sub_department(db, sub_department_id, sub_department_update)
+    await redis_manager.invalidate_namespace("hrms:settings")
+    return res
 
 @app.delete("/sub-departments/{sub_department_id}")
 async def delete_sub_department(sub_department_id: str, db=Depends(get_db)):
     await crud.delete_sub_department(db, sub_department_id)
+    await redis_manager.invalidate_namespace("hrms:settings")
     return {"message": "SubDepartment deleted successfully"}
 
 # Designation Endpoints
 @app.get("/designations", response_model=List[schemas.Designation])
-async def read_designations(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
+@redis_manager.cached_api(namespace="hrms:settings", ttl=600)
+async def read_designations(request: Request, skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_designations(db, skip=skip, limit=limit)
 
 @app.post("/designations", response_model=schemas.Designation)
 async def create_designation(designation: schemas.DesignationCreate, db=Depends(get_db)):
-    return await crud.create_designation(db, designation)
+    res = await crud.create_designation(db, designation)
+    await redis_manager.invalidate_namespace("hrms:settings")
+    return res
 
 @app.put("/designations/{designation_id}", response_model=schemas.Designation)
 async def update_designation(designation_id: str, designation_update: schemas.DesignationUpdate, db=Depends(get_db)):
-    return await crud.update_designation(db, designation_id, designation_update)
+    res = await crud.update_designation(db, designation_id, designation_update)
+    await redis_manager.invalidate_namespace("hrms:settings")
+    return res
 
 @app.delete("/designations/{designation_id}")
 async def delete_designation(designation_id: str, db=Depends(get_db)):
     await crud.delete_designation(db, designation_id)
+    await redis_manager.invalidate_namespace("hrms:settings")
     return {"message": "Designation deleted successfully"}
 
 # Configuration Endpoints (Companies, Roles, Relations)
 @app.get("/companies", response_model=List[schemas.Company])
-async def read_companies(skip: int = 0, limit: int = 10000, db=Depends(get_db)): return await crud.get_companies(db, skip, limit)
+@redis_manager.cached_api(namespace="hrms:settings", ttl=600)
+async def read_companies(request: Request, skip: int = 0, limit: int = 10000, db=Depends(get_db)): return await crud.get_companies(db, skip, limit)
 @app.post("/companies", response_model=schemas.Company)
-async def create_company(company: schemas.CompanyCreate, db=Depends(get_db)): return await crud.create_company(db, company)
+async def create_company(company: schemas.CompanyCreate, db=Depends(get_db)):
+    res = await crud.create_company(db, company)
+    await redis_manager.invalidate_namespace("hrms:settings")
+    return res
 
 @app.get("/roles", response_model=List[schemas.Role])
-async def read_roles(skip: int = 0, limit: int = 10000, db=Depends(get_db)): return await crud.get_roles(db, skip, limit)
+@redis_manager.cached_api(namespace="hrms:settings", ttl=600)
+async def read_roles(request: Request, skip: int = 0, limit: int = 10000, db=Depends(get_db)): return await crud.get_roles(db, skip, limit)
 @app.post("/roles", response_model=schemas.Role)
-async def create_role(role: schemas.RoleCreate, db=Depends(get_db)): return await crud.create_role(db, role)
+async def create_role(role: schemas.RoleCreate, db=Depends(get_db)):
+    res = await crud.create_role(db, role)
+    await redis_manager.invalidate_namespace("hrms:settings")
+    return res
 
 @app.get("/relations", response_model=List[schemas.Relation])
-async def read_relations(skip: int = 0, limit: int = 10000, db=Depends(get_db)): return await crud.get_relations(db, skip, limit)
+@redis_manager.cached_api(namespace="hrms:settings", ttl=600)
+async def read_relations(request: Request, skip: int = 0, limit: int = 10000, db=Depends(get_db)): return await crud.get_relations(db, skip, limit)
 @app.post("/relations", response_model=schemas.Relation)
-async def create_relation(relation: schemas.RelationCreate, db=Depends(get_db)): return await crud.create_relation(db, relation)
+async def create_relation(relation: schemas.RelationCreate, db=Depends(get_db)):
+    res = await crud.create_relation(db, relation)
+    await redis_manager.invalidate_namespace("hrms:settings")
+    return res
 
 
 # Recruitment Endpoints
@@ -2749,6 +2779,7 @@ async def delete_chat_message(message_id: str, request: Request, deleteFor: str 
 @app.post("/chat/mark-seen/{sender_id}/{receiver_id}")
 async def mark_messages_as_seen(sender_id: str, receiver_id: str, db=Depends(get_db)):
     await crud.mark_messages_as_seen(db, sender_id, receiver_id)
+    await redis_manager.invalidate_namespace("hrms:chat")
     
     # Broadcast seen event to active clients in real-time
     try:
@@ -2847,7 +2878,8 @@ async def get_unread_counts(user_id: str, db=Depends(get_db)):
     return unread_counts
 
 @app.get("/chat/summaries/{user_id}")
-async def get_chat_summaries(user_id: str, db=Depends(get_db)):
+@redis_manager.cached_api(namespace="hrms:chat", ttl=30)
+async def get_chat_summaries(request: Request, user_id: str, db=Depends(get_db)):
     return await crud.get_chat_summaries(db, user_id)
 
 @app.post("/chat/messages/{message_id}/toggle-save")

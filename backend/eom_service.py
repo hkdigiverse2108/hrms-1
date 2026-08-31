@@ -2,6 +2,7 @@ from database import db
 from datetime import datetime
 from bson import ObjectId
 import pytz
+import redis_manager
 
 IST = pytz.timezone('Asia/Kolkata')
 
@@ -60,6 +61,7 @@ async def save_master_criteria(criteria_list: list):
         if "_id" in doc:
             del doc["_id"]
         saved.append(doc)
+    await redis_manager.invalidate_namespace("hrms:eom")
     return saved
 
 # --- EMPLOYEE OF THE MONTH (PER-MONTH CRITERIA & SCORES) ---
@@ -298,6 +300,7 @@ async def save_month_config(month_year: str, selected_employee_ids: list = None,
         {"$set": update_fields},
         upsert=True
     )
+    await redis_manager.invalidate_namespace("hrms:eom")
     return await get_month_config(month_year)
 
 async def clone_criteria(from_month_year: str, to_month_year: str):
@@ -1374,7 +1377,8 @@ async def save_weekly_entries(meeting_id: str, entries_list: list):
             upsert=True
         )
         saved_entries.append(doc)
-
+    await redis_manager.invalidate_namespace("hrms:eom")
+    await redis_manager.invalidate_namespace("hrms:weekly")
     return saved_entries
 
 async def delete_weekly_meeting(meeting_id: str):
@@ -1382,6 +1386,8 @@ async def delete_weekly_meeting(meeting_id: str):
     await db.weekly_meetings.delete_one({"_id": mid_obj})
     await db.weekly_topics.delete_many({"meetingId": meeting_id})
     await db.weekly_entries.delete_many({"meetingId": meeting_id})
+    await redis_manager.invalidate_namespace("hrms:eom")
+    await redis_manager.invalidate_namespace("hrms:weekly")
     return True
 
 async def calculate_team_eom_average(month_year: str, department: str):
@@ -1488,6 +1494,8 @@ async def declare_weekly_team_result(week_meeting_ids: list, month_year: str):
     if "_id" in doc:
         del doc["_id"]
 
+    await redis_manager.invalidate_namespace("hrms:eom")
+    await redis_manager.invalidate_namespace("hrms:weekly")
     return doc
 
 async def get_team_declared_result(month_year: str):
@@ -1500,8 +1508,10 @@ async def get_team_declared_result(month_year: str):
 
 async def update_weekly_participants(meeting_id: str, participant_ids: list):
     mid_obj = ObjectId(meeting_id) if len(meeting_id) == 24 else meeting_id
-    await db.weekly_meetings.update_one(
+    res = await db.weekly_meetings.update_one(
         {"$or": [{"_id": mid_obj}, {"id": meeting_id}]},
-        {"$set": {"participantEmployeeIds": participant_ids or []}}
+        {"$set": {"participantEmployeeIds": participant_ids, "updatedAt": datetime.now(IST)}}
     )
-    return True
+    await redis_manager.invalidate_namespace("hrms:eom")
+    await redis_manager.invalidate_namespace("hrms:weekly")
+    return res
