@@ -1193,7 +1193,7 @@ async def get_eom_month_history():
 # --- EMPLOYEE OF THE WEEK (EOW) ---
 
 async def get_weekly_meetings():
-    meetings = await db.weekly_meetings.find({}).sort("meetingDate", 1).to_list(length=200)
+    meetings = await db.weekly_meetings.find({}).sort("meetingDate", -1).to_list(length=200)
     result = []
     for m in meetings:
         mid = str(m.get("_id", m.get("id")))

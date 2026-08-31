@@ -165,14 +165,22 @@ export default function EmployeeOfWeekPage() {
     }
   };
 
+  const parseMeetingTimestamp = (dStr: any) => {
+    if (!dStr) return 0;
+    const d = dayjs(dStr);
+    if (d.isValid()) return d.valueOf();
+    const t = new Date(dStr).getTime();
+    return isNaN(t) ? 0 : t;
+  };
+
   const fetchMeetings = async () => {
     setLoading(true);
     try {
       const res = await fetch(`${API_URL}/weekly-meetings`);
       if (res.ok) {
         const data = await res.json();
-        // Sort chronologically date-wise (oldest date to newest date)
-        data.sort((a: any, b: any) => (a.meetingDate || "").localeCompare(b.meetingDate || ""));
+        // Sort descending by meetingDate timestamp (Newest meeting at the top!)
+        data.sort((a: any, b: any) => parseMeetingTimestamp(b.meetingDate) - parseMeetingTimestamp(a.meetingDate));
         setMeetings(data);
         if (data.length > 0 && !selectedMeetingId) {
           setSelectedMeetingId(data[0].id);

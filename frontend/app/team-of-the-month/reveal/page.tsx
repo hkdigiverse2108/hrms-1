@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Trophy, ArrowLeft, Sparkles, Crown, Users, User, Play, RefreshCw, ChevronRight, Award, ShieldCheck, Zap, LayoutList, Building2, Timer, FastForward } from "lucide-react";
+import { Trophy, ArrowLeft, Sparkles, Crown, Users, User, Play, RefreshCw, ChevronRight, Award, ShieldCheck, Zap, LayoutList, Building2, Timer, FastForward, Maximize, Minimize } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import { Spin, DatePicker } from "antd";
 import dayjs from "dayjs";
@@ -101,6 +101,9 @@ export default function TeamOfMonthRevealPage() {
   const [loading, setLoading] = useState(true);
   const [displayTab, setDisplayTab] = useState<"individual" | "team">("individual");
 
+  // Fullscreen Presentation Mode State
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
   // Reveal Animation Stage: 0=Init, 1=Weekly Totals (Week by Week), 2=Total Sums / Tease, 3=Champion & Full Reveal
   const [stage, setStage] = useState<number>(0);
   const [revealedWeekCount, setRevealedWeekCount] = useState<number>(0);
@@ -109,6 +112,32 @@ export default function TeamOfMonthRevealPage() {
   const [isAutoTeasing, setIsAutoTeasing] = useState(false);
   const [teaseCountdown, setTeaseCountdown] = useState<number>(2);
   const [teasingRankIndex, setTeasingRankIndex] = useState<number>(-1); // Current rank index being revealed (bottom to top)
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(console.error);
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().then(() => setIsFullscreen(false)).catch(console.error);
+      }
+    }
+  };
+
+  useEffect(() => {
+    // Attempt auto fullscreen on load
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
+
+    const handleFSChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener("fullscreenchange", handleFSChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFSChange);
+    };
+  }, []);
 
   useEffect(() => {
     fetchDeclaredResults(selectedMonth);
@@ -238,7 +267,7 @@ export default function TeamOfMonthRevealPage() {
     : null;
 
   return (
-    <div className="min-h-screen bg-[#070913] text-white p-4 sm:p-8 space-y-6 relative overflow-hidden select-none font-sans">
+    <div className="fixed inset-0 z-[999999] bg-[#070913] overflow-y-auto w-screen h-screen p-4 sm:p-8 space-y-6 select-none font-sans text-white">
       {/* Dynamic Ambient Background Glows */}
       <div className="absolute -top-32 -left-32 w-96 h-96 bg-amber-500/15 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute top-1/3 right-0 w-[500px] h-[500px] bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
@@ -264,6 +293,20 @@ export default function TeamOfMonthRevealPage() {
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
+          {/* Fullscreen Mode Toggle Button */}
+          <button
+            onClick={toggleFullscreen}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-2xl text-xs font-bold transition-all border cursor-pointer ${
+              isFullscreen
+                ? "bg-amber-500 text-slate-950 border-amber-400 shadow-lg shadow-amber-500/20"
+                : "bg-slate-800 hover:bg-slate-700 text-amber-400 border-amber-500/40"
+            }`}
+            title="Toggle Auditorium Fullscreen Presentation Mode"
+          >
+            {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+            <span className="hidden sm:inline">{isFullscreen ? "EXIT FULLSCREEN" : "FULLSCREEN SHOW"}</span>
+          </button>
+
           {/* View Tab Switcher */}
           <div className="flex items-center p-1 bg-slate-950 rounded-2xl border border-slate-800">
             <button
