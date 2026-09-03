@@ -92,9 +92,15 @@ export default function EditEmployeePage() {
       })
 
       if (response.ok) {
+        toast.success('Employee updated successfully')
         router.push('/employees')
       } else {
-        const error = await response.json()
+        let error: any = {}
+        try {
+          error = await response.json()
+        } catch (_) {
+          error = { detail: `Server returned status ${response.status} (${response.statusText})` }
+        }
         let errMsg = 'Failed to update employee';
         if (error.detail) {
           if (typeof error.detail === 'string') {
