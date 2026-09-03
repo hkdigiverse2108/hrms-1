@@ -1123,7 +1123,8 @@ async def read_employees(request: Request, skip: int = 0, limit: int = 10000, in
     return await crud.get_employees(db, skip=skip, limit=limit, include_inactive=include_inactive)
 
 @app.get("/employees/{employee_id}", response_model=schemas.Employee)
-async def read_employee(employee_id: str, db=Depends(get_db)):
+@redis_manager.cached_api(namespace="hrms:employees", ttl=300)
+async def read_employee(employee_id: str, request: Request, db=Depends(get_db)):
     employee = await crud.get_employee(db, employee_id)
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
@@ -1209,6 +1210,7 @@ async def update_employee(employee_id: str, employee_update: schemas.EmployeeUpd
 async def delete_employee(employee_id: str, request: Request, db=Depends(get_db)):
     performed_by, user_name = await get_actor_from_request(request, db)
     await crud.delete_employee(db, employee_id, performed_by=performed_by, user_name=user_name)
+    await redis_manager.invalidate_namespace("hrms:employees")
     return {"message": "Employee deleted successfully"}
 
 @app.post("/employees/transfer-responsibilities")
@@ -1273,6 +1275,11 @@ async def transfer_responsibilities(payload: dict, request: Request, db=Depends(
         userName=actor_name,
         details=f"All work and responsibilities transferred from {from_name} to {to_name}."
     )
+
+    await redis_manager.invalidate_namespace("hrms:employees")
+    await redis_manager.invalidate_namespace("hrms:tasks")
+    await redis_manager.invalidate_namespace("hrms:wm_tasks")
+    await redis_manager.invalidate_namespace("hrms:work")
 
     return {"message": f"Successfully transferred all responsibilities from {from_name} to {to_name}."}
 
@@ -2465,11 +2472,13 @@ async def get_my_tasks_view_data(
     }
 
 @app.get("/wm-tasks", response_model=List[schemas.WMTask])
-async def read_wm_tasks(userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 10000, db=Depends(get_db)):
+@redis_manager.cached_api(namespace="hrms:wm_tasks", ttl=60)
+async def read_wm_tasks(request: Request, userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_wm_tasks(db, userId=userId, role=role, skip=skip, limit=limit)
 
 @app.get("/wm-tasks/{task_id}", response_model=schemas.WMTask)
-async def read_wm_task(task_id: str, db=Depends(get_db)):
+@redis_manager.cached_api(namespace="hrms:wm_tasks", ttl=60)
+async def read_wm_task(task_id: str, request: Request, db=Depends(get_db)):
     task = await crud.get_wm_task(db, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -2483,7 +2492,10 @@ async def create_wm_task(task: schemas.WMTaskCreate, db=Depends(get_db)):
         existing = await db.wm_tasks.find_one({"assignedToId": task.assignedToId, "status": "in-progress"})
         if existing:
             raise HTTPException(status_code=400, detail="already a task in progress")
-    return await crud.create_wm_task(db, task=task)
+    res = await crud.create_wm_task(db, task=task)
+    await redis_manager.invalidate_namespace("hrms:wm_tasks")
+    await redis_manager.invalidate_namespace("hrms:tasks")
+    return res
 
 @app.put("/wm-tasks/{task_id}", response_model=schemas.WMTask)
 async def update_wm_task(task_id: str, task_update: schemas.WMTaskUpdate, db=Depends(get_db)):
@@ -2511,6 +2523,8 @@ async def update_wm_task(task_id: str, task_update: schemas.WMTaskUpdate, db=Dep
     updated = await crud.update_wm_task(db, task_id, task_update)
     if not updated:
         raise HTTPException(status_code=404, detail="Task not found")
+    await redis_manager.invalidate_namespace("hrms:wm_tasks")
+    await redis_manager.invalidate_namespace("hrms:tasks")
     return updated
 
 @app.delete("/wm-tasks/{task_id}")
@@ -2518,6 +2532,8 @@ async def delete_wm_task(task_id: str, db=Depends(get_db)):
     success = await crud.delete_wm_task(db, task_id)
     if not success:
         raise HTTPException(status_code=404, detail="Task not found")
+    await redis_manager.invalidate_namespace("hrms:wm_tasks")
+    await redis_manager.invalidate_namespace("hrms:tasks")
     return {"message": "Task deleted successfully"}
 
 # Activity Log Endpoints
@@ -2954,7 +2970,9 @@ async def toggle_reaction(message_id: str, user_id: str, emoji: str, db=Depends(
 
 @app.put("/employees/{employee_id}/status")
 async def update_employee_status(employee_id: str, status: Optional[str] = None, emoji: Optional[str] = None, db=Depends(get_db)):
-    return await crud.update_employee_status(db, employee_id, status, emoji)
+    res = await crud.update_employee_status(db, employee_id, status, emoji)
+    await redis_manager.invalidate_namespace("hrms:employees")
+    return res
 
 @app.post("/chat/messages/{message_id}/vote")
 async def vote_on_poll(message_id: str, user_id: str, option_id: str, db=Depends(get_db)):
