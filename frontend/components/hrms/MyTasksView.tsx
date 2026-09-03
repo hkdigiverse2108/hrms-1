@@ -71,7 +71,15 @@ export interface MyTasksViewProps {
 
 export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: MyTasksViewProps) {
   const router = useRouter()
-  const [currentUser, setCurrentUser] = useState<any>(null)
+  const [currentUser, setCurrentUser] = useState<any>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('user')
+      if (stored) {
+        try { return JSON.parse(stored) } catch (e) { return null }
+      }
+    }
+    return null
+  })
   
   // Tasks states
   const [tasks, setTasks] = useState<any[]>([]) // General & HR Tasks
@@ -93,32 +101,43 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('all')
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('user')
-    if (storedUser) {
-      setCurrentUser(JSON.parse(storedUser))
-    } else if (!targetUserId) {
+    if (!currentUser && typeof window !== 'undefined') {
+      const storedUser = localStorage.getItem('user')
+      if (storedUser) {
+        try { setCurrentUser(JSON.parse(storedUser)) } catch (e) {}
+      } else if (!targetUserId) {
+        router.push('/login')
+      }
+    } else if (!currentUser && !targetUserId) {
       router.push('/login')
     }
-  }, [router, targetUserId])
+  }, [router, targetUserId, currentUser])
 
   const fetchData = async () => {
     setLoading(true)
     try {
-      const uId = targetUserId || currentUser?.id || '';
-      const role = currentUser?.role || '';
-      const res = await fetch(`${API_URL}/my-tasks-view-data?userId=${uId}&role=${role}`, { cache: 'no-store' });
+      let userObj = currentUser
+      if (!userObj && typeof window !== 'undefined') {
+        const storedUser = localStorage.getItem('user')
+        if (storedUser) {
+          try { userObj = JSON.parse(storedUser) } catch (e) {}
+        }
+      }
+      const uId = targetUserId || userObj?.id || ''
+      const role = userObj?.role || ''
+      const res = await fetch(`${API_URL}/my-tasks-view-data?userId=${uId}&role=${role}`, { cache: 'no-store' })
       if (res.ok) {
-        const data = await res.json();
-        setTasks(data.tasks || []);
-        setWmTasks(data.wmTasks || []);
-        setEntries(data.contentCalendar || []);
-        setOtherWork(data.otherWork || []);
-        setProjects(data.projects || []);
-        setClients(data.clients || []);
-        setEmployees(data.employees || []);
-        setLeads(data.leads || []);
-        setDailyReports(data.dailyReports || []);
-        setProjectRemarks(data.projectRemarks || []);
+        const data = await res.json()
+        setTasks(data.tasks || [])
+        setWmTasks(data.wmTasks || [])
+        setEntries(data.contentCalendar || [])
+        setOtherWork(data.otherWork || [])
+        setProjects(data.projects || [])
+        setClients(data.clients || [])
+        setEmployees(data.employees || [])
+        setLeads(data.leads || [])
+        setDailyReports(data.dailyReports || [])
+        setProjectRemarks(data.projectRemarks || [])
       }
     } catch (err) {
       console.error('Error fetching data:', err)
@@ -129,10 +148,17 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
   }
 
   useEffect(() => {
-    if (currentUser || targetUserId) {
-      fetchData();
+    let userObj = currentUser
+    if (!userObj && typeof window !== 'undefined') {
+      const storedUser = localStorage.getItem('user')
+      if (storedUser) {
+        try { userObj = JSON.parse(storedUser) } catch (e) {}
+      }
     }
-  }, [currentUser, targetUserId]);
+    if (userObj || targetUserId) {
+      fetchData()
+    }
+  }, [targetUserId])
 
   const handleMarkComplete = async (task: any) => {
     try {
