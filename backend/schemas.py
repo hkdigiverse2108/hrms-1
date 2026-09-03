@@ -349,12 +349,12 @@ class Employee(EmployeeBase):
         return data
 
 class Break(BaseModel):
-    startTime: str
+    startTime: Optional[str] = None
     endTime: Optional[str] = None
     duration: Optional[str] = None
 
 class PunchLog(BaseModel):
-    punchIn: str
+    punchIn: Optional[str] = None
     punchOut: Optional[str] = None
     activityType: Optional[str] = None
     activitySubtype: Optional[str] = None
@@ -363,15 +363,15 @@ class PunchLog(BaseModel):
  
 class AttendanceBase(BaseModel):
     employeeId: str
-    employeeName: str
+    employeeName: Optional[str] = ""
     date: RobustDate
-    checkIn: str
+    checkIn: Optional[str] = None
     checkOut: Optional[str] = None
-    status: str
+    status: Optional[str] = "Present"
     workHours: Optional[str] = None
     accumulatedWorkSeconds: Optional[float] = None
-    breaks: List[Break] = []
-    punches: List[PunchLog] = []
+    breaks: Optional[List[Break]] = []
+    punches: Optional[List[PunchLog]] = []
     remarks: Optional[str] = None
     isLate: Optional[bool] = False
     punchInActivityType: Optional[str] = None
