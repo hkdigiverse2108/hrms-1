@@ -509,11 +509,28 @@ export default function CreativeClientsPage() {
       }
 
       let maxDatesLocal: Record<string, Date> = {};
+      let projects: any[] = [];
+      if (pRes.ok) {
+        projects = await pRes.json();
+      }
+
       if (ccRes.ok) {
         const entries = await ccRes.json();
         setCalendarEntries(entries);
         const counts: Record<string, number> = {};
         entries.forEach((entry: any) => {
+          let project = null;
+          if (entry.projectId) {
+            project = projects.find((p: any) => p.id === entry.projectId);
+          }
+          if (!project && entry.clientId) {
+            project = projects.find((p: any) => p.clientId === entry.clientId && p.department === 'Creative');
+          }
+          const pStatus = (project?.status || "").toLowerCase().trim();
+          if (pStatus === 'completed' || pStatus === 'on-hold' || pStatus === 'onhold' || pStatus === 'on hold') {
+            return;
+          }
+
           let pending = 0;
           const isPost = entry.postReel === 'Post';
           const isStory = entry.postReel === 'Story';
@@ -570,8 +587,7 @@ export default function CreativeClientsPage() {
         setCalendarSettings(settingsMap);
       }
 
-      if (pRes.ok) {
-        const projects = await pRes.json();
+      if (projects.length > 0 || pRes.ok) {
         const projectMap: Record<string, any[]> = {};
         projects.forEach((p: any) => {
           if (p.clientId && p.department === 'Creative') {
@@ -906,29 +922,30 @@ export default function CreativeClientsPage() {
         
       if (!matchesSearch) return false;
 
-      const projectStatus = p?.status || "";
-      const isOnHold = projectStatus.toLowerCase() === "on-hold";
+      const projectStatus = (p?.status || "").toLowerCase().trim();
+      const isOnHold = projectStatus === "on-hold" || projectStatus === "onhold" || projectStatus === "on hold";
+      const isCompleted = projectStatus === "completed";
       if (isOnHold && masterFilter !== "on-hold") return false;
-      const isFollowupDue = p?.nextFollowupDate && new Date(p.nextFollowupDate) <= new Date();
+      const isFollowupDue = !isCompleted && !isOnHold && p?.nextFollowupDate && new Date(p.nextFollowupDate) <= new Date();
       
       const hasPendingWork = pendingCounts[c.id] > 0;
 
       switch(masterFilter) {
-        case 'whatsapp-submitted': return !!c.whatsappGroup;
-        case 'whatsapp-pending': return !c.whatsappGroup;
-        case 'greetings-sent': return !!c.greetingsMsgSent;
-        case 'greetings-pending': return !c.greetingsMsgSent;
+        case 'whatsapp-submitted': return !isCompleted && !!c.whatsappGroup;
+        case 'whatsapp-pending': return !isCompleted && !c.whatsappGroup;
+        case 'greetings-sent': return !isCompleted && !!c.greetingsMsgSent;
+        case 'greetings-pending': return !isCompleted && !c.greetingsMsgSent;
         case 'followup-due': return !!isFollowupDue;
-        case 'active': return p ? !isOnHold : true;
+        case 'active': return p ? (!isOnHold && !isCompleted) : true;
         case 'on-hold': return isOnHold;
-        case 'festival-post': return (p?.festivalPost === "Yes") || c.festivalPost === "Yes";
+        case 'festival-post': return !isCompleted && ((p?.festivalPost === "Yes") || c.festivalPost === "Yes");
         case 'pending-work': return hasPendingWork;
-        case 'meeting-done': return c.meetings && c.meetings.length > 0;
-        case 'meeting-not-done': return !c.meetings || c.meetings.length === 0;
-        case 'approval-pending': return !calendarSettings[c.id]?.approvalStatus || calendarSettings[c.id]?.approvalStatus === "Pending";
-        case 'approval-approved': return calendarSettings[c.id]?.approvalStatus === "Approved by Client";
-        case 'approval-changes': return calendarSettings[c.id]?.approvalStatus === "Changes Requested";
-        case 'approval-rejected': return calendarSettings[c.id]?.approvalStatus === "Rejected";
+        case 'meeting-done': return !isCompleted && c.meetings && c.meetings.length > 0;
+        case 'meeting-not-done': return !isCompleted && (!c.meetings || c.meetings.length === 0);
+        case 'approval-pending': return !isCompleted && (!calendarSettings[c.id]?.approvalStatus || calendarSettings[c.id]?.approvalStatus === "Pending");
+        case 'approval-approved': return !isCompleted && calendarSettings[c.id]?.approvalStatus === "Approved by Client";
+        case 'approval-changes': return !isCompleted && calendarSettings[c.id]?.approvalStatus === "Changes Requested";
+        case 'approval-rejected': return !isCompleted && calendarSettings[c.id]?.approvalStatus === "Rejected";
         default: return true;
       }
     }).filter(({ client: c, project: p }: { client: any; project: any }) => {

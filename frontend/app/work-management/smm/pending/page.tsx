@@ -105,7 +105,15 @@ export default function PendingWorkPage() {
       const client = clients.find(c => c.id === entry.clientId);
       const clientName = client ? (client.companyName || client.clientName || 'Unknown Client') : 'Unknown Client';
       const projectId = entry.projectId;
-      const project = projectId ? clientProjects[projectId] : null;
+      let project = projectId ? clientProjects[projectId] : null;
+      if (!project && entry.clientId) {
+        project = Object.values(clientProjects).find((p: any) => p.clientId === entry.clientId);
+      }
+      const pStatus = (project?.status || "").toLowerCase().trim();
+      if (pStatus === "completed" || pStatus === "on-hold" || pStatus === "onhold" || pStatus === "on hold") return;
+      const cStatus = (client?.status || "").toLowerCase().trim();
+      if (cStatus === "completed" || cStatus === "inactive") return;
+
       const displayName = project ? `${project.title} (${clientName})` : clientName;
       const key = projectId || entry.clientId;
 

@@ -124,8 +124,12 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
           
           if (Array.isArray(ccData)) {
             ccData.forEach(entry => {
-              const project = projects.find((p: any) => p.id === entry.projectId) || {};
+              const project = projects.find((p: any) => p.id === entry.projectId) || projects.find((p: any) => p.clientId === entry.clientId && p.department === 'Creative') || {};
               const client = clients.find((c: any) => c.id === (entry.clientId || project.clientId)) || {};
+              const pStatus = (project.status || "").toLowerCase().trim();
+              if (pStatus === "completed" || pStatus === "on-hold" || pStatus === "onhold" || pStatus === "on hold") return;
+              const cStatus = (client.status || "").toLowerCase().trim();
+              if (cStatus === "completed" || cStatus === "inactive") return;
               
               const addIfMatches = (stage: string, date: string, assigneeId: string, isCompleted: boolean) => {
                 if (!date || date > targetDate || isCompleted) return;
@@ -189,8 +193,11 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
           if (Array.isArray(projects)) {
             projects.forEach((p: any) => {
               if (p.department?.toLowerCase() === 'digital marketing') return; // Skip DM projects for SMM employees
-              
+              const pStatus = (p.status || "").toLowerCase().trim();
+              if (pStatus === "completed" || pStatus === "on-hold" || pStatus === "onhold" || pStatus === "on hold") return;
               const client = clients.find((c: any) => c.id === p.clientId) || {};
+              const cStatus = (client.status || "").toLowerCase().trim();
+              if (cStatus === "completed" || cStatus === "inactive") return;
               const followUpAssignee = p.assignedFollowUpId || client.assignedFollowUpId;
               
               if (followUpAssignee === targetId && p.nextFollowupDate) {

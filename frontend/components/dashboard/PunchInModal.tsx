@@ -162,7 +162,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
             const project = allProjects.find((p: any) => String(p.id || p._id) === String(t.projectId));
             if (project) {
               const pStatus = (project.status || "").toLowerCase().trim();
-              if (pStatus === "onhold" || pStatus === "on-hold" || pStatus === "on hold") return false;
+              if (pStatus === "onhold" || pStatus === "on-hold" || pStatus === "on hold" || pStatus === "completed") return false;
             }
           }
           return true;
@@ -199,7 +199,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                   const project = projList.find((p: any) => String(p.id || p._id).trim() === String(o.projectId).trim());
                   if (project) {
                     const pStatus = (project.status || "").toLowerCase().trim();
-                    if (pStatus === "onhold" || pStatus === "on-hold" || pStatus === "on hold") return;
+                    if (pStatus === "onhold" || pStatus === "on-hold" || pStatus === "on hold" || pStatus === "completed") return;
                   }
                   const client = clientList.find((c: any) => String(c.id || c._id).trim() === String(o.clientId).trim());
                   let displayName = "Other Work";
@@ -252,7 +252,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                   const project = projList.find((p: any) => String(p.id || p._id).trim() === String(o.projectId).trim());
                   if (project) {
                     const pStatus = (project.status || "").toLowerCase().trim();
-                    if (pStatus === "onhold" || pStatus === "on-hold" || pStatus === "on hold") return;
+                    if (pStatus === "onhold" || pStatus === "on-hold" || pStatus === "on hold" || pStatus === "completed") return;
                   }
                   smmTasks.push({
                     id: o.id || o._id,
@@ -272,7 +272,9 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                   const project = projList.find((p: any) => String(p.clientId).trim() === String(entry.clientId).trim() && p.department?.toLowerCase().trim() === 'creative');
                   if (!project) return; // Only show if active creative project (matching SMM)
                   const pStatus = (project.status || "").toLowerCase().trim();
-                  if (pStatus === "onhold" || pStatus === "on-hold" || pStatus === "on hold") return;
+                  if (pStatus === "onhold" || pStatus === "on-hold" || pStatus === "on hold" || pStatus === "completed") return;
+                  const cStatus = (client?.status || "").toLowerCase().trim();
+                  if (cStatus === "completed" || cStatus === "inactive") return;
                   
                   const cName = client?.companyName || client?.clientName || "Unknown Client";
                   

@@ -266,13 +266,14 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
       const isAssigned = t.assignedToId === uId || assIds.includes(uId);
 
       if (isAssigned) {
-        let isProjectOnHold = false;
+        let isProjectOnHoldOrDone = false;
         if (t.projectId) {
           const assocProject = projects.find(p => p.id === t.projectId);
-          isProjectOnHold = assocProject && (assocProject.status === 'on-hold' || assocProject.status === 'onhold' || assocProject.status?.toLowerCase() === 'on-hold');
+          const pStatus = (assocProject?.status || '').toLowerCase().trim();
+          isProjectOnHoldOrDone = assocProject && (pStatus === 'on-hold' || pStatus === 'onhold' || pStatus === 'on hold' || pStatus === 'completed');
         }
         
-        if (!isProjectOnHold) {
+        if (!isProjectOnHoldOrDone) {
           const isHR = t.department === 'HR' || t.department?.toUpperCase() === 'HR';
           consolidated.push({
             id: t.id,
@@ -294,10 +295,11 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
     wmTasks.forEach(t => {
       const isAssigned = t.assignedToId === uId || t.assignedToIds?.includes(uId)
       if (isAssigned) {
-        const assocProject = projects.find(p => p.id === t.projectId)
-        const isProjectOnHold = assocProject && (assocProject.status === 'on-hold' || assocProject.status === 'onhold' || assocProject.status?.toLowerCase() === 'on-hold')
+        const assocProject = projects.find(p => p.id === t.projectId);
+        const pStatus = (assocProject?.status || '').toLowerCase().trim();
+        const isProjectOnHoldOrDone = assocProject && (pStatus === 'on-hold' || pStatus === 'onhold' || pStatus === 'on hold' || pStatus === 'completed');
         
-        if (!isProjectOnHold) {
+        if (!isProjectOnHoldOrDone) {
           consolidated.push({
             id: t.id,
             title: t.title,
@@ -327,9 +329,12 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
         );
       }
 
-      const isProjectOnHold = assocProject && (assocProject.status === 'on-hold' || assocProject.status === 'onhold' || assocProject.status?.toLowerCase() === 'on-hold');
+      const pStatus = (assocProject?.status || '').toLowerCase().trim();
+      const isProjectOnHoldOrDone = assocProject && (pStatus === 'on-hold' || pStatus === 'onhold' || pStatus === 'on hold' || pStatus === 'completed');
+      const cStatus = (client?.status || '').toLowerCase().trim();
+      const isClientDone = cStatus === 'completed' || cStatus === 'inactive';
       
-      if (!isProjectOnHold) {
+      if (!isProjectOnHoldOrDone && !isClientDone) {
         const checkAndAddCreativeTask = (stageName: string, deadline: string, isDone: boolean) => {
           let assigneeId = null
           if (stageName === 'Script') assigneeId = entry.assignedScriptwriterId || assocProject?.assignedScriptwriterId || client?.assignedScriptwriterId
@@ -442,13 +447,14 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
       const isAssignee = String(ow.assigneeId) === String(uId) || (targetEmpName && ow.assigneeName && ow.assigneeName.toLowerCase().includes(targetEmpName.toLowerCase()));
       const isAssigner = !targetUserId && (String(ow.assignerId) === String(uId) || (targetEmpName && ow.assignerName && ow.assignerName.toLowerCase().includes(targetEmpName.toLowerCase())));
       if ((isAssignee || isAssigner) && ow.status !== 'Approved') {
-        let isProjectOnHold = false;
+        let isProjectOnHoldOrDone = false;
         if (ow.projectId) {
           const assocProject = projects.find(p => p.id === ow.projectId);
-          isProjectOnHold = assocProject && (assocProject.status === 'on-hold' || assocProject.status === 'onhold' || assocProject.status?.toLowerCase() === 'on-hold');
+          const pStatus = (assocProject?.status || '').toLowerCase().trim();
+          isProjectOnHoldOrDone = assocProject && (pStatus === 'on-hold' || pStatus === 'onhold' || pStatus === 'on hold' || pStatus === 'completed');
         }
         
-        if (!isProjectOnHold) {
+        if (!isProjectOnHoldOrDone) {
           const assignerEmp = employees.find(e => e.id === ow.assignerId);
           const assigneeEmp = employees.find(e => e.id === ow.assigneeId);
           const creatorName = assignerEmp ? (assignerEmp.name || `${assignerEmp.firstName || ''} ${assignerEmp.lastName || ''}`.trim()) : (ow.assignerName || ow.logs?.[0]?.userName || 'Manager');

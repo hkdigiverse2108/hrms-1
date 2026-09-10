@@ -445,7 +445,11 @@ export function PendingWorkEmbedded({
         const projectMap: Record<string, any> = {};
         fetchedProjects.forEach((p: any) => {
           if (p.clientId && p.department === 'Creative') {
-            projectMap[p.clientId] = p;
+            const pStatus = (p.status || "").toLowerCase().trim();
+            const isFinished = pStatus === 'completed' || pStatus === 'on-hold' || pStatus === 'onhold' || pStatus === 'on hold' || pStatus === 'rejected';
+            if (!projectMap[p.clientId] || (!isFinished && ['completed', 'on-hold', 'onhold', 'on hold', 'rejected'].includes((projectMap[p.clientId].status || '').toLowerCase().trim()))) {
+              projectMap[p.clientId] = p;
+            }
           }
         });
         setClientProjects(projectMap);
@@ -476,7 +480,10 @@ export function PendingWorkEmbedded({
         project = clientProjects[entry.clientId];
       }
       if (!project) return; // Only show if active creative project
-      if (project.status === "on-hold" || project.status === "onhold" || project.status?.toLowerCase() === "on-hold") return;
+      const pStatus = (project.status || "").toLowerCase().trim();
+      if (pStatus === "on-hold" || pStatus === "onhold" || pStatus === "on hold" || pStatus === "completed") return;
+      const cStatus = (client?.status || "").toLowerCase().trim();
+      if (cStatus === "completed" || cStatus === "inactive") return;
       
       const clientName = client ? (client.companyName || client.clientName || 'Unknown Client') : 'Unknown Client';
       const projectName = project.title;
@@ -612,10 +619,13 @@ export function PendingWorkEmbedded({
 
     if (projects) {
       projects.forEach(project => {
-        if (project.status === "on-hold" || project.status === "onhold" || project.status?.toLowerCase() === "on-hold") return;
+        const pStatus = (project.status || "").toLowerCase().trim();
+        if (pStatus === "on-hold" || pStatus === "onhold" || pStatus === "on hold" || pStatus === "completed") return;
+        const client = clients.find(c => c.id === project.clientId) || {};
+        const cStatus = (client?.status || "").toLowerCase().trim();
+        if (cStatus === "completed" || cStatus === "inactive") return;
         if (!project.nextFollowupDate) return;
         const nextDate = project.nextFollowupDate.split("T")[0].split(" ")[0];
-        const client = clients.find(c => c.id === project.clientId) || {};
         
         const followUpAssigneeId = project.assignedFollowUpId || client.assignedFollowUpId;
         
@@ -644,6 +654,11 @@ export function PendingWorkEmbedded({
     }
 
     otherWorkEntries.forEach(ow => {
+      if (ow.projectId) {
+        const project = projects.find(p => p.id === ow.projectId);
+        const pStatus = (project?.status || "").toLowerCase().trim();
+        if (pStatus === "on-hold" || pStatus === "onhold" || pStatus === "on hold" || pStatus === "completed") return;
+      }
       const uId = user?.id || user?._id;
       const transfer = incomingRequests.find(r => r.taskId === (ow.id || ow._id) && (r.taskType === 'other-work' || r.taskType === 'dm-other-work' || r.taskType === 'creative') && r.status === 'Accepted');
       const currentAssigneeId = transfer ? transfer.receiverId : ow.assigneeId;
