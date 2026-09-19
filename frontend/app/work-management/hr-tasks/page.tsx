@@ -292,9 +292,10 @@ export default function HRTasksPage() {
         toast.success(`Leave request ${leaveStatusData.status.toLowerCase()} successfully`);
         setIsLeaveModalOpen(false);
         setSelectedLeave(null);
-        fetchLeaves();
+        fetchPageData();
       } else {
-        toast.error("Failed to update leave status");
+        const errData = await res.json().catch(() => null);
+        toast.error(errData?.detail || "Failed to update leave status");
       }
     } catch (err) {
       console.error(err);

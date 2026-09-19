@@ -351,7 +351,7 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
           if (stageName === 'Approval') assigneeId = entry.assignedApproverId || assocProject?.assignedApproverId || client?.assignedApproverId
           if (stageName === 'Posting') assigneeId = entry.assignedPosterId || assocProject?.assignedPosterId || client?.assignedPosterId
 
-          if (assigneeId === uId && !isDone && deadline) {
+          if (assigneeId && assigneeId !== 'none' && assigneeId === uId && !isDone && deadline) {
             const creatorName = entry.logs?.[0]?.userName || 'Admin'
             const empName = employees.find(e => e.id === assigneeId)?.name || currentUser?.name || 'User'
             const enrichedEntry = { ...entry, assignerName: creatorName, assigneeName: empName }

@@ -297,7 +297,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                     const transfer = acceptedTransfers.find((t: any) => String(t.taskId) === String(entry.id || entry._id) && t.stage === (stageName === 'Editing' && entry.postReel === 'Post' ? 'Post/Graphics' : stageName));
                     const currentAssigneeId = transfer ? transfer.receiverId : originalAssigneeId;
 
-                    if (String(currentAssigneeId).trim() === String(userId).trim() && !isDone) {
+                    if (originalAssigneeId && originalAssigneeId !== 'none' && String(currentAssigneeId).trim() === String(userId).trim() && !isDone) {
                       let dateStr = entry[dateField];
                       if (!dateStr && (stageName === 'Caption' || stageName === 'Thumbnail')) {
                         dateStr = entry.editingStart;

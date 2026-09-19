@@ -1,4 +1,4 @@
-from pydantic import BaseModel as PydanticBaseModel, model_serializer, BeforeValidator, PlainSerializer, SerializationInfo, Field
+from pydantic import BaseModel as PydanticBaseModel, model_serializer, BeforeValidator, PlainSerializer, SerializationInfo, Field, field_validator
 from typing import List, Optional, Any, Dict, Annotated, Union
 from datetime import datetime, date
 import pytz
@@ -414,15 +414,15 @@ class PunchOutRequest(BaseModel):
 class LeaveRequestBase(BaseModel):
     employee_id: str
     employee_name: str
-    type: str  # annual, sick, unpaid, etc.
-    start_date: RobustDateDMY
-    end_date: RobustDateDMY
-    duration: str
-    reason: str
+    type: Optional[str] = "Leave"  # annual, sick, unpaid, etc.
+    start_date: Optional[RobustDateDMY] = None
+    end_date: Optional[RobustDateDMY] = None
+    duration: Optional[str] = "1 Day"
+    reason: Optional[str] = ""
     status: str = "Pending"
     requested_on: Optional[RobustDatetimeDMY] = None
     day_type: Optional[str] = "Full Day"
-    half_day: bool = False
+    half_day: Optional[bool] = False
     approved_by: Optional[str] = None
     approved_by_role: Optional[str] = None
     approved_by_id: Optional[str] = None
@@ -430,6 +430,16 @@ class LeaveRequestBase(BaseModel):
     proof_image: Optional[str] = None
     reject_reason: Optional[str] = None
     approve_reason: Optional[str] = None
+
+    @field_validator("employee_id", mode="before")
+    @classmethod
+    def coerce_emp_id(cls, v):
+        return str(v) if v is not None else ""
+
+    @field_validator("approved_by_id", mode="before")
+    @classmethod
+    def coerce_approver_id(cls, v):
+        return str(v) if v is not None else None
 
 class LeaveRequestCreate(LeaveRequestBase):
     pass
@@ -986,6 +996,13 @@ class NotificationBase(BaseModel):
     reference_id: Optional[str] = None
     is_read: bool = False
     created_at: Optional[RobustDatetime] = None
+
+    @field_validator("employee_id", mode="before")
+    @classmethod
+    def coerce_employee_id(cls, v):
+        if v is not None:
+            return str(v)
+        return ""
 
 class NotificationCreate(NotificationBase):
     pass

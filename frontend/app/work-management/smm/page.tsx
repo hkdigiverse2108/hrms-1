@@ -536,25 +536,34 @@ export default function CreativeClientsPage() {
           const isStory = entry.postReel === 'Story';
           
           const isUserAssigned = (stageAssigneeId: string | null | undefined) => {
+            if (!stageAssigneeId || stageAssigneeId === 'none') return false;
             if (!isEmployeeOrIntern || !user?.id) return true;
             return stageAssigneeId === user.id;
           };
 
-          if (!isPost && !isStory && entry.scriptDate && entry.scriptDate !== '-' && !entry.scriptLink && isUserAssigned(entry.assignedScriptwriterId)) pending++;
-          if (!isPost && !isStory && entry.shootDate && entry.shootDate !== '-' && (!entry.shootLink || entry.shootLink === '-') && isUserAssigned(entry.assignedShooterId)) pending++;
+          const scriptAssignee = entry.assignedScriptwriterId || project?.assignedScriptwriterId;
+          if (!isPost && !isStory && entry.scriptDate && entry.scriptDate !== '-' && !entry.scriptLink && isUserAssigned(scriptAssignee)) pending++;
+
+          const shootAssignee = entry.assignedShooterId || project?.assignedShooterId;
+          if (!isPost && !isStory && entry.shootDate && entry.shootDate !== '-' && (!entry.shootLink || entry.shootLink === '-') && isUserAssigned(shootAssignee)) pending++;
           
           const captionDate = entry.captionDate || entry.editingStart;
-          if (!isStory && captionDate && captionDate !== '-' && !entry.caption && entry.caption !== '-' && isUserAssigned(entry.assignedCaptionWriterId)) pending++;
+          const captionAssignee = entry.assignedCaptionWriterId || project?.assignedCaptionWriterId;
+          if (!isStory && captionDate && captionDate !== '-' && !entry.caption && entry.caption !== '-' && isUserAssigned(captionAssignee)) pending++;
           
           const thumbnailDate = entry.thumbnailDate || entry.editingStart;
-          if (!isPost && !isStory && thumbnailDate && thumbnailDate !== '-' && !entry.thumbnailLink && entry.thumbnailLink !== '-' && isUserAssigned(entry.assignedThumbnailDesignerId)) pending++;
+          const thumbAssignee = entry.assignedThumbnailDesignerId || project?.assignedThumbnailDesignerId;
+          if (!isPost && !isStory && thumbnailDate && thumbnailDate !== '-' && !entry.thumbnailLink && entry.thumbnailLink !== '-' && isUserAssigned(thumbAssignee)) pending++;
           
           const isEditingPending = entry.editingStart && entry.editingStart !== '-' && (isPost ? !entry.finalPostLink : !entry.finalReelLink);
-          const editorId = isPost ? entry.assignedPostDesignerId : entry.assignedReelEditorId;
+          const editorId = (isPost ? entry.assignedPostDesignerId : entry.assignedReelEditorId) || (isPost ? project?.assignedPostDesignerId : project?.assignedReelEditorId);
           if (isEditingPending && isUserAssigned(editorId)) pending++;
           
-          if (entry.approval && entry.approval !== '-' && entry.isApproved !== 'Yes' && isUserAssigned(entry.assignedApproverId)) pending++;
-          if (!isStory && entry.postingDate && entry.postingDate !== '-' && !entry.postingLinkOfIg && entry.postingLinkOfIg !== '-' && isUserAssigned(entry.assignedPosterId)) pending++;
+          const approverAssignee = entry.assignedApproverId || project?.assignedApproverId;
+          if (entry.approval && entry.approval !== '-' && entry.isApproved !== 'Yes' && isUserAssigned(approverAssignee)) pending++;
+
+          const posterAssignee = entry.assignedPosterId || project?.assignedPosterId;
+          if (!isStory && entry.postingDate && entry.postingDate !== '-' && !entry.postingLinkOfIg && entry.postingLinkOfIg !== '-' && isUserAssigned(posterAssignee)) pending++;
 
           if (pending > 0) {
             const key = entry.projectId || entry.clientId;

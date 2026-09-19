@@ -196,7 +196,8 @@ export default function LeaveRequestsPage() {
         fetchRequests();
         setRejectModalOpen(false);
       } else {
-        toast.error("Failed to update status");
+        const errData = await res.json().catch(() => null);
+        toast.error(errData?.detail || "Failed to update status");
       }
     } catch (err) {
       console.error("Update error:", err);

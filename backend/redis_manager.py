@@ -1,5 +1,6 @@
 import os
 import json
+import time
 import logging
 import functools
 from typing import Any, Optional, Union, List, Callable
@@ -16,6 +17,10 @@ REDIS_ENABLED = os.getenv("REDIS_ENABLED", "true").lower() in ("true", "1", "yes
 
 # Global Redis pool & client instance
 _redis_client: Optional[aioredis.Redis] = None
+
+# High-speed fallback in-memory cache when Redis server is unreachable or offline
+_fallback_cache: dict = {}
+_fallback_expiry: dict = {}
 
 
 class JSONEncoder(json.JSONEncoder):
@@ -53,7 +58,7 @@ async def init_redis() -> Optional[aioredis.Redis]:
         logger.info(f"✅ Successfully connected to Redis at {REDIS_URL}")
         return _redis_client
     except Exception as e:
-        logger.warning(f"⚠️ Could not connect to Redis ({e}). Running with direct database queries (Fallback Mode).")
+        logger.warning(f"⚠️ Could not connect to Redis ({e}). Running with in-memory fallback caching.")
         _redis_client = None
         return None
 
@@ -79,77 +84,104 @@ def get_redis_client() -> Optional[aioredis.Redis]:
 async def get_cached(key: str) -> Optional[Any]:
     """
     Retrieve and parse cached JSON object.
-    Returns None on cache miss or Redis error.
+    Checks Redis first; falls back to in-memory cache if Redis is down.
     """
     client = get_redis_client()
-    if client is None:
-        return None
-    try:
-        raw_val = await client.get(key)
-        if raw_val is not None:
-            return json.loads(raw_val)
-    except Exception as e:
-        logger.debug(f"Redis GET failed for key '{key}': {e}")
+    if client is not None:
+        try:
+            raw_val = await client.get(key)
+            if raw_val is not None:
+                return json.loads(raw_val)
+        except Exception as e:
+            logger.debug(f"Redis GET failed for key '{key}': {e}")
+    
+    # In-memory fallback
+    if key in _fallback_cache:
+        if time.time() < _fallback_expiry.get(key, 0):
+            return _fallback_cache[key]
+        else:
+            _fallback_cache.pop(key, None)
+            _fallback_expiry.pop(key, None)
     return None
 
 
 async def set_cached(key: str, data: Any, ttl: int = 60) -> bool:
     """
     Serialize and store data in Redis with TTL (seconds).
-    Returns True if successful, False on failure.
+    Also stores in in-memory fallback cache.
     """
-    client = get_redis_client()
-    if client is None or data is None:
+    if data is None:
         return False
+        
+    client = get_redis_client()
+    if client is not None:
+        try:
+            json_str = json.dumps(data, cls=JSONEncoder)
+            await client.set(key, json_str, ex=ttl)
+            return True
+        except Exception as e:
+            logger.debug(f"Redis SET failed for key '{key}': {e}")
+            
+    # Always keep in-memory fallback updated
     try:
-        json_str = json.dumps(data, cls=JSONEncoder)
-        await client.set(key, json_str, ex=ttl)
+        _fallback_cache[key] = json.loads(json.dumps(data, cls=JSONEncoder))
+        _fallback_expiry[key] = time.time() + ttl
         return True
     except Exception as e:
-        logger.debug(f"Redis SET failed for key '{key}': {e}")
+        logger.debug(f"Fallback cache SET failed for key '{key}': {e}")
         return False
 
 
 async def delete_cached(*keys: str) -> bool:
-    """Delete specific cache keys."""
+    """Delete specific cache keys from Redis and in-memory cache."""
     client = get_redis_client()
-    if client is None or not keys:
-        return False
-    try:
-        valid_keys = [k for k in keys if k]
-        if valid_keys:
-            await client.delete(*valid_keys)
-        return True
-    except Exception as e:
-        logger.debug(f"Redis DELETE failed: {e}")
-        return False
+    if client is not None:
+        try:
+            valid_keys = [k for k in keys if k]
+            if valid_keys:
+                await client.delete(*valid_keys)
+        except Exception as e:
+            logger.debug(f"Redis DELETE failed: {e}")
+            
+    for k in keys:
+        _fallback_cache.pop(k, None)
+        _fallback_expiry.pop(k, None)
+    return True
 
 
 async def invalidate_namespace(namespace: str) -> bool:
     """
     Invalidate all keys matching namespace pattern (e.g., 'hrms:tasks:*').
-    Uses SCAN to safely iterate without blocking Redis engine.
+    Invalidates both Redis and in-memory fallback cache.
     """
-    client = get_redis_client()
-    if client is None or not namespace:
+    if not namespace:
         return False
 
+    client = get_redis_client()
     pattern = f"{namespace}:*" if not namespace.endswith("*") else namespace
-    try:
-        keys_to_delete = []
-        async for key in client.scan_iter(match=pattern, count=100):
-            keys_to_delete.append(key)
-            if len(keys_to_delete) >= 500:
+    if client is not None:
+        try:
+            keys_to_delete = []
+            async for key in client.scan_iter(match=pattern, count=100):
+                keys_to_delete.append(key)
+                if len(keys_to_delete) >= 500:
+                    await client.delete(*keys_to_delete)
+                    keys_to_delete = []
+            
+            if keys_to_delete:
                 await client.delete(*keys_to_delete)
-                keys_to_delete = []
-        
-        if keys_to_delete:
-            await client.delete(*keys_to_delete)
-        logger.debug(f"Invalidated Redis namespace pattern: '{pattern}'")
-        return True
-    except Exception as e:
-        logger.warning(f"Redis invalidate_namespace failed for '{pattern}': {e}")
-        return False
+            logger.debug(f"Invalidated Redis namespace pattern: '{pattern}'")
+        except Exception as e:
+            logger.warning(f"Redis invalidate_namespace failed for '{pattern}': {e}")
+
+    # Also invalidate in-memory fallback
+    ns_prefix = namespace.rstrip("*")
+    matched = [k for k in _fallback_cache.keys() if k.startswith(ns_prefix)]
+    for k in matched:
+        _fallback_cache.pop(k, None)
+        _fallback_expiry.pop(k, None)
+    logger.debug(f"Invalidated fallback cache namespace pattern: '{namespace}' ({len(matched)} keys)")
+    return True
 
 
 def build_cache_key(namespace: str, path: str, params: dict) -> str:

@@ -133,7 +133,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
               
               const addIfMatches = (stage: string, date: string, assigneeId: string, isCompleted: boolean) => {
                 if (!date || date > targetDate || isCompleted) return;
-                if (assigneeId !== targetId) return;
+                if (!assigneeId || assigneeId === 'none' || assigneeId !== targetId) return;
                 smmTasks.push({
                   id: `${entry.id}-${stage}`,
                   title: `${entry.concept || entry.topic || 'Content Task'} - ${stage}`,

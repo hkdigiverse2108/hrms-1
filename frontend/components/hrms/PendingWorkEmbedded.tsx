@@ -558,7 +558,11 @@ export function PendingWorkEmbedded({
             isAssignedToMe = String(transfer ? transfer.receiverId : (entry.assignedReelEditorId || project.assignedReelEditorId || client?.assignedReelEditorId)) === String(uId);
           }
         }
-        else if (stage === 'Approval') isAssignedToMe = String(transfer ? transfer.receiverId : (entry.assignedApproverId || project.assignedApproverId || client?.assignedApproverId)) === String(uId);
+        else if (stage === 'Approval') {
+          const approverAssignee = entry.assignedApproverId || project.assignedApproverId || client?.assignedApproverId;
+          if (!approverAssignee || approverAssignee === 'none') return false;
+          isAssignedToMe = String(transfer ? transfer.receiverId : approverAssignee) === String(uId);
+        }
         else if (stage === 'Posting') isAssignedToMe = String(transfer ? transfer.receiverId : (entry.assignedPosterId || project.assignedPosterId || client?.assignedPosterId)) === String(uId);
         
         if (isAdminOrTL && (type === 'all' || workScope === 'all')) return true;
@@ -613,7 +617,8 @@ export function PendingWorkEmbedded({
 
       const isEditingPending = entry.editingStart && entry.editingStart !== '-' && (isPost ? !entry.finalPostLink : !entry.finalReelLink);
       if (isEditingPending && canSeeTask('Editing')) tasks.push(enrich('Editing', entry.editingStart, 'edits'));
-      if (entry.approval && entry.approval !== '-' && entry.isApproved !== 'Yes' && canSeeTask('Approval')) tasks.push(enrich('Approval', entry.approval, 'approvals'));
+      const approverAssignee = entry.assignedApproverId || project.assignedApproverId || client?.assignedApproverId;
+      if (approverAssignee && approverAssignee !== 'none' && entry.approval && entry.approval !== '-' && entry.isApproved !== 'Yes' && canSeeTask('Approval')) tasks.push(enrich('Approval', entry.approval, 'approvals'));
       if (!isStory && entry.postingDate && entry.postingDate !== '-' && !entry.postingLinkOfIg && canSeeTask('Posting')) tasks.push(enrich('Posting', entry.postingDate, 'posts'));
     });
 
