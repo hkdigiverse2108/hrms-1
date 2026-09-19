@@ -365,19 +365,34 @@ export default function ProjectsPage() {
     if (isAdmin) return true;
     // Check global access roles
     const userRole = (user?.role || "").toLowerCase();
-    if (userRole.includes("hr") || userRole.includes("finance")) return true;
+    const userDesig = (user?.designation || "").toLowerCase();
+    if (
+      userRole.includes("hr") || 
+      userRole.includes("finance") || 
+      userRole.includes("admin") || 
+      userRole.includes("head") || 
+      userDesig.includes("head") ||
+      userRole.includes("manager") ||
+      userDesig.includes("manager") ||
+      userRole.includes("director")
+    ) return true;
     
     // Check explicit assignments dynamically
     const isAssigned = Object.keys(p).some(key => {
       const val = p[key];
       return (typeof val === 'string' && val === user?.id);
-    });
+    }) || (Array.isArray(p.assignedTeamIds) && p.assignedTeamIds.map(String).includes(String(user?.id)));
     if (isAssigned) return true;
     
-    // If not assigned, filter by department
-    if (!user?.department) return true;
-    const userDept = user.department.toLowerCase().trim();
-    return p.department && p.department.toLowerCase().includes(userDept);
+    // Check if user has any tasks in this project
+    const hasTasks = tasks.some(t => String(t.projectId) === String(p.id) && (
+      String(t.assignedToId) === String(user?.id) || 
+      String(t.assignedEmployeeId) === String(user?.id) ||
+      (Array.isArray(t.assignedToIds) && t.assignedToIds.map(String).includes(String(user?.id)))
+    ));
+    if (hasTasks) return true;
+
+    return false;
   });
 
   const filteredProjects = allowedProjects.filter(p => {

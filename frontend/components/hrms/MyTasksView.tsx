@@ -342,7 +342,7 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
           if (stageName === 'Caption') assigneeId = entry.assignedCaptionWriterId || assocProject?.assignedCaptionWriterId || client?.assignedCaptionWriterId
           if (stageName === 'Thumbnail') assigneeId = entry.assignedThumbnailDesignerId || assocProject?.assignedThumbnailDesignerId || client?.assignedThumbnailDesignerId
           if (stageName === 'Editing') {
-            if (entry.postReel === 'Post') {
+            if (entry.postReel === 'Post' || entry.postReel === 'Story') {
               assigneeId = entry.assignedPostDesignerId || assocProject?.assignedPostDesignerId || client?.assignedPostDesignerId
             } else {
               assigneeId = entry.assignedReelEditorId || assocProject?.assignedReelEditorId || client?.assignedReelEditorId
@@ -427,7 +427,7 @@ export function MyTasksView({ targetUserId, isEmbedded = false, targetDate }: My
           checkAndAddCreativeTask('Thumbnail', entry.thumbnailDate, !!entry.thumbnailLink)
         }
         if (entry.editingStart && entry.editingStart !== '-') {
-          const isDone = isPost ? !!entry.finalPostLink : !!entry.finalReelLink
+          const isDone = (isPost || isStory) ? !!entry.finalPostLink : !!entry.finalReelLink
           checkAndAddCreativeTask('Editing', entry.editingStart, isDone)
         }
         if (entry.approval && entry.approval !== '-') {

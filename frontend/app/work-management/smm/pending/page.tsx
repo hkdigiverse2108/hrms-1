@@ -140,7 +140,7 @@ export default function PendingWorkPage() {
       const thumbnailDate = entry.thumbnailDate || entry.editingStart;
       if (!isPost && !isStory && thumbnailDate && thumbnailDate !== '-' && !entry.thumbnailLink && entry.thumbnailLink !== '-') clientsMap[key].tasks.push(enrich('Thumbnail', thumbnailDate, 'thumbnails'));
       
-      const isEditingPending = entry.editingStart && entry.editingStart !== '-' && (isPost ? !entry.finalPostLink : !entry.finalReelLink);
+      const isEditingPending = entry.editingStart && entry.editingStart !== '-' && ((isPost || isStory) ? !entry.finalPostLink : !entry.finalReelLink);
       if (isEditingPending) clientsMap[key].tasks.push(enrich('Editing', entry.editingStart, 'edits'));
       const approverAssignee = entry.assignedApproverId || project?.assignedApproverId || client?.assignedApproverId;
       if (approverAssignee && approverAssignee !== 'none' && entry.approval && entry.approval !== '-' && entry.isApproved !== 'Yes') clientsMap[key].tasks.push(enrich('Approval', entry.approval, 'approvals'));

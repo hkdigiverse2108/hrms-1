@@ -555,8 +555,9 @@ export default function CreativeClientsPage() {
           const thumbAssignee = entry.assignedThumbnailDesignerId || project?.assignedThumbnailDesignerId;
           if (!isPost && !isStory && thumbnailDate && thumbnailDate !== '-' && !entry.thumbnailLink && entry.thumbnailLink !== '-' && isUserAssigned(thumbAssignee)) pending++;
           
-          const isEditingPending = entry.editingStart && entry.editingStart !== '-' && (isPost ? !entry.finalPostLink : !entry.finalReelLink);
-          const editorId = (isPost ? entry.assignedPostDesignerId : entry.assignedReelEditorId) || (isPost ? project?.assignedPostDesignerId : project?.assignedReelEditorId);
+          const isGraphics = isPost || isStory;
+          const isEditingPending = entry.editingStart && entry.editingStart !== '-' && (isGraphics ? !entry.finalPostLink : !entry.finalReelLink);
+          const editorId = (isGraphics ? entry.assignedPostDesignerId : entry.assignedReelEditorId) || (isGraphics ? project?.assignedPostDesignerId : project?.assignedReelEditorId);
           if (isEditingPending && isUserAssigned(editorId)) pending++;
           
           const approverAssignee = entry.assignedApproverId || project?.assignedApproverId;
@@ -897,12 +898,13 @@ export default function CreativeClientsPage() {
         const proj = p || {};
         const hasAssignedCCEntry = calendarEntries.some((entry: any) => {
           if (entry.clientId !== c.id) return false;
+          const isGraphics = entry.postReel === 'Post' || entry.postReel === 'Story';
+          const entryEditorId = isGraphics ? entry.assignedPostDesignerId : entry.assignedReelEditorId;
           return entry.assignedScriptwriterId === user.id ||
                  entry.assignedShooterId === user.id ||
                  entry.assignedCaptionWriterId === user.id ||
                  entry.assignedThumbnailDesignerId === user.id ||
-                 entry.assignedReelEditorId === user.id ||
-                 entry.assignedPostDesignerId === user.id ||
+                 entryEditorId === user.id ||
                  entry.assignedApproverId === user.id ||
                  entry.assignedPosterId === user.id;
         });

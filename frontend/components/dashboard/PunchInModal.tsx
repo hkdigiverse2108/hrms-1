@@ -286,7 +286,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                       !entry.remarkStage || 
                       (() => {
                         const stages = ['Script', 'Shoot', 'Caption', 'Thumbnail', 'Editing', 'Post/Graphics', 'Approval', 'Posting'];
-                        const idx1 = stages.indexOf(stageName === 'Editing' && entry.postReel === 'Post' ? 'Post/Graphics' : stageName);
+                        const idx1 = stages.indexOf(stageName === 'Editing' && (entry.postReel === 'Post' || entry.postReel === 'Story') ? 'Post/Graphics' : stageName);
                         const idx2 = stages.indexOf(entry.remarkStage);
                         return idx1 >= idx2;
                       })()
@@ -294,7 +294,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                     const isClientIssue = hasApplicableRemark && entry.remark.startsWith('[CLIENT ISSUE] ');
                     if (isClientIssue) return; // SMM moves these to Pending Work
 
-                    const transfer = acceptedTransfers.find((t: any) => String(t.taskId) === String(entry.id || entry._id) && t.stage === (stageName === 'Editing' && entry.postReel === 'Post' ? 'Post/Graphics' : stageName));
+                    const transfer = acceptedTransfers.find((t: any) => String(t.taskId) === String(entry.id || entry._id) && t.stage === (stageName === 'Editing' && (entry.postReel === 'Post' || entry.postReel === 'Story') ? 'Post/Graphics' : stageName));
                     const currentAssigneeId = transfer ? transfer.receiverId : originalAssigneeId;
 
                     if (originalAssigneeId && originalAssigneeId !== 'none' && String(currentAssigneeId).trim() === String(userId).trim() && !isDone) {
@@ -326,8 +326,9 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                   if (!isStory) checkStage('Caption', 'assignedCaptionWriterId', 'captionDate', 'caption');
                   if (!isPost && !isStory) checkStage('Thumbnail', 'assignedThumbnailDesignerId', 'thumbnailDate', 'thumbnailLink');
                   
-                  const editIdField = isPost ? 'assignedPostDesignerId' : 'assignedReelEditorId';
-                  const editLinkField = isPost ? 'finalPostLink' : 'finalReelLink';
+                  const isGraphics = isPost || isStory;
+                  const editIdField = isGraphics ? 'assignedPostDesignerId' : 'assignedReelEditorId';
+                  const editLinkField = isGraphics ? 'finalPostLink' : 'finalReelLink';
                   checkStage('Editing', editIdField, 'editingStart', editLinkField);
                   checkStage('Approval', 'assignedApproverId', 'approval', 'isApproved', (e) => e.isApproved === 'Yes');
                   if (!isStory) checkStage('Posting', 'assignedPosterId', 'postingDate', 'postingLinkOfIg');

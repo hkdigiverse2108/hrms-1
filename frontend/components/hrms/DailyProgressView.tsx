@@ -167,10 +167,10 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
                 }
               }
 
-              const editAssignee = isGraphicPost 
+              const editAssignee = (isGraphicPost || isStory)
                 ? (entry.assignedPostDesignerId || project.assignedPostDesignerId || client.assignedPostDesignerId)
                 : (entry.assignedReelEditorId || project.assignedReelEditorId || client.assignedReelEditorId);
-              addIfMatches('Editing', entry.editingStart, editAssignee, isGraphicPost ? !!entry.finalPostLink : !!entry.finalReelLink);
+              addIfMatches('Editing', entry.editingStart, editAssignee, (isGraphicPost || isStory) ? !!entry.finalPostLink : !!entry.finalReelLink);
               
               const captionAssignee = entry.assignedCaptionWriterId || project.assignedCaptionWriterId || client.assignedCaptionWriterId;
               addIfMatches('Caption', entry.captionDate || entry.editingStart, captionAssignee, !!entry.caption || isStory);

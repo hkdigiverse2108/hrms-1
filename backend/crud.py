@@ -3875,6 +3875,23 @@ async def get_projects(db, userId: str = None, role: str = None, skip: int = 0, 
             task_list = await task_cursor.to_list(length=1000)
             project_ids = list(set([t.get("projectId") for t in task_list if t.get("projectId")]))
             
+            # Fetch CC entries where user is assigned
+            cc_cursor = db.content_calendar_entries.find({
+                "$or": [
+                    {"assignedScriptwriterId": userId},
+                    {"assignedShooterId": userId},
+                    {"assignedCaptionWriterId": userId},
+                    {"assignedThumbnailDesignerId": userId},
+                    {"assignedReelEditorId": userId},
+                    {"assignedPostDesignerId": userId},
+                    {"assignedApproverId": userId},
+                    {"assignedPosterId": userId}
+                ]
+            })
+            cc_list = await cc_cursor.to_list(length=1000)
+            cc_project_ids = [c.get("projectId") for c in cc_list if c.get("projectId")]
+            project_ids = list(set(project_ids + cc_project_ids))
+
             or_conditions = [
                 {"teamLeaderId": userId},
                 {"assignedEmployeeId": userId},
@@ -3886,7 +3903,8 @@ async def get_projects(db, userId: str = None, role: str = None, skip: int = 0, 
                 {"assignedPosterId": userId},
                 {"assignedCaptionWriterId": userId},
                 {"assignedThumbnailDesignerId": userId},
-                {"assignedFinanceManagerId": userId}
+                {"assignedFinanceManagerId": userId},
+                {"assignedTeamIds": userId}
             ]
             if project_ids:
                 project_ids_as_obj = []
@@ -3900,14 +3918,17 @@ async def get_projects(db, userId: str = None, role: str = None, skip: int = 0, 
                     or_conditions.append({"_id": {"$in": project_ids_as_obj}})
                 or_conditions.append({"id": {"$in": project_ids}}) # fallback for string IDs
             
-            if dept:
+            user_desig = str(user.get("designation", "")).lower().strip()
+            role_lower = str(role or user.get("role", "")).lower().strip()
+            is_head = "head" in role_lower or "head" in user_desig or "manager" in role_lower or "manager" in user_desig or "director" in role_lower or "admin" in role_lower or role_lower == "team leader" or user_desig == "team leader"
+
+            if dept and is_head:
                 import re
                 dept_regex = re.compile(f".*{re.escape(dept)}.*", re.IGNORECASE)
                 or_conditions.append({"department": dept_regex})
 
             # If the user is HR, also give them access to the Creative department's projects for SMM access
-            role_lower = str(role or "").lower().strip()
-            if role_lower == "hr" or (user and str(user.get("role", "")).lower().strip() == "hr"):
+            if role_lower == "hr":
                 import re
                 creative_regex = re.compile(".*Creative.*", re.IGNORECASE)
                 or_conditions.append({"department": creative_regex})
@@ -4530,18 +4551,27 @@ async def get_wm_tasks(db, userId: Optional[str] = None, role: Optional[str] = N
             
             user_role = str(user.get("role", "")).lower().strip()
             user_desig = str(user.get("designation", "")).lower().strip()
-            is_tl = (role and role.lower() == "team leader") or (user_role == "team leader") or (user_desig == "team leader")
+            role_lower = str(role or "").lower().strip()
+            is_dept_lead = (role_lower == "team leader") or (user_role == "team leader") or (user_desig == "team leader") or ("head" in user_desig) or ("head" in role_lower) or ("manager" in user_desig) or ("manager" in role_lower)
             
-            tl_proj = await db.projects.find_one({"teamLeaderId": userId})
+            tl_projs = await db.projects.find({"teamLeaderId": userId}).to_list(length=100)
+            tl_proj_ids = [str(p["_id"]) for p in tl_projs]
             
-            if is_tl or tl_proj:
-                # TL sees tasks assigned to them, tasks in their dept, unassigned tasks in their dept, or tasks they created
+            if is_dept_lead:
+                # Dept Head / Overall TL sees all tasks in their dept
                 dept_employees = await db.employees.find({"department": dept}).to_list(length=1000)
                 dept_emp_ids = [str(e["_id"]) for e in dept_employees]
                 
                 query["$or"] = [
                     {"assignedToId": {"$in": dept_emp_ids}},
                     {"department": dept},
+                    {"performedBy": userId},
+                    {"assignedToId": userId}
+                ]
+            elif tl_proj_ids:
+                # Project-level TL sees tasks in their assigned projects, plus their own tasks
+                query["$or"] = [
+                    {"projectId": {"$in": tl_proj_ids}},
                     {"performedBy": userId},
                     {"assignedToId": userId}
                 ]
@@ -9436,7 +9466,7 @@ async def create_content_calendar_entry(db, entry_data: dict):
     if entry_data.get("postReel") == "Post" and not entry_data.get("shootLink"):
         entry_data["shootLink"] = "-"
     elif entry_data.get("postReel") == "Story":
-        for k in ["scriptLink", "shootLink", "thumbnailLink", "caption", "postingLinkOfIg", "finalPostLink"]:
+        for k in ["scriptLink", "shootLink", "thumbnailLink", "caption", "postingLinkOfIg", "finalReelLink"]:
             if not entry_data.get(k):
                 entry_data[k] = "-"
         for k in ["scriptDate", "shootDate", "thumbnailDate", "captionDate"]:
@@ -9470,7 +9500,7 @@ async def update_content_calendar_entry(db, entry_id: str, update_data: dict):
         if not update_data.get("shootLink") and not existing.get("shootLink"):
             update_data["shootLink"] = "-"
     elif curr_post_reel == "Story":
-        for k in ["scriptLink", "shootLink", "thumbnailLink", "caption", "postingLinkOfIg", "finalPostLink"]:
+        for k in ["scriptLink", "shootLink", "thumbnailLink", "caption", "postingLinkOfIg", "finalReelLink"]:
             if not update_data.get(k) and not existing.get(k):
                 update_data[k] = "-"
             elif update_data.get(k) == "":
@@ -9779,7 +9809,7 @@ async def respond_to_transfer_request(db, request_id: str, status: str):
                     update_field = "assignedThumbnailDesignerId"
                 elif stage == "Editing":
                     entry = await db.content_calendar_entries.find_one({"_id": ObjectId(task_id)})
-                    if entry and entry.get("postReel") == "Post":
+                    if entry and (entry.get("postReel") == "Post" or entry.get("postReel") == "Story"):
                         update_field = "assignedPostDesignerId"
                     else:
                         update_field = "assignedReelEditorId"

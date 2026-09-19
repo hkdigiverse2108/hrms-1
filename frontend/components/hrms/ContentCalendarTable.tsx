@@ -606,7 +606,7 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
       payload.thumbnailLink = '-';
       payload.caption = '-';
       payload.postingLinkOfIg = '-';
-      payload.finalPostLink = '-';
+      payload.finalReelLink = '-';
       payload.scriptDate = '-';
       payload.shootDate = '-';
       payload.thumbnailDate = '-';
@@ -1662,7 +1662,8 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
                       const igLink = (entry.postingLinkOfIg || "").trim();
                       const finalLink = (entry.finalPostLink || entry.finalReelLink || "").trim();
                       if (entry.postReel === 'Story') {
-                        if (!finalLink || finalLink === '-') {
+                        const postLink = (entry.finalPostLink || "").trim();
+                        if (!postLink || postLink === '-') {
                           isDue = true;
                         }
                       } else {
@@ -1724,7 +1725,7 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
                                     updates.captionDate = '-';
                                     updates.caption = '-';
                                     updates.postingLinkOfIg = '-';
-                                    updates.finalPostLink = '-';
+                                    updates.finalReelLink = '-';
                                     updates.assignedBrandPersonIds = [];
                                   }
                                   setEditForm({ ...editForm, ...updates });
@@ -1783,7 +1784,7 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
                               )
                             ) : (
                               ( (key === 'thumbnailLink' || key === 'shootLink') && editForm.postReel === 'Post') ||
-                              ( ['scriptLink', 'shootLink', 'thumbnailLink', 'caption', 'postingLinkOfIg', 'finalPostLink'].includes(key) && editForm.postReel === 'Story') ? (
+                              ( ['scriptLink', 'shootLink', 'thumbnailLink', 'caption', 'postingLinkOfIg', 'finalReelLink'].includes(key) && editForm.postReel === 'Story') ? (
                                 <div className="text-slate-400 text-center w-full">-</div>
                               ) : key === 'caption' ? (
                                 <textarea
@@ -1812,7 +1813,7 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
                                  if (['thumbnailDate', 'thumbnailLink', 'shootDate', 'shootLink'].includes(key) && entry.postReel === 'Post') {
                                    return <span className="text-slate-400 text-center w-full">-</span>;
                                  }
-                                 if (['scriptDate', 'scriptLink', 'shootDate', 'shootLink', 'thumbnailDate', 'thumbnailLink', 'captionDate', 'caption', 'postingLinkOfIg', 'finalPostLink', 'assignedBrandPersonIds'].includes(key) && entry.postReel === 'Story') {
+                                 if (['scriptDate', 'scriptLink', 'shootDate', 'shootLink', 'thumbnailDate', 'thumbnailLink', 'captionDate', 'caption', 'postingLinkOfIg', 'finalReelLink', 'assignedBrandPersonIds'].includes(key) && entry.postReel === 'Story') {
                                    return <span className="text-slate-400 text-center w-full">-</span>;
                                  }
                                  if (entry[key] && (key.toLowerCase().includes("link") || key === "reference")) {

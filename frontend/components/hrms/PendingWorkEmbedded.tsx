@@ -498,7 +498,7 @@ export function PendingWorkEmbedded({
         if (stage === 'Caption') assigneeId = entry.assignedCaptionWriterId || project.assignedCaptionWriterId || client?.assignedCaptionWriterId;
         if (stage === 'Thumbnail') assigneeId = entry.assignedThumbnailDesignerId || project.assignedThumbnailDesignerId || client?.assignedThumbnailDesignerId;
         if (stage === 'Editing') {
-          if (entry.postReel === 'Post') {
+          if (entry.postReel === 'Post' || entry.postReel === 'Story') {
             assigneeId = entry.assignedPostDesignerId || project.assignedPostDesignerId || client?.assignedPostDesignerId;
           } else {
             assigneeId = entry.assignedReelEditorId || project.assignedReelEditorId || client?.assignedReelEditorId;
@@ -510,7 +510,7 @@ export function PendingWorkEmbedded({
         const assignee = employees.find((e: any) => e.id === assigneeId);
         const assigner = employees.find((e: any) => e.id === assignerId);
 
-        const finalStage = (stage === 'Editing' && entry.postReel === 'Post') ? 'Post/Graphics' : stage;
+        const finalStage = (stage === 'Editing' && (entry.postReel === 'Post' || entry.postReel === 'Story')) ? 'Post/Graphics' : stage;
         const transfer = incomingRequests.find((r: any) => r.taskId === (entry.id || entry._id) && r.stage === finalStage && r.status === 'Accepted' && String(r.receiverId) === String(user?.id));
         
         const cleanConcept = (entry.concept && entry.concept.trim() !== '-') ? entry.concept.trim() : '';
@@ -538,7 +538,7 @@ export function PendingWorkEmbedded({
         const uId = user?.id;
         if (!uId) return false;
         
-        const finalStageName = (stage === 'Editing' && entry.postReel === 'Post') ? 'Post/Graphics' : stage;
+        const finalStageName = (stage === 'Editing' && (entry.postReel === 'Post' || entry.postReel === 'Story')) ? 'Post/Graphics' : stage;
         
         // Hide task if the current user has sent a transfer request that has been accepted
         const outgoingTransfer = outgoingRequests.find(r => r.taskId === (entry.id || entry._id) && r.stage === finalStageName && r.status === 'Accepted');
@@ -552,7 +552,7 @@ export function PendingWorkEmbedded({
         else if (stage === 'Caption') isAssignedToMe = String(transfer ? transfer.receiverId : (entry.assignedCaptionWriterId || project.assignedCaptionWriterId || client?.assignedCaptionWriterId)) === String(uId);
         else if (stage === 'Thumbnail') isAssignedToMe = String(transfer ? transfer.receiverId : (entry.assignedThumbnailDesignerId || project.assignedThumbnailDesignerId || client?.assignedThumbnailDesignerId)) === String(uId);
         else if (stage === 'Editing') {
-          if (entry.postReel === 'Post') {
+          if (entry.postReel === 'Post' || entry.postReel === 'Story') {
             isAssignedToMe = String(transfer ? transfer.receiverId : (entry.assignedPostDesignerId || project.assignedPostDesignerId || client?.assignedPostDesignerId)) === String(uId);
           } else {
             isAssignedToMe = String(transfer ? transfer.receiverId : (entry.assignedReelEditorId || project.assignedReelEditorId || client?.assignedReelEditorId)) === String(uId);
@@ -615,7 +615,7 @@ export function PendingWorkEmbedded({
       const thumbnailDate = entry.thumbnailDate || entry.editingStart;
       if (!isPost && !isStory && thumbnailDate && thumbnailDate !== '-' && !entry.thumbnailLink && canSeeTask('Thumbnail')) tasks.push(enrich('Thumbnail', thumbnailDate, 'thumbnails'));
 
-      const isEditingPending = entry.editingStart && entry.editingStart !== '-' && (isPost ? !entry.finalPostLink : !entry.finalReelLink);
+      const isEditingPending = entry.editingStart && entry.editingStart !== '-' && ((isPost || isStory) ? !entry.finalPostLink : !entry.finalReelLink);
       if (isEditingPending && canSeeTask('Editing')) tasks.push(enrich('Editing', entry.editingStart, 'edits'));
       const approverAssignee = entry.assignedApproverId || project.assignedApproverId || client?.assignedApproverId;
       if (approverAssignee && approverAssignee !== 'none' && entry.approval && entry.approval !== '-' && entry.isApproved !== 'Yes' && canSeeTask('Approval')) tasks.push(enrich('Approval', entry.approval, 'approvals'));
