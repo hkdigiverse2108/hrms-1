@@ -269,7 +269,13 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                 ccList.forEach((entry: any) => {
                   const client = clientList.find((c: any) => String(c.id || c._id).trim() === String(entry.clientId).trim());
                   // In SMM, CC tasks use the client's Creative project
-                  const project = projList.find((p: any) => String(p.clientId).trim() === String(entry.clientId).trim() && p.department?.toLowerCase().trim() === 'creative');
+                  let project = null;
+                  if (entry.projectId) {
+                    project = projList.find((p: any) => String(p.id || p._id).trim() === String(entry.projectId).trim());
+                  }
+                  if (!project) {
+                    project = projList.find((p: any) => String(p.clientId).trim() === String(entry.clientId).trim() && (p.department?.toLowerCase().trim() === 'creative' || p.department?.toLowerCase().trim() === 'smm' || p.department?.toLowerCase().trim() === 'social media management'));
+                  }
                   if (!project) return; // Only show if active creative project (matching SMM)
                   const pStatus = (project.status || "").toLowerCase().trim();
                   if (pStatus === "onhold" || pStatus === "on-hold" || pStatus === "on hold" || pStatus === "completed") return;
@@ -277,6 +283,9 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                   if (cStatus === "completed" || cStatus === "inactive") return;
                   
                   const cName = client?.companyName || client?.clientName || "Unknown Client";
+                  const projTitle = project?.projectName || project?.title;
+                  const cleanProjTitle = projTitle ? projTitle.replace(/\s*-\s*Creative\s+Project$/i, '').trim() : '';
+                  const displayBrand = cleanProjTitle || projTitle || cName;
                   
                   const checkStage = (stageName: string, idField: string, dateField: string, linkField: string, linkCheck?: (e:any)=>boolean) => {
                     const originalAssigneeId = entry[idField] || project?.[idField] || client?.[idField];
@@ -312,7 +321,7 @@ export function PunchInModal({ open, onOpenChange, onConfirm, userId, initialAct
                       smmTasks.push({
                         id: `${entry.id || entry._id}-${stageName}`,
                         title: taskName,
-                        projectName: `${stageName} - ${cName}`,
+                        projectName: `${stageName} - ${displayBrand}`,
                         dueDate: dateStr,
                         status: "pending"
                       });
