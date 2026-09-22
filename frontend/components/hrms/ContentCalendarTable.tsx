@@ -826,12 +826,36 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
     
     const formatDateToDDMMYY = (dateStr: string) => {
       if (!dateStr) return "";
-      const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      const s = String(dateStr).trim().substring(0, 10);
+      const match = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
       if (match) {
         const [_, year, month, day] = match;
         return `${day}-${month}-${year.slice(-2)}`;
       }
+      const dm = s.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+      if (dm) {
+        return `${dm[1]}-${dm[2]}-${dm[3].slice(-2)}`;
+      }
       return dateStr;
+    };
+
+    // Normalize any posting-date value to YYYY-MM-DD for reliable date-wise filtering/sorting
+    const toISODateOnly = (d: any): string => {
+      if (!d || typeof d !== "string") return "";
+      const s = d.trim();
+      if (!s || s === "-") return "";
+      const iso = s.substring(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
+      const dm = s.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+      if (dm) return `${dm[3]}-${dm[2]}-${dm[1]}`;
+      const parsed = new Date(s);
+      if (!isNaN(parsed.getTime())) {
+        const y = parsed.getFullYear();
+        const m = String(parsed.getMonth() + 1).padStart(2, "0");
+        const day = String(parsed.getDate()).padStart(2, "0");
+        return `${y}-${m}-${day}`;
+      }
+      return "";
     };
 
     const formatMonthYearToMMYY = (myStr: string) => {
@@ -850,9 +874,16 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
     let entriesToProcess = entries;
     if (downloadStartDate || downloadEndDate) {
       try {
-        const res = await fetch(`${API_URL}/content-calendar?clientId=${clientId}${projectId ? `&projectId=${projectId}` : ''}`);
+        // Fetch without monthYear/projectId params and apply the same
+        // project filter as the on-screen table, so legacy (no-project)
+        // entries of the oldest project are not missed in date-range PDFs.
+        const res = await fetch(`${API_URL}/content-calendar?clientId=${clientId}`);
         if (res.ok) {
-          entriesToProcess = await res.json();
+          let fetched = await res.json();
+          if (projectId) {
+            fetched = fetched.filter((entry: any) => entry.projectId === projectId || (isOldestProject && !entry.projectId));
+          }
+          entriesToProcess = fetched;
         }
       } catch (e) {
         console.error("Failed to fetch all entries for date range download", e);
@@ -862,14 +893,26 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
     const filteredEntries = entriesToProcess.filter((entry: any) => {
       const matchesType = typeFilter === "all" || entry.postReel === typeFilter;
       let matchesDate = true;
-      if (entry.postingDate) {
-        const postingDStr = entry.postingDate.substring(0, 10);
-        if (downloadStartDate && postingDStr < downloadStartDate) matchesDate = false;
-        if (downloadEndDate && postingDStr > downloadEndDate) matchesDate = false;
-      } else if (downloadStartDate || downloadEndDate) {
-        matchesDate = false;
+      if (downloadStartDate || downloadEndDate) {
+        const postingDStr = toISODateOnly(entry.postingDate);
+        if (!postingDStr) {
+          matchesDate = false;
+        } else {
+          if (downloadStartDate && postingDStr < downloadStartDate) matchesDate = false;
+          if (downloadEndDate && postingDStr > downloadEndDate) matchesDate = false;
+        }
       }
       return matchesType && matchesDate;
+    });
+
+    // Sort date-wise by posting date (entries without a valid date go last),
+    // so the PDF rows always come in proper date order.
+    filteredEntries.sort((a: any, b: any) => {
+      const da = toISODateOnly(a.postingDate);
+      const db = toISODateOnly(b.postingDate);
+      if (!da) return 1;
+      if (!db) return -1;
+      return da.localeCompare(db);
     });
 
     if (filteredEntries.length === 0) {
@@ -881,8 +924,10 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
     let monthLabel = "";
     let headerMonthStr = formatMonthYearToMMYY(monthYear);
 
-    if (filteredEntries.length > 0 && filteredEntries[0].postingDate) {
-      const parts = filteredEntries[0].postingDate.split("-");
+    const firstDatedEntry = filteredEntries.find((e: any) => toISODateOnly(e.postingDate));
+    if (firstDatedEntry) {
+      const isoDate = toISODateOnly(firstDatedEntry.postingDate);
+      const parts = isoDate.split("-");
       if (parts.length >= 2) {
         const year = parts[0];
         const monthNum = parseInt(parts[1], 10);
@@ -931,14 +976,18 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
     doc.setFontSize(10);
     doc.setTextColor(100, 100, 100);
     doc.setFont("helvetica", "normal");
-    doc.text(`Month: ${headerMonthStr}`, pageWidth - 14, 20, { align: "right" });
+    const hasDateRange = !!(downloadStartDate || downloadEndDate);
+    const rangeLabel = hasDateRange
+      ? `${downloadStartDate ? formatDateToDDMMYY(downloadStartDate) : "Start"} to ${downloadEndDate ? formatDateToDDMMYY(downloadEndDate) : "End"}`
+      : "";
+    doc.text(hasDateRange ? `Date: ${rangeLabel}` : `Month: ${headerMonthStr}`, pageWidth - 14, 20, { align: "right" });
 
     // Decorative separator line
     doc.setDrawColor(220, 220, 220);
     doc.setLineWidth(0.5);
     doc.line(14, 38, pageWidth - 14, 38);
 
-    const dateFields = ["postingDate", "scriptDate", "shootDate", "editingStart", "actualPostingDate"];
+    const dateFields = ["postingDate", "scriptDate", "shootDate", "editingStart", "actualPostingDate", "thumbnailDate", "captionDate"];
     const tableData = filteredEntries.map(entry => {
       return indicesToRender.map(idx => {
         const key = fieldKeys[idx];
@@ -1044,7 +1093,12 @@ export function ContentCalendarTable({ clientId, clientName, projectId, projectN
     }
 
     const safeCompanyName = companyName.replace(/[\\/:*?"<>|]/g, "");
-    doc.save(`${safeCompanyName} ${monthLabel} Content Calendar.pdf`);
+    if (hasDateRange) {
+      const safeRange = rangeLabel.replace(/[\\/:*?"<>|]/g, "");
+      doc.save(`${safeCompanyName} Content Calendar ${safeRange}.pdf`);
+    } else {
+      doc.save(`${safeCompanyName} ${monthLabel} Content Calendar.pdf`);
+    }
     setIsPdfDialogOpen(false);
     } finally {
       setIsDownloadingPdf(false);
